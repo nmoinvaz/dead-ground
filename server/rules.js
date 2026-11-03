@@ -624,6 +624,17 @@ const Rules = (() => {
     S.P[team].shield = S.tick + (o.shield || 0) * HZ;
     S.P[team].vis = was.vis.fill(0); S.P[team].seen = was.seen.fill(0);
     spawnBase(S, team);
+    // Armies of other sides standing on the new base's ground march off it.
+    if (o.shield) {
+      const b = S.bases[team];
+      for (const u of S.ents) {
+        if (u.b || u.team === team || u.hp <= 0 || isAir(u)) continue;
+        const dx = u.x - b[0], dy = u.y - b[1], d = mhypot(dx, dy);
+        if (d > 28) continue;
+        const k = 34 / (d || 1), tx = clamp(b[0] + (d ? dx : 1) * k, 2, W - 2), ty = clamp(b[1] + (d ? dy : 0) * k, 2, H - 2);
+        u.ord = { t: 'move', x: tx, y: ty }; u.tgt = 0; u.home = null; u.wpT = 0; u.stuck = 0;
+      }
+    }
     territory(S); recount(S); vision(S);
     S.ev.push({ t: 'spawned', team });
   }
@@ -1103,7 +1114,7 @@ const Rules = (() => {
     let best = null, score = Infinity;
     const list = u.d.weapons || [];
     near(S, u.x, u.y, radius, t => {
-      if (t.team === u.team || t.hp <= 0 || t.drop > 0) return;
+      if (t.team === u.team || t.hp <= 0 || t.drop > 0 || atPeace(S, u.team, t.team)) return;
       const d = gap(u.x, u.y, t);
       if (d > radius) return;
       let usable = false;
@@ -1122,7 +1133,7 @@ const Rules = (() => {
     let best = 0, top = 0;
     for (const id of ids) {
       const t = S.byId.get(id);
-      if (!t || t.hp <= 0 || t.team === u.team || t.drop > 0) continue;
+      if (!t || t.hp <= 0 || t.team === u.team || t.drop > 0 || shielded(S, t.team)) continue;
       let eff = 0;
       for (const wn of u.d.weapons || []) if (canHit(wn, t)) { const w = WEAPONS[wn]; eff = Math.max(eff, (w.vs[t.d.armor] ?? 1) * w.dmg * (w.salvo || 1) / w.cd); }
       if (u.d.kamikaze) eff = t.b ? 0.2 : t.d.armor === 'inf' ? 0.4 : 1;
@@ -1142,8 +1153,13 @@ const Rules = (() => {
     if (v > a.vet) { a.vet = v; a.hp = Math.min(a.max, a.hp + a.max * 0.25); S.ev.push({ t: 'vet', id: a.id, team: a.team, x: a.x, y: a.y, v }); }
   }
 
+  // A newcomer is shielded for a while, and the peace runs both ways: nothing of theirs aims at or hurts another
+  // side, and nothing of another side's aims at or hurts theirs. It ends early when they give an order to attack.
+  const shielded = (S, team) => team >= 0 && !!S.P[team] && (S.P[team].shield || 0) > S.tick;
+  const atPeace = (S, a, b) => a !== b && (shielded(S, a) || shielded(S, b));
   function hurt(S, t, dmg, team, by) {
     if (t.hp <= 0) return;
+    if (team >= 0 && atPeace(S, team, t.team)) return;
     t.hp -= dmg;
     t.under = S.tick;
     const P = S.P[t.team];
@@ -1590,7 +1606,7 @@ const Rules = (() => {
       u.life -= DT;
       if (u.life <= 0) { kill(S, u, -1); return; }
       let t = u.tgt ? S.byId.get(u.tgt) : null;
-      if (t && t.hp <= 0) { t = null; u.tgt = 0; }
+      if (t && (t.hp <= 0 || atPeace(S, u.team, t.team))) { t = null; u.tgt = 0; }
       if (!t && (!o || o.t !== 'move')) {
         if (o && o.t === 'attack') t = S.byId.get(o.id);
         if (!t || t.hp <= 0) t = acquireAny(S, u, 14);
@@ -1612,10 +1628,10 @@ const Rules = (() => {
     }
     // Helicopters hold station and shoot at what they are near.
     let t = u.tgt ? S.byId.get(u.tgt) : null;
-    if (t && t.hp <= 0) { t = null; u.tgt = 0; }
+    if (t && (t.hp <= 0 || atPeace(S, u.team, t.team))) { t = null; u.tgt = 0; }
     if (o && o.t === 'attack') {
       t = S.byId.get(o.id);
-      if (!t || t.hp <= 0) { u.ord = null; t = null; }
+      if (!t || t.hp <= 0 || atPeace(S, u.team, t.team)) { u.ord = null; t = null; }
       else u.tgt = t.id;
     }
     if (!t && S.tick % 10 === u.id % 10 && (!o || o.t !== 'move')) {
@@ -1638,7 +1654,7 @@ const Rules = (() => {
   function acquireAny(S, u, r) {
     let best = null, bd = Infinity;
     near(S, u.x, u.y, r, t => {
-      if (t.team === u.team || t.hp <= 0 || t.b || isAir(t) || !seenBy(S, u.team, t)) return;
+      if (t.team === u.team || t.hp <= 0 || t.b || isAir(t) || atPeace(S, u.team, t.team) || !seenBy(S, u.team, t)) return;
       const d = mhypot(t.x - u.x, t.y - u.y) - (t.d.armor === 'inf' ? -4 : 0);
       if (d < bd) { bd = d; best = t; }
     });
@@ -1689,7 +1705,7 @@ const Rules = (() => {
     let o = u.ord;
 
     let t = u.tgt ? S.byId.get(u.tgt) : null;
-    if (t && (t.hp <= 0 || (!seenBy(S, u.team, t) && !(o && (o.t === 'attack' || o.t === 'group'))))) { t = null; u.tgt = 0; }
+    if (t && (t.hp <= 0 || atPeace(S, u.team, t.team) || (!seenBy(S, u.team, t) && !(o && (o.t === 'attack' || o.t === 'group'))))) { t = null; u.tgt = 0; }
 
     const free = !o || o.t === 'amove' || o.t === 'capture';
     if (armed(u) && free && !t && S.tick % 10 === u.id % 10) {
@@ -1710,7 +1726,7 @@ const Rules = (() => {
     }
     if (o && o.t === 'attack') {
       t = S.byId.get(o.id);
-      if (!t || t.hp <= 0 || t.team === u.team && !d.engineer) { u.ord = null; u.tgt = 0; t = null; o = null; }
+      if (!t || t.hp <= 0 || (t.team === u.team && !d.engineer) || atPeace(S, u.team, t.team)) { u.ord = null; u.tgt = 0; t = null; o = null; }
       else u.tgt = t.id;
     }
 
@@ -1846,12 +1862,12 @@ const Rules = (() => {
     const dark = e.d.needsPower && S.P[e.team].low;
     if (dark) return;
     let t = e.tgt ? S.byId.get(e.tgt) : null;
-    if (t && (t.hp <= 0 || !seenBy(S, e.team, t) || !inRange(S, e, e.d.weapons[0], t))) { t = null; e.tgt = 0; }
+    if (t && (t.hp <= 0 || atPeace(S, e.team, t.team) || !seenBy(S, e.team, t) || !inRange(S, e, e.d.weapons[0], t))) { t = null; e.tgt = 0; }
     if (!t && S.tick % 10 === e.id % 10) {
       let best = null, bd = Infinity;
       const wn = e.d.weapons[0], R = WEAPONS[wn].r;
       near(S, e.x, e.y, R + 1, o => {
-        if (o.team === e.team || o.hp <= 0 || o.drop > 0 || !canHit(wn, o) || !seenBy(S, e.team, o)) return;
+        if (o.team === e.team || o.hp <= 0 || o.drop > 0 || atPeace(S, e.team, o.team) || !canHit(wn, o) || !seenBy(S, e.team, o)) return;
         const d = gap(e.x, e.y, o);
         if (d > R) return;
         const s = d + (o.b ? 8 : 0);
@@ -2027,6 +2043,12 @@ const Rules = (() => {
 
   function apply(S, team, c) {
     const P = S.P[team];
+    // Any order to attack ends the giver's own shield.
+    if (shielded(S, team)) {
+      const tg = c.c === 'attack' ? S.byId.get(c.id) : null;
+      const war = (tg && tg.team !== team) || c.c === 'strike' || c.c === 'bridge' || c.c === 'launch' || (c.c === 'power' && c.name === 'barrage');
+      if (war) { P.shield = 0; S.ev.push({ t: 'unshield', team }); }
+    }
     if (c.c === 'move') {
       const us = unitsOf(S, team, c.ids);
       if (us.length) {
@@ -2035,7 +2057,7 @@ const Rules = (() => {
       }
     } else if (c.c === 'attack') {
       const t = S.byId.get(c.id);
-      if (t && t.hp > 0) for (const u of unitsOf(S, team, c.ids)) {
+      if (t && t.hp > 0 && !(t.team !== team && shielded(S, t.team))) for (const u of unitsOf(S, team, c.ids)) {
         if (u.d.move === 'jet') { if (u.ammo > 0 && !sky(S).grounded) u.ord = { t: 'attack', id: t.id, x: t.x, y: t.y }; }
         else if (u.d.cargo) continue;
         else { u.ord = { t: 'attack', id: t.id }; u.tgt = t.id; u.wpT = 0; u.stuck = 0; }
@@ -2054,8 +2076,8 @@ const Rules = (() => {
       // Marks every enemy seen within r of a point, and shares them out among the units.
       const us = unitsOf(S, team, c.ids).filter(u => (armed(u) || u.d.kamikaze) && !u.d.cargo);
       const list = [], first = S.byId.get(c.id);
-      if (first && first.hp > 0 && first.team !== team) list.push(first);
-      near(S, c.x, c.y, c.r, t => { if (t !== first && t.team !== team && t.hp > 0 && !(t.drop > 0) && gap(c.x, c.y, t) <= c.r && seenBy(S, team, t)) list.push(t); });
+      if (first && first.hp > 0 && first.team !== team && !shielded(S, first.team)) list.push(first);
+      near(S, c.x, c.y, c.r, t => { if (t !== first && t.team !== team && t.hp > 0 && !(t.drop > 0) && !shielded(S, t.team) && gap(c.x, c.y, t) <= c.r && seenBy(S, team, t)) list.push(t); });
       if (!list.length || !us.length) return;
       const ids = list.map(t => t.id), load = new Map();
       for (const u of us) {
@@ -2324,7 +2346,7 @@ const Rules = (() => {
     newGame, step, push, spawn, addBuilding, pickFrom, fits, spotFor, roomy, blockedReason, near, rehash, seenBy, terrainAt, heightAt, los, isAir, armed, cellOf, summary, exitOf,
     mulberry, noiser, clamp, lerp, smooth, angleTo, toXY, toUV, gap, setSize, save, load, hashOf, restartSlot, razeSlot, makeMap, layoutFor,
     msin, mcos, matan2, mhypot,
-    BRIDGE_HP, SPELL, weatherAt, sky, dayAt, spellOf, bridgeAt, clsOf, houseHp, hurtBridge, ignite,
+    BRIDGE_HP, SPELL, weatherAt, sky, dayAt, spellOf, bridgeAt, clsOf, houseHp, hurtBridge, ignite, shielded,
   };
 })();
 if (typeof module !== 'undefined') module.exports = Rules;

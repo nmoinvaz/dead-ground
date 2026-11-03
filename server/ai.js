@@ -1,7 +1,7 @@
 // Dead Ground, the enemy commander. It sends the same commands a player can, on a clock set by its
 // difficulty. It may only act on what it has seen, except that it knows where the other bases are. In
 // the world it fights whichever living neighbour is nearest, counting people's bases as further off, and
-// leaves alone a newcomer still shielded.
+// leaves alone a newcomer still shielded, whom the rules also keep it from hurting.
 // It draws on random numbers of its own, never the world's, since on a server only the server runs it.
 const AI = (() => {
   const R = typeof Rules !== 'undefined' ? Rules : require('./rules.js');
