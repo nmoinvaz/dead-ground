@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
 <title>Dead Ground</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23efe6d2'/%3E%3Ccircle cx='16' cy='16' r='9' fill='none' stroke='%231c1a17' stroke-width='3'/%3E%3Cpath d='M16 3v8M16 21v8M3 16h8M21 16h8' stroke='%231c1a17' stroke-width='3'/%3E%3Ccircle cx='16' cy='16' r='2.5' fill='%23c8321e'/%3E%3C/svg%3E">
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;500;600;700&family=Saira+Stencil+One&family=Share+Tech+Mono&family=IM+Fell+English+SC&family=IM+Fell+English:ital@0;1&family=Courier+Prime:wght@400;700&display=swap">
@@ -7028,16 +7029,19 @@ const Game = (() => {
       }
     }
     // The title offers the shared world only when this page is served by its server.
-    async function probe() {
+    async function probe(n = 0) {
       if (!/^https?:$/.test(location.protocol)) return;
+      // A server waking up may fail the first ask, so a network error or 5xx is asked again.
+      const again = () => { if (n < 4) setTimeout(() => probe(n + 1), 1500 * (n + 1)); };
       try {
         const r = await fetch('/api/hello', { cache: 'no-store' });
+        if (r.status >= 500) return again();
         if (!r.ok) return;
         const j = await r.json();
         if (!j.ok) return;
         $('m-online').hidden = false;
         $('online-n').textContent = j.players === 1 ? '1 commander online' : `${j.players} commanders online`;
-      } catch (e) { /* no server here */ }
+      } catch (e) { again(); }
     }
     function joinWorld() {
       G.name = ($('callsign').value || '').trim().slice(0, 16) || 'Commander';
