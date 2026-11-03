@@ -7,7 +7,7 @@ import R from './rules.js';
 import AI from './ai.js';
 
 const HZ = R.HZ, SEED = 4;
-// A newcomer's base is left alone by the computers for ten minutes. A player away for two hours gives up
+// A newcomer's base cannot attack or be attacked for ten minutes. A player away for two hours gives up
 // the slot. A computer's fallen base comes back after a minute.
 const SHIELD = 600, AWAY = 2 * 3600 * 1000, RESPAWN = 60;
 const LEVEL = 'regular';
@@ -203,19 +203,52 @@ export class World {
     this.broadcast({ t: 'roster', r: this.rosterView() });
   }
 
-  // A slot for a newcomer: their own if they were here before and it still stands, else a fallen one,
-  // else the weakest computer's, whose base is cleared for them.
+  // A slot for a newcomer: their own if they were here before and it still stands. Otherwise a computer's slot,
+  // or their own fallen one, beside the newest base in the world, so a new base starts next to a young one and
+  // not among armies that have been building for an hour. Of the slots as near the newest, the one whose other
+  // neighbour has the smallest army.
   pickSlot(id) {
     const S = this.S, mine = this.roster.findIndex(r => r.id === id && (r.kind === 'away' || r.kind === 'human'));
     if (mine >= 0 && S.P[mine].alive) return { slot: mine, fresh: false };
-    if (mine >= 0) return { slot: mine, fresh: true };
+    const free = [];
+    this.roster.forEach((r, t) => { if (r.kind === 'ai' || t === mine) free.push(t); });
+    if (!free.length) return { slot: -1, fresh: false };
+    const B = S.bases, d = (a, b) => Math.hypot(B[a][0] - B[b][0], B[a][1] - B[b][1]);
+    const army = t => S.P[t].alive ? R.summary(S, t).army : 0;
+    // The newest by when it started, and of bases started together the one with the smallest army.
+    let newest = -1;
+    S.P.forEach((P, t) => { if (P.alive && t !== mine && (newest < 0 || P.born > S.P[newest].born || (P.born === S.P[newest].born && army(t) < army(newest)))) newest = t; });
+    const cands = free.filter(t => t !== newest);
+    if (newest < 0 || !cands.length) return { slot: free[0], fresh: true };
+    const nearest = Math.min(...cands.map(t => d(t, newest)));
     let best = -1, bs = Infinity;
-    this.roster.forEach((r, t) => {
-      if (r.kind !== 'ai') return;
-      const score = S.P[t].alive ? S.ents.filter(e => e.team === t && e.b).length : -1;
+    for (const t of cands) {
+      if (d(t, newest) > nearest * 1.25) continue;
+      // The strongest of the other bases as near this slot as its nearest one.
+      const others = S.P.filter(P => P.alive && P.team !== t && P.team !== newest).map(P => P.team);
+      const close = others.length ? Math.min(...others.map(o => d(t, o))) : 0;
+      const score = Math.max(0, ...others.filter(o => d(t, o) <= close * 1.25).map(army)) + (S.P[t].alive ? 1 : 0);
       if (score < bs) { bs = score; best = t; }
-    });
-    return best >= 0 ? { slot: best, fresh: true } : { slot: -1, fresh: false };
+    }
+    return { slot: best, fresh: true };
+  }
+
+  // A fallen player starts again beside the newest base, which may be another slot. Their old one goes back to a
+  // computer, and they are sent the world again as the new slot.
+  async respawn(k) {
+    const S = this.S, old = k.slot, { slot } = this.pickSlot(k.id);
+    if (slot < 0) return;
+    if (slot !== old) {
+      this.roster[old] = { kind: 'ai' };
+      this.ais[old] = AI.create(old, LEVEL, S.seed + old + S.tick);
+      this.respawnAt[old] = 0;
+      this.roster[slot] = { kind: 'human', id: k.id, name: k.name, since: Date.now() };
+      this.ais[slot] = null; this.respawnAt[slot] = 0;
+      k.slot = slot;
+    }
+    this.pending.push({ team: slot, c: { c: 'restart', shield: SHIELD }, at: S.tick }, { team: slot, c: { c: 'income', v: 1 }, at: S.tick });
+    if (slot !== old) await this.welcome(k);
+    this.broadcast({ t: 'roster', r: this.rosterView() });
   }
 
   async join(k, msg) {
@@ -256,9 +289,7 @@ export class World {
     const msg = JSON.parse(data);
     if (msg.t === 'join' && !k.id) this.join(k, msg);
     else if (msg.t === 'cmd' && k.slot >= 0) { const c = clean(this.S, msg.c); if (c) this.pending.push({ team: k.slot, c, at: this.S.tick }); }
-    else if (msg.t === 'respawn' && k.slot >= 0 && !this.S.P[k.slot].alive) {
-      this.pending.push({ team: k.slot, c: { c: 'restart', shield: SHIELD }, at: this.S.tick }, { team: k.slot, c: { c: 'income', v: 1 }, at: this.S.tick });
-    }
+    else if (msg.t === 'respawn' && k.slot >= 0 && !this.S.P[k.slot].alive) this.respawn(k);
     else if (msg.t === 'resync' && k.id && k.ready) this.welcome(k);
     // A player who quits hands the slot straight back to a computer.
     else if (msg.t === 'quit' && k.slot >= 0 && this.roster[k.slot].id === k.id) {

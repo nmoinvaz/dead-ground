@@ -8150,7 +8150,7 @@ const Game = (() => {
         hud.reset();
         G.playing = true; G.paused = false;
         document.body.classList.add('in-game', 'online');
-        if (net.slot >= 0) { home(S, net.slot); hud.say(`Joined the world as ${G.name}. The computers leave a new base alone for five minutes.`, 'good'); }
+        if (net.slot >= 0) { home(S, net.slot); hud.say(`Joined the world as ${G.name}, beside its newest base. For ten minutes nobody can attack you, and you cannot attack anyone.`, 'good'); }
         else { world.focus(S.map.W / 2, S.map.H / 2, 150); hud.say('Every slot is taken, so you are watching.', 'bad'); }
       } else Object.assign(world.cam, cam);
       drawRoster();
