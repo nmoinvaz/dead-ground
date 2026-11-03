@@ -3653,7 +3653,7 @@ const World = (() => {
       t.wrapS = t.wrapT = THREE.RepeatWrapping; t.magFilter = THREE.LinearFilter; t.minFilter = THREE.LinearMipmapLinearFilter; t.generateMipmaps = true; t.needsUpdate = true;
       return t;
     }
-    let look = 'film', inkStyle = 8;
+    let look = 'film', inkStyle = 8, roadStyle = 3, oreStyle = 4;
     // The kind of thing being drawn into the line passes, shared with the pass's material.
     const catU = { value: 1 }, catRef = { mat: null };
     const maskMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
@@ -3754,8 +3754,8 @@ const World = (() => {
       // Pen and ink, after the Lightning film and js/ink.js: tone in seven steps of hatching on cream paper, at
       // 45 and 135 degrees, then flat and upright lines for the darkest, each line a little uneven with small gaps.
       // The ground's hatching is pinned to the map so it pans with it, the units' redraws a few times a second.
-      const ink = new THREE.ShaderMaterial({ uniforms: { t: { value: null }, tSubj: { value: null }, tHeat: { value: null }, tPaper: { value: null }, res: { value: new THREE.Vector2(1, 1) }, uTime: { value: 0 }, uK: { value: 1 }, uOff: { value: new THREE.Vector2() }, uStyle: { value: 8 }, tNorm: { value: null }, tFogS: { value: null }, tLand: { value: null }, uSun2: { value: new THREE.Vector2(-1, 0) }, uUpV: { value: new THREE.Vector3(0, 1, 0) } }, vertexShader: vs, depthTest: false, depthWrite: false, fragmentShader: `
-        varying vec2 vUv; uniform sampler2D t, tSubj, tHeat, tPaper, tNorm, tFogS, tLand; uniform vec2 res, uOff, uSun2; uniform vec3 uUpV; uniform float uTime, uK; uniform int uStyle;
+      const ink = new THREE.ShaderMaterial({ uniforms: { t: { value: null }, tSubj: { value: null }, tHeat: { value: null }, tPaper: { value: null }, res: { value: new THREE.Vector2(1, 1) }, uTime: { value: 0 }, uK: { value: 1 }, uOff: { value: new THREE.Vector2() }, uStyle: { value: 8 }, tNorm: { value: null }, tFogS: { value: null }, tLand: { value: null }, uSun2: { value: new THREE.Vector2(-1, 0) }, uUpV: { value: new THREE.Vector3(0, 1, 0) }, uRoad: { value: 0 }, uOre: { value: 0 } }, vertexShader: vs, depthTest: false, depthWrite: false, fragmentShader: `
+        varying vec2 vUv; uniform sampler2D t, tSubj, tHeat, tPaper, tNorm, tFogS, tLand; uniform vec2 res, uOff, uSun2; uniform vec3 uUpV; uniform float uTime, uK; uniform int uStyle, uRoad, uOre;
         const vec3 PAPER = vec3(0.949, 0.910, 0.824), INK = vec3(0.122, 0.102, 0.086);
         // The soft axonometric's washes, after the atlas: speckled pale green ground, lilac water, pink paths,
         // three canopy greens, cream roofs over warm grey walls, and the ghost plan's blue-grey for what was.
@@ -3771,6 +3771,8 @@ const World = (() => {
         float A(vec2 uv) { return texture2D(tSubj, uv).a; }
         // Scenery, buildings and units only, for outlines that leave the water mesh's edge alone.
         float AS(vec2 uv) { float a = A(uv); return a * step(0.3, a); }
+        // Ore, on its own value in the scenery band.
+        float oA(vec2 uv) { return 1.0 - smoothstep(0.02, 0.035, abs(A(uv) - 0.55)); }
         float Ls(vec2 uv, vec2 k) { return (L(uv) * 2.0 + L(uv + k * vec2(2.5, 0)) + L(uv - k * vec2(2.5, 0)) + L(uv + k * vec2(0, 2.5)) + L(uv - k * vec2(0, 2.5))) / 6.0; }
         // One set of parallel lines: ang in degrees, d the spacing and w the width, in px at 1080p.
         float hatch(vec2 p, float ang, float d, float w, float seed, float gaps) {
@@ -3824,6 +3826,8 @@ const World = (() => {
           // The mixture's washes under its ink, and its lines alone, for the remembered past.
           vec3 baseC = PAPER;
           float lineK = lines;
+          // Ore's own outline, in brown, for the styles that do not ink it black.
+          float oreL = 0.0;
           if (uStyle == 0) {
             // Lightning: tone in seven steps of hatching and crosshatching.
             cover = max(tone(p, n, seedU), lines);
@@ -3928,8 +3932,9 @@ const World = (() => {
             float wC = 0.0;
             // Bridges: a pink deck with one light hatch in its shade, solid in its deepest.
             float brC = max(hatch(p, 45.0, 4.6, 0.8, 41.0, 0.1) * step(0.62, dens), smoothstep(0.9, 0.94, dens));
-            // Ore: outlined gold pebbles, hatched only on their shaded side.
-            float oC = max(hatch(p, 45.0, 3.0, 0.9, 47.0, 0.05) * step(0.56, dens), smoothstep(0.9, 0.94, dens));
+            // Ore: outlined gold pebbles, hatched only on their shaded side. The other styles draw it in its wash,
+            // and gold leaf keeps only its deepest shade black.
+            float oC = uOre == 0 ? max(hatch(p, 45.0, 3.0, 0.9, 47.0, 0.05) * step(0.56, dens), smoothstep(0.9, 0.94, dens)) : uOre == 5 ? smoothstep(0.9, 0.94, dens) : 0.0;
             // Trees, rocks and houses: loose quick scribble.
             vec2 cell = floor(p / (22.0 * uK));
             float sang = 30.0 + hash(cell + 3.0) * 120.0;
@@ -3962,6 +3967,12 @@ const World = (() => {
             if (a < 0.6) for (int i = 1; i <= 3; i++) swell = max(swell,step(0.6, A(uv + uSun2 * k * (float(i) * 1.15))));
             cover = max(cover, max(heavy, swell * (1.0 -step(0.6, a))));
             cover = max(cover, detail * mix(0.75, 1.0, isU));
+            // Ore in the soft, stippled, engraved and faceted styles is outlined thin in brown, not black.
+            if (uOre >= 1 && uOre <= 4) {
+              float nearO = max(max(oA(uv + k * vec2(1.6, 0)), oA(uv - k * vec2(1.6, 0))), max(max(oA(uv + k * vec2(0, 1.6)), oA(uv - k * vec2(0, 1.6))), isO));
+              cover *= 1.0 - nearO;
+              oreL = outline * nearO;
+            }
             paperC = vec3(0.96, 0.93, 0.86);
             lineK = max(max(heavy, swell * (1.0 - step(0.6, a))), max(detail, max(edge * 0.55 * (1.0 - bankZone) * isG, max(rEdge * 0.9 * isG, bankL * step(0.001, dep + 0.05) * (isG + isW)))));
             // The washes: the land green, roads and bridge decks pink, water lilac with white ripples, canopies in
@@ -3969,13 +3980,41 @@ const World = (() => {
             vec3 base = mix(paperC, SOFT_G, isG);
             base = mix(base, OLIVE, max(stip * 0.55, speck * 0.4) * isG * (1.0 - onRoad));
             float rH = hatch(p, 60.0, 4.0, 0.8, 53.0, 0.1);
-            base = mix(base, mix(PINK, PINK_D, rH * 0.35), max(onRoad * isG, isBr) * 0.9);
+            // Roads in one of six colours: pink, sand, pale stone, bare paper, khaki or white.
+            vec3 RC = uRoad == 0 ? PINK : uRoad == 1 ? vec3(0.886, 0.824, 0.675) : uRoad == 2 ? vec3(0.847, 0.835, 0.804) : uRoad == 3 ? paperC : uRoad == 4 ? vec3(0.812, 0.765, 0.573) : vec3(0.969, 0.961, 0.933);
+            vec3 RD = uRoad == 0 ? PINK_D : uRoad == 1 ? vec3(0.62, 0.52, 0.34) : uRoad == 2 ? vec3(0.5, 0.49, 0.46) : uRoad == 3 ? paperC : uRoad == 4 ? vec3(0.5, 0.47, 0.3) : vec3(0.72, 0.7, 0.66);
+            base = mix(base, mix(RC, RD, rH * 0.35), max(onRoad * isG, isBr) * 0.9);
             float rip = hatch(p, -12.0, 6.5, 0.9, 57.0, 0.45);
             base = mix(base, mix(mix(LILAC, LILAC_D, wLine * 0.6), vec3(1.0), rip * 0.55 * (1.0 - wLine)), isW);
             float tn = noise(p / (60.0 * uK));
             base = mix(base, tn < 0.4 ? TREE3 : tn < 0.62 ? TREE1 : TREE2, isT * 0.8);
             vec3 nV = N0.xyz * 2.0 - 1.0;
             base = mix(base, dot(nV, uUpV) > 0.6 ? ROOF : nV.x < 0.0 ? WALL_L : WALL_R, isB);
+            // Ore in the chosen style: 1 a soft ochre wash, 2 a stippled deposit, 3 engraved, 4 faceted, 5 gold leaf.
+            vec3 OCH = vec3(0.92, 0.78, 0.45), GOLD_P = vec3(0.97, 0.9, 0.66), BRN = vec3(0.45, 0.32, 0.14);
+            float up = dot(nV, uUpV);
+            vec3 oreC = paperC;
+            if (uOre == 1) oreC = OCH * mix(1.0, 0.82, smoothstep(0.4, 0.8, dens));
+            else if (uOre == 2) {
+              vec2 dq = p / (2.2 * uK);
+              float dt = (1.0 - smoothstep(0.18, 0.3, length(fract(dq) - 0.5))) * step(hash(floor(dq) + 71.0), 0.35 + 0.5 * dens);
+              oreC = mix(GOLD_P, BRN, dt);
+            }
+            else if (uOre == 3) oreC = mix(GOLD_P, BRN, hatch(p, 0.0, 2.6, mix(0.5, 1.6, dens), 73.0, 0.02));
+            else if (uOre == 4) oreC = up > 0.7 ? vec3(0.99, 0.86, 0.45) : nV.x < 0.0 ? vec3(0.9, 0.67, 0.27) : vec3(0.72, 0.5, 0.2);
+            else if (uOre == 5) {
+              oreC = up > 0.75 ? vec3(1.0, 0.95, 0.72) : nV.x < 0.0 ? vec3(0.98, 0.78, 0.22) : vec3(0.8, 0.56, 0.1);
+              oreC = mix(oreC, vec3(1.0), step(0.985, hash(floor(p / (3.0 * uK)) + 91.0)) * step(0.5, up));
+            }
+            if (uOre != 0) base = mix(base, oreC, isO);
+            // The stippled deposit spreads its dots onto the ground round each field.
+            if (uOre == 2) {
+              float halo = 0.0;
+              for (int i = 0; i < 8; i++) { float an = float(i) * 0.785; halo = max(halo, oA(vUv + vec2(cos(an), sin(an)) * k * 9.0)); }
+              vec2 hq = p / (2.6 * uK);
+              float hd = (1.0 - smoothstep(0.15, 0.28, length(fract(hq) - 0.5))) * step(hash(floor(hq) + 83.0), 0.5);
+              base = mix(base, OCH * 0.6, hd * halo * isG * (1.0 - isO));
+            }
             baseC = base;
           } else {
             // Crow quill sketch: two loose passes of each line and quick scribbled hatching that turns from patch to patch.
@@ -3997,6 +4036,7 @@ const World = (() => {
           if (inverse) { cover = max(cover * (1.0 - lit), 0.0); cover = max(cover, rim * 0.0); }
           else { cover *= 1.0 - lit; cover = max(cover, rim); }
           vec3 col = mix(uStyle == 8 ? baseC : paperC, inkC, clamp(cover, 0.0, 1.0));
+          col = mix(col, vec3(0.42, 0.29, 0.12), clamp(oreL, 0.0, 1.0) * 0.85);
           // Colour in the shade: a cool violet wash under the ink where the sun does not reach, warm paper in the light.
           if (uStyle == 8 || uStyle == 0) {
             // On open ground it keeps to the real shadows and is lighter, so the land stays mostly paper.
@@ -4016,7 +4056,7 @@ const World = (() => {
           // Ore is marked gold; every side's own colour comes through as itself.
           bool gold = hue.b < 0.3 && hue.g > 0.7;
           vec3 wc = gold ? vec3(1.0, 0.8, 0.3) : mix(vec3(1.0), hue, 0.5);
-          col = mix(col, col * wc, wash * (gold ? 0.85 : 0.55));
+          col = mix(col, col * wc, wash * (gold ? (uStyle == 8 && uOre != 0 ? 0.0 : 0.85) : 0.55));
           vec3 colour = hue * 0.7;
           // Coloured ink laid as close crosshatching, solid only where a marking is small.
           float ch = max(hatch(p, 45.0, 2.6, 1.3, 77.0, 0.0), hatch(p, 135.0, 3.2, 1.1, 81.0, 0.0));
@@ -4196,6 +4236,7 @@ const World = (() => {
           if (C.uSun2) C.uSun2.value.set((q1.x - q.x) * w, (q1.y - q.y) * h).normalize();
           // The world's up in view space, to tell a building's roof from its walls.
           if (C.uUpV) C.uUpV.value.set(0, 1, 0).transformDirection(camera.matrixWorldInverse);
+          if (C.uRoad) { C.uRoad.value = roadStyle; C.uOre.value = oreStyle; }
         }
         run(pass2, null);
       }
@@ -5530,6 +5571,8 @@ const World = (() => {
         if (typeof document !== 'undefined') document.body.dataset.look = look;
       },
       setInk(n) { inkStyle = n; },
+      setRoad(n) { roadStyle = n; },
+      setOre(n) { oreStyle = n; },
       get look() { return look; },
       cam, vw: 1, vh: 1, onScreen: [], load, frame, event, resize, pick, project, setGhost, cameos, renderer, camera, scene, place: placeCamera,
       teamCol, THEMES,
