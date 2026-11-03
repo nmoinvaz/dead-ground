@@ -92,6 +92,8 @@ export class World {
     this.respawnAt = this.S.P.map(() => 0);
     // Nobody is connected after a restart, so every person's slot is held for them while away.
     this.ais = this.roster.map((r, t) => {
+      // A check player's slot goes back to the computer.
+      if (r.id && r.id.startsWith('check-')) r = this.roster[t] = { kind: 'ai' };
       if (r.kind === 'human') { r.kind = 'away'; r.since = r.since || Date.now(); }
       return AI.create(t, r.kind === 'away' ? 'keeper' : LEVEL, this.S.seed + t);
     });
@@ -255,6 +257,13 @@ export class World {
       this.pending.push({ team: k.slot, c: { c: 'restart', shield: SHIELD }, at: this.S.tick }, { team: k.slot, c: { c: 'income', v: 1 }, at: this.S.tick });
     }
     else if (msg.t === 'resync' && k.id && k.ready) this.welcome(k);
+    // A player who quits hands the slot straight back to a computer.
+    else if (msg.t === 'quit' && k.slot >= 0 && this.roster[k.slot].id === k.id) {
+      this.roster[k.slot] = { kind: 'ai' };
+      this.ais[k.slot] = AI.create(k.slot, LEVEL, this.S.seed + k.slot + this.S.tick);
+      k.slot = -1;
+      this.broadcast({ t: 'roster', r: this.rosterView() });
+    }
     else if (msg.t === 'ping') this.send(k, JSON.stringify({ t: 'pong', tick: this.S.tick, at: msg.at }));
   }
 
