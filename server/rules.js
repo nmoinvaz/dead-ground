@@ -116,6 +116,12 @@ const Rules = (() => {
     para: { name: 'Paradrop', sym: 'par', cost: 600, cd: 150, tech: 2, r: 4, note: 'Three rifle squads, anywhere you can see.' },
   };
 
+  // Tracks. Ground units wear the cells they move into, tracks most and feet least. Worn ground hardens a step at a
+  // time at each of these marks into a track that is quicker going and that paths prefer. Left alone it grows back.
+  const WEAR = { foot: 5, wheel: 10, track: 14 }, TRACK_AT = [30, 75, 140], TRACK_GO = [1, 1.04, 1.08, 1.12];
+  // Each change of a track makes the shared ways be worked out again, so tracks change only every 45 seconds.
+  const TRACK_COST = TRACK_GO.map(g => 1 / g), TRACK_EVERY = 45 * HZ;
+
   // A bridge stands this much damage. A house stands less, more for each floor.
   const BRIDGE_HP = 1500;
   const houseHp = h => 260 + 220 * h.floors;
@@ -378,7 +384,8 @@ const Rules = (() => {
     L.wells.forEach(p => wells.push({ x: Math.round(p[0]), y: Math.round(p[1]) }));
 
     // Cells. Bit 1 stops vehicles, bit 2 stops infantry, bit 4 forbids building. Bit 8 is standing woods,
-    // which stop wheels, slow infantry and fall under tracks. Bit 16 is a ford, slow going for everyone.
+    // which stop wheels, slow infantry and fall under tracks. Bit 16 is a ford, slow going for everyone. Bits 32
+    // and 64 hold how hard a track worn there has become, 0 to 3, set as the world goes on.
     const hAt = (x, y) => { const i = clamp(Math.round(x * RES), 0, VW - 1), j = clamp(Math.round(y * RES), 0, VH - 1); return h[j * VW + i]; };
     const deckAt = (x, y) => { const i = clamp(Math.round(x * RES), 0, VW - 1), j = clamp(Math.round(y * RES), 0, VH - 1); return deck[j * VW + i]; };
     const ground = new Uint8Array(N), fordCells = [];
@@ -580,6 +587,7 @@ const Rules = (() => {
       // bridges and houses.
       gnd: new Uint8Array(M.ground), gndVer: 0, wood: new Uint8Array(N), woodVer: 0, burn: [], crush: [],
       bridges: M.bridges.map(() => ({ hp: BRIDGE_HP, fix: 0, c4: 0 })), hh: M.houses.map(houseHp), flooded: false,
+      trail: new Uint8Array(N), trailSum: 0,
     };
     S.rand = rngOf(S);
     for (let t = 0; t < n; t++) { S.P.push(freshPlayer(t, o)); S.infl.push(new Float32Array(N)); }
@@ -656,6 +664,7 @@ const Rules = (() => {
       P: S.P.map(P => { const o = plain(P); o.vis = bits(P.vis); o.seen = bits(P.seen); o.q = {}; for (const c in P.q) o.q[c] = P.q[c].map(it => { const j = Object.assign({}, it); delete j.cost; return j; }); return o; }),
       // The ground and the trees as pairs of cell and value, only where they differ from the map's start.
       gnd: diffs(S.gnd, S.map.ground), wood: diffs(S.wood, null), gndVer: S.gndVer, woodVer: S.woodVer, burn: S.burn, bridges: S.bridges, hh: S.hh, flooded: S.flooded,
+      trail: b64.en(S.trail), trailSum: S.trailSum,
     };
   }
   function diffs(a, base) { const o = []; for (let c = 0; c < a.length; c++) if (a[c] !== (base ? base[c] : 0)) o.push(c, a[c]); return o; }
@@ -679,6 +688,7 @@ const Rules = (() => {
     for (let i = 0; i < gd.length; i += 2) S.gnd[gd[i]] = gd[i + 1];
     for (let i = 0; i < wd.length; i += 2) S.wood[wd[i]] = wd[i + 1];
     S.gndVer = o.gndVer || 0; S.woodVer = o.woodVer || 0; S.burn = o.burn || []; S.flooded = !!o.flooded;
+    if (o.trail) S.trail = new Uint8Array(b64.de(o.trail)); S.trailSum = o.trailSum || 0;
     if (o.hh && o.hh.length === S.hh.length) S.hh = o.hh.slice();
     if (o.bridges && o.bridges.length === S.bridges.length) S.bridges = o.bridges.map(b => Object.assign({}, b));
     S.bridges.forEach((b, i) => { if (b.hp <= 0) for (const v of S.map.bridges[i].verts) S.map.deck[v] = 0; });
@@ -704,7 +714,7 @@ const Rules = (() => {
     for (const e of S.ents) { mix(e.id); mix(e.team); mix(e.x * 1024); mix(e.y * 1024); mix(e.hp * 64); }
     for (const P of S.P) { mix(P.supply * 16); mix(P.oil * 16); mix(P.tech); }
     for (const t of S.towns) { mix(t.owner); mix(t.cap * 1024); }
-    mix(S.gndVer); mix(S.woodVer); mix(S.burn.length);
+    mix(S.gndVer); mix(S.woodVer); mix(S.burn.length); mix(S.trailSum);
     for (const b of S.bridges) mix(b.hp * 16);
     return h;
   }
@@ -943,8 +953,8 @@ const Rules = (() => {
     fill(S, p, cls, gx, gy, occ, gnd, f.reach);
     return p;
   }
-  // Dijkstra from the goal over a grid of what blocks this class, with roads a little cheaper, and woods
-  // and fords dearer.
+  // Dijkstra from the goal over a grid of what blocks this class, with roads and worn tracks a little cheaper, and
+  // woods and fords dearer.
   let fillBlock = null;
   function fill(S, f, cls, gx, gy, occ, g, reach = Infinity) {
     const M = S.map, bit = BIT[cls], woodC = cls === 'track' ? 3 : 1.6;
@@ -991,7 +1001,7 @@ const Rules = (() => {
         if (block[m]) continue;
         if ((i & 1) && (block[y * W + nx] || block[ny * W + x])) continue;
         // Rounded to the array's own precision, so a cell is never queued again for the same distance.
-        const gm = g[m], nd = Math.fround(dc + COST[i] * (road[m] ? 0.8 : 1) * (gm & 8 ? woodC : 1) * (gm & 16 ? 2 : 1));
+        const gm = g[m], nd = Math.fround(dc + COST[i] * (road[m] ? 0.8 : TRACK_COST[(gm >> 5) & 3]) * (gm & 8 ? woodC : 1) * (gm & 16 ? 2 : 1));
         if (nd < dist[m]) { dist[m] = nd; dir[m] = (i + 4) & 7; push(m, nd); }
       }
     }
@@ -1025,7 +1035,7 @@ const Rules = (() => {
   // Looks ahead along the field for the farthest point in a straight, clear line.
   function waypoint(S, u, tx, ty) {
     const cls = clsOf(u), far = mhypot(tx - u.x, ty - u.y);
-    if (far < 16 && lineClear(S, cls, u.x, u.y, tx, ty)) return [tx, ty];
+    if (far < 16 && lineClear(S, cls, u.x, u.y, tx, ty) && !tracksBetween(S, u.x, u.y, tx, ty)) return [tx, ty];
     // From afar the way leads to the middle of the goal's block of four by four cells, so a group and
     // anyone going near the same place share one field. Close in it leads to the goal's own cell.
     const q = far > 24;
@@ -1048,6 +1058,8 @@ const Rules = (() => {
       return [best % W + 0.5, (best / W | 0) + 0.5];
     }
     let bx = u.x, by = u.y, wx = (c % W) + 0.5, wy = (c / W | 0) + 0.5;
+    // The look ahead stops where the going changes, so a way that keeps to a track follows its bends.
+    const lv0 = S.gnd[c] & 96;
     for (let i = 0; i < 10; i++) {
       const dir = f.dir[c];
       if (dir < 0) break;
@@ -1055,8 +1067,17 @@ const Rules = (() => {
       c = y * W + x;
       const px = x + 0.5, py = y + 0.5;
       if (lineClear(S, cls, bx, by, px, py)) { wx = px; wy = py; } else break;
+      if ((S.gnd[c] & 96) !== lv0) break;
     }
     return [wx, wy];
+  }
+  // Whether a beaten or hardened track lies near the way between two points, so the way is found rather than
+  // taken straight.
+  function tracksBetween(S, ax, ay, bx, by) {
+    const x0 = Math.max(0, (Math.min(ax, bx) | 0) - 2), x1 = Math.min(W - 1, (Math.max(ax, bx) | 0) + 2);
+    const y0 = Math.max(0, (Math.min(ay, by) | 0) - 2), y1 = Math.min(H - 1, (Math.max(ay, by) | 0) + 2);
+    for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) if ((S.gnd[y * W + x] & 96) >= 64) return true;
+    return false;
   }
 
   // Grid of who is where, for neighbours and targets.
@@ -1385,7 +1406,9 @@ const Rules = (() => {
     dx /= mag; dy /= mag;
     const onRoad = S.map.roadDist[((u.y | 0) * RES) * VW + (u.x | 0) * RES] < 2, here = S.gnd[cellOf(u.x, u.y)], w = sky(S);
     // Mud after rain bogs wheels down off the roads, snow slows everyone, and woods and fords slow what is in them.
-    let going = onRoad ? 1.15 : d.move === 'wheel' ? 1 - 0.24 * w.rain - 0.2 * w.snow : d.move === 'track' ? 1 - 0.12 * w.storm - 0.1 * w.snow : 1 - 0.18 * w.snow;
+    // A worn track is quicker going, and a hardened one is as firm as a road in the wet.
+    const tl = (here >> 5) & 3;
+    let going = onRoad ? 1.15 : (tl >= 3 ? 1 : d.move === 'wheel' ? 1 - 0.24 * w.rain - 0.2 * w.snow : d.move === 'track' ? 1 - 0.12 * w.storm - 0.1 * w.snow : 1 - 0.18 * w.snow) * TRACK_GO[tl];
     if (here & 16) going *= 0.5;
     if ((here & 8) && d.move === 'foot') going *= 0.75;
     const top = d.speed * speedScale * going;
@@ -1411,7 +1434,13 @@ const Rules = (() => {
     u.x = clamp(u.x, 0.5, W - 0.5); u.y = clamp(u.y, 0.5, H - 0.5);
     u.anim += u.v * DT;
     // Tracks flatten the trees they drive into, and slow doing it.
-    if (d.move === 'track') { const c = cellOf(u.x, u.y); if ((S.gnd[c] & 8) && S.wood[c] !== 2) { S.crush.push(c); u.v *= 0.55; } }
+    const cNow = cellOf(u.x, u.y);
+    if (d.move === 'track' && (S.gnd[cNow] & 8) && S.wood[cNow] !== 2) { S.crush.push(cNow); u.v *= 0.55; }
+    // Whatever moves into a cell off the roads wears it.
+    if (cNow !== u.lc) {
+      u.lc = cNow;
+      if (S.map.roadDist[((u.y | 0) * RES) * VW + (u.x | 0) * RES] >= 2) S.trail[cNow] = Math.min(255, S.trail[cNow] + WEAR[d.move]);
+    }
   }
 
   // Drives toward a goal. Says true on arrival within `stop`, and gives up when truly stuck.
@@ -2224,6 +2253,22 @@ const Rules = (() => {
       if (b.fix && S.tick >= b.fix) raiseBridge(S, i);
       if (b.c4 && S.tick >= b.c4) { const m = S.map.bridges[i]; S.ev.push({ t: 'boom', x: (m.x0 + m.x1) / 2, y: (m.y0 + m.y1) / 2, size: 3 }); dropBridge(S, i); }
     });
+    // Worn ground hardens a step at a time into tracks, and what is no longer used grows back over.
+    if (S.tick % TRACK_EVERY === TRACK_EVERY / 2) {
+      const T = S.trail, G = S.gnd, cells = [], bits = [];
+      let sum = 0;
+      for (let c = 0; c < N; c++) {
+        let v = T[c];
+        const lv = (G[c] >> 5) & 3;
+        if (!v && !lv) continue;
+        if (v) T[c] = v = Math.max(0, v - 2);
+        sum = (sum + v) | 0;
+        const nl = lv < 3 && v >= TRACK_AT[lv] ? lv + 1 : lv > 0 && v < TRACK_AT[lv - 1] * 0.6 ? lv - 1 : lv;
+        if (nl !== lv) { cells.push(c); bits.push((G[c] & ~96) | (nl << 5)); }
+      }
+      S.trailSum = sum;
+      setGround(S, cells, bits);
+    }
     // After enough rain the rivers rise over the fords, and they open again as the water goes down.
     if (S.tick % 20 === 0) {
       const w = sky(S), want = S.flooded ? w.flood > 0.65 : w.flood > 0.9;
