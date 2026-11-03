@@ -116,6 +116,10 @@ const Rules = (() => {
     para: { name: 'Paradrop', sym: 'par', cost: 600, cd: 150, tech: 2, r: 4, note: 'Three rifle squads, anywhere you can see.' },
   };
 
+  // A bridge stands this much damage. A house stands less, more for each floor.
+  const BRIDGE_HP = 1500;
+  const houseHp = h => 260 + 220 * h.floors;
+
   const DIFFICULTY = {
     // tech1 and tech2 are the minutes before reaching for Tech II and Tech III. gap is seconds between powers.
     // ramp caps the army at ramp[0] units plus ramp[1] a minute. def is the most defences it builds.
@@ -173,8 +177,10 @@ const Rules = (() => {
   // Where everything goes on a kind of map. syms are the turns that carry the map onto itself. Each
   // feature is listed with all of its images in a row, so one town's images sit side by side.
   function layoutFor(kind) {
-    const L = { kind, roads: [], bridges: [], towns: [], ore: [], wells: [], bases: [] };
+    const L = { kind, roads: [], bridges: [], towns: [], ore: [], wells: [], bases: [], fords: [] };
     const all = (list, p, extra = []) => { for (const T of L.syms) { const q = T(p); list.push([q[0], q[1], ...extra]); } };
+    // A ford's images, each its middle and the unit way along the river.
+    const fordAt = (p, q) => { for (const T of L.syms) { const a = T(p), b = T(q), d = mhypot(b[0] - a[0], b[1] - a[1]); L.fords.push([a[0], a[1], (b[0] - a[0]) / d, (b[1] - a[1]) / d]); } };
     const R = (a, b, wig, rep = true) => L.roads.push({ a, b, wig, rep });
     if (kind === 'world') {
       const rot = ([x, y], k) => { let dx = x - CX, dy = y - CY; for (let i = 0; i < k; i++) { const t = dx; dx = -dy; dy = t; } return [CX + dx, CY + dy]; };
@@ -213,6 +219,8 @@ const Rules = (() => {
       R(tIn, span(rivers[0], 45)[1], 2.5); R(tIn, span(rivers[1], 45)[0], 2.5);
       R(C, span(rivers[0], 95)[1], 2.5); R(E, span(rivers[1], 95)[0], 2.5);
       for (const s of [45, 95]) { const [a, b] = span(rivers[0], s); R(a, b, 0); }
+      // A ford between the two bridges, as a middle point and the river's way there.
+      fordAt(fromRiver(rivers[0], 70, riverU(70)), fromRiver(rivers[0], 71, riverU(71)));
       return L;
     }
     L.syms = [p => [p[0], p[1]], mirror];
@@ -239,6 +247,7 @@ const Rules = (() => {
       L.bridges.push([a, b]);
       if (v) L.bridges.push([mirror(a), mirror(b)]);
     }
+    fordAt(uvp(riverU(20), 20), uvp(riverU(21), 21));
     return L;
   }
 
@@ -310,17 +319,30 @@ const Rules = (() => {
       }
     }
     for (let c = 0; c < h.length; c++) h[c] = lerp(h[c], blur[c], smooth(5.5, 2, roadDist[c]));
+    // How much of a ford a point is in: a strip across the river a few cells wide.
+    const fordK = (x, y) => {
+      let k = 0;
+      for (const f of L.fords) {
+        const dx = x - f[0], dy = y - f[1], a = Math.abs(dx * f[2] + dy * f[3]), b = Math.abs(dy * f[2] - dx * f[3]);
+        if (a < 4.5 && b < 14) k = Math.max(k, smooth(4.5, 2.5, a));
+      }
+      return k;
+    };
     for (let j = 0; j < VH; j++) for (let i = 0; i < VW; i++) {
       const x = i / RES, y = j / RES, c = j * VW + i, [d, width] = L.river(x, y);
-      if (d < width + 7) h[c] = lerp(-1.3, Math.min(h[c], 1.4), smooth(width - 1, width + 7, d));
+      if (d < width + 7) {
+        // The bed, and at a ford a shallow one with gentle banks.
+        const top = Math.min(h[c], 1.4), s = smooth(width - 1, width + 7, d), deep = lerp(-1.3, top, s), fk = fordK(x, y);
+        h[c] = fk > 0 ? lerp(deep, lerp(-0.3, top, s), fk) : deep;
+      }
     }
 
     // Decks over the water. Units walk at deck height, the terrain below stays as it was.
     const deck = new Float32Array(VW * VH), bridges = [];
     const addBridge = (a, b) => {
       const dx = b[0] - a[0], dy = b[1] - a[1], len = mhypot(dx, dy), ux = dx / len, uy = dy / len, wide = 3;
-      const z = 0.8;
-      bridges.push({ x0: a[0], y0: a[1], x1: b[0], y1: b[1], w: wide * 2, z });
+      const z = 0.8, br = { x0: a[0], y0: a[1], x1: b[0], y1: b[1], w: wide * 2, z, len, ux, uy, verts: [], cells: [], under: [] };
+      bridges.push(br);
       const i0 = Math.max(0, Math.floor((Math.min(a[0], b[0]) - 5) * RES)), i1 = Math.min(VW - 1, Math.ceil((Math.max(a[0], b[0]) + 5) * RES));
       const j0 = Math.max(0, Math.floor((Math.min(a[1], b[1]) - 5) * RES)), j1 = Math.min(VH - 1, Math.ceil((Math.max(a[1], b[1]) + 5) * RES));
       for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
@@ -328,10 +350,17 @@ const Rules = (() => {
         if (t >= -1 && t <= len + 1 && s <= wide) {
           const c = j * VW + i;
           deck[c] = Math.max(deck[c], z);
+          br.verts.push(c);
         }
       }
     };
-    for (const [a, b] of L.bridges) addBridge(a, b);
+    // A duel lists its outer bridges twice, once as each other's mirror image. Each is kept once.
+    const keyB = new Set();
+    for (const [a, b] of L.bridges) {
+      const k = Math.round(a[0] + b[0]) + ',' + Math.round(a[1] + b[1]);
+      if (keyB.has(k)) continue;
+      keyB.add(k); addBridge(a, b);
+    }
 
     // Towns, ore and wells.
     L.towns.forEach(p => towns.push({ x: p[0], y: p[1], owner: -1, cap: 0, capTeam: -1, r: 14 }));
@@ -348,28 +377,39 @@ const Rules = (() => {
     });
     L.wells.forEach(p => wells.push({ x: Math.round(p[0]), y: Math.round(p[1]) }));
 
-    // Cells. Bit 1 stops vehicles, bit 2 stops infantry, bit 4 forbids building.
+    // Cells. Bit 1 stops vehicles, bit 2 stops infantry, bit 4 forbids building. Bit 8 is standing woods,
+    // which stop wheels, slow infantry and fall under tracks. Bit 16 is a ford, slow going for everyone.
     const hAt = (x, y) => { const i = clamp(Math.round(x * RES), 0, VW - 1), j = clamp(Math.round(y * RES), 0, VH - 1); return h[j * VW + i]; };
     const deckAt = (x, y) => { const i = clamp(Math.round(x * RES), 0, VW - 1), j = clamp(Math.round(y * RES), 0, VH - 1); return deck[j * VW + i]; };
-    const ground = new Uint8Array(N);
-    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
-      let hi = -99, lo = 99, wet = false;
+    const ground = new Uint8Array(N), fordCells = [];
+    // A cell's bits from the land alone, as if no bridge stood over it.
+    const landBits = (x, y) => {
+      let hi = -99, lo = 99;
       for (let b = 0; b <= 2; b++) for (let a = 0; a <= 2; a++) {
         const z = hAt(x + a / 2, y + b / 2);
         hi = Math.max(hi, z); lo = Math.min(lo, z);
       }
-      if (lo < water + 0.1) wet = true;
-      const onDeck = deckAt(x + 0.5, y + 0.5) > 0, slope = hi - lo;
+      if (lo < water + 0.1) return fordK(x + 0.5, y + 0.5) > 0.85 ? 4 | 16 : 7;
+      const slope = hi - lo;
       let bits = 0;
-      if (!onDeck) {
-        if (wet) bits = 7;
-        else {
-          if (slope > 0.95) bits |= 1 | 4;
-          if (slope > 1.4) bits |= 2;
-          if (slope > 0.5) bits |= 4;
-        }
-      } else bits = 4;
+      if (slope > 0.95) bits |= 1 | 4;
+      if (slope > 1.4) bits |= 2;
+      if (slope > 0.5) bits |= 4;
+      return bits;
+    };
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const bits = deckAt(x + 0.5, y + 0.5) > 0 ? 4 : landBits(x, y);
       ground[y * W + x] = bits;
+      if (bits & 16) fordCells.push(y * W + x);
+    }
+    // Each bridge's cells, and what lies under them, for when it falls.
+    for (const br of bridges) {
+      for (let y = Math.max(0, Math.floor(Math.min(br.y0, br.y1) - 5)); y <= Math.min(H - 1, Math.ceil(Math.max(br.y0, br.y1) + 5)); y++) for (let x = Math.max(0, Math.floor(Math.min(br.x0, br.x1) - 5)); x <= Math.min(W - 1, Math.ceil(Math.max(br.x0, br.x1) + 5)); x++) {
+        if (deckAt(x + 0.5, y + 0.5) <= 0) continue;
+        const px = x + 0.5 - br.x0, py = y + 0.5 - br.y0, t = px * br.ux + py * br.uy, s = Math.abs(-px * br.uy + py * br.ux);
+        if (t < -2 || t > br.len + 2 || s > 4) continue;
+        br.cells.push(y * W + x); br.under.push(landBits(x, y));
+      }
     }
 
     // Trees and rocks stand in woods on the slopes, never on roads or in the open places. Each is placed in
@@ -389,7 +429,7 @@ const Rules = (() => {
         for (const T of L.syms) {
           const [qx, qy] = T([px, py]);
           scatter.push({ k, x: qx, y: qy, s, a: rand() * TAU });
-          ground[clamp(qy | 0, 0, H - 1) * W + clamp(qx | 0, 0, W - 1)] |= 7;
+          ground[clamp(qy | 0, 0, H - 1) * W + clamp(qx | 0, 0, W - 1)] |= k === 'tree' ? 4 | 8 : 7;
         }
       };
       if (!keep(x, y)) continue;
@@ -420,13 +460,14 @@ const Rules = (() => {
       }
     }
     const faces = L.bases.map(b => matan2(CY - b[1], CX - b[0]));
-    return { W, H, seed, kind, h, deck, water, ground, ore: oreCells, oreFields, wells, towns, roads, roadDist, bridges, scatter, houses, oreRich, bases: L.bases, faces };
+    for (const s of scatter) s.c = clamp(s.y | 0, 0, H - 1) * W + clamp(s.x | 0, 0, W - 1);
+    return { W, H, seed, kind, h, deck, water, ground, ore: oreCells, oreFields, wells, towns, roads, roadDist, bridges, scatter, houses, oreRich, bases: L.bases, faces, fords: L.fords, fordCells };
   }
 
   // A map is kept only if vehicles can get from the first base to every other base, town and well.
   function goodMap(M) {
     const pass = new Uint8Array(N);
-    for (let c = 0; c < N; c++) pass[c] = (M.ground[c] & 1) ? 0 : 1;
+    for (let c = 0; c < N; c++) pass[c] = (M.ground[c] & 9) ? 0 : 1;
     const a = M.bases[0];
     const seen = new Uint8Array(N), q = [Math.floor(a[1]) * W + Math.floor(a[0]) + 4];
     seen[q[0]] = 1;
@@ -469,6 +510,50 @@ const Rules = (() => {
       return ((t ^ t >>> 14) >>> 0) / 4294967296;
     };
   }
+
+  // Weather comes in spells of three minutes. A spell's kind follows from the seed and its number alone, so
+  // every copy of the world has the same sky and nothing about it is saved. A game's first two are clear.
+  const SPELL = 180 * HZ, BLEND = 24 * HZ;
+  const WIND = { clear: 0.45, cloud: 0.6, rain: 0.7, storm: 1, fog: 0.12, snow: 0.4 };
+  function spellHash(seed, k) {
+    let h = Math.imul((seed | 0) ^ 0x9e3779b9, 0x85ebca6b) ^ Math.imul(k | 0, 0xc2b2ae35);
+    h ^= h >>> 13; h = Math.imul(h, 0x27d4eb2f); h ^= h >>> 15;
+    return h >>> 0;
+  }
+  function spellOf(seed, k) {
+    if (k < 2) return 'clear';
+    const r = spellHash(seed, k) % 100;
+    return r < 36 ? 'clear' : r < 50 ? 'cloud' : r < 66 ? 'rain' : r < 75 ? 'storm' : r < 89 ? 'fog' : 'snow';
+  }
+  // How much a spell holds at a tick. It rises over BLEND across its start and falls across its end, so two
+  // spells of one kind in a row join without a seam.
+  const spellW = (k, t) => clamp((t - (k * SPELL - BLEND / 2)) / BLEND, 0, 1) * clamp(((k + 1) * SPELL + BLEND / 2 - t) / BLEND, 0, 1);
+  function weatherAt(seed, t) {
+    const k = Math.floor(t / SPELL), o = { clear: 0, cloud: 0, rain: 0, storm: 0, fog: 0, snow: 0, wind: [0, 0], flood: 0, cover: 0, kind: spellOf(seed, k), next: spellOf(seed, k + 1), left: (k + 1) * SPELL - t };
+    for (let j = k - 1; j <= k + 1; j++) {
+      const w = spellW(j, t);
+      if (w <= 0) continue;
+      const kd = spellOf(seed, j), a = (spellHash(seed + 77, j) % 6283) / 1000;
+      o[kd] += w;
+      o.wind[0] += mcos(a) * WIND[kd] * w; o.wind[1] += msin(a) * WIND[kd] * w;
+    }
+    o.rain = Math.min(1, o.rain + o.storm);
+    // Rivers rise through a spell of rain or storm and go down over the next one and a half. Snow lies over
+    // most of its spell and melts over the next.
+    for (let j = k - 3; j <= k; j++) {
+      const kd = spellOf(seed, j), rv = kd === 'storm' ? 1 : kd === 'rain' ? 0.55 : 0, snow = kd === 'snow';
+      if (!rv && !snow) continue;
+      const tau = t - j * SPELL, up = clamp(tau / (SPELL * (snow ? 0.6 : 0.8)), 0, 1), down = tau > SPELL ? clamp(1 - (tau - SPELL) / (SPELL * (snow ? 1 : 1.5)), 0, 1) : 1;
+      if (snow) o.cover += up * down; else o.flood += rv * up * down;
+    }
+    o.cover = Math.min(1, o.cover);
+    // A storm keeps every aircraft on the ground.
+    o.grounded = o.storm > 0.5;
+    return o;
+  }
+  const sky = S => S._wx && S._wx.at === S.tick ? S._wx : (S._wx = Object.assign(weatherAt(S.seed, S.tick), { at: S.tick }));
+  // The time of day, from 0 at dawn round to 1. A day lasts twenty minutes and a game starts early in the morning.
+  const dayAt = t => (t / (HZ * 1200) + 0.03) % 1;
   function freshPlayer(team, o = {}) {
     return {
       team, supply: o.supply || 3500, oil: o.oil || 250, tech: 1, income: 1, carried: 0,
@@ -491,6 +576,10 @@ const Rules = (() => {
       terr: new Int8Array(N).fill(-1), infl: [], terrVer: 0, townOwnerVer: 0,
       ore: new Uint16Array(M.ore), oreVer: 0,
       P: [], bases: M.bases, faces: M.faces, _fields: new Map(),
+      // The ground as it now is, which woods, bridges and fords change, and what has happened to the trees,
+      // bridges and houses.
+      gnd: new Uint8Array(M.ground), gndVer: 0, wood: new Uint8Array(N), woodVer: 0, burn: [], crush: [],
+      bridges: M.bridges.map(() => ({ hp: BRIDGE_HP, fix: 0, c4: 0 })), hh: M.houses.map(houseHp), flooded: false,
     };
     S.rand = rngOf(S);
     for (let t = 0; t < n; t++) { S.P.push(freshPlayer(t, o)); S.infl.push(new Float32Array(N)); }
@@ -554,8 +643,11 @@ const Rules = (() => {
       fields: [...S.fields].map(([k, f]) => [k, f.ver, f.used, f.made, f.reach]),
       ore: b64.en(new Uint8Array(S.ore.buffer.slice(0))),
       P: S.P.map(P => { const o = plain(P); o.vis = bits(P.vis); o.seen = bits(P.seen); o.q = {}; for (const c in P.q) o.q[c] = P.q[c].map(it => { const j = Object.assign({}, it); delete j.cost; return j; }); return o; }),
+      // The ground and the trees as pairs of cell and value, only where they differ from the map's start.
+      gnd: diffs(S.gnd, S.map.ground), wood: diffs(S.wood, null), gndVer: S.gndVer, woodVer: S.woodVer, burn: S.burn, bridges: S.bridges, hh: S.hh, flooded: S.flooded,
     };
   }
+  function diffs(a, base) { const o = []; for (let c = 0; c < a.length; c++) if (a[c] !== (base ? base[c] : 0)) o.push(c, a[c]); return o; }
   function load(o) {
     const S = newGame({ seed: o.seed, layout: o.layout, empty: true });
     if (S.seed !== o.seed) throw new Error('map seed mismatch');
@@ -571,6 +663,14 @@ const Rules = (() => {
     });
     S.ents = o.ents.map(e => Object.assign({}, e, { d: e.b ? BUILDINGS[e.kind] : UNITS[e.kind] }));
     S.byId = new Map(S.ents.map(e => [e.id, e]));
+    // A world saved before woods, bridges and fords could change keeps the map's own ground.
+    const gd = o.gnd || [], wd = o.wood || [];
+    for (let i = 0; i < gd.length; i += 2) S.gnd[gd[i]] = gd[i + 1];
+    for (let i = 0; i < wd.length; i += 2) S.wood[wd[i]] = wd[i + 1];
+    S.gndVer = o.gndVer || 0; S.woodVer = o.woodVer || 0; S.burn = o.burn || []; S.flooded = !!o.flooded;
+    if (o.hh && o.hh.length === S.hh.length) S.hh = o.hh.slice();
+    if (o.bridges && o.bridges.length === S.bridges.length) S.bridges = o.bridges.map(b => Object.assign({}, b));
+    S.bridges.forEach((b, i) => { if (b.hp <= 0) for (const v of S.map.bridges[i].verts) S.map.deck[v] = 0; });
     S.occ.fill(0);
     for (const e of S.ents) if (e.b && e.hp > 0) for (let y = e.cy; y < e.cy + e.h; y++) for (let x = e.cx; x < e.cx + e.w; x++) S.occ[y * W + x] = e.id;
     const terrVer = S.terrVer;
@@ -593,6 +693,8 @@ const Rules = (() => {
     for (const e of S.ents) { mix(e.id); mix(e.team); mix(e.x * 1024); mix(e.y * 1024); mix(e.hp * 64); }
     for (const P of S.P) { mix(P.supply * 16); mix(P.oil * 16); mix(P.tech); }
     for (const t of S.towns) { mix(t.owner); mix(t.cap * 1024); }
+    mix(S.gndVer); mix(S.woodVer); mix(S.burn.length);
+    for (const b of S.bridges) mix(b.hp * 16);
     return h;
   }
 
@@ -627,7 +729,7 @@ const Rules = (() => {
     }
     for (let y = cy; y < cy + d.h; y++) for (let x = cx; x < cx + d.w; x++) {
       const c = y * W + x;
-      if (S.occ[c] || (M.ground[c] & 4)) return false;
+      if (S.occ[c] || (S.gnd[c] & 4)) return false;
       if (S.ore[c] && !d.well) return false;
       if (!ignoreTerr && S.terr[c] !== team) return false;
     }
@@ -749,33 +851,51 @@ const Rules = (() => {
         }
       }
     };
+    // Fog and storm shorten everyone's sight. Radar sweeps see through them.
+    const w = sky(S), fk = 1 - 0.45 * w.fog - 0.12 * w.storm, fa = 1 - 0.3 * w.fog;
     for (const e of S.ents) {
       if (e.hp <= 0) continue;
       const P = S.P[e.team];
-      if (e.b) light(P, e.x, e.y, e.d.sight + Math.max(e.w, e.h) / 2, 3, false);
-      else if (e.d.move === 'air' || e.d.move === 'jet') light(P, e.x, e.y, e.d.sight, 0, true);
-      else light(P, e.x, e.y, e.d.sight, 1.1, false);
+      if (e.b) light(P, e.x, e.y, (e.d.sight + Math.max(e.w, e.h) / 2) * fk, 3, false);
+      else if (e.d.move === 'air' || e.d.move === 'jet') light(P, e.x, e.y, e.d.sight * fa, 0, true);
+      else light(P, e.x, e.y, e.d.sight * fk, 1.1, false);
     }
-    for (const t of S.towns) if (t.owner >= 0) light(S.P[t.owner], t.x, t.y, 9, 2, false);
+    for (const t of S.towns) if (t.owner >= 0) light(S.P[t.owner], t.x, t.y, 9 * fk, 2, false);
     for (const s of S.sweeps) if (s.until > S.tick) light(S.P[s.team], s.x, s.y, s.r, 0, true);
   }
 
-  function blocked(S, cls, c, occ = S.occ) {
-    return (S.map.ground[c] & (cls === 'foot' ? 2 : 1)) !== 0 || occ[c] !== 0;
+  // Three ways of getting about: on foot, on wheels, and on tracks, which go through woods by flattening them.
+  // Each is stopped by its own ground bits.
+  const BIT = { foot: 2, veh: 9, track: 1 };
+  const clsOf = u => u.d.move === 'foot' ? 'foot' : u.d.move === 'track' ? 'track' : 'veh';
+  function blocked(S, cls, c, occ = S.occ, g = S.gnd) {
+    return (g[c] & BIT[cls]) !== 0 || occ[c] !== 0;
   }
-  // Each change to who stands where is kept a while, so a flow field can be worked out again against the
-  // ground as it was when the field was made. A player who joins part way has the fields' list but not
-  // their arrays, and makes them again from this.
-  function logOcc(S, cells, prev) {
-    S.occLog.push({ v: S.occVer, c: cells, p: prev });
+  // Each change to who stands where, or to the ground, is kept a while, so a flow field can be worked out
+  // again against the ground as it was when the field was made. A player who joins part way has the fields'
+  // list but not their arrays, and makes them again from this.
+  function logOcc(S, cells, prev, g, gp) {
+    S.occLog.push(g ? { v: S.occVer, c: cells, p: prev, g, gp } : { v: S.occVer, c: cells, p: prev });
     if (S.occLog.length > 96) S.occLog.shift();
   }
+  function setGround(S, cells, bits) {
+    if (!cells.length) return;
+    const prev = [];
+    for (let i = 0; i < cells.length; i++) { prev.push(S.gnd[cells[i]]); S.gnd[cells[i]] = bits[i]; }
+    S.occVer++; S.gndVer++;
+    logOcc(S, [], [], cells.slice(), prev);
+  }
   const oldestOcc = S => S.occLog.length ? S.occLog[0].v - 1 : S.occVer;
-  function occAt(S, ver) {
-    if (ver === S.occVer) return S.occ;
-    const o = new Int32Array(S.occ);
-    for (let i = S.occLog.length - 1; i >= 0 && S.occLog[i].v > ver; i--) { const L = S.occLog[i]; for (let k = 0; k < L.c.length; k++) o[L.c[k]] = L.p[k]; }
-    return o;
+  // Who stood where and what the ground was, at an earlier version.
+  function stateAt(S, ver) {
+    if (ver === S.occVer) return [S.occ, S.gnd];
+    const o = new Int32Array(S.occ), g = new Uint8Array(S.gnd);
+    for (let i = S.occLog.length - 1; i >= 0 && S.occLog[i].v > ver; i--) {
+      const L = S.occLog[i];
+      for (let k = 0; k < L.c.length; k++) o[L.c[k]] = L.p[k];
+      if (L.g) for (let k = 0; k < L.g.length; k++) g[L.g[k]] = L.gp[k];
+    }
+    return [o, g];
   }
   // Flow fields. One field per class and goal, shared by everyone going there. Which fields exist, how old
   // and when last used is part of the world; their arrays are not, and are made when first needed.
@@ -783,7 +903,7 @@ const Rules = (() => {
   // further out, for someone beyond it. After the ground changes a field is kept three seconds more before
   // it is made again, and at most four are made in a step.
   function field(S, cls, gx, gy, need = 0) {
-    const key = (cls === 'foot' ? 0 : 1) * N + gy * W + gx;
+    const key = (cls === 'foot' ? 0 : cls === 'veh' ? 1 : 2) * N + gy * W + gx;
     let f = S.fields.get(key);
     if (f && f.ver < oldestOcc(S)) { S.fields.delete(key); S._fields.delete(key); f = null; }
     const enough = f && f.reach >= need;
@@ -808,13 +928,15 @@ const Rules = (() => {
     if (p && p.ver === f.ver && p.reach === f.reach) return p;
     if (!p) { p = { dist: new Float32Array(N), dir: new Int8Array(N) }; S._fields.set(key, p); }
     p.ver = f.ver; p.reach = f.reach;
-    fill(S, p, cls, gx, gy, occAt(S, f.ver), f.reach);
+    const [occ, gnd] = stateAt(S, f.ver);
+    fill(S, p, cls, gx, gy, occ, gnd, f.reach);
     return p;
   }
-  // Dijkstra from the goal over a grid of what blocks this class, with roads a little cheaper.
+  // Dijkstra from the goal over a grid of what blocks this class, with roads a little cheaper, and woods
+  // and fords dearer.
   let fillBlock = null;
-  function fill(S, f, cls, gx, gy, occ, reach = Infinity) {
-    const M = S.map, g = M.ground, bit = cls === 'foot' ? 2 : 1;
+  function fill(S, f, cls, gx, gy, occ, g, reach = Infinity) {
+    const M = S.map, bit = BIT[cls], woodC = cls === 'track' ? 3 : 1.6;
     if (!M.roadCell) { M.roadCell = new Uint8Array(N); for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) M.roadCell[y * W + x] = M.roadDist[(y * RES) * VW + x * RES] < 2 ? 1 : 0; }
     if (!fillBlock || fillBlock.length !== N) fillBlock = new Uint8Array(N);
     const block = fillBlock, road = M.roadCell;
@@ -840,7 +962,7 @@ const Rules = (() => {
       heapD[i] = d; heapC[i] = c;
       return top;
     };
-    const seeds = goalCells(S, cls, gx, gy, occ);
+    const seeds = goalCells(S, cls, gx, gy, occ, g);
     for (const c of seeds) { dist[c] = 0; push(c, 0); }
     const DX = [1, 1, 0, -1, -1, -1, 0, 1], DY = [0, 1, 1, 1, 0, -1, -1, -1];
     const COST = [1, 1.41, 1, 1.41, 1, 1.41, 1, 1.41];
@@ -858,15 +980,15 @@ const Rules = (() => {
         if (block[m]) continue;
         if ((i & 1) && (block[y * W + nx] || block[ny * W + x])) continue;
         // Rounded to the array's own precision, so a cell is never queued again for the same distance.
-        const nd = Math.fround(dc + COST[i] * (road[m] ? 0.8 : 1));
+        const gm = g[m], nd = Math.fround(dc + COST[i] * (road[m] ? 0.8 : 1) * (gm & 8 ? woodC : 1) * (gm & 16 ? 2 : 1));
         if (nd < dist[m]) { dist[m] = nd; dir[m] = (i + 4) & 7; push(m, nd); }
       }
     }
   }
   // A goal on something solid means the free cells around it.
-  function goalCells(S, cls, gx, gy, occ = S.occ) {
+  function goalCells(S, cls, gx, gy, occ = S.occ, g = S.gnd) {
     const c = gy * W + gx;
-    if (!blocked(S, cls, c, occ)) return [c];
+    if (!blocked(S, cls, c, occ, g)) return [c];
     for (let r = 1; r < 24; r++) {
       const out = [];
       for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) {
@@ -874,7 +996,7 @@ const Rules = (() => {
         const x = gx + dx, y = gy + dy;
         if (x < 0 || y < 0 || x >= W || y >= H) continue;
         const m = y * W + x;
-        if (!blocked(S, cls, m, occ)) out.push(m);
+        if (!blocked(S, cls, m, occ, g)) out.push(m);
       }
       if (out.length) return out;
     }
@@ -891,7 +1013,7 @@ const Rules = (() => {
   const FDX = [1, 1, 0, -1, -1, -1, 0, 1], FDY = [0, 1, 1, 1, 0, -1, -1, -1];
   // Looks ahead along the field for the farthest point in a straight, clear line.
   function waypoint(S, u, tx, ty) {
-    const cls = u.d.move === 'foot' ? 'foot' : 'veh', far = mhypot(tx - u.x, ty - u.y);
+    const cls = clsOf(u), far = mhypot(tx - u.x, ty - u.y);
     if (far < 16 && lineClear(S, cls, u.x, u.y, tx, ty)) return [tx, ty];
     // From afar the way leads to the middle of the goal's block of four by four cells, so a group and
     // anyone going near the same place share one field. Close in it leads to the goal's own cell.
@@ -1048,10 +1170,10 @@ const Rules = (() => {
       S.dirty = true;
       S.ev.push({ t: 'crater', x: t.x, y: t.y, r: Math.max(t.w, t.h) * 0.8, b: true, w: t.w, h: t.h, cx: t.cx, cy: t.cy });
       if (t.kind === 'hq') S.P[t.team].exposed = true;
-    }
+    } else if (!t.d.men && (S.gnd[cellOf(t.x, t.y)] & 8)) ignite(S, t.x, t.y, 1.2, 0.45);
   }
 
-  function blast(S, x, y, r, dmg, wvs, team, by, friendly) {
+  function blast(S, x, y, r, dmg, wvs, team, by, friendly, spareBridge = -1) {
     near(S, x, y, r, t => {
       if (t.hp <= 0 || (!friendly && t.team === team) || isAir(t)) return;
       const d = gap(x, y, t);
@@ -1059,6 +1181,99 @@ const Rules = (() => {
       const f = 1 - 0.6 * d / r;
       hurt(S, t, dmg * f * (wvs ? (wvs[t.d.armor] ?? 1) : 1), team, by);
     });
+    // A blast on a bridge wears it down a little, and one among houses knocks them about.
+    const bld = (wvs ? (wvs.bld ?? 1) : 1) * dmg;
+    S.map.bridges.forEach((m, i) => {
+      if (i === spareBridge || S.bridges[i].hp <= 0) return;
+      const px = x - m.x0, py = y - m.y0, t = px * m.ux + py * m.uy, s = Math.abs(-px * m.uy + py * m.ux);
+      if (t > -r && t < m.len + r && s < m.w / 2 + r * 0.5) hurtBridge(S, i, bld * 0.35, team);
+    });
+    const hs = S.map.houses;
+    for (let i = 0; i < hs.length; i++) {
+      const h = hs[i];
+      if (S.hh[i] <= 0 || x < h.x - r || x > h.x + h.w + r || y < h.y - r || y > h.y + h.h + r) continue;
+      S.hh[i] -= bld * 0.5;
+      if (S.hh[i] <= 0) { S.hh[i] = 0; S.ev.push({ t: 'ruin', i, x: h.x + h.w / 2, y: h.y + h.h / 2 }); }
+    }
+  }
+
+  // Bridges. One is brought down by enough damage, or at once by C4, and an engineer rebuilds it in twenty
+  // seconds. Whoever is on it when it falls goes into the river.
+  function hurtBridge(S, i, dmg, team) {
+    const b = S.bridges[i];
+    if (b.hp <= 0 || dmg <= 0) return;
+    b.hp -= dmg; b.under = S.tick;
+    if (b.hp <= 0) dropBridge(S, i);
+  }
+  function dropBridge(S, i) {
+    const b = S.bridges[i], m = S.map.bridges[i];
+    b.hp = 0; b.fix = 0; b.c4 = 0;
+    for (const v of m.verts) S.map.deck[v] = 0;
+    setGround(S, m.cells, m.under);
+    const on = new Set(m.cells);
+    for (const u of S.ents) if (!u.b && u.hp > 0 && !isAir(u) && !(u.drop > 0) && on.has(cellOf(u.x, u.y)) && blocked(S, clsOf(u), cellOf(u.x, u.y))) hurt(S, u, 1e6, -1, 0);
+    S.ev.push({ t: 'bridge', i, down: true, x: (m.x0 + m.x1) / 2, y: (m.y0 + m.y1) / 2 });
+  }
+  function raiseBridge(S, i) {
+    const b = S.bridges[i], m = S.map.bridges[i];
+    b.hp = BRIDGE_HP; b.fix = 0;
+    for (const v of m.verts) S.map.deck[v] = m.z;
+    setGround(S, m.cells, m.cells.map(() => 4));
+    S.ev.push({ t: 'bridge', i, down: false, x: (m.x0 + m.x1) / 2, y: (m.y0 + m.y1) / 2 });
+  }
+  // The bridge whose deck covers a point, or -1.
+  function bridgeAt(S, x, y) {
+    const B = S.map.bridges;
+    for (let i = 0; i < B.length; i++) {
+      const m = B[i], px = x - m.x0, py = y - m.y0, t = px * m.ux + py * m.uy, s = Math.abs(-px * m.uy + py * m.ux);
+      if (t > -1 && t < m.len + 1 && s < m.w / 2 + 0.6) return i;
+    }
+    return -1;
+  }
+  // What a gun aims at to hit a bridge: the middle of its deck, dressed as a building of no side.
+  function bridgeMark(S, i) {
+    const m = S.map.bridges[i];
+    return { id: 0, br: i, b: true, team: -1, x: (m.x0 + m.x1) / 2, y: (m.y0 + m.y1) / 2, cx: (m.x0 + m.x1) / 2 - 1, cy: (m.y0 + m.y1) / 2 - 1, w: 2, h: 2, hp: S.bridges[i].hp, d: { armor: 'bld' }, z: m.z + 0.3 };
+  }
+  // The end of a bridge nearer a point, a little way onto the land.
+  function bridgeEnd(S, i, x, y) {
+    const m = S.map.bridges[i], a = mhypot(x - m.x0, y - m.y0) < mhypot(x - m.x1, y - m.y1);
+    return a ? [m.x0 - m.ux * 1.5, m.y0 - m.uy * 1.5] : [m.x1 + m.ux * 1.5, m.y1 + m.uy * 1.5];
+  }
+
+  // Fire in the woods. A blast among standing trees may light them, and fire spreads from tree to tree, more
+  // with the wind and not at all in rain or snow, then leaves the ground burnt and open.
+  function ignite(S, x, y, r, p) {
+    const w = sky(S);
+    p *= 1 - 0.8 * Math.min(1, w.rain + w.snow);
+    if (p <= 0 || S.burn.length >= 400) return;
+    for (let cy = Math.max(0, (y - r) | 0); cy <= Math.min(H - 1, (y + r) | 0); cy++) for (let cx = Math.max(0, (x - r) | 0); cx <= Math.min(W - 1, (x + r) | 0); cx++) {
+      const c = cy * W + cx;
+      if ((S.gnd[c] & 8) && !S.wood[c] && S.rand() < p) kindle(S, c);
+    }
+  }
+  function kindle(S, c) {
+    S.wood[c] = 2; S.woodVer++;
+    S.burn.push([c, 500 + (S.rand() * 300 | 0)]);
+  }
+  const D8 = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, 1], [1, -1], [-1, -1]];
+  function stepFire(S) {
+    if (!S.burn.length) return;
+    const w = sky(S), wet = Math.min(1, w.rain + w.snow), spread = 0.06 * (1 - wet), out = [];
+    for (let i = S.burn.length - 1; i >= 0; i--) {
+      const b = S.burn[i], c = b[0], x = c % W, y = c / W | 0;
+      b[1] -= 10 * (1 + wet * 3);
+      if (spread > 0 && S.burn.length < 400) for (const [dx, dy] of D8) {
+        const nx = x + dx, ny = y + dy;
+        if (nx < 0 || ny < 0 || nx >= W || ny >= H) continue;
+        const n = ny * W + nx;
+        if ((S.gnd[n] & 8) && !S.wood[n] && S.rand() < spread * (1 + (dx * w.wind[0] + dy * w.wind[1]) * 0.9)) kindle(S, n);
+      }
+      // What stands in the fire is burnt.
+      near(S, x + 0.5, y + 0.5, 1.5, u => { if (!u.b && u.hp > 0 && !isAir(u) && cellOf(u.x, u.y) === c) hurt(S, u, u.d.men ? 4 : 2.5, -1, 0); });
+      if (b[1] <= 0) { S.burn.splice(i, 1); S.wood[c] = 3; S.woodVer++; out.push(c); }
+    }
+    setGround(S, out, out.map(c => S.gnd[c] & ~8));
   }
 
   function fire(S, s, wn, t, slot) {
@@ -1067,14 +1282,16 @@ const Rules = (() => {
     const up = (s.b ? terrainAt(S.map, s.x, s.y) : heightAt(S.map, s.x, s.y)) - (t.b ? terrainAt(S.map, t.x, t.y) : heightAt(S.map, t.x, t.y));
     const dmg = w.dmg * vetScale * (up > 1 ? 1.1 : 1);
     s.flash = S.tick; s.fired = S.tick;
-    const z0 = groundZ(S, s) + (s.b ? 1 : 0.1), z1 = groundZ(S, t);
+    const br = t.br, z0 = groundZ(S, s) + (s.b ? 1 : 0.1), z1 = br !== undefined ? t.z : groundZ(S, t);
     const shot = { w: wn, team: s.team, by: s.id, x: s.x, y: s.y, z: z0, tx: t.x, ty: t.y, tz: z1, t: 0, dur: 0, tgt: t.id, dmg };
+    if (br !== undefined) shot.br = br;
     if (w.spread) {
       shot.tx += (S.rand() - 0.5) * w.spread * 2; shot.ty += (S.rand() - 0.5) * w.spread * 2;
       shot.tz = terrainAt(S.map, shot.tx, shot.ty); shot.tgt = 0;
     }
     if (w.fx === 'bullet' || w.fx === 'tracer' || w.fx === 'beam') {
-      hurt(S, t, dmg * (w.vs[t.d.armor] ?? 1), s.team, s.id);
+      if (br !== undefined) hurtBridge(S, br, dmg * (w.vs.bld ?? 1), s.team);
+      else hurt(S, t, dmg * (w.vs[t.d.armor] ?? 1), s.team, s.id);
       S.ev.push({ t: 'shot', w: wn, x: s.x, y: s.y, z: z0, tx: t.x, ty: t.y, tz: z1, team: s.team, dur: 0, id: s.id });
       return;
     }
@@ -1094,8 +1311,15 @@ const Rules = (() => {
       if (s.kind) { landShot(S, s); continue; }
       const w = WEAPONS[s.w];
       S.ev.push({ t: 'hit', w: s.w, x: s.tx, y: s.ty, z: s.tz, team: s.team });
-      if (w.splash) blast(S, s.tx, s.ty, w.splash, s.dmg, w.vs, s.team, s.by);
-      else if (t && t.hp > 0) hurt(S, t, s.dmg * (w.vs[t.d.armor] ?? 1), s.team, s.by);
+      // A shot laid on a bridge strikes it whole, and its blast spares it the second time.
+      if (s.br !== undefined) {
+        const m = S.map.bridges[s.br], px = s.tx - m.x0, py = s.ty - m.y0, along = px * m.ux + py * m.uy, off = Math.abs(-px * m.uy + py * m.ux);
+        if (along > -1 && along < m.len + 1 && off < m.w / 2 + 1) hurtBridge(S, s.br, s.dmg * (w.vs.bld ?? 1), s.team);
+      }
+      if (w.splash) {
+        blast(S, s.tx, s.ty, w.splash, s.dmg, w.vs, s.team, s.by, false, s.br ?? -1);
+        if (S.gnd[cellOf(s.tx, s.ty)] & 8) ignite(S, s.tx, s.ty, w.splash, 0.2);
+      } else if (t && t.hp > 0) hurt(S, t, s.dmg * (w.vs[t.d.armor] ?? 1), s.team, s.by);
     }
   }
 
@@ -1113,7 +1337,7 @@ const Rules = (() => {
       if (u.d.turret && Math.abs(angleTo(u.ta, matan2(t.y - u.y, t.x - u.x))) > 0.12) continue;
       if (!clearShot(S, u, wn, t)) { readyAny = false; continue; }
       u.cd[i] = w.cd * (u.b && S.P[u.team].low ? 2 : 1);
-      if (w.salvo) { u.salvo = w.salvo; u.salvoT = 0; u.salvoW = wn; }
+      if (w.salvo) { u.salvo = w.salvo; u.salvoT = 0; u.salvoW = wn; u.salvoBr = -1; }
       else fire(S, u, wn, t, i);
     }
     return readyAny;
@@ -1123,7 +1347,7 @@ const Rules = (() => {
     if (!u.salvo) return;
     u.salvoT -= DT;
     if (u.salvoT > 0) return;
-    const t = S.byId.get(u.tgt);
+    const t = u.salvoBr >= 0 ? bridgeMark(S, u.salvoBr) : S.byId.get(u.tgt);
     if (!t || t.hp <= 0) { u.salvo = 0; return; }
     u.salvo--;
     u.salvoT = WEAPONS[u.salvoW].gap;
@@ -1143,8 +1367,12 @@ const Rules = (() => {
     dx += sx * 1.6; dy += sy * 1.6;
     const mag = mhypot(dx, dy) || 1;
     dx /= mag; dy /= mag;
-    const road = S.map.roadDist[((u.y | 0) * RES) * VW + (u.x | 0) * RES] < 2 ? 1.15 : 1;
-    const top = d.speed * speedScale * road;
+    const onRoad = S.map.roadDist[((u.y | 0) * RES) * VW + (u.x | 0) * RES] < 2, here = S.gnd[cellOf(u.x, u.y)], w = sky(S);
+    // Mud after rain bogs wheels down off the roads, snow slows everyone, and woods and fords slow what is in them.
+    let going = onRoad ? 1.15 : d.move === 'wheel' ? 1 - 0.24 * w.rain - 0.2 * w.snow : d.move === 'track' ? 1 - 0.12 * w.storm - 0.1 * w.snow : 1 - 0.18 * w.snow;
+    if (here & 16) going *= 0.5;
+    if ((here & 8) && d.move === 'foot') going *= 0.75;
+    const top = d.speed * speedScale * going;
     const want = matan2(dy, dx), diff = angleTo(u.a, want);
     if (d.move === 'foot') {
       u.a += clamp(diff, -6 * DT * 2, 6 * DT * 2);
@@ -1157,7 +1385,7 @@ const Rules = (() => {
       const goal = top * align * clamp(dist / 1.2, 0.3, 1);
       u.v += clamp(goal - u.v, -5 * DT, 2.5 * DT);
     }
-    const cls = d.move === 'foot' ? 'foot' : 'veh';
+    const cls = clsOf(u);
     const hx = d.move === 'foot' ? dx : mcos(u.a), hy = d.move === 'foot' ? dy : msin(u.a);
     const nx = u.x + hx * u.v * DT, ny = u.y + hy * u.v * DT;
     if (!blocked(S, cls, cellOf(nx, ny))) { u.x = nx; u.y = ny; }
@@ -1166,6 +1394,8 @@ const Rules = (() => {
     else u.v *= 0.3;
     u.x = clamp(u.x, 0.5, W - 0.5); u.y = clamp(u.y, 0.5, H - 0.5);
     u.anim += u.v * DT;
+    // Tracks flatten the trees they drive into, and slow doing it.
+    if (d.move === 'track') { const c = cellOf(u.x, u.y); if ((S.gnd[c] & 8) && S.wood[c] !== 2) { S.crush.push(c); u.v *= 0.55; } }
   }
 
   // Drives toward a goal. Says true on arrival within `stop`, and gives up when truly stuck.
@@ -1230,7 +1460,7 @@ const Rules = (() => {
     const ax = fieldBest ? fieldBest.x : x, ay = fieldBest ? fieldBest.y : y, R = fieldBest ? fieldBest.r + 3 : 18;
     for (let cy = Math.max(1, ay - R | 0); cy <= Math.min(H - 2, ay + R | 0); cy++) for (let cx = Math.max(1, ax - R | 0); cx <= Math.min(W - 2, ax + R | 0); cx++) {
       const c = cy * W + cx;
-      if (!S.ore[c] || S.occ[c] || (S.map.ground[c] & 1)) continue;
+      if (!S.ore[c] || S.occ[c] || (S.gnd[c] & 9)) continue;
       const d = mhypot(cx + 0.5 - x, cy + 0.5 - y);
       if (d < bd) { bd = d; best = c; }
     }
@@ -1290,20 +1520,33 @@ const Rules = (() => {
       S.ev.push({ t: 'boom', x, y, size: 2.2 });
       S.ev.push({ t: 'crater', x, y, r: 1.8 });
       blast(S, x, y, s.splash, s.dmg, { inf: 1, light: 1, heavy: 0.8, bld: 0.9 }, s.team, s.by);
+      ignite(S, x, y, 2, 0.5);
     } else if (s.kind === 'nuke') {
       S.ev.push({ t: 'boom', x, y, size: 9 });
       S.ev.push({ t: 'crater', x, y, r: 9 });
       blast(S, x, y, 10, 1400, { inf: 1.5, light: 1, heavy: 0.8, bld: 0.8 }, s.team, s.by, true);
+      ignite(S, x, y, 10, 0.7);
     } else if (s.kind === 'barrage') {
       S.ev.push({ t: 'boom', x, y, size: 1.8 });
       S.ev.push({ t: 'crater', x, y, r: 1.4 });
       blast(S, x, y, 2.2, 180, { inf: 1, light: 1, heavy: 0.6, bld: 0.7 }, s.team, 0);
+      ignite(S, x, y, 1.6, 0.35);
     }
+  }
+  // An airfield's pad for an aircraft waiting out a storm.
+  function padFor(S, u) {
+    const home = S.ents.find(e => e.b && e.team === u.team && e.kind === 'airfield' && e.hp > 0);
+    if (!home) return [u.x, u.y];
+    const k = u.id % 6;
+    return [home.x - 2.2 + (k % 3) * 2.2, home.y + (k < 3 ? -2.6 : 2.6)];
   }
 
   function jetTick(S, u) {
     // Parked at the airfield until told. A run flies over the target and home again.
-    const o = u.ord, home = S.ents.find(e => e.b && e.team === u.team && e.kind === 'airfield' && e.hp > 0);
+    const home = S.ents.find(e => e.b && e.team === u.team && e.kind === 'airfield' && e.hp > 0);
+    // A storm calls every run off.
+    if (sky(S).grounded && u.ord && u.ord.t === 'attack') u.ord = null;
+    const o = u.ord;
     if (o && o.t === 'attack' && u.ammo > 0) {
       const t = S.byId.get(o.id), tx = t ? t.x : o.x, ty = t ? t.y : o.y;
       if (t && t.hp > 0) { o.x = t.x; o.y = t.y; }
@@ -1332,7 +1575,17 @@ const Rules = (() => {
 
   function airTick(S, u) {
     const d = u.d, o = u.ord;
-    u.z = d.alt + msin(S.tick * 0.05 + u.id) * 0.12;
+    // In a storm helicopters and drones go home and set down, and a drone's flying time stands still.
+    if (sky(S).grounded) {
+      u.ord = null; u.tgt = 0;
+      const [px, py] = padFor(S, u);
+      if (flyTo(S, u, px, py, 0.6)) u.z = Math.max(0.3, u.z - 2 * DT);
+      else u.z = Math.min(d.alt, u.z + 2 * DT);
+      return;
+    }
+    // Back up to height after setting down.
+    const alt = d.alt + msin(S.tick * 0.05 + u.id) * 0.12;
+    u.z = u.z < alt - 0.2 && !d.kamikaze ? u.z + 2 * DT : alt;
     if (d.kamikaze) {
       u.life -= DT;
       if (u.life <= 0) { kill(S, u, -1); return; }
@@ -1421,7 +1674,7 @@ const Rules = (() => {
     }
 
     // Standing on something that was just built. Walk off it.
-    const cls = d.move === 'foot' ? 'foot' : 'veh';
+    const cls = clsOf(u);
     if (blocked(S, cls, cellOf(u.x, u.y))) {
       const c = goalCells(S, cls, u.x | 0, u.y | 0)[0];
       u.x += clamp((c % W) + 0.5 - u.x, -0.15, 0.15);
@@ -1430,6 +1683,8 @@ const Rules = (() => {
     }
 
     if (d.cargo && u.ord && u.ord.t === 'harvest') { truckTick(S, u); return; }
+    if (u.ord && u.ord.t === 'bridge') return bridgeGo(S, u, u.ord);
+    if (u.ord && u.ord.t === 'mend') return mendGo(S, u, u.ord);
 
     let o = u.ord;
 
@@ -1524,6 +1779,53 @@ const Rules = (() => {
         ownEvent(S, u.team, 'captured'); ownEvent(S, was, 'lostbuilding');
         territory(S); recount(S);
       } else hurt(S, t, t.max * 0.3, u.team, u.id);
+      u.hp = 0;
+      S.ev.push({ t: 'enter', id: u.id });
+    }
+  }
+
+  // Told to bring a bridge down: close to range of its deck and shoot it, or, for the commando, set C4 on it.
+  function bridgeGo(S, u, o) {
+    const b = S.bridges[o.i], d = u.d;
+    if (!b || b.hp <= 0) { u.ord = null; u.v = 0; return; }
+    const T = bridgeMark(S, o.i);
+    if (d.hero) {
+      const [ex, ey] = bridgeEnd(S, o.i, u.x, u.y);
+      if (drive(S, u, ex, ey, 1) || mhypot(ex - u.x, ey - u.y) < 2.5) {
+        u.ord = null; u.v = 0;
+        if (!b.c4) { b.c4 = S.tick + 4 * HZ; b.c4by = u.team; S.ev.push({ t: 'c4', x: T.x, y: T.y, team: u.team, br: o.i }); }
+      }
+      return;
+    }
+    const want = matan2(T.y - u.y, T.x - u.x), far = mhypot(T.x - u.x, T.y - u.y) - 2;
+    if (d.turret) u.ta += clamp(angleTo(u.ta, want), -d.turret * DT, d.turret * DT);
+    let ready = false;
+    const list = d.weapons || [];
+    for (let i = 0; i < list.length; i++) {
+      const wn = list[i], w = WEAPONS[wn];
+      if (w.onlyAir || far > w.r || (w.min && far < w.min)) continue;
+      ready = true;
+      if (u.cd[i] > 0 || u.salvo > 0) continue;
+      if (d.turret ? Math.abs(angleTo(u.ta, want)) > 0.12 : Math.abs(angleTo(u.a, want)) > 0.3) continue;
+      u.cd[i] = w.cd;
+      if (w.salvo) { u.salvo = w.salvo; u.salvoT = 0; u.salvoW = wn; u.salvoBr = o.i; }
+      else fire(S, u, wn, T, i);
+    }
+    if (!list.length) { u.ord = null; return; }
+    if (!ready) drive(S, u, T.x, T.y, 1.5);
+    else { u.v = 0; if (!d.turret) u.a += clamp(angleTo(u.a, want), -5 * DT, 5 * DT); }
+  }
+  // An engineer at a bridge's end mends its damage and pulls out any C4, or, if it is down, starts it being
+  // rebuilt. He goes into the work.
+  function mendGo(S, u, o) {
+    const b = S.bridges[o.i];
+    if (!b || b.fix || (b.hp >= BRIDGE_HP && !b.c4)) { u.ord = null; u.v = 0; return; }
+    const [ex, ey] = bridgeEnd(S, o.i, u.x, u.y);
+    if (drive(S, u, ex, ey, 1) || mhypot(ex - u.x, ey - u.y) < 3) {
+      if (b.hp <= 0) b.fix = S.tick + 20 * HZ; else b.hp = BRIDGE_HP;
+      b.c4 = 0;
+      const m = S.map.bridges[o.i];
+      S.ev.push({ t: 'fixed', br: o.i, x: (m.x0 + m.x1) / 2, y: (m.y0 + m.y1) / 2, team: u.team });
       u.hp = 0;
       S.ev.push({ t: 'enter', id: u.id });
     }
@@ -1688,7 +1990,7 @@ const Rules = (() => {
       const row = i % rows, col = i / rows | 0;
       const ox = (col - (Math.ceil(land.length / rows) - 1) / 2) * spacing, oy = -(row - (rows - 1) / 2) * spacing;
       let px = x + sx * ox + fx * oy, py = y + sy * ox + fy * oy;
-      const cls = u.d.move === 'foot' ? 'foot' : 'veh';
+      const cls = clsOf(u);
       if (blocked(S, cls, cellOf(px, py))) {
         const c = goalCells(S, cls, clamp(px | 0, 0, W - 1), clamp(py | 0, 0, H - 1))[0];
         px = c % W + 0.5; py = (c / W | 0) + 0.5;
@@ -1734,9 +2036,19 @@ const Rules = (() => {
     } else if (c.c === 'attack') {
       const t = S.byId.get(c.id);
       if (t && t.hp > 0) for (const u of unitsOf(S, team, c.ids)) {
-        if (u.d.move === 'jet') { if (u.ammo > 0) u.ord = { t: 'attack', id: t.id, x: t.x, y: t.y }; }
+        if (u.d.move === 'jet') { if (u.ammo > 0 && !sky(S).grounded) u.ord = { t: 'attack', id: t.id, x: t.x, y: t.y }; }
         else if (u.d.cargo) continue;
         else { u.ord = { t: 'attack', id: t.id }; u.tgt = t.id; u.wpT = 0; u.stuck = 0; }
+      }
+    } else if (c.c === 'bridge' || c.c === 'mend') {
+      // Bring a bridge down, or mend one. Engineers mend, everything armed shoots, jets bomb its middle.
+      const i = c.i | 0, m = S.map.bridges[i];
+      if (!m) return;
+      for (const u of unitsOf(S, team, c.ids)) {
+        if (c.c === 'mend') { if (u.d.engineer) { u.ord = { t: 'mend', i }; u.wpT = 0; u.stuck = 0; u.tgt = 0; } continue; }
+        if (u.d.move === 'jet') { if (u.ammo > 0 && !sky(S).grounded) u.ord = { t: 'attack', id: 0, x: (m.x0 + m.x1) / 2, y: (m.y0 + m.y1) / 2 }; continue; }
+        if (u.d.cargo || u.d.engineer || isAir(u) || !(armed(u) || u.d.hero)) continue;
+        u.ord = { t: 'bridge', i }; u.tgt = 0; u.wpT = 0; u.stuck = 0; u.home = null;
       }
     } else if (c.c === 'strike') {
       // Marks every enemy seen within r of a point, and shares them out among the units.
@@ -1868,12 +2180,46 @@ const Rules = (() => {
         if (d >= min) return;
         const push = (min - d) * 0.5, nx = dx / d, ny = dy / d;
         const mu = u.d.r, mo = o.d.r, ku = mo / (mu + mo), ko = mu / (mu + mo);
-        const cu = u.d.move === 'foot' ? 'foot' : 'veh', co = o.d.move === 'foot' ? 'foot' : 'veh';
+        const cu = clsOf(u), co = clsOf(o);
         const ax = u.x + nx * push * ku * 2, ay = u.y + ny * push * ku * 2;
         if (!blocked(S, cu, cellOf(ax, ay))) { u.x = ax; u.y = ay; }
         const bx = o.x - nx * push * ko * 2, by = o.y - ny * push * ko * 2;
         if (!blocked(S, co, cellOf(bx, by))) { o.x = bx; o.y = by; }
       });
+    }
+  }
+
+  // The land's own changes in a step: trees flattened, fires, bridges rebuilt or blown, the fords, the sky.
+  function stepLand(S) {
+    if (S.crush.length) {
+      const cells = [...new Set(S.crush)].filter(c => (S.gnd[c] & 8) && S.wood[c] !== 2);
+      S.crush.length = 0;
+      for (const c of cells) S.wood[c] = 1;
+      if (cells.length) { S.woodVer++; setGround(S, cells, cells.map(c => S.gnd[c] & ~8)); }
+    }
+    if (S.tick % 10 === 5) stepFire(S);
+    S.bridges.forEach((b, i) => {
+      if (b.fix && S.tick >= b.fix) raiseBridge(S, i);
+      if (b.c4 && S.tick >= b.c4) { const m = S.map.bridges[i]; S.ev.push({ t: 'boom', x: (m.x0 + m.x1) / 2, y: (m.y0 + m.y1) / 2, size: 3 }); dropBridge(S, i); }
+    });
+    // After enough rain the rivers rise over the fords, and they open again as the water goes down.
+    if (S.tick % 20 === 0) {
+      const w = sky(S), want = S.flooded ? w.flood > 0.65 : w.flood > 0.9;
+      if (want !== S.flooded) {
+        S.flooded = want;
+        const fc = S.map.fordCells;
+        setGround(S, fc, fc.map(() => want ? 7 : 4 | 16));
+        S.ev.push({ t: 'flood', on: want });
+      }
+    }
+    // The sky turns at the start of a spell, and a storm is called half a minute before it comes.
+    if (S.tick > 0 && S.tick % SPELL === 0) {
+      const k = S.tick / SPELL, now = spellOf(S.seed, k), was = spellOf(S.seed, k - 1);
+      if (now !== was) S.ev.push({ t: 'weather', kind: now, was });
+    }
+    if ((S.tick + 30 * HZ) % SPELL === 0) {
+      const k = (S.tick + 30 * HZ) / SPELL;
+      if (spellOf(S.seed, k) === 'storm' && spellOf(S.seed, k - 1) !== 'storm') S.ev.push({ t: 'weather', kind: 'stormsoon' });
     }
   }
 
@@ -1896,6 +2242,7 @@ const Rules = (() => {
     }
     stepShots(S);
     separate(S);
+    stepLand(S);
     // Trucks in the ore, a little growth on what is left.
     if (S.tick % (HZ * 4) === 0) {
       const f = S.map.oreFields[S.tick / (HZ * 4) % S.map.oreFields.length];
@@ -1977,6 +2324,7 @@ const Rules = (() => {
     newGame, step, push, spawn, addBuilding, pickFrom, fits, spotFor, roomy, blockedReason, near, rehash, seenBy, terrainAt, heightAt, los, isAir, armed, cellOf, summary, exitOf,
     mulberry, noiser, clamp, lerp, smooth, angleTo, toXY, toUV, gap, setSize, save, load, hashOf, restartSlot, razeSlot, makeMap, layoutFor,
     msin, mcos, matan2, mhypot,
+    BRIDGE_HP, SPELL, weatherAt, sky, dayAt, spellOf, bridgeAt, clsOf, houseHp, hurtBridge, ignite,
   };
 })();
 if (typeof module !== 'undefined') module.exports = Rules;

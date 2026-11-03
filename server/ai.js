@@ -197,6 +197,25 @@ const AI = (() => {
     }
   }
 
+  // A bridge near home that is down, badly hurt or carrying C4 gets an engineer, trained for it if need be.
+  function bridges(S, me, P) {
+    if (S.tick < (me.mendT || 0)) return;
+    me.mendT = S.tick + 10 * HZ;
+    const b = S.bases[me.team];
+    let best = -1, bd = 70;
+    S.bridges.forEach((st, i) => {
+      if (st.fix || (st.hp > R.BRIDGE_HP * 0.5 && !st.c4)) return;
+      const m = S.map.bridges[i], mx = (m.x0 + m.x1) / 2, my = (m.y0 + m.y1) / 2, d = Math.hypot(mx - b[0], my - b[1]);
+      if (d < bd && P.seen[R.cellOf(mx, my)]) { bd = d; best = i; }
+    });
+    if (best < 0) return;
+    const engs = S.ents.filter(e => e.team === me.team && e.hp > 0 && e.d.engineer);
+    if (engs.some(e => e.ord && e.ord.t === 'mend' && e.ord.i === best)) return;
+    const free = engs.find(e => !(e.ord && e.ord.t === 'mend'));
+    if (free) R.push(S, me.team, { c: 'mend', ids: [free.id], i: best });
+    else if (has(P, 'barracks') && P.supply > 700 && !queuedIn(P, 'inf', 'engineer')) R.push(S, me.team, { c: 'train', kind: 'engineer' });
+  }
+
   function repairs(S, me) {
     for (const e of S.ents) if (e.b && e.team === me.team && e.hp < e.max * 0.6 && !e.repairing && S.P[me.team].supply > 500) {
       R.push(S, me.team, { c: 'repair', id: e.id });
@@ -215,6 +234,7 @@ const AI = (() => {
     research(S, me, P);
     trainNext(S, me, P);
     repairs(S, me);
+    bridges(S, me, P);
     powers(S, me, P);
 
     let army = S.ents.filter(e => e.team === team && !e.b && !e.d.cargo && !e.d.repair && !e.d.engineer && e.drop <= 0);
