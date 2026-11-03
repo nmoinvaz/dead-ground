@@ -7,9 +7,9 @@ import R from './rules.js';
 import AI from './ai.js';
 
 const HZ = R.HZ, SEED = 4;
-// A newcomer's base is left alone by the computers for five minutes. A player away for two hours gives up
+// A newcomer's base is left alone by the computers for ten minutes. A player away for two hours gives up
 // the slot. A computer's fallen base comes back after a minute.
-const SHIELD = 300, AWAY = 2 * 3600 * 1000, RESPAWN = 60;
+const SHIELD = 600, AWAY = 2 * 3600 * 1000, RESPAWN = 60;
 const LEVEL = 'regular';
 
 // The commands a player may send and the fields each takes. 'restart', 'raze' and 'income' are the
@@ -151,7 +151,10 @@ export class World {
 
   stepOnce() {
     const S = this.S;
-    for (let t = 0; t < this.ais.length; t++) if (this.ais[t] && S.P[t].alive) this.ais[t].tick(S);
+    // The computers are told which slots people hold, so they fight each other first.
+    const people = new Set();
+    this.roster.forEach((r, t) => { if (r.kind === 'human' || r.kind === 'away') people.add(t); });
+    for (let t = 0; t < this.ais.length; t++) if (this.ais[t] && S.P[t].alive) { this.ais[t].people = people; this.ais[t].tick(S); }
     for (const q of this.pending) S.cmds.push(q);
     this.pending = [];
     const tick = S.tick, list = S.cmds.map(q => [q.team, q.c]);

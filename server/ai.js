@@ -1,6 +1,7 @@
 // Dead Ground, the enemy commander. It sends the same commands a player can, on a clock set by its
 // difficulty. It may only act on what it has seen, except that it knows where the other bases are. In
-// the world it fights whichever living neighbour is nearest, and leaves alone a newcomer still shielded.
+// the world it fights whichever living neighbour is nearest, counting people's bases as further off, and
+// leaves alone a newcomer still shielded.
 // It draws on random numbers of its own, never the world's, since on a server only the server runs it.
 const AI = (() => {
   const R = typeof Rules !== 'undefined' ? Rules : require('./rules.js');
@@ -27,7 +28,8 @@ const AI = (() => {
     let best = -1, bd = Infinity;
     for (const P of S.P) {
       if (P.team === me.team || P.alive === false || (P.shield || 0) > S.tick) continue;
-      const f = S.bases[P.team], d = Math.hypot(f[0] - b[0], f[1] - b[1]);
+      // A person's base counts as half again as far, so computers mostly fight each other.
+      const f = S.bases[P.team], d = Math.hypot(f[0] - b[0], f[1] - b[1]) * (me.people && me.people.has(P.team) ? 1.6 : 1);
       if (d < bd) { bd = d; best = P.team; }
     }
     return me.foe = best;
