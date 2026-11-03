@@ -340,7 +340,7 @@ body[data-look="ink"] #menu, body[data-look="ink"] #quit, body[data-look="ink"] 
       <h1>Dead <span>Ground</span></h1>
       <p class="lede">Build a base, dig ore, take the towns, and flatten the other side before it flattens you.</p>
       <div class="choice"><h2>Theatre</h2><div id="m-theme"><button data-v="desert">Salt Flats</button><button data-v="steppe">Black Steppe</button><button data-v="winter">White Pass</button></div></div>
-      <div class="choice"><h2>Look</h2><div id="m-look"><button data-v="ink">Pen and ink</button><button data-v="strokes">Strokes</button><button data-v="film">Sunset</button></div></div>
+      <div class="choice"><h2>Look</h2><div id="m-look"><button data-v="ink">Pen and ink</button><button data-v="film">Sunset</button></div></div>
       <div class="choice"><h2>Enemy</h2><div id="m-diff"><button data-v="recruit">Recruit</button><button data-v="regular">Regular</button><button data-v="veteran">Veteran</button></div></div>
       <button id="deploy">Deploy</button>
       <div class="choice" id="m-online" hidden><h2>The shared world</h2>
@@ -501,8 +501,8 @@ const Rules = (() => {
   const DIFFICULTY = {
     // tech1 and tech2 are the minutes before reaching for Tech II and Tech III. gap is seconds between powers.
     // ramp caps the army at ramp[0] units plus ramp[1] a minute. def is the most defences it builds.
-    recruit: { think: 3.5, income: 0.65, wave: 2200, grow: 400, delay: 540, power: false, tech: 2, apm: 2, tech1: 10, tech2: 99, gap: 90, silo: false, ramp: [5, 1], def: 2, name: 'Recruit' },
-    regular: { think: 2.5, income: 0.8, wave: 2200, grow: 500, delay: 420, power: true, tech: 3, apm: 2, tech1: 8, tech2: 18, gap: 90, silo: false, ramp: [6, 1.6], def: 4, name: 'Regular' },
+    recruit: { think: 4, income: 0.55, wave: 2600, grow: 300, delay: 720, power: false, tech: 2, apm: 1, tech1: 12, tech2: 99, gap: 90, silo: false, ramp: [4, 0.8], def: 2, name: 'Recruit' },
+    regular: { think: 3, income: 0.7, wave: 2600, grow: 400, delay: 600, power: true, tech: 3, apm: 2, tech1: 10, tech2: 22, gap: 120, silo: false, ramp: [5, 1.2], def: 3, name: 'Regular' },
     veteran: { think: 0.75, income: 1.25, wave: 1500, grow: 1100, delay: 110, power: true, tech: 3, apm: 8, tech1: 3, tech2: 8, gap: 20, silo: true, def: 8, name: 'Veteran' },
     // Holds a player's base while they are away: builds and defends, never sets out.
     keeper: { think: 3, income: 1, wave: 1e9, grow: 0, delay: 1e9, power: false, tech: 2, apm: 2, tech1: 10, tech2: 99, gap: 90, silo: false, ramp: [8, 1], def: 6, stay: true, name: 'Keeper' },
@@ -2367,7 +2367,8 @@ if (typeof module !== 'undefined') module.exports = Rules;
 <script>
 // Dead Ground, the enemy commander. It sends the same commands a player can, on a clock set by its
 // difficulty. It may only act on what it has seen, except that it knows where the other bases are. In
-// the world it fights whichever living neighbour is nearest, and leaves alone a newcomer still shielded.
+// the world it fights whichever living neighbour is nearest, counting people's bases as further off, and
+// leaves alone a newcomer still shielded.
 // It draws on random numbers of its own, never the world's, since on a server only the server runs it.
 const AI = (() => {
   const R = typeof Rules !== 'undefined' ? Rules : require('./rules.js');
@@ -2394,7 +2395,8 @@ const AI = (() => {
     let best = -1, bd = Infinity;
     for (const P of S.P) {
       if (P.team === me.team || P.alive === false || (P.shield || 0) > S.tick) continue;
-      const f = S.bases[P.team], d = Math.hypot(f[0] - b[0], f[1] - b[1]);
+      // A person's base counts as half again as far, so computers mostly fight each other.
+      const f = S.bases[P.team], d = Math.hypot(f[0] - b[0], f[1] - b[1]) * (me.people && me.people.has(P.team) ? 1.6 : 1);
       if (d < bd) { bd = d; best = P.team; }
     }
     return me.foe = best;
@@ -3752,9 +3754,16 @@ const World = (() => {
       // Pen and ink, after the Lightning film and js/ink.js: tone in seven steps of hatching on cream paper, at
       // 45 and 135 degrees, then flat and upright lines for the darkest, each line a little uneven with small gaps.
       // The ground's hatching is pinned to the map so it pans with it, the units' redraws a few times a second.
-      const ink = new THREE.ShaderMaterial({ uniforms: { t: { value: null }, tSubj: { value: null }, tHeat: { value: null }, tPaper: { value: null }, res: { value: new THREE.Vector2(1, 1) }, uTime: { value: 0 }, uK: { value: 1 }, uOff: { value: new THREE.Vector2() }, uStyle: { value: 8 }, tNorm: { value: null }, tFogS: { value: null }, tLand: { value: null }, uSun2: { value: new THREE.Vector2(-1, 0) } }, vertexShader: vs, depthTest: false, depthWrite: false, fragmentShader: `
-        varying vec2 vUv; uniform sampler2D t, tSubj, tHeat, tPaper, tNorm, tFogS, tLand; uniform vec2 res, uOff, uSun2; uniform float uTime, uK; uniform int uStyle;
+      const ink = new THREE.ShaderMaterial({ uniforms: { t: { value: null }, tSubj: { value: null }, tHeat: { value: null }, tPaper: { value: null }, res: { value: new THREE.Vector2(1, 1) }, uTime: { value: 0 }, uK: { value: 1 }, uOff: { value: new THREE.Vector2() }, uStyle: { value: 8 }, tNorm: { value: null }, tFogS: { value: null }, tLand: { value: null }, uSun2: { value: new THREE.Vector2(-1, 0) }, uUpV: { value: new THREE.Vector3(0, 1, 0) } }, vertexShader: vs, depthTest: false, depthWrite: false, fragmentShader: `
+        varying vec2 vUv; uniform sampler2D t, tSubj, tHeat, tPaper, tNorm, tFogS, tLand; uniform vec2 res, uOff, uSun2; uniform vec3 uUpV; uniform float uTime, uK; uniform int uStyle;
         const vec3 PAPER = vec3(0.949, 0.910, 0.824), INK = vec3(0.122, 0.102, 0.086);
+        // The soft axonometric's washes, after the atlas: speckled pale green ground, lilac water, pink paths,
+        // three canopy greens, cream roofs over warm grey walls, and the ghost plan's blue-grey for what was.
+        const vec3 SOFT_G = vec3(0.905, 0.935, 0.845), OLIVE = vec3(0.353, 0.431, 0.235);
+        const vec3 LILAC = vec3(0.788, 0.804, 0.902), LILAC_D = vec3(0.46, 0.5, 0.7), PINK = vec3(0.863, 0.722, 0.655), PINK_D = vec3(0.588, 0.392, 0.333);
+        const vec3 TREE1 = vec3(0.663, 0.78, 0.498), TREE2 = vec3(0.737, 0.831, 0.592), TREE3 = vec3(0.561, 0.706, 0.408);
+        const vec3 ROOF = vec3(0.969, 0.953, 0.918), WALL_L = vec3(0.894, 0.863, 0.796), WALL_R = vec3(0.804, 0.757, 0.671);
+        const vec3 WAS = vec3(0.427, 0.51, 0.678);
         float hash(vec2 p) { p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
         float noise(vec2 p) { vec2 i = floor(p), f = fract(p), u = f * f * (3. - 2. * f);
           return mix(mix(hash(i), hash(i + vec2(1, 0)), u.x), mix(hash(i + vec2(0, 1)), hash(i + vec2(1, 1)), u.x), u.y); }
@@ -3812,6 +3821,9 @@ const World = (() => {
           vec3 paperC = PAPER, inkC = INK;
           bool inverse = false;
           float waterK = 0.0;
+          // The mixture's washes under its ink, and its lines alone, for the remembered past.
+          vec3 baseC = PAPER;
+          float lineK = lines;
           if (uStyle == 0) {
             // Lightning: tone in seven steps of hatching and crosshatching.
             cover = max(tone(p, n, seedU), lines);
@@ -3871,7 +3883,9 @@ const World = (() => {
             float isW = smoothstep(0.12, 0.2, a) * (1.0 - smoothstep(0.37, 0.45, a)), isG = 1.0 - smoothstep(0.08, 0.15, a);
             // Ore and bridges sit inside the scenery band, each on its own value.
             float isO = 1.0 - smoothstep(0.02, 0.035, abs(a - 0.55)), isBr = 1.0 - smoothstep(0.02, 0.035, abs(a - 0.42));
-            isS = max(0.0, isS - isO - isBr);
+            // Trees too, between the bridges' value and the rest of the scenery's.
+            float isT = 1.0 - smoothstep(0.01, 0.02, abs(a - 0.459));
+            isS = max(0.0, isS - isO - isBr - isT);
             // Water is where the river bed lies under the water line. The water mesh's own edge zigzags along its
             // triangles, so it only says that something lower than scenery is here.
             float wl = -0.15 - (texture2D(tFogS, vUv).b - 20.0), dep = max(wl, 0.0);
@@ -3890,26 +3904,30 @@ const World = (() => {
             float detail = max(smoothstep(0.08, 0.3, nE), smoothstep(0.006, 0.02, dE)) * step(0.3, a);
             // Inner lines thin out in the light.
             detail *= mix(0.55, 1.0, smoothstep(0.25, 0.6, dens));
-            // Ground: mostly bare paper, a light stipple in the middle values, crosshatch only in real shadow.
+            // Ground: a pale green wash speckled in olive, thicker in the middle values, with black ink only for
+            // crosshatch in the deepest shade.
             vec2 q = p / (3.6 * uK), ci = floor(q), fq = fract(q) - 0.5 - (vec2(hash(ci), hash(ci + 7.0)) - 0.5) * 0.5;
             float stip = 1.0 - smoothstep(0.0, 0.08, length(fq) - sqrt(clamp(dens * 1.3 - 0.52, 0.0, 1.0)) * 0.4);
-            float gC = dens > 0.64 ? max(tone(p, n - 1.0, 0.0), stip * 0.6) : stip;
-            gC = max(gC, smoothstep(0.9, 0.94, dens));
+            vec2 sq = p / (2.4 * uK), sf = fract(sq) - 0.5;
+            float speck = step(0.8, hash(floor(sq) + 31.0)) * (1.0 - smoothstep(0.12, 0.26, length(sf)));
+            float gC = dens > 0.74 ? tone(p, n - 2.0, 0.0) : 0.0;
+            gC = max(gC, smoothstep(0.92, 0.96, dens));
             gC = max(gC, edge * 0.55 * (1.0 - bankZone));
             // Roads as on a map: two ruled edges, bare paper between, a broken line down the middle.
             float rd = texture2D(tLand, vUv).r, rw = max(fwidth(rd), 1e-4);
             float onRoad = 1.0 - smoothstep(1.1, 1.3, rd);
             float rEdge = (1.0 - smoothstep(0.45 * uK, 1.2 * uK, abs(rd - 1.3) / rw)) * step(0.12, noise(p / (30.0 * uK)) + 0.1);
             float rMid = (1.0 - smoothstep(0.3 * uK, 0.9 * uK, rd / rw)) * step(0.5, noise(p / (4.5 * uK)));
-            gC = max(gC * (1.0 - onRoad * 0.9), max(rEdge * 0.9, rMid * 0.55));
+            gC = max(gC * (1.0 - onRoad * 0.9), max(rEdge * 0.9, rMid * 0.4));
             // Rivers water-lined as old maps do: lines that follow the shore, close at the bank and further apart
             // toward the middle, each thinner and more broken than the last, and a heavy line at the bank.
             float wq = pow(dep / 1.15, 0.6) * 7.0, wqw = max(fwidth(wq), 1e-4), wf = fract(wq);
             float wLine = (1.0 - smoothstep(mix(0.55, 0.25, wq / 7.0) * uK, mix(1.2, 0.8, wq / 7.0) * uK, min(wf, 1.0 - wf) / wqw)) * step(0.5, wq);
             wLine *= step(wq / 14.0, noise(p / (12.0 * uK) + floor(wq) * 3.1));
-            float wC = wLine;
-            // Bridges: hatched deck, crosshatched where it is darker, solid in its deepest shade.
-            float brC = max(max(hatch(p, 45.0, 3.8, 0.85, 41.0, 0.04) * step(0.3, dens), hatch(p, 135.0, 3.8, 0.85, 43.0, 0.04) * step(0.6, dens)), smoothstep(0.9, 0.94, dens));
+            // The water lines are laid in the lilac wash below, not in black.
+            float wC = 0.0;
+            // Bridges: a pink deck with one light hatch in its shade, solid in its deepest.
+            float brC = max(hatch(p, 45.0, 4.6, 0.8, 41.0, 0.1) * step(0.62, dens), smoothstep(0.9, 0.94, dens));
             // Ore: outlined gold pebbles, hatched only on their shaded side.
             float oC = max(hatch(p, 45.0, 3.0, 0.9, 47.0, 0.05) * step(0.56, dens), smoothstep(0.9, 0.94, dens));
             // Trees, rocks and houses: loose quick scribble.
@@ -3918,12 +3936,15 @@ const World = (() => {
             float sC = hatch(p, sang, 3.6, 1.0, hash(cell) * 40.0, 0.2) * step(0.3, dens);
             sC = max(sC, hatch(p, sang + 75.0, 3.2, 0.9, 5.0, 0.25) * step(0.6, dens));
             sC = max(sC, smoothstep(0.88, 0.92, dens));
-            // Buildings: clean line with hatched tone, windows and deep shade solid.
-            float bC = max(tone(p, max(0.0, n - 1.0), 0.0), smoothstep(0.88, 0.92, dens));
+            // Trees: cutout canopies in a translucent wash, scribbled only on their shaded side.
+            float tC = hatch(p, sang, 3.6, 0.9, hash(cell) * 40.0, 0.3) * step(0.58, dens);
+            tC = max(tC, smoothstep(0.9, 0.94, dens));
+            // Buildings: massed in flat tones by face, so hatched only in shadow, with windows and deep shade solid.
+            float bC = max(hatch(p, 45.0, 4.4, 0.9, 0.0, 0.06) * step(0.6, dens), smoothstep(0.88, 0.92, dens));
             // Units: bright paper with one hatch for their shade and solid black for the deepest.
             float uC = hatch(p, 45.0, 3.2, 1.0, seedU, 0.04) * smoothstep(0.42, 0.46, dens);
             uC = max(uC, smoothstep(0.8, 0.84, dens));
-            cover = isG * gC + isW * wC + isS * sC + isB * bC + isU * uC + isBr * brC + isO * oC;
+            cover = isG * gC + isW * wC + isS * sC + isT * tC + isB * bC + isU * uC + isBr * brC + isO * oC;
             // The bank drawn once, heavy, on whichever side of it the pixel lies.
             float bankL = 1.0 - smoothstep(0.7 * uK, 1.6 * uK, abs(dep - 0.03) / max(fwidth(dep), 1e-4));
             cover = max(cover, bankL * step(0.001, dep + 0.05) * (isG + isW) * 0.9);
@@ -3942,6 +3963,20 @@ const World = (() => {
             cover = max(cover, max(heavy, swell * (1.0 -step(0.6, a))));
             cover = max(cover, detail * mix(0.75, 1.0, isU));
             paperC = vec3(0.96, 0.93, 0.86);
+            lineK = max(max(heavy, swell * (1.0 - step(0.6, a))), max(detail, max(edge * 0.55 * (1.0 - bankZone) * isG, max(rEdge * 0.9 * isG, bankL * step(0.001, dep + 0.05) * (isG + isW)))));
+            // The washes: the land green, roads and bridge decks pink, water lilac with white ripples, canopies in
+            // three greens, roofs cream and walls warm grey by which way they face.
+            vec3 base = mix(paperC, SOFT_G, isG);
+            base = mix(base, OLIVE, max(stip * 0.55, speck * 0.4) * isG * (1.0 - onRoad));
+            float rH = hatch(p, 60.0, 4.0, 0.8, 53.0, 0.1);
+            base = mix(base, mix(PINK, PINK_D, rH * 0.35), max(onRoad * isG, isBr) * 0.9);
+            float rip = hatch(p, -12.0, 6.5, 0.9, 57.0, 0.45);
+            base = mix(base, mix(mix(LILAC, LILAC_D, wLine * 0.6), vec3(1.0), rip * 0.55 * (1.0 - wLine)), isW);
+            float tn = noise(p / (60.0 * uK));
+            base = mix(base, tn < 0.4 ? TREE3 : tn < 0.62 ? TREE1 : TREE2, isT * 0.8);
+            vec3 nV = N0.xyz * 2.0 - 1.0;
+            base = mix(base, dot(nV, uUpV) > 0.6 ? ROOF : nV.x < 0.0 ? WALL_L : WALL_R, isB);
+            baseC = base;
           } else {
             // Crow quill sketch: two loose passes of each line and quick scribbled hatching that turns from patch to patch.
             vec2 cell = floor(p / (26.0 * uK));
@@ -3961,16 +3996,15 @@ const World = (() => {
           float lit = step(0.26, hn), rim = 0.0;
           if (inverse) { cover = max(cover * (1.0 - lit), 0.0); cover = max(cover, rim * 0.0); }
           else { cover *= 1.0 - lit; cover = max(cover, rim); }
-          vec3 col = mix(paperC, inkC, clamp(cover, 0.0, 1.0));
+          vec3 col = mix(uStyle == 8 ? baseC : paperC, inkC, clamp(cover, 0.0, 1.0));
           // Colour in the shade: a cool violet wash under the ink where the sun does not reach, warm paper in the light.
           if (uStyle == 8 || uStyle == 0) {
             // On open ground it keeps to the real shadows and is lighter, so the land stays mostly paper.
             float gw = 1.0 - smoothstep(0.08, 0.15, A(vUv));
             float shade = smoothstep(mix(0.32, 0.52, gw), mix(0.78, 0.9, gw), dens) * (1.0 - lit) * (1.0 - waterK);
-            col = mix(col, col * vec3(0.6, 0.64, 0.9) + vec3(0.03, 0.025, 0.07), shade * mix(0.85, 0.6, gw));
-            // Water gets a pale blue wash under its lines instead of shade.
-            col = mix(col, col * vec3(0.8, 0.9, 1.02), waterK * (1.0 - lit) * 0.6);
-            col = mix(col, col * vec3(1.04, 0.99, 0.9), smoothstep(0.35, 0.05, dens) * 0.6);
+            // The soft axonometric has almost no light, so the mixture keeps its shade faint on the land.
+            col = mix(col, col * vec3(0.6, 0.64, 0.9) + vec3(0.03, 0.025, 0.07), shade * (uStyle == 8 ? mix(0.6, 0.3, gw) : mix(0.85, 0.6, gw)));
+            if (uStyle == 0) col = mix(col, col * vec3(1.04, 0.99, 0.9), smoothstep(0.35, 0.05, dens) * 0.6);
           }
           // The sides' markings in coloured ink.
           vec3 mk = texture2D(tSubj, uv).rgb;
@@ -4010,9 +4044,22 @@ const World = (() => {
           // faint pencil of an unfinished drawing: contour lines of the land and long construction lines.
           float edgeN = (noise(px * 0.03 / uK) - 0.5) * 0.5;
           float seenE = smoothstep(0.38, 0.62, F.g + edgeN), visE = smoothstep(0.3, 0.7, F.r + edgeN * 0.5);
-          vec3 faded = mix(paperC, col, 0.55);
-          faded = mix(vec3(dot(faded, vec3(0.3, 0.59, 0.11))), faded, 0.2);
-          col = mix(faded, col, visE);
+          if (uStyle == 8) {
+            // What was, as a ghost plan draws it: pale washes and dashed blue-grey line, with no tone. Each dash
+            // runs along its line, found from the edge of the shape or else of the land, so a straight edge dashes
+            // evenly. The side's colour stays faintly, to say whose it was.
+            vec2 gd = vec2(A(vUv + k * vec2(2.5, 0)) - A(vUv - k * vec2(2.5, 0)), A(vUv + k * vec2(0, 2.5)) - A(vUv - k * vec2(0, 2.5)));
+            if (length(gd) < 0.04) gd = e1;
+            float dash = length(gd) > 0.02 ? step(0.42, fract(dot(p, normalize(vec2(-gd.y, gd.x))) / (6.5 * uK))) : step(0.35, hash(floor(p / (5.0 * uK)) + 17.0));
+            vec3 past = mix(paperC, baseC, 0.4);
+            past = mix(past, hue * 0.8, mark * 0.3);
+            past = mix(past, WAS, clamp(lineK, 0.0, 1.0) * dash * 0.75);
+            col = mix(past, col, visE);
+          } else {
+            vec3 faded = mix(paperC, col, 0.55);
+            faded = mix(vec3(dot(faded, vec3(0.3, 0.59, 0.11))), faded, 0.2);
+            col = mix(faded, col, visE);
+          }
           // Off the map there is no land, so no contours, only the guide lines.
           float onMap = step(1.0, F.b), hgt = F.b - 20.0;
           float hw = max(fwidth(hgt), 1e-4), hf = fract(hgt / 0.8);
@@ -4028,197 +4075,6 @@ const World = (() => {
           float grain = texture2D(tPaper, g / 900.0).r, fib = texture2D(tPaper, g / 300.0 + 0.4).b;
           col *= 0.94 + 0.05 * grain + 0.03 * fib;
           vec2 o = vUv - 0.5; col *= 1.0 - dot(o, o) * 0.35;
-          gl_FragColor = vec4(col, 1.0);
-        }` });
-      // Swirling strokes, after van Gogh and js/restyle/painting.js, in two passes. The first finds which way the
-      // paint runs at each point: along the contours of the land and the course of a river, down a road, round a
-      // fire in rings, round the shape of a unit, and where none of these holds, in a slow swirl pinned to the map.
-      // It stores the way as a doubled angle, so strokes pointing opposite ways agree.
-      const NOISE = `
-        float hash(vec2 p) { p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
-        float noise(vec2 p) { vec2 i = floor(p), f = fract(p), u = f * f * (3. - 2. * f);
-          return mix(mix(hash(i), hash(i + vec2(1, 0)), u.x), mix(hash(i + vec2(0, 1)), hash(i + vec2(1, 1)), u.x), u.y); }
-        float fbm(vec2 p) { float s = 0.0, a = 0.5; for (int i = 0; i < 4; i++) { s += a * noise(p); p = p * 2.03 + 17.0; a *= 0.5; } return s; }`;
-      const flowMat = new THREE.ShaderMaterial({ uniforms: { tSubj: { value: null }, tHeat: { value: null }, tFogS: { value: null }, tLand: { value: null }, res: { value: new THREE.Vector2(1, 1) }, uOff: { value: new THREE.Vector2() }, uK: { value: 1 } }, vertexShader: vs, depthTest: false, depthWrite: false, fragmentShader: `
-        varying vec2 vUv; uniform sampler2D tSubj, tHeat, tFogS, tLand; uniform vec2 res, uOff; uniform float uK;
-        ${NOISE}
-        float Hg(vec2 uv) { return texture2D(tFogS, uv).b; }
-        float Rd(vec2 uv) { return texture2D(tLand, uv).r; }
-        float Q(vec2 uv) { vec3 h = texture2D(tHeat, uv).rgb; return max(h.r, max(h.g, h.b)); }
-        float A(vec2 uv) { return texture2D(tSubj, uv).a; }
-        vec2 dbl(vec2 g) { float m = dot(g, g); return m > 1e-12 ? vec2(g.x * g.x - g.y * g.y, 2.0 * g.x * g.y) / m : vec2(0.0); }
-        vec2 grad(vec2 uv, float r, int which) {
-          vec2 o = (uK / res) * r, gx = vec2(o.x, 0.0), gy = vec2(0.0, o.y);
-          if (which == 0) return vec2(Hg(uv + gx) - Hg(uv - gx), Hg(uv + gy) - Hg(uv - gy));
-          if (which == 1) return vec2(Rd(uv + gx) - Rd(uv - gx), Rd(uv + gy) - Rd(uv - gy));
-          if (which == 2) return vec2(Q(uv + gx) - Q(uv - gx), Q(uv + gy) - Q(uv - gy));
-          return vec2(A(uv + gx) - A(uv - gx), A(uv + gy) - A(uv - gy));
-        }
-        void main() {
-          vec2 p = vUv * res - uOff;
-          vec4 F = texture2D(tFogS, vUv);
-          float onMap = step(1.0, F.b), seen = smoothstep(0.3, 0.7, F.g) * onMap;
-          vec2 gT = grad(vUv, 6.0, 0), gR = grad(vUv, 4.0, 1), gH = grad(vUv, 9.0, 2), gA = grad(vUv, 3.0, 3);
-          float wT = smoothstep(0.01, 0.14, length(gT)) * onMap;
-          float wR = (1.0 - smoothstep(1.0, 2.6, Rd(vUv))) * 1.6 * onMap;
-          float wH = smoothstep(0.06, 0.45, Q(vUv)) * 3.0;
-          float wA = smoothstep(0.05, 0.3, length(gA)) * 2.0;
-          // A stroke runs across the gradient, which turns the doubled angle half a turn.
-          vec2 J = -(dbl(gT) * wT + dbl(gR) * wR + dbl(gH) * wH + dbl(gA) * wA);
-          float sure = clamp(length(J), 0.0, 1.0);
-          // Open ground swirls slowly; ground never seen turns in the tighter whorls of a night sky.
-          float day = (fbm(p / (uK * 260.0)) - 0.5) * 6.283 * 1.3 + 0.5;
-          float night = (fbm(p / (uK * 150.0) + 7.0) - 0.5) * 6.283 * 2.6;
-          float na = mix(night, day, seen);
-          vec2 D = mix(vec2(cos(2.0 * na), sin(2.0 * na)), J / max(length(J), 1e-6), sure * mix(0.15, 1.0, seen));
-          // Halved back to a direction here, once, so the strokes read it straight. Its sign is free.
-          float ha = atan(D.y, D.x) * 0.5;
-          gl_FragColor = vec4(vec2(cos(ha), sin(ha)) * 0.5 + 0.5, sure, 1.0);
-        }` });
-      // The second lays short thick strokes over that flow in three sizes, each taking the frame's colour at its
-      // middle pushed toward a few strong paints, the shade in blue, with the canvas showing dark between them.
-      // Units keep their own colours and detail and get a Prussian blue outline, heavier on the side away from the
-      // sun. Ground never seen is a night sky in blue whorls, ground seen before is painted by moonlight.
-      const PAL = ['#1b2f7a', '#2f55b0', '#5b86d6', '#9ec0e8', '#f2c53d', '#f7e27a', '#e8a32a', '#c8622a', '#2f6a3a', '#6aa04a', '#f4efdc', '#0f1a2e', '#7a4a2a', '#d9c690'].map(c => new THREE.Color(c).convertLinearToSRGB().convertSRGBToLinear());
-      const strokes = new THREE.ShaderMaterial({ uniforms: { t: { value: null }, tSubj: { value: null }, tHeat: { value: null }, tFogS: { value: null }, tFlow: { value: null }, res: { value: new THREE.Vector2(1, 1) }, uOff: { value: new THREE.Vector2() }, uSun2: { value: new THREE.Vector2(-1, 0) }, uK: { value: 1 }, uTime: { value: 0 }, uPal: { value: PAL } }, vertexShader: vs, depthTest: false, depthWrite: false, fragmentShader: `
-        varying vec2 vUv; uniform sampler2D t, tSubj, tHeat, tFogS, tFlow; uniform vec2 res, uOff, uSun2; uniform float uK, uTime; uniform vec3 uPal[14];
-        ${NOISE}
-        const vec3 PRUSSIAN = vec3(0.07, 0.12, 0.3);
-        float A(vec2 uv) { return texture2D(tSubj, uv).a; }
-        float AS(vec2 uv) { float a = A(uv); return a * step(0.3, a); }
-        float L(vec3 c) { return dot(c, vec3(0.299, 0.587, 0.114)); }
-        float Q(vec2 uv) { vec3 h = texture2D(tHeat, uv).rgb; return max(h.r, max(h.g, h.b)); }
-        vec2 rot(vec2 d, float a) { float c = cos(a), s = sin(a); return vec2(c * d.x - s * d.y, s * d.x + c * d.y); }
-        vec2 dirAt(vec2 q) { return normalize(texture2D(tFlow, (q + uOff) / res).rg * 2.0 - 1.0 + 1e-5); }
-        vec3 nearestP(vec3 c) {
-          vec3 b = uPal[0]; float bd = 1e9;
-          for (int i = 0; i < 14; i++) { vec3 d = c - uPal[i]; float dd = dot(d, d); if (dd < bd) { bd = dd; b = uPal[i]; } }
-          return b;
-        }
-        // The topmost stroke over p in one layer of strokes laid on a jittered grid c px across: its centre (xy),
-        // where p lies across it (z, -1..1) and along it (w), or z = -9 when none covers p. dw holds its direction
-        // and its half-width and half-length in px.
-        vec4 stroke(vec2 p, float c, float len, float wid, float jit, float layer, out float id, out vec4 dw) {
-          vec2 off = vec2(0.37, 0.71) * layer, i0 = floor(p / c + off);
-          float best = -1.0;
-          vec4 hit = vec4(0.0, 0.0, -9.0, 0.0);
-          dw = vec4(1.0, 0.0, 1.0, 1.0);
-          for (int y = -2; y <= 2; y++) for (int x = -2; x <= 2; x++) {
-            vec2 ci = i0 + vec2(x, y), key = ci + layer * 101.0;
-            float h = hash(key);
-            vec2 cc = (ci + 0.5 + (vec2(hash(key + 3.7), hash(key + 9.1)) - 0.5) * 0.9 - off) * c;
-            vec2 r = p - cc;
-            float Ls = len * c * (0.7 + 0.6 * hash(key + 7.7)), Ws = wid * c * (0.75 + 0.5 * hash(key + 2.2));
-            if (dot(r, r) > (Ls + Ws) * (Ls + Ws) * 1.3) continue;
-            vec2 d = rot(dirAt(cc), (hash(key + 5.3) - 0.5) * jit);
-            float u = dot(r, d), v = dot(r, vec2(-d.y, d.x));
-            // The edge is ragged where the bristles splay.
-            float Wr = Ws * (1.0 + 0.11 * sin(u / c * 9.0 + h * 40.0) + 0.05 * sin(u / c * 23.0 + h * 17.0));
-            float e = length(vec2(max(abs(u) - Ls, 0.0), v)) / Wr;
-            if (e < 1.0 && h > best) { best = h; hit = vec4(cc, v / Wr, u / (Ls + Ws)); dw = vec4(d, Wr, Ls + Ws); }
-          }
-          id = best;
-          return hit;
-        }
-        // How the light falls on a stroke of thick paint, lit from the upper left: flat on top, a ridge along each
-        // edge, bristle grooves, and a lip where the brush lifted.
-        float relief(vec4 hit, vec4 dw, float id, float thick) {
-          float x = clamp(hit.z, -1.0, 1.0), ax = abs(x), y = hit.w;
-          float ridge = 0.3 * exp(-pow((ax - 0.8) / 0.12, 2.0));
-          float dx = -4.0 * x * x * x + sign(x) * ridge * -2.0 * (ax - 0.8) / 0.0144 + 0.45 * cos(x * 19.0 + id * 40.0) + 0.3 * cos(x * 41.0 + id * 17.0);
-          float lip = 0.6 * exp(-pow((y - 0.72) / 0.16, 2.0)), dy = lip * -2.0 * (y - 0.72) / 0.0256;
-          vec2 d = dw.xy, nrm = vec2(-d.y, d.x);
-          vec2 n2 = -dx * thick / dw.z * nrm - dy * thick / dw.w * d;
-          vec3 n = normalize(vec3(n2, 1.0)), Lt = normalize(vec3(-0.55, 0.65, 0.9));
-          return dot(n, Lt) / Lt.z;
-        }
-        float weave(vec2 p) {
-          vec2 q = p / (3.2 * uK);
-          return 0.5 + 0.25 * sin(q.x * 3.1416) * sin(q.y * 3.1416 + 1.5708 * step(0.5, fract(q.x * 0.5))) + 0.25 * (noise(q * 0.7) - 0.5);
-        }
-        // The colour a stroke takes from what lies under its middle.
-        vec3 paint(vec2 cuv, vec2 key, float fine) {
-          vec3 sc = texture2D(t, cuv).rgb;
-          float a = A(cuv), subj = smoothstep(0.6, 0.7, a);
-          vec3 j = (vec3(hash(key), hash(key + 1.3), hash(key + 2.7)) - 0.5) * 0.2;
-          float l0 = L(sc);
-          vec3 s2 = mix(vec3(l0), sc, 1.35) + j;
-          vec3 c = mix(sc, nearestP(s2), mix(0.68, 0.3, subj));
-          // Shade is laid in blue, a cobalt or an ultramarine.
-          vec3 blue = mix(uPal[1], uPal[0], hash(key + 4.1));
-          c = mix(c, blue, smoothstep(0.4, 0.16, l0) * 0.6 * (1.0 - subj));
-          // Fire in rings of vermilion, chrome, lemon and cream.
-          float hz = Q(cuv);
-          vec3 fire = hz < 0.6 ? mix(uPal[7], vec3(0.91, 0.38, 0.16), hash(key + 6.0)) : hz < 1.3 ? uPal[4] : hz < 2.6 ? uPal[5] : uPal[10];
-          c = mix(c, fire, smoothstep(0.12, 0.3, hz));
-          // Scars on the ground: craters and treads in burnt umber.
-          vec4 F = texture2D(tFogS, cuv);
-          float trk = step(1.0, F.a), sc2 = F.a - trk;
-          c = mix(c, vec3(0.2, 0.12, 0.1), (smoothstep(0.04, 0.45, sc2) * 0.75 + trk * 0.3) * (1.0 - subj));
-          // Moonlight where the ground was seen before, a night sky where it never was.
-          float onMap = step(1.0, F.b), seen = smoothstep(0.38, 0.62, F.g) * onMap, vis = smoothstep(0.3, 0.7, F.r);
-          vec3 moon = mix(c * vec3(0.5, 0.56, 0.86), vec3(0.12, 0.18, 0.42), 0.35);
-          c = mix(moon, c, vis);
-          float nh = hash(key + 8.8) + (fbm(key * 0.13) - 0.5) * 0.8;
-          vec3 sky = nh < 0.3 ? uPal[11] : nh < 0.55 ? uPal[0] : nh < 0.8 ? uPal[1] : nh < 0.95 ? uPal[2] : uPal[3];
-          return mix(sky, c, seen);
-        }
-        void main() {
-          vec2 px = vUv * res, k = uK / res, p = px - uOff;
-          float a = A(vUv), isU = smoothstep(0.85, 0.95, a), subj = smoothstep(0.6, 0.7, a);
-          vec3 frame = texture2D(t, vUv).rgb;
-          vec3 base = (frame + texture2D(t, vUv + k * vec2(5, 0)).rgb + texture2D(t, vUv - k * vec2(5, 0)).rgb + texture2D(t, vUv + k * vec2(0, 5)).rgb + texture2D(t, vUv - k * vec2(0, 5)).rgb) / 5.0;
-          vec4 F = texture2D(tFogS, vUv);
-          float seenHere = smoothstep(0.38, 0.62, F.g) * step(1.0, F.b);
-          // The dark canvas showing between strokes.
-          vec3 col = mix(mix(base * 0.5, PRUSSIAN, 0.4), uPal[11], 1.0 - seenHere) * (0.9 + 0.2 * weave(p));
-          // A unit or building shows its own paint between its strokes.
-          col = mix(col, frame, subj);
-          float heat = Q(vUv);
-          float id; vec4 dw;
-          // The top layer first: the first stroke found is the one on top, so the layers under it are skipped.
-          for (int i = 0; i < 3; i++) {
-            int Ly = 2 - i;
-            float c = (Ly == 0 ? 14.0 : Ly == 1 ? 10.0 : 6.0) * uK;
-            if (Ly == 2 && a < 0.37 && heat < 0.2) continue;
-            vec4 hit = stroke(p, c, 0.95, Ly == 2 ? 0.3 : 0.25, 0.3, float(Ly), id, dw);
-            if (hit.z < -1.0) continue;
-            vec2 cuv = (hit.xy + uOff) / res;
-            if (Ly == 2 && A(cuv) < 0.37 && Q(cuv) < 0.2) continue;
-            // A stroke of the ground never runs over a unit or building.
-            if (subj > 0.5 && A(cuv) < 0.6) continue;
-            vec3 pc = paint(cuv, hit.xy, float(Ly));
-            float lit = relief(hit, dw, id, 1.8 * uK);
-            pc *= mix(1.0, clamp(lit, 0.6, 1.3), 0.6);
-            pc += vec3(1.0, 0.96, 0.8) * pow(clamp(lit - 0.95, 0.0, 1.0), 2.0) * 0.4;
-            col = pc;
-            break;
-          }
-          // Units and buildings keep their own colours and detail wherever a stroke's colour is wrong for them,
-          // and houses, trees, bridges and ore a little of theirs.
-          // Buildings are lifted toward the pale cream of his houses so they stand off the ground.
-          vec3 own = mix(frame, vec3(L(frame)), -0.25) * (1.0 + 0.3 * smoothstep(0.62, 0.7, a) * (1.0 - isU));
-          float kk = max(subj * mix(0.75, 0.85, isU), smoothstep(0.37, 0.45, a) * (1.0 - subj) * 0.45);
-          col = mix(col, own, smoothstep(0.08, 0.25, length(own - col)) * kk);
-          // The sides' markings in strong cobalt or vermilion.
-          vec3 mk = texture2D(tSubj, vUv).rgb;
-          float mkx = max(mk.r, max(mk.g, mk.b)), mark = smoothstep(0.62, 0.8, mkx);
-          col = mix(col, mk / max(0.001, mkx) * 0.88, mark * 0.85);
-          // Prussian blue outlines: round every unit and building, heavier on the side away from the sun, and
-          // lighter where the land itself breaks.
-          float e2 = length(vec2(AS(vUv + k * vec2(1.4, 0)) - AS(vUv - k * vec2(1.4, 0)), AS(vUv + k * vec2(0, 1.4)) - AS(vUv - k * vec2(0, 1.4))));
-          float swell = 0.0;
-          if (a < 0.6) for (int i = 1; i <= 3; i++) swell = max(swell,step(0.6, A(vUv + uSun2 * k * (float(i) * 1.2))));
-          float e1 = length(vec2(L(texture2D(t, vUv + k * vec2(2.5, 0)).rgb) - L(texture2D(t, vUv - k * vec2(2.5, 0)).rgb), L(texture2D(t, vUv + k * vec2(0, 2.5)).rgb) - L(texture2D(t, vUv - k * vec2(0, 2.5)).rgb)));
-          float line = max(smoothstep(0.12, 0.4, e2), swell * (1.0 -subj));
-          line = max(line, smoothstep(0.1, 0.24, e1) * 0.55 * (1.0 - subj) * seenHere);
-          // Fine lines inside a unit where its parts meet.
-          float e3 = length(vec2(L(texture2D(t, vUv + k * vec2(1, 0)).rgb) - L(texture2D(t, vUv - k * vec2(1, 0)).rgb), L(texture2D(t, vUv + k * vec2(0, 1)).rgb) - L(texture2D(t, vUv - k * vec2(0, 1)).rgb)));
-          line = max(line, smoothstep(0.08, 0.2, e3) * isU * 0.6);
-          col = mix(col, PRUSSIAN, line * 0.88);
-          // A soft glow round fire, as the halos round his lamps.
-          col += texture2D(tHeat, vUv).rgb * 0.12;
-          vec2 o = vUv - 0.5; col *= 1.0 - dot(o, o) * 0.45;
           gl_FragColor = vec4(col, 1.0);
         }` });
       // The units and buildings for the outlines: white where they stand, their side's colour on their markings.
@@ -4262,14 +4118,13 @@ const World = (() => {
       const landMat = new THREE.ShaderMaterial({ vertexShader: `
         attribute float aRoad; varying float vR; void main() { vR = aRoad; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }`, fragmentShader: `
         varying float vR; void main() { gl_FragColor = vec4(min(vR, 20.0), 0.0, 0.0, 1.0); }` });
-      let ldr = null, mask = null, norm = null, fogRT = null, landRT = null, flowRT = null;
+      let ldr = null, mask = null, norm = null, fogRT = null, landRT = null;
       let rt, a0, a1, b0, b1, w = 1, h = 1;
       function size(wp, hp) {
         w = wp; h = hp;
-        for (const r of [rt, a0, a1, b0, b1, ldr, mask, norm, fogRT, landRT, flowRT]) if (r) r.dispose();
+        for (const r of [rt, a0, a1, b0, b1, ldr, mask, norm, fogRT, landRT]) if (r) r.dispose();
         fogRT = new THREE.WebGLRenderTarget(w >> 1, h >> 1, { type: THREE.HalfFloatType, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter });
         landRT = new THREE.WebGLRenderTarget(w >> 1, h >> 1, { type: THREE.HalfFloatType, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter });
-        flowRT = new THREE.WebGLRenderTarget(w >> 1, h >> 1, { minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter, depthBuffer: false });
         norm = new THREE.WebGLRenderTarget(w, h, { type: THREE.HalfFloatType, minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter });
         ldr = new THREE.WebGLRenderTarget(w, h, { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, depthBuffer: false });
         mask = new THREE.WebGLRenderTarget(w, h, { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter });
@@ -4283,7 +4138,7 @@ const World = (() => {
       const pass = (src, dst, dx, dy) => { blur.uniforms.t.value = src; blur.uniforms.d.value.set(dx, dy); run(blur, dst); };
       function render() {
         // In ink the fog is drawn by the ink pass, so the scene renders without it.
-        const inkFog = (look === 'ink' || look === 'strokes') && viewTeam >= 0;
+        const inkFog = look === 'ink' && viewTeam >= 0;
         if (inkFog) SH.uFogOn.value = 0;
         renderer.setRenderTarget(rt);
         renderer.render(scene, camera);
@@ -4310,7 +4165,7 @@ const World = (() => {
         renderer.shadowMap.autoUpdate = true;
         scene.overrideMaterial = null; camera.layers.mask = was;
         renderer.setClearColor(theme ? theme.shroud : 0, 1);
-        const pass2 = look === 'ink' ? ink : look === 'strokes' ? strokes : charcoal, C = pass2.uniforms;
+        const pass2 = look === 'ink' ? ink : charcoal, C = pass2.uniforms;
         if (C.tPaper && !C.tPaper.value) C.tPaper.value = makePaper();
         C.t.value = ldr.texture; C.tSubj.value = mask.texture; C.tHeat.value = a0.texture; C.res.value.set(w, h); C.uTime.value = SH.uTime.value; C.uK.value = h / 1080;
         if (C.tNorm) C.tNorm.value = norm.texture;
@@ -4339,13 +4194,8 @@ const World = (() => {
           // Which way the sun lies across the screen.
           const s = SH.uSunDir.value, q1 = new THREE.Vector3(CX + s.x * 8 / Math.hypot(s.x, s.z), 1, CY + s.z * 8 / Math.hypot(s.x, s.z)).project(camera);
           if (C.uSun2) C.uSun2.value.set((q1.x - q.x) * w, (q1.y - q.y) * h).normalize();
-        }
-        if (C.tFlow) {
-          const U = flowMat.uniforms;
-          U.tSubj.value = mask.texture; U.tHeat.value = a0.texture; U.tFogS.value = fogRT.texture; U.tLand.value = landRT.texture;
-          U.res.value.set(w, h); U.uOff.value.copy(C.uOff.value); U.uK.value = C.uK.value;
-          run(flowMat, flowRT);
-          C.tFlow.value = flowRT.texture;
+          // The world's up in view space, to tell a building's roof from its walls.
+          if (C.uUpV) C.uUpV.value.set(0, 1, 0).transformDirection(camera.matrixWorldInverse);
         }
         run(pass2, null);
       }
@@ -4564,7 +4414,7 @@ const World = (() => {
       statics = [];
       for (const k in sets) for (const p of sets[k]) { scene.remove(p.mesh); p.mesh.dispose(); }
       sets = {};
-      rs.clear(); wrecks = []; corpses = []; flyers = []; planes = []; falls = []; inkFx.length = 0;
+      rs.clear(); wrecks = []; corpses = []; flyers = []; planes = []; falls = []; inkFx.length = 0; pastBoxes.length = 0;
     }
     const add = o => { scene.add(o); statics.push(o); return o; };
     function lineCat(mesh, cat) {
@@ -4751,7 +4601,8 @@ const World = (() => {
       const th = theme, rand = mulberry(M.seed + 11), sc = MODELS.scenery;
       const trees = M.scatter.filter(s => s.k === 'tree'), rocks = M.scatter.filter(s => s.k === 'rock');
       const lf = th.leaf.map(c => new THREE.Color(c));
-      instanced(sc[th.tree], plainTint, trees.map(t => ({ x: t.x, y: terrainAt(M, t.x, t.y) - 0.04, z: t.y, s: t.s * 1.1, a: t.a, c: colA.copy(lf[0]).lerp(lf[1], rand()).getHex() })));
+      // Trees get their own line category, so the ink pass can wash their canopies.
+      lineCat(instanced(sc[th.tree], plainTint, trees.map(t => ({ x: t.x, y: terrainAt(M, t.x, t.y) - 0.04, z: t.y, s: t.s * 1.1, a: t.a, c: colA.copy(lf[0]).lerp(lf[1], rand()).getHex() }))), 0.459);
       const rc = new THREE.Color(th.rock);
       instanced(sc.rock, plainTint, rocks.map(t => ({ x: t.x, y: terrainAt(M, t.x, t.y) - 0.08, z: t.y, s: t.s * 1.4, a: t.a, c: colA.copy(rc).multiplyScalar(0.8 + rand() * 0.5).getHex() })));
 
@@ -5423,6 +5274,7 @@ const World = (() => {
       const y = e.b ? terrainAt(M, e.x, e.y) : heightAt(M, e.x, e.y);
       if (e.b) {
         if (r && r.y0 !== undefined) falls.push({ kind: e.kind, x: e.x, y0: r.y0, z: e.y, yaw: r.yaw, team: e.team, t: 0, dir: Math.random() < 0.5 ? -1 : 1, w: e.w, h: e.h, dust: 0 });
+        pastBoxes.push({ x: e.cx, y: e.cy, w: e.w, h: e.h, ht: bHeight(e.kind), t: 0, life: 60 });
         splatter(e.x, e.y, Math.max(e.w, e.h) * 0.6);
         scorch(e.x, e.y, Math.max(e.w, e.h) * 0.9, 1);
         const n = Math.max(e.w, e.h) + 2;
@@ -5452,13 +5304,17 @@ const World = (() => {
       const c = new THREE.Color(theme.sunColor);
       glow.tint([c.r * 1.6, c.g * 1.4, c.b * 1.1, 0.5]);
     }
+    // Pen and ink looks down a long lens, nearly an axonometric, standing back as far again as frames the same
+    // ground. cam.dist stays the distance the 26° lens would stand at, so everything sized by it holds.
     function placeCamera() {
-      const c = cam;
+      const c = cam, fov = look === 'ink' ? 10 : 26;
+      if (camera.fov !== fov) { camera.fov = fov; camera.near = fov < 20 ? 5 : 2; camera.far = fov < 20 ? 1400 : 500; camera.updateProjectionMatrix(); }
+      const D = c.D = c.dist * Math.tan(13 * Math.PI / 180) / Math.tan(fov * Math.PI / 360);
       c.pitchNow = c.pitch + (1.4 - c.pitch) * smooth(70, 175, c.dist);
       const cp = Math.cos(c.pitchNow), sp = Math.sin(c.pitchNow);
       const h = M ? Math.max(terrainAt(M, clamp(c.x, 0, W), clamp(c.y, 0, H)), 0.5) * 0.4 + 0.6 : 1;
       const sx = c.shake ? (Math.random() - 0.5) * c.shake : 0, sy = c.shake ? (Math.random() - 0.5) * c.shake : 0;
-      camera.position.set(c.x - Math.cos(c.yaw) * cp * c.dist + sx, h + sp * c.dist + sy, c.y - Math.sin(c.yaw) * cp * c.dist);
+      camera.position.set(c.x - Math.cos(c.yaw) * cp * D + sx, h + sp * D + sy, c.y - Math.sin(c.yaw) * cp * D);
       camera.lookAt(c.x + sx, h + sy, c.y);
       camera.updateMatrixWorld();
     }
@@ -5492,7 +5348,7 @@ const World = (() => {
       g2.normalize();
       pp.grade.uniforms.uGlow.value.set(0.5 + g2.x * 0.78, 0.5 + g2.y * 0.62);
       pp.grade.uniforms.uAspect.value = camera.aspect;
-      SH.uHazeFrom.value = cam.dist * 0.85;
+      SH.uHazeFrom.value = (cam.D || cam.dist) - cam.dist * 0.15;
       motes -= dt;
       while (motes < 0) {
         motes += 0.03;
@@ -5507,6 +5363,9 @@ const World = (() => {
       let j = 0;
       for (let i = 0; i < inkFx.length; i++) { const f = inkFx[i]; f.t += dt; if (f.t < f.life) inkFx[j++] = f; }
       inkFx.length = j;
+      j = 0;
+      for (const b of pastBoxes) { b.t += dt; if (b.t < b.life) pastBoxes[j++] = b; }
+      pastBoxes.length = j;
       for (const f of flashes) { f.t += dt; f.l.intensity = f.p * Math.max(0, 1 - f.t / 0.3) ** 2; }
       const u = pp.grade.uniforms.uFlash;
       if (u.value > 0) u.value = Math.max(0, u.value - dt * 0.9);
@@ -5516,6 +5375,19 @@ const World = (() => {
       updateGhost();
       pp.render();
     }
+
+    // A building's height, from the top of its model, for the ghost plan's wireframes.
+    const tops = {};
+    function bHeight(kind) {
+      if (tops[kind] === undefined) {
+        let top = 1;
+        for (const p of MODELS.buildings[kind] || []) { p.geo.computeBoundingBox(); top = Math.max(top, p.geo.boundingBox.max.y + (p.pivot ? p.pivot[1] : 0)); }
+        tops[kind] = top;
+      }
+      return tops[kind];
+    }
+    // Buildings destroyed in sight, kept a minute as what was.
+    const pastBoxes = [];
 
     // The building being placed shows as a pale model over cells marked good or bad.
     let ghostState = null;
@@ -5529,6 +5401,8 @@ const World = (() => {
       }
       if (!ghostState) { ghostCells.count = 0; if (ghost) ghost.visible = false; SH.uBorder.value = 1; return; }
       SH.uBorder.value = 1.8;
+      // In pen and ink the overlay draws it as the ghost plan's dotted wireframe instead.
+      if (look === 'ink') { ghostCells.count = 0; if (ghost) ghost.visible = false; return; }
       const g = ghostState, d = BUILDINGS[g.kind];
       let n = 0;
       for (let y = g.y; y < g.y + d.h; y++) for (let x = g.x; x < g.x + d.w; x++) {
@@ -5554,7 +5428,8 @@ const World = (() => {
       ro.set(px / world.vw * 2 - 1, 1 - py / world.vh * 2, 0.5).unproject(camera);
       ray.copy(ro).sub(camera.position).normalize();
       const o = camera.position;
-      let t = 0, step = 1.2;
+      // The march starts just above the highest ground, since a long lens stands far back.
+      let t = ray.y < 0 ? Math.max(0, (o.y - 30) / -ray.y) : 0, step = 1.2;
       for (let i = 0; i < 600; i++) {
         const x = o.x + ray.x * t, y = o.y + ray.y * t, z = o.z + ray.z * t;
         const h = x >= 0 && z >= 0 && x <= W && z <= H ? heightAt(M, x, z) : 0.8;
@@ -5645,11 +5520,12 @@ const World = (() => {
     }
 
     const world = {
-      subjectCanvas, inkFx,
+      subjectCanvas, inkFx, pastBoxes, bHeight,
+      get ghostState() { return ghostState; },
       // Screen pixels to a world unit at a point, for sizing drawn marks.
       ppu(x, y, z) { p1.set(x, y, z); return world.vh / (2 * Math.tan(camera.fov * Math.PI / 360) * camera.position.distanceTo(p1)); },
       setLook(name) {
-        look = ['charcoal', 'ink', 'strokes'].includes(name) ? name : 'film';
+        look = name === 'film' ? 'film' : name === 'charcoal' ? 'charcoal' : 'ink';
         // The page dresses its panels to match.
         if (typeof document !== 'undefined') document.body.dataset.look = look;
       },
@@ -6272,7 +6148,7 @@ const Hud = (() => {
         return;
       }
       if (k === 'KeyL') {
-        const order = ['ink', 'strokes', 'film'], said = { ink: 'Pen and ink.', strokes: 'Swirling strokes.', film: 'Sunset.' };
+        const order = ['ink', 'film'], said = { ink: 'Pen and ink.', film: 'Sunset.' };
         game.look = order[(order.indexOf(world.look) + 1) % order.length]; world.setLook(game.look);
         try { localStorage.setItem('dg-look', game.look); } catch (e) { /* no store */ }
         say(said[game.look]); return;
@@ -6347,6 +6223,70 @@ const Hud = (() => {
         og.stroke();
       }
     }
+    // The ghost plan, in pen and ink: what is planned in dotted orange, what was in dashed blue-grey.
+    const PLAN = '#e0703a', PLAN_BAD = '#c8321e', WAS = '#6d82ad';
+    const dotted = () => { og.setLineDash([0.5, 4]); og.lineCap = 'round'; og.lineWidth = 2; };
+    const dashed = () => { og.setLineDash([6, 4]); og.lineCap = 'butt'; og.lineWidth = 1.4; };
+    // A box standing on the ground over cells x..x+w, y..y+h, ht tall, as a wireframe.
+    function box3(s, x, y, w, h, ht) {
+      const g = terrainAt(s.map, clamp(x + w / 2, 0, W), clamp(y + h / 2, 0, H)) + 0.05;
+      const c = [[x, y], [x + w, y], [x + w, y + h], [x, y + h]];
+      const lo = c.map(([a, b]) => world.project(a, g, b)), hi = c.map(([a, b]) => world.project(a, g + ht, b));
+      og.beginPath();
+      for (let i = 0; i < 4; i++) {
+        const j = (i + 1) % 4;
+        og.moveTo(lo[i][0], lo[i][1]); og.lineTo(lo[j][0], lo[j][1]);
+        og.moveTo(hi[i][0], hi[i][1]); og.lineTo(hi[j][0], hi[j][1]);
+        og.moveTo(lo[i][0], lo[i][1]); og.lineTo(hi[i][0], hi[i][1]);
+      }
+      og.stroke();
+    }
+    function drawGhostPlan(s, t, selected) {
+      og.save();
+      // What was: a building destroyed in sight stays a minute as its dashed outline.
+      og.strokeStyle = WAS; dashed();
+      for (const b of world.pastBoxes) { og.globalAlpha = Math.min(1, (b.life - b.t) / 15) * 0.9; box3(s, b.x, b.y, b.w, b.h, b.ht); }
+      og.globalAlpha = 1;
+      // What is planned: the building being placed, and where the chosen units are bound.
+      const g = world.ghostState;
+      if (g) { og.strokeStyle = g.ok ? PLAN : PLAN_BAD; dotted(); const d = BUILDINGS[g.kind]; box3(s, g.x, g.y, d.w, d.h, world.bHeight(g.kind)); }
+      og.strokeStyle = PLAN; dotted();
+      const ends = [];
+      let byId = null;
+      for (const e of selected) {
+        if (!e || e.b || e.team !== t || e.hp <= 0 || !e.ord) continue;
+        const o = e.ord;
+        let tx, ty;
+        if (o.t === 'move' || o.t === 'amove') { tx = o.x; ty = o.y; }
+        else if (o.id !== undefined) {
+          byId = byId || new Map(s.ents.map(u => [u.id, u]));
+          const v = byId.get(o.id);
+          if (v && v.hp > 0 && Rules.seenBy(s, t, v)) { tx = v.x; ty = v.y; } else if (o.x !== undefined) { tx = o.x; ty = o.y; }
+        } else if (o.t === 'capture' && s.towns[o.town]) { tx = s.towns[o.town].x; ty = s.towns[o.town].y; }
+        if (tx === undefined) continue;
+        tx = clamp(tx, 0, W); ty = clamp(ty, 0, H);
+        const air = Rules.isAir(e);
+        const [ax, ay] = world.project(e.x, Rules.heightAt(s.map, clamp(e.x, 0, W), clamp(e.y, 0, H)) + (air ? e.z : 0.2), e.y);
+        const [bx, by] = world.project(tx, Rules.heightAt(s.map, tx, ty) + 0.2, ty);
+        og.beginPath(); og.moveTo(ax, ay); og.lineTo(bx, by); og.stroke();
+        if (!ends.some(p => Math.abs(p[0] - bx) < 8 && Math.abs(p[1] - by) < 8)) ends.push([bx, by]);
+      }
+      for (const [x, y] of ends) { og.beginPath(); og.ellipse(x, y, 9, 5.5, 0, 0, 6.3); og.stroke(); }
+      og.restore();
+    }
+    // A key to the plan, as the atlas's ghost plan carries one, in the corner the selection panel leaves free.
+    function drawKey() {
+      const x = world.vw - 118, y = world.vh - 72;
+      og.save(); og.setLineDash([]);
+      og.fillStyle = 'rgba(250,244,228,0.9)'; og.strokeStyle = 'rgba(31,26,22,0.85)'; og.lineWidth = 1;
+      og.fillRect(x, y, 104, 58); og.strokeRect(x + 0.5, y + 0.5, 103, 57);
+      og.font = 'italic 14px "IM Fell English", Georgia, serif'; og.textBaseline = 'middle'; og.textAlign = 'left';
+      const row = (i, label, draw) => { const yy = y + 12 + i * 17; draw(x + 10, yy); og.setLineDash([]); og.fillStyle = '#3d352c'; og.fillText(label, x + 46, yy + 1); };
+      row(0, 'was', (a, b) => { og.strokeStyle = WAS; dashed(); og.beginPath(); og.moveTo(a, b); og.lineTo(a + 28, b); og.stroke(); });
+      row(1, 'planned', (a, b) => { og.strokeStyle = PLAN; dotted(); og.beginPath(); og.moveTo(a, b); og.lineTo(a + 28, b); og.stroke(); });
+      row(2, 'now', (a, b) => { og.fillStyle = '#cdc1ab'; og.fillRect(a + 7, b - 5, 14, 10); og.strokeStyle = '#1f1a16'; og.lineWidth = 1.2; og.strokeRect(a + 7, b - 5, 14, 10); });
+      og.restore();
+    }
     const smoothstepJS = (a, b, v) => { const x = clamp((v - a) / (b - a), 0, 1); return x * x * (3 - 2 * x); };
     function drawOverlay(dt) {
       const dpr = Math.min(2, devicePixelRatio || 1), w = world.vw, h = world.vh;
@@ -6417,7 +6357,8 @@ const Hud = (() => {
         }
         if (e.b && on && e.rally && mine) {
           const [rx, ry] = world.project(e.rally[0], terrainAt(s.map, e.rally[0], e.rally[1]) + 0.1, e.rally[1]);
-          og.strokeStyle = '#7fe0a0'; og.setLineDash([5, 4]); og.lineWidth = 1; og.beginPath(); og.moveTo(o.x, o.y); og.lineTo(rx, ry); og.stroke(); og.setLineDash([]);
+          if (world.look === 'ink') { og.strokeStyle = PLAN; dotted(); } else { og.strokeStyle = '#7fe0a0'; og.setLineDash([5, 4]); og.lineWidth = 1; }
+          og.beginPath(); og.moveTo(o.x, o.y); og.lineTo(rx, ry); og.stroke(); og.setLineDash([]); og.lineCap = 'butt';
         }
         if (e.b && e.c4) { og.fillStyle = '#ff5040'; og.font = '700 12px "Share Tech Mono", monospace'; og.textAlign = 'center'; og.fillText(Math.ceil((e.c4 - s.tick) / HZ) + '', o.x, o.y - 18); }
       }
@@ -6438,7 +6379,7 @@ const Hud = (() => {
         for (const o of world.onScreen) if (o.e.team !== t && (o.e === hv || Rules.gap(hv.x, hv.y, o.e) <= STRIKE_R) && Rules.seenBy(s, t, o.e)) brackets(o.x, o.y, Math.max(9, o.e.b ? Math.max(o.e.w, o.e.h) * o.scale * 0.5 : o.r * 1.3), o.e === hv, o.e === hv ? '#ff5a40' : 'rgba(255,110,80,0.85)');
       }
 
-      if (world.look === 'ink') drawInk(s, t);
+      if (world.look === 'ink') { drawGhostPlan(s, t, selected); drawKey(); drawInk(s, t); }
 
       for (let i = state.marks.length - 1; i >= 0; i--) {
         const m = state.marks[i];
@@ -6456,8 +6397,8 @@ const Hud = (() => {
         const g = world.pick(state.mouse.x, state.mouse.y);
         if (g) {
           const r = m.type === 'launch' ? 10 : POWERS[m.name].r, [x, y] = [state.mouse.x, state.mouse.y], sc = world.vh / (2 * Math.tan(13 * Math.PI / 180) * world.cam.dist);
-          og.strokeStyle = '#ffa040'; og.lineWidth = 1.5; og.setLineDash([8, 5]);
-          og.beginPath(); og.ellipse(x, y, r * sc, r * sc * 0.82, 0, 0, 6.3); og.stroke(); og.setLineDash([]);
+          if (world.look === 'ink') { og.strokeStyle = PLAN; dotted(); } else { og.strokeStyle = '#ffa040'; og.lineWidth = 1.5; og.setLineDash([8, 5]); }
+          og.beginPath(); og.ellipse(x, y, r * sc, r * sc * 0.82, 0, 0, 6.3); og.stroke(); og.setLineDash([]); og.lineCap = 'butt';
         }
       }
 
@@ -6910,6 +6851,7 @@ const Game = (() => {
     };
     try { G.theme = localStorage.getItem('dg-theme') || G.theme; G.diff = localStorage.getItem('dg-diff') || G.diff; G.look = localStorage.getItem('dg-look') || G.look; if (G.look === 'charcoal') G.look = 'ink'; G.showHints = !localStorage.getItem('dg-played'); } catch (e) { /* no store */ }
     if (params.get('look')) G.look = params.get('look');
+    if (G.look !== 'film') G.look = 'ink';
     world.setLook(G.look);
     pick($('m-theme'), 'theme'); pick($('m-diff'), 'diff'); pick($('m-look'), 'look');
     $('m-look').addEventListener('click', () => world.setLook(G.look));
