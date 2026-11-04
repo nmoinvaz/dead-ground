@@ -7344,6 +7344,9 @@ const Hud = (() => {
       }
       if (us.every(u => u.d.cargo) && s.ore[Rules.cellOf(g.x, g.y)]) { game.order(s, t, { c: 'harvest', ids, cell: Rules.cellOf(g.x, g.y) }); marker(g.x, g.y, '#ffd34d'); game.audio.ack(us[0]); return; }
       if (e && e.kind === 'refinery' && us.some(u => u.d.cargo)) { game.order(s, t, { c: 'harvest', ids, cell: -1 }); return; }
+      // Infantry sent near a cover point go to the point itself.
+      const snap = us.some(u => u.d.men) ? tacSnap(s, g.x, g.y) : null;
+      if (snap) { g.x = snap.x; g.y = snap.y; }
       game.order(s, t, { c: 'move', ids, x: g.x, y: g.y, a: !!forceAttack });
       marker(g.x, g.y, forceAttack ? '#ffa040' : '#7fe0a0');
       game.audio.ack(us[0], forceAttack);
@@ -7724,9 +7727,17 @@ const Hud = (() => {
       else { og.moveTo(px - r, py + r * 0.6); og.lineTo(px, py - r); og.lineTo(px + r, py + r * 0.6); }
       og.stroke();
     }
+    // The point an order near the cursor would snap to, within a stride and a half on the land.
+    function tacSnap(s, gx, gy) {
+      let best = null, bd = 1.5;
+      for (const q of tacPoints(s)) { const d = Math.hypot(q.x - gx, q.y - gy); if (d < bd) { bd = d; best = q; } }
+      return best;
+    }
+    // While infantry are chosen, the points near the cursor show, fading with distance. The one the order would
+    // snap to is ringed, the chosen squad's order runs to it, and the order it would be is written beside it.
     function drawTactical(s, t) {
-      const v = world.style.tac, inf = state.sel.filter(e => !e.b && e.team === t && e.d && e.d.men);
-      if (!inf.length) return;
+      const v = 2, inf = state.sel.filter(e => !e.b && e.team === t && e.d && e.d.men);
+      if (!inf.length || !state.mouse.in || state.mode) return;
       const pts = tacPoints(s), m = state.mouse, SEP = '#5a4636';
       let best = null, bd = 1e9;
       og.save(); og.setLineDash([]); og.lineCap = 'round'; og.lineJoin = 'round';
@@ -7754,7 +7765,9 @@ const Hud = (() => {
         }
       }
       og.globalAlpha = 1;
-      if (best && bd < 60) {
+      const g = world.pick(m.x, m.y), snap = g && tacSnap(s, g.x, g.y);
+      if (snap && snap.px !== undefined) best = snap; else best = null;
+      if (best) {
         // The snapped point: a dashed ring, the order line from the squad, and what the order would be.
         og.strokeStyle = PLAN; og.setLineDash([3, 3]); og.lineWidth = 1.5; og.beginPath(); og.arc(best.px, best.py, 13, 0, 6.283); og.stroke();
         const e = inf[0], [ex, ey] = world.project(e.x, terrainAt(s.map, e.x, e.y) + 0.3, e.y);
@@ -8157,7 +8170,7 @@ const Hud = (() => {
         for (const o of world.onScreen) if (o.e.team !== t && (o.e === hv || Rules.gap(hv.x, hv.y, o.e) <= STRIKE_R) && Rules.seenBy(s, t, o.e)) brackets(o.x, o.y, Math.max(9, o.e.b ? Math.max(o.e.w, o.e.h) * o.scale * 0.5 : o.r * 1.3), o.e === hv, o.e === hv ? '#ff5a40' : 'rgba(255,110,80,0.85)');
       }
 
-      if (inked()) { drawGhostPlan(s, t, selected); drawKey(); drawInk(s, t); if (world.style.tac) drawTactical(s, t); }
+      if (inked()) { drawGhostPlan(s, t, selected); drawKey(); drawInk(s, t); drawTactical(s, t); }
       drawBridges(s, t); drawFires(); drawBirds(); drawLightning(dt);
       if (game.playing) { drawSkyNote(s); drawGroundTip(s, dt); }
 
