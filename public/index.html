@@ -1387,6 +1387,8 @@ const Rules = (() => {
     }
     for (const t of S.towns) if (t.owner >= 0) light(S.P[t.owner], t.x, t.y, 9 * fk, 2, false);
     for (const s of S.sweeps) if (s.until > S.tick) light(S.P[s.team], s.x, s.y, s.r, 0, true);
+    // A unit or building that has fired lately is seen by the side it fired on, wherever it stands, by its flash.
+    for (const e of S.ents) if (e.hp > 0 && e.firedUntil > S.tick && S.P[e.firedOn]) light(S.P[e.firedOn], e.x, e.y, e.b ? Math.max(e.w, e.h) / 2 + 0.5 : 0.8, 0, true);
   }
 
   // Three ways of getting about: on foot, on wheels, and on tracks, which go through woods by flattening them.
@@ -1626,7 +1628,9 @@ const Rules = (() => {
   function inRange(S, s, wn, t, slack = 0) {
     const w = WEAPONS[wn], d = gap(s.x, s.y, t);
     const up = (s.b ? terrainAt(S.map, s.x, s.y) : heightAt(S.map, s.x, s.y)) - (t.b ? terrainAt(S.map, t.x, t.y) : heightAt(S.map, t.x, t.y));
-    const reach = w.r * (up > 1 && !isAir(s) ? 1.15 : 1) + slack;
+    // Height lends reach: a ground unit above its target fires a tenth farther for each unit of height it has over
+    // it past the first third, up to a third farther from a hilltop.
+    const reach = w.r * (1 + 0.1 * (isAir(s) ? 0 : clamp(up - 0.3, 0, 3.5))) + slack;
     return d <= reach && (!w.min || d >= w.min);
   }
   function clearShot(S, s, wn, t) {
@@ -1825,6 +1829,8 @@ const Rules = (() => {
     const up = (s.b ? terrainAt(S.map, s.x, s.y) : heightAt(S.map, s.x, s.y)) - (t.b ? terrainAt(S.map, t.x, t.y) : heightAt(S.map, t.x, t.y));
     const dmg = w.dmg * vetScale * (up > 1 ? 1.1 : 1);
     s.flash = S.tick; s.fired = S.tick;
+    // A shot gives the shooter away to the side it fired on, for a few seconds.
+    if (t.team !== undefined && t.team >= 0 && t.team !== s.team) { s.firedOn = t.team; s.firedUntil = S.tick + 4 * HZ; }
     const br = t.br, z0 = groundZ(S, s) + (s.b ? 1 : 0.1), z1 = br !== undefined ? t.z : groundZ(S, t);
     const shot = { w: wn, team: s.team, by: s.id, x: s.x, y: s.y, z: z0, tx: t.x, ty: t.y, tz: z1, t: 0, dur: 0, tgt: t.id, dmg };
     if (br !== undefined) shot.br = br;
