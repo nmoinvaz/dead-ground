@@ -7097,7 +7097,8 @@ const Hud = (() => {
         return;
       }
       state.mouse.x = x; state.mouse.y = y;
-      if (e.button === 1) { state.pan = { x, y, cx: world.cam.x, cy: world.cam.y, yaw: world.cam.yaw }; return; }
+      // A middle button is a mouse's, so its wheel zooms from here on.
+      if (e.button === 1) { pad = false; state.pan = { x, y, cx: world.cam.x, cy: world.cam.y, yaw: world.cam.yaw }; return; }
       if (e.button === 2) { if (state.mode) { leave(); return; } state.rdown = { x, y, moved: false }; return; }
       if (state.mode) { useMode(x, y); return; }
       state.drag = { x0: x, y0: y, x1: x, y1: y, box: false, add: e.shiftKey };
@@ -7193,23 +7194,31 @@ const Hud = (() => {
       const after = before && world.pick(px, py);
       if (after) { c.x += before.x - after.x; c.y += before.y - after.y; world.place(); }
     }
-    // A trackpad pinch reaches Chrome and Firefox as a wheel with ctrl held. A two-finger swipe comes as small, often
-    // fractional steps, usually with some sideways movement, and pans the map. A mouse wheel moves in whole notches of
-    // about a hundred pixels, or in lines, and zooms. Once a trackpad has shown itself, small steps always pan.
-    let trackpad = false;
+    // A trackpad pinch reaches Chrome and Firefox as a wheel with ctrl held, and zooms. A two-finger swipe pans. A mouse
+    // wheel zooms by a step a notch. A wheel moves in lines, or on a Mac in fractional accelerated steps, or elsewhere
+    // in whole notches of a hundred or so after a pause. A trackpad moves in whole steps, nearly always with some
+    // sideways movement. A step that shows neither follows the last device seen, and a mouse until a trackpad shows.
+    let pad = false, lastWheel = -1e9;
+    const wheelKind = e => {
+      const now = performance.now(), gap = now - lastWheel;
+      lastWheel = now;
+      if (e.ctrlKey) return 'pinch';
+      if (e.deltaMode !== 0) return (pad = false, 'wheel');
+      if (e.deltaX !== 0 && !e.shiftKey) return (pad = true, 'pad');
+      if (!Number.isInteger(e.deltaY)) return (pad = false, 'wheel');
+      if (Math.abs(e.deltaY) >= 50 && gap > 250) return (pad = false, 'wheel');
+      return pad ? 'pad' : 'wheel';
+    };
+    state.wheelKind = wheelKind;
     view.addEventListener('wheel', e => {
       e.preventDefault();
       if (!game.playing) return;
-      const [x, y] = local(e);
-      if (e.ctrlKey) { trackpad = true; zoomAt(x, y, Math.exp(clamp(e.deltaY, -120, 120) * 0.009)); return; }
-      const notch = e.deltaMode !== 0 || (e.deltaX === 0 && Number.isInteger(e.deltaY) && Math.abs(e.deltaY) >= 50);
-      if (!notch && (trackpad || e.deltaX !== 0 || !Number.isInteger(e.deltaY) || Math.abs(e.deltaY) < 30)) {
-        trackpad = true;
-        moveView(-e.deltaX, -e.deltaY);
-        if (state.mode) moveGhost();
-        return;
-      }
-      zoomAt(x, y, Math.exp(clamp(e.deltaY, -120, 120) * (e.deltaMode === 1 ? 0.05 : 0.0015)));
+      const [x, y] = local(e), kind = wheelKind(e);
+      if (kind === 'pinch') { pad = true; zoomAt(x, y, Math.exp(clamp(e.deltaY, -120, 120) * 0.009)); return; }
+      if (kind === 'pad') { moveView(-e.deltaX, -e.deltaY); if (state.mode) moveGhost(); return; }
+      // A notch zooms a tenth at least, however small the step the system reports for it.
+      const px = e.deltaY * (e.deltaMode === 1 ? 33 : e.deltaMode === 2 ? 400 : 1);
+      if (px) zoomAt(x, y, Math.exp(Math.sign(px) * clamp(Math.abs(px) * 0.0015, 0.1, 0.25)));
     }, { passive: false });
     // Safari sends a pinch as gesture events, with a scale since the start and a twist in degrees.
     let gesture = null;
