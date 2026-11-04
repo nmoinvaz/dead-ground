@@ -4287,6 +4287,8 @@ if (typeof module !== 'undefined') module.exports = Looks;
     // Blasts: flames as flicks of line, fire left white and scorch hatched in the pass, and the drawn burst lives long
     // enough to be seen. Each kind of thing has its own drawing, set in world.js.
     fx: 1, fxs: 2, burstLife: 2.5,
+    // Survey inks, each family of things in its own colour, and units drawn in their side's ink on bare paper.
+    inks: 1, units: 1,
     // The lens stands back as far again as frames the same ground, so everything sized by cam.dist holds.
     camera: (c, smooth) => ({ fov: 10, near: 5, far: 1400, D: c.dist * Math.tan(13 * Math.PI / 180) / Math.tan(5 * Math.PI / 180), pitch: c.pitch + (1.4 - c.pitch) * smooth(70, 175, c.dist) }),
     sun: w => w.sunAt(w.day),
