@@ -30,6 +30,27 @@ kbd { font: 11px var(--mono); color: var(--dim); }
 #view { position: relative; flex: 1 1 auto; min-width: 0; overflow: hidden; background: #000; touch-action: none; }
 #gl, #ov { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
 #ov { pointer-events: none; }
+#settings { position: absolute; top: calc(52px + env(safe-area-inset-top, 0px)); right: 10px; z-index: 6; width: min(300px, calc(100% - 20px)); display: flex; flex-direction: column; gap: 10px; padding: 12px; background: rgba(20,22,15,.94); border: 1px solid var(--edge); box-shadow: 0 6px 18px rgba(0,0,0,.45); }
+#settings[hidden] { display: none; }
+body[data-look="ink"] #settings { background: var(--paper-hi); border: 1.5px solid var(--ink); box-shadow: 3px 3px 0 var(--ink); color: var(--ink); }
+/* The dark scheme of pen and ink: light ink on dark paper. The picture's pass turns its own tones over, and the
+   overlay drawn on it is turned over the same way by a filter, which costs nothing on one canvas. The panels change
+   their colours instead, as a filter on them redrew them every frame; the map and the unit pictures in them keep
+   the filter, being small. */
+body[data-look="ink"][data-scheme="dark"] {
+  --paper: #23201b; --paper-hi: #2b2722; --paper-lo: #1a1814; --ink: #e8e0cf; --ink-dim: #a49a89; --redink: #e07a62; --blueink: #8fb0ef;
+  --good: #7fbf8a; --warn: #e0b050; --amber-dim: #8a5a4e;
+}
+body[data-look="ink"][data-scheme="dark"] #ov, body[data-look="ink"][data-scheme="dark"] #map, body[data-look="ink"][data-scheme="dark"] .cam::before { filter: invert(.93) hue-rotate(180deg); }
+body[data-look="ink"][data-scheme="dark"] #side { background: repeating-linear-gradient(135deg, rgba(232,224,207,.035) 0 1px, transparent 1px 7px), var(--paper); }
+body[data-look="ink"][data-scheme="dark"] .gauge, body[data-look="ink"][data-scheme="dark"] .tools button, body[data-look="ink"][data-scheme="dark"] #sel, body[data-look="ink"][data-scheme="dark"] #stats div, body[data-look="ink"][data-scheme="dark"] #banner { box-shadow: 2px 2px 0 rgba(0,0,0,.5); }
+body[data-look="ink"][data-scheme="dark"] #roster, body[data-look="ink"][data-scheme="dark"] #objective, body[data-look="ink"][data-scheme="dark"] .line { background: rgba(43,39,34,.92); box-shadow: 2px 2px 0 rgba(0,0,0,.4); }
+body[data-look="ink"][data-scheme="dark"] .tools button.off { color: #6e665a; }
+body[data-look="ink"][data-scheme="dark"] .cam.busy::after { background: conic-gradient(rgba(0,0,0,0) var(--p), rgba(35,32,27,.72) var(--p)); }
+body[data-look="ink"][data-scheme="dark"] #tip p, body[data-look="ink"][data-scheme="dark"] #title .lede, body[data-look="ink"][data-scheme="dark"] .help, body[data-look="ink"][data-scheme="dark"] #end th { color: #cfc6b4; }
+body[data-look="ink"][data-scheme="dark"] #cams { scrollbar-color: #6e665a transparent; }
+body[data-look="ink"][data-scheme="dark"] #title { background: linear-gradient(90deg, rgba(35,32,27,.95) 0, rgba(35,32,27,.82) 34%, rgba(35,32,27,0) 64%); }
+body[data-look="ink"][data-scheme="dark"] #end, body[data-look="ink"][data-scheme="dark"] #veil { background: rgba(20,18,15,.55); }
 #view[data-cur="order"] { cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='28'%3E%3Cpath d='M14 3l7 8h-4v5h-6v-5H7z' fill='%237fe0a0' stroke='%23000'/%3E%3Cpath d='M6 22l8 3 8-3' fill='none' stroke='%237fe0a0' stroke-width='2'/%3E%3C/svg%3E") 14 24, pointer; }
 #view[data-cur="attack"] { cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='30' height='30'%3E%3Ccircle cx='15' cy='15' r='9' fill='none' stroke='%23000' stroke-width='4'/%3E%3Ccircle cx='15' cy='15' r='9' fill='none' stroke='%23ff5a40' stroke-width='2'/%3E%3Cpath d='M15 1v8M15 21v8M1 15h8M21 15h8' stroke='%23ff5a40' stroke-width='2'/%3E%3C/svg%3E") 15 15, crosshair; }
 #view[data-cur="aim"], #view[data-cur="place"] { cursor: crosshair; }
@@ -318,9 +339,14 @@ body[data-look="ink"] #menu, body[data-look="ink"] #quit, body[data-look="ink"] 
         <button id="b-pause" title="Pause (P)" aria-label="Pause">&#10074;&#10074;</button>
         <button id="b-mute" title="Sound (M)" aria-label="Sound">&#9834;</button>
         <button id="b-full" title="Full screen (F)" aria-label="Full screen">&#9974;</button>
+        <button id="b-set" title="Settings" aria-label="Settings" aria-expanded="false">&#9881;</button>
       </div>
     </div>
     <div id="notes"><div id="objective" hidden></div><div id="log"></div></div>
+    <div id="settings" hidden role="dialog" aria-label="Settings">
+      <div class="choice"><h2>Look</h2><div id="s-look" class="two"></div></div>
+      <div class="choice"><h2>Paper</h2><div id="s-scheme"><button data-v="auto">As the system</button><button data-v="light">Light</button><button data-v="dark">Dark</button></div></div>
+    </div>
     <div id="banner" hidden></div>
     <div id="sel" hidden></div>
     <div id="roster" hidden></div>
@@ -340,7 +366,7 @@ body[data-look="ink"] #menu, body[data-look="ink"] #quit, body[data-look="ink"] 
       <h1>Dead <span>Ground</span></h1>
       <p class="lede">Build a base, dig ore, take the towns, and flatten the other side before it flattens you.</p>
       <div class="choice"><h2>Theatre</h2><div id="m-theme"><button data-v="desert">Salt Flats</button><button data-v="steppe">Black Steppe</button><button data-v="winter">White Pass</button></div></div>
-      <div class="choice"><h2>Look</h2><div id="m-look"></div></div>
+      <div class="choice" hidden><h2>Look</h2><div id="m-look"></div></div>
       <div class="choice"><h2>Enemy</h2><div id="m-diff"><button data-v="recruit">Recruit</button><button data-v="regular">Regular</button><button data-v="veteran">Veteran</button></div></div>
       <button id="deploy">Deploy</button>
       <div class="choice" id="m-online" hidden><h2>The shared world</h2>
@@ -4173,6 +4199,10 @@ const Looks = (() => {
     add(def) { all.set(def.name, Object.assign({}, base, def)); },
     get(name) { return all.get(name) || all.get('ink'); },
     has(name) { return all.has(name); },
+    // Every look, for the settings panel, which offers the ones the menu hides.
+    all() { return [...all.values()].filter(l => l.name !== 'charcoal'); },
+    // Whether the page is in its dark scheme, set from the system's or the player's choice.
+    dark: false,
     list() { return [...all.values()].filter(l => !l.hidden); },
     // Paper to draw on: fine tooth in red, long streaks in green, broad smudges in blue. It tiles.
     paper(THREE) {
@@ -4241,10 +4271,10 @@ if (typeof module !== 'undefined') module.exports = Looks;
       // 45 and 135 degrees, then flat and upright lines for the darkest, each line a little uneven with small gaps.
       // The ground's hatching is pinned to the map so it pans with it, the units' redraws a few times a second.
       const ink = new THREE.ShaderMaterial({ uniforms: { t: { value: null }, tSubj: { value: null }, tHeat: { value: null }, tPaper: { value: null }, res: { value: new THREE.Vector2(1, 1) }, uTime: { value: 0 }, uK: { value: 1 }, uOff: { value: new THREE.Vector2() }, uStyle: { value: 8 }, tNorm: { value: null }, tFogS: { value: null }, tLand: { value: null }, uSun2: { value: new THREE.Vector2(-1, 0) }, uUpV: { value: new THREE.Vector3(0, 1, 0) }, uRoad: { value: 0 }, uOre: { value: 0 },
-        uWindS: { value: new THREE.Vector2() }, uView: { value: new THREE.Vector2(1, 0) }, tFx: { value: null }, uFxs: { value: 0 }, tH: SH.tH, uHSize: { value: new THREE.Vector2(1, 1) }, uHScale: { value: 1 }, uRain: { value: 0 }, uStorm: { value: 0 }, uSnowF: { value: 0 }, uSnowC: SH.uSnowC, uFog: { value: 0 }, uMist: { value: 0 }, uNight: { value: 0 }, uWet: { value: 0 },
+        uWindS: { value: new THREE.Vector2() }, uView: { value: new THREE.Vector2(1, 0) }, tFx: { value: null }, tAnc: { value: null }, uDark: { value: 0 }, uFxs: { value: 0 }, uUnits: { value: 0 }, tH: SH.tH, uHSize: { value: new THREE.Vector2(1, 1) }, uHScale: { value: 1 }, uRain: { value: 0 }, uStorm: { value: 0 }, uSnowF: { value: 0 }, uSnowC: SH.uSnowC, uFog: { value: 0 }, uMist: { value: 0 }, uNight: { value: 0 }, uWet: { value: 0 },
         uDayMul: { value: new THREE.Vector3(1, 1, 1) }, uDayAdd: { value: new THREE.Vector3() }, uWaterL: { value: -0.15 }, uCloudK: SH.uCloudK,
         uInvVP: { value: new THREE.Matrix4() }, uW2S: { value: new THREE.Vector4(1, 0, 0, 1) }, uLev: { value: 1 } }, vertexShader: vs, depthTest: false, depthWrite: false, fragmentShader: `
-        varying vec2 vUv; uniform sampler2D t, tSubj, tHeat, tPaper, tNorm, tFogS, tLand; uniform vec2 res, uOff, uSun2, uWindS, uView, uHSize; uniform float uHScale, uFxs; uniform sampler2D tH, tFx; uniform vec3 uUpV, uDayMul, uDayAdd; uniform float uTime, uK, uRain, uStorm, uSnowF, uSnowC, uFog, uMist, uNight, uWet, uWaterL, uCloudK; uniform int uStyle, uRoad, uOre;
+        varying vec2 vUv; uniform sampler2D t, tSubj, tHeat, tPaper, tNorm, tFogS, tLand; uniform vec2 res, uOff, uSun2, uWindS, uView, uHSize; uniform float uHScale, uFxs; uniform int uUnits; uniform float uDark; uniform sampler2D tH, tFx, tAnc; uniform vec3 uUpV, uDayMul, uDayAdd; uniform float uTime, uK, uRain, uStorm, uSnowF, uSnowC, uFog, uMist, uNight, uWet, uWaterL, uCloudK; uniform int uStyle, uRoad, uOre;
         const vec3 PAPER = vec3(0.949, 0.910, 0.824), INK = vec3(0.122, 0.102, 0.086);
         // The soft axonometric's washes, after the atlas: speckled pale green ground, lilac water, pink paths,
         // three canopy greens, cream roofs over warm grey walls, and the ghost plan's blue-grey for what was.
@@ -4306,14 +4336,19 @@ if (typeof module !== 'undefined') module.exports = Looks;
           float s0 = A(vUv);
           // Units boil through three hand-drawn variants; the ground holds still and moves with the map.
           float boil = mod(floor(uTime * 6.0), 3.0);
-          vec2 uv = vUv + s0 * (vec2(noise(px * 0.05 / uK + boil * 7.1), noise(px * 0.05 / uK + boil * 3.3 + 11.0)) - 0.5) * 1.2 * k;
+          // Where this pixel lies on the thing it belongs to, from the thing's own middle, so its marks travel with it.
+          vec2 anc = texture2D(tAnc, vUv).xy;
+          float onThing = step(0.4, A(vUv));
+          vec2 own = anc + vec2(2048.0, 1024.0);
+          vec2 uv = vUv + s0 * (vec2(noise(own * 0.05 / uK + boil * 7.1), noise(own * 0.05 / uK + boil * 3.3 + 11.0)) - 0.5) * 1.2 * k;
           float l = mix(L(uv), Ls(uv, k), 0.5 * (1.0 - s0));
           float v = clamp((l - 0.03) / 0.52, 0.0, 1.0);
           // Mostly bare paper and single hatching, as in the film, with the dark steps kept for real shadow.
           float n = floor(pow(1.0 - v, 1.7) * 7.6);
           if (s0 > 0.5) n = max(0.0, n - 1.0);
-          vec2 p = s0 > 0.5 ? px : px - uOff;
-          float seedU = s0 > 0.5 ? 50.0 + boil * 31.0 : 0.0;
+          // Units, buildings and scenery are hatched from their own middles, the land from the map.
+          vec2 p = onThing > 0.5 ? own : px - uOff;
+          float seedU = s0 > 0.5 ? 50.0 : 0.0;
           float dens = 1.0 - v;
           vec2 e2 = vec2(A(uv + k * vec2(1.4, 0)) - A(uv - k * vec2(1.4, 0)), A(uv + k * vec2(0, 1.4)) - A(uv - k * vec2(0, 1.4)));
           float outline = smoothstep(0.12, 0.42, length(e2));
@@ -4411,9 +4446,10 @@ if (typeof module !== 'undefined') module.exports = Looks;
             vec2 gJx = dFdx(Wl), gJy = dFdy(Wl);
             float hdx = dFdx(lhS), hdy = dFdy(lhS);
             float rfDark = 0.0, rfLight = 0.0, contour = 0.0, hyps = clamp(lhS / 3.2, 0.0, 1.0);
+            float gDet = gJx.x * gJy.y - gJx.y * gJy.x;
+            // A screen gradient turned into one on the land.
+            vec2 gh = vec2(gJy.y * hdx - gJx.y * hdy, -gJy.x * hdx + gJx.x * hdy) / (gDet + sign(gDet) * 1e-9);
             if (isG > 0.01) {
-              float gDet = gJx.x * gJy.y - gJx.y * gJy.x;
-              vec2 gh = vec2(gJy.y * hdx - gJx.y * hdy, -gJy.x * hdx + gJx.x * hdy) / (gDet + sign(gDet) * 1e-9);
               vec2 ul = normalize(vec2(uView.x + uView.y, uView.y - uView.x));
               vec3 nrm = normalize(vec3(-gh.x * 2.2, 1.0, -gh.y * 2.2)), lit = normalize(vec3(ul.x, 1.0, ul.y));
               float sh = dot(nrm, lit) - lit.y;
@@ -4475,8 +4511,16 @@ if (typeof module !== 'undefined') module.exports = Looks;
             // Buildings: massed in flat tones by face, so hatched only in shadow, with windows and deep shade solid.
             float bC = max(hatch(p, 45.0, 4.4, 0.9, 0.0, 0.06) * step(0.6, dens), smoothstep(0.88, 0.92, dens));
             // Units: bright paper with one hatch for their shade and solid black for the deepest.
-            float uC = hatch(p, 45.0, 3.2, 1.0, seedU, 0.04) * smoothstep(0.42, 0.46, dens);
-            uC = max(uC, smoothstep(0.8, 0.84, dens));
+            // The units' shade, in the way the study asks: a 45 degree hatch with solid black in the deepest (0, 1),
+            // solid black with the edges cut white (2), bare paper with line alone (3), hatched along the form (4),
+            // or stippled (5).
+            vec3 nVu = N0.xyz * 2.0 - 1.0;
+            float uAng = degrees(atan(nVu.y, nVu.x)) + 90.0, uC;
+            if (uUnits == 2) uC = 1.0;
+            else if (uUnits == 3) uC = 0.0;
+            else if (uUnits == 4) uC = max(hatch(p, uAng, mix(5.0, 2.6, smoothstep(0.15, 0.8, dens)), 0.9, seedU, 0.04) * smoothstep(0.12, 0.22, dens), smoothstep(0.84, 0.88, dens));
+            else if (uUnits == 5) { vec2 uq = p / (2.2 * uK); float ud = length(fract(uq) - 0.5 - (vec2(hash(floor(uq) + seedU), hash(floor(uq) + seedU + 7.0)) - 0.5) * 0.3), ur = smoothstep(0.1, 0.85, dens) * 0.58; uC = max((1.0 - smoothstep(ur - 0.08, ur + 0.08, ud)) * step(0.06, ur), smoothstep(0.88, 0.92, dens)); }
+            else uC = max(hatch(p, 45.0, 3.2, 1.0, seedU, 0.04) * smoothstep(0.42, 0.46, dens), smoothstep(0.8, 0.84, dens));
             cover = isG * gC + isW * wC + isS * sC + isT * tC + isB * bC + isU * uC + isBr * brC + isO * oC + isL * smoothstep(0.88, 0.92, dens);
             // The bank drawn once, heavy, on whichever side of it the pixel lies.
             float bankL = 1.0 - smoothstep(0.7 * uK, 1.6 * uK, abs(dep - 0.03) / max(fwidth(dep), 1e-4));
@@ -4492,9 +4536,11 @@ if (typeof module !== 'undefined') module.exports = Looks;
             // The outline swells on the side away from the sun: a pixel just outside a unit or building, with the
             // shape lying sunward of it, is inked.
             float swell = 0.0;
-            if (a < 0.6) for (int i = 1; i <= 3; i++) swell = max(swell,step(0.6, A(uv + uSun2 * k * (float(i) * 1.15))));
+            if (a < 0.6) for (int i = 1; i <= 9; i++) { if (i > 3 && uUnits != 3) break; swell = max(swell, step(i > 3 ? 0.95 : 0.6, A(uv + uSun2 * k * (float(i) * 1.15)))); }
             cover = max(cover, max(heavy, swell * (1.0 -step(0.6, a))));
             cover = max(cover, detail * mix(0.75, 1.0, isU));
+            // Scratchboard units: a solid body with the inner edges cut out white.
+            if (uUnits == 2) cover = mix(cover, 1.0 - smoothstep(0.3, 0.7, detail), isU);
             // Ore in the soft, stippled, engraved and faceted styles is outlined thin in brown, not black.
             if (uOre >= 1 && uOre <= 4) {
               float nearO = max(max(oA(uv + k * vec2(1.6, 0)), oA(uv - k * vec2(1.6, 0))), max(max(oA(uv + k * vec2(0, 1.6)), oA(uv - k * vec2(0, 1.6))), isO));
@@ -4509,10 +4555,12 @@ if (typeof module !== 'undefined') module.exports = Looks;
             // Layer tints by height, pale green lowland to cream to tan upland, the slopes away from the light shaded
             // in a cool sepia and the slopes toward it lifted a little, and the contours in sepia.
             vec3 tint = hyps < 0.5 ? mix(vec3(0.84, 0.90, 0.80), vec3(0.94, 0.93, 0.82), hyps * 2.0) : mix(vec3(0.94, 0.93, 0.82), vec3(0.88, 0.80, 0.64), hyps * 2.0 - 1.0);
-            base = mix(base, tint, isG * (1.0 - onRoad));
+            // A road takes a third of the tint and the contours cross it faint, so it climbs and falls with the land
+            // rather than lying flat over it.
+            base = mix(base, tint, isG * (1.0 - onRoad * 0.65));
             base = mix(base, base * vec3(0.72, 0.70, 0.68), rfDark * 0.65 * isG);
             base = mix(base, min(base * 1.05 + 0.03, vec3(1.0)), rfLight * 0.6 * isG);
-            base = mix(base, vec3(0.42, 0.33, 0.24), contour * isG * (1.0 - onRoad) * (1.0 - wet));
+            base = mix(base, vec3(0.42, 0.33, 0.24), contour * isG * (1.0 - onRoad * 0.55) * (1.0 - wet));
             base = mix(base, base * vec3(0.9, 0.93, 0.97), uWet * isG * 0.7);
             // Tracks worn by traffic: beaten earth, and a hardened track drawn as a site plan draws a path, its edges
             // in dashed sepia.
@@ -4534,6 +4582,10 @@ if (typeof module !== 'undefined') module.exports = Looks;
             vec3 RC = uRoad == 0 ? PINK : uRoad == 1 ? vec3(0.886, 0.824, 0.675) : uRoad == 2 ? vec3(0.847, 0.835, 0.804) : uRoad == 3 ? paperC : uRoad == 4 ? vec3(0.812, 0.765, 0.573) : vec3(0.969, 0.961, 0.933);
             vec3 RD = uRoad == 0 ? PINK_D : uRoad == 1 ? vec3(0.62, 0.52, 0.34) : uRoad == 2 ? vec3(0.5, 0.49, 0.46) : uRoad == 3 ? paperC : uRoad == 4 ? vec3(0.5, 0.47, 0.3) : vec3(0.72, 0.7, 0.66);
             base = mix(base, mix(RC, RD, rH * 0.35), max(onRoad * isG, isBr) * 0.9);
+            // The road climbs and falls with the land: its relief shading and the contours carry across it.
+            float onR = onRoad * isG * (1.0 - wet);
+            base = mix(base, base * vec3(0.8, 0.78, 0.76), rfDark * 0.55 * onR);
+            base = mix(base, vec3(0.42, 0.33, 0.24), contour * 0.55 * onR);
             float rip = hatch(p, -12.0, 6.5, 0.9, 57.0, 0.45);
             base = mix(base, mix(mix(LILAC, LILAC_D, wLine * 0.6), vec3(1.0), rip * 0.55 * (1.0 - wLine)), isW);
             float tn = noise(p / (60.0 * uK));
@@ -4616,6 +4668,12 @@ if (typeof module !== 'undefined') module.exports = Looks;
           vec3 hue = mk / max(0.001, mkx);
           // A light wash of the side's colour over each unit's body, as watercolour over ink.
           float wash = smoothstep(0.12, 0.25, mkx) * (1.0 - smoothstep(0.62, 0.8, mkx));
+          // Each side's units drawn in its own ink (1), or their marks laid solid on a black body (2).
+          float nearU = smoothstep(0.85, 0.95, max(max(A(uv + k * vec2(2.4, 0.0)), A(uv - k * vec2(2.4, 0.0))), max(max(A(uv + k * vec2(0.0, 2.4)), A(uv - k * vec2(0.0, 2.4))), s0)));
+          if (uUnits == 1) { vec3 tInk = mix(INK, hue, 0.6) * 0.8; col = mix(col, tInk, nearU * smoothstep(0.25, 0.6, cover) * step(0.05, mkx)); mark = 0.0; wash = 0.0; }
+          if (uUnits == 2) { col = mix(col, hue * 0.85, mark * nearU); mark = 0.0; wash = 0.0; }
+          // Line, hatch and stipple units keep their bodies paper, the side shown by its marks alone.
+          if (uUnits >= 3 && uUnits <= 5) wash = 0.0;
           // Ore is marked gold; every side's own colour comes through as itself.
           bool gold = hue.b < 0.3 && hue.g > 0.7;
           vec3 wc = gold ? vec3(1.0, 0.8, 0.3) : mix(vec3(1.0), hue, 0.5);
@@ -4723,8 +4781,14 @@ if (typeof module !== 'undefined') module.exports = Looks;
           // The hour: rose at dawn, amber toward dusk, and night as a blue wash over the page.
           col = col * uDayMul + uDayAdd;
           col = mix(col, col * vec3(0.6, 0.66, 0.82) + vec3(0.02, 0.03, 0.06), uNight * 0.72);
+          // The dark scheme: light ink on dark paper, every tone turned over and every hue kept, as the page's CSS
+          // turns the overlay and panels over with invert(0.93) and hue-rotate(180deg), so all of it agrees.
+          if (uDark > 0.5) {
+            vec3 iv = mix(col, 1.0 - col, 0.93);
+            col = clamp(vec3(dot(iv, vec3(-0.574, 1.43, 0.144)), dot(iv, vec3(0.426, 0.43, 0.144)), dot(iv, vec3(0.426, 1.43, -0.856))), 0.0, 1.0);
+          }
           // Paper grain over everything, as js/ink.js finishes a frame.
-          vec2 g = (px - uOff * (1.0 - s0)) / uK;
+          vec2 g = (onThing > 0.5 ? own : px - uOff) / uK;
           float grain = texture2D(tPaper, g / 900.0).r, fib = texture2D(tPaper, g / 300.0 + 0.4).b;
           col *= 0.94 + 0.05 * grain + 0.03 * fib;
           vec2 o = vUv - 0.5; col *= 1.0 - dot(o, o) * 0.35;
@@ -4736,7 +4800,7 @@ if (typeof module !== 'undefined') module.exports = Looks;
           const C = ink.uniforms, { w, h, camera, sky } = K, [CX, CY] = K.center;
           if (!C.tPaper.value) C.tPaper.value = K.paper();
           C.t.value = K.ldr.texture; C.tSubj.value = K.mask(); C.tNorm.value = K.norm(); C.tHeat.value = K.a0.texture;
-          C.tFx.value = K.fx(); C.uFxs.value = look.fxs || 0;
+          C.tFx.value = K.fx(); C.uFxs.value = look.fxs || 0; C.uUnits.value = look.units || 0; C.tAnc.value = K.anchor(); C.uDark.value = Looks.dark ? 1 : 0;
           C.res.value.set(w, h); C.uTime.value = K.time; C.uK.value = h / 1080;
           C.tFogS.value = K.fog();
           // Distance to the nearest road, per pixel of the land.
@@ -4766,7 +4830,7 @@ if (typeof module !== 'undefined') module.exports = Looks;
 // Daylight: a clear afternoon under a blue sky, in full colour with a firm contrast, and no pass of its own.
 (() => {
   Looks.add({
-    name: 'daylight', title: 'Daylight', said: 'Daylight.', vivid: 1,
+    name: 'daylight', title: 'Daylight', said: 'Daylight.', vivid: 1, hidden: true,
     light: (th, SUN) => Object.assign({}, th, {
       name: th.name + ' day', sun: SUN(-0.62, 0.82), sunColor: 0xfff2dc, sunPower: 3.2, hemi: [0x8db4ee, 0x6a5a46, 1.1],
       env: [0x4f7fb2, 0xc2d6ea, 0x584a3a], haze: 0xc4d8ee, hazeK: 0.0035,
@@ -5128,6 +5192,22 @@ const World = (() => {
           vN = normalize(normalMatrix * n); vD = -mv.z;
           gl_Position = projectionMatrix * mv;
         }`, fragmentShader: `varying vec3 vN; varying float vD; void main() { gl_FragColor = vec4(normalize(vN) * 0.5 + 0.5, vD); }` });
+      // Each thing drawn in line, as offsets from its own middle on the screen, so a pass can hatch every unit,
+      // building and tree from its own origin and the hatching travels with it.
+      const anchorRes = { value: new THREE.Vector2(1, 1) };
+      const anchorMat = new THREE.ShaderMaterial({ uniforms: { uSwayOn: swayU, uTime: SH.uTime, uWind: SH.uWind, uRes: anchorRes }, vertexShader: `
+        varying vec2 vO; uniform float uSwayOn, uTime; uniform vec2 uWind, uRes;
+        ${SWAY}
+        void main() {
+          vec4 p = vec4(position, 1.0), o = vec4(0.0, 0.0, 0.0, 1.0);
+          #ifdef USE_INSTANCING
+            p = instanceMatrix * p; o = instanceMatrix * o;
+          #endif
+          p.xz += sway(p.xz, position.y) * uSwayOn;
+          vec4 oc = projectionMatrix * modelViewMatrix * o;
+          vO = (oc.xy / oc.w * 0.5 + 0.5) * uRes;
+          gl_Position = projectionMatrix * modelViewMatrix * p;
+        }`, fragmentShader: `varying vec2 vO; void main() { gl_FragColor = vec4(gl_FragCoord.xy - vO, 0.0, 1.0); }` });
       // The land alone, for passes that need it: visible, seen, height, and scars with a flag for tread marks.
       const fogPassMat = new THREE.ShaderMaterial({ uniforms: { tFog: SH.tFog, tMarks: SH.tMarks, uFogOn: SH.uFogOn, uMap: SH.uMap }, vertexShader: `
         varying vec3 vW; void main() { vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }`, fragmentShader: `
@@ -5149,13 +5229,14 @@ const World = (() => {
           float fb = texture2D(tDetail, vW.xz * 0.013 + uCloud * 0.7 + 0.37).g;
           gl_FragColor = vec4(min(vR, 20.0), cl, fb, texture2D(tTrail, vW.xz / uMap).r);
         }` });
-      let ldr = null, maskRT = null, normRT = null, fogRT = null, landRT = null, fxRT = null;
+      let ldr = null, maskRT = null, normRT = null, fogRT = null, landRT = null, fxRT = null, anchorRT = null;
       let rt, a0, a1, b0, b1, w = 1, h = 1;
       // Screen-sized targets a look keeps for itself, by name.
       const targets = new Map();
       function size(wp, hp) {
         w = wp; h = hp;
-        for (const r of [rt, a0, a1, b0, b1, ldr, maskRT, normRT, fogRT, landRT, fxRT, ...targets.values()]) if (r) r.dispose();
+        for (const r of [rt, a0, a1, b0, b1, ldr, maskRT, normRT, fogRT, landRT, fxRT, anchorRT, ...targets.values()]) if (r) r.dispose();
+        anchorRT = new THREE.WebGLRenderTarget(w, h, { type: THREE.HalfFloatType, minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter });
         fxRT = new THREE.WebGLRenderTarget(w >> 1, h >> 1, { type: THREE.HalfFloatType, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter });
         targets.clear();
         fogRT = new THREE.WebGLRenderTarget(w >> 1, h >> 1, { type: THREE.HalfFloatType, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter });
@@ -5211,6 +5292,7 @@ const World = (() => {
       //   fog()    the land alone: visible, seen, height + 20, scars and tread marks
       //   land()   the land alone: road distance, cloud shadow, fog banks, track hardness
       //   fx()     the fire and smoke alone, bright where hot and covered where smoky
+      //   anchor() each thing drawn in line as offsets in pixels from its own middle on the screen
       // and ldr is the graded picture, a0 and a1 quarter-size buffers free once the grade has run.
       const K = {
         THREE, SH, vs, renderer, run, blur: pass,
@@ -5225,6 +5307,7 @@ const World = (() => {
         fog: () => landInto(fogPassMat, fogRT),
         land: () => landInto(landMat, landRT),
         fx: () => drawInto(fxRT, 0x000000, 0, 2, null),
+        anchor: () => { anchorRes.value.set(w, h); return drawInto(anchorRT, 0x000000, 0, 1, anchorMat); },
         landUniforms,
         paper: () => paperTex || (paperTex = Looks.paper(THREE)),
         target(name) {
@@ -8004,6 +8087,20 @@ const Hud = (() => {
         }
         og.globalAlpha = 1;
       }
+      // Study 6: pulled back, a unit becomes a plan's tag, a paper plate with a hand letter, square for ours and
+      // a lozenge for theirs, in the side's ink.
+      if (world.style.units === 6 && world.cam.dist > 100) {
+        const TAG = { tank: 'T', heavy: 'H', ifv: 'I', humvee: 'J', truck: 'Tk', flak: 'AA', support: 'S', mlrs: 'R', rifle: 'i', rocket: 'at', engineer: 'e', sniper: 's', hero: 'h', heli: 'He', jet: 'Jt', fpv: 'd' };
+        og.save(); og.setLineDash([]); og.font = 'italic 11px "IM Fell English", Georgia, serif'; og.textAlign = 'center'; og.textBaseline = 'middle';
+        for (const o of world.onScreen) {
+          const e = o.e; if (e.b || !e.d) continue;
+          const own = e.team === t, c = world.teamCol[Math.max(0, e.team)], ink = own ? '#1f3f8a' : '#8a2a1e', s2 = 8;
+          og.fillStyle = '#f3ecdc'; og.strokeStyle = ink; og.lineWidth = 1.2; og.beginPath();
+          if (own) og.rect(o.x - s2, o.y - s2 * 0.7, s2 * 2, s2 * 1.4); else { og.moveTo(o.x, o.y - s2); og.lineTo(o.x + s2 * 1.2, o.y); og.lineTo(o.x, o.y + s2); og.lineTo(o.x - s2 * 1.2, o.y); og.closePath(); }
+          og.fill(); og.stroke(); og.fillStyle = ink; og.fillText(TAG[e.kind] || '?', o.x, o.y + 0.5);
+        }
+        og.restore();
+      }
       if (world.cam.dist > 140) return;
       og.strokeStyle = 'rgba(26,21,18,0.75)'; og.lineCap = 'round';
       for (const o of world.onScreen) {
@@ -8869,12 +8966,39 @@ const Game = (() => {
     };
     try { G.theme = localStorage.getItem('dg-theme') || G.theme; G.diff = localStorage.getItem('dg-diff') || G.diff; G.look = localStorage.getItem('dg-look') || G.look; G.look = { film: 'daylight', charcoal: 'ink', hudson: 'ink', hills: 'ink' }[G.look] || G.look; G.showHints = !localStorage.getItem('dg-played'); } catch (e) { /* no store */ }
     if (params.get('look')) G.look = params.get('look');
-    if (!Looks.has(G.look) || Looks.get(G.look).hidden) G.look = 'ink';
+    // A saved look the settings offer is kept; anything else opens as pen and ink.
+    if (!Looks.all().some(l => l.name === G.look)) G.look = 'ink';
     // The look menu lists every look in the registry.
     $('m-look').innerHTML = Looks.list().map(l => `<button data-v="${l.name}">${l.title}</button>`).join('');
     world.setLook(G.look);
     pick($('m-theme'), 'theme'); pick($('m-diff'), 'diff'); pick($('m-look'), 'look');
     $('m-look').addEventListener('click', () => world.setLook(G.look));
+    // The paper's scheme: as the system has it, or light or dark by the player's choice, kept in the browser.
+    const darkQ = window.matchMedia ? matchMedia('(prefers-color-scheme: dark)') : null;
+    let scheme = 'auto';
+    try { scheme = localStorage.getItem('dg-scheme') || 'auto'; } catch (e) { /* no store */ }
+    function applyScheme() {
+      const dark = scheme === 'dark' || (scheme === 'auto' && !!darkQ && darkQ.matches);
+      Looks.dark = dark; document.body.dataset.scheme = dark ? 'dark' : 'light';
+      $('s-scheme').querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.v === scheme));
+    }
+    darkQ?.addEventListener?.('change', applyScheme);
+    applyScheme();
+    // The settings panel, from the gear at the top right: the look, Daylight among them, and the paper's scheme.
+    $('s-look').innerHTML = Looks.all().map(l => `<button data-v="${l.name}">${l.title}</button>`).join('');
+    const markLook = () => $('s-look').querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.v === world.look));
+    $('s-look').querySelectorAll('button').forEach(b => b.addEventListener('click', () => {
+      G.look = b.dataset.v; world.setLook(G.look); markLook(); audio.ui('click');
+      try { localStorage.setItem('dg-look', G.look); } catch (e) { /* no store */ }
+    }));
+    $('s-scheme').querySelectorAll('button').forEach(b => b.addEventListener('click', () => {
+      scheme = b.dataset.v; applyScheme(); audio.ui('click');
+      try { localStorage.setItem('dg-scheme', scheme); } catch (e) { /* no store */ }
+    }));
+    const setOpen = open => { $('settings').hidden = !open; $('b-set').setAttribute('aria-expanded', String(open)); if (open) markLook(); };
+    $('b-set').addEventListener('click', e => { e.stopPropagation(); setOpen($('settings').hidden); audio.ui('click'); });
+    document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('settings').hidden) setOpen(false); });
+    document.addEventListener('pointerdown', e => { if (!$('settings').hidden && !$('settings').contains(e.target) && e.target !== $('b-set')) setOpen(false); });
     $('deploy').addEventListener('click', () => { audio.wake(); audio.ui('click'); start(); try { localStorage.setItem('dg-played', '1'); } catch (e) { /* no store */ } });
     $('again').addEventListener('click', () => { audio.ui('click'); if (G.online) { if (net.ws) net.ws.send(JSON.stringify({ t: 'respawn' })); $('end').hidden = true; } else start(); });
     $('menu').addEventListener('click', () => { $('end').hidden = true; leave(); toTitle(); });
