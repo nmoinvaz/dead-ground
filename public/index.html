@@ -4296,10 +4296,10 @@ if (typeof module !== 'undefined') module.exports = Looks;
       // 45 and 135 degrees, then flat and upright lines for the darkest, each line a little uneven with small gaps.
       // The ground's hatching is pinned to the map so it pans with it, the units' redraws a few times a second.
       const ink = new THREE.ShaderMaterial({ uniforms: { t: { value: null }, tSubj: { value: null }, tHeat: { value: null }, tPaper: { value: null }, res: { value: new THREE.Vector2(1, 1) }, uTime: { value: 0 }, uK: { value: 1 }, uOff: { value: new THREE.Vector2() }, uStyle: { value: 8 }, tNorm: { value: null }, tFogS: { value: null }, tLand: { value: null }, uSun2: { value: new THREE.Vector2(-1, 0) }, uUpV: { value: new THREE.Vector3(0, 1, 0) }, uRoad: { value: 0 }, uOre: { value: 0 },
-        uWindS: { value: new THREE.Vector2() }, uView: { value: new THREE.Vector2(1, 0) }, tFx: { value: null }, tAnc: { value: null }, uDark: { value: 0 }, uFxs: { value: 0 }, uUnits: { value: 0 }, tH: SH.tH, uHSize: { value: new THREE.Vector2(1, 1) }, uHScale: { value: 1 }, uRain: { value: 0 }, uStorm: { value: 0 }, uSnowF: { value: 0 }, uSnowC: SH.uSnowC, uFog: { value: 0 }, uMist: { value: 0 }, uNight: { value: 0 }, uWet: { value: 0 },
+        uWindS: { value: new THREE.Vector2() }, uView: { value: new THREE.Vector2(1, 0) }, tFx: { value: null }, tAnc: { value: null }, uDark: { value: 0 }, uInks: { value: 0 }, uFxs: { value: 0 }, uUnits: { value: 0 }, tH: SH.tH, uHSize: { value: new THREE.Vector2(1, 1) }, uHScale: { value: 1 }, uRain: { value: 0 }, uStorm: { value: 0 }, uSnowF: { value: 0 }, uSnowC: SH.uSnowC, uFog: { value: 0 }, uMist: { value: 0 }, uNight: { value: 0 }, uWet: { value: 0 },
         uDayMul: { value: new THREE.Vector3(1, 1, 1) }, uDayAdd: { value: new THREE.Vector3() }, uWaterL: { value: -0.15 }, uCloudK: SH.uCloudK,
         uInvVP: { value: new THREE.Matrix4() }, uW2S: { value: new THREE.Vector4(1, 0, 0, 1) }, uLev: { value: 1 } }, vertexShader: vs, depthTest: false, depthWrite: false, fragmentShader: `
-        varying vec2 vUv; uniform sampler2D t, tSubj, tHeat, tPaper, tNorm, tFogS, tLand; uniform vec2 res, uOff, uSun2, uWindS, uView, uHSize; uniform float uHScale, uFxs; uniform int uUnits; uniform float uDark; uniform sampler2D tH, tFx, tAnc; uniform vec3 uUpV, uDayMul, uDayAdd; uniform float uTime, uK, uRain, uStorm, uSnowF, uSnowC, uFog, uMist, uNight, uWet, uWaterL, uCloudK; uniform int uStyle, uRoad, uOre;
+        varying vec2 vUv; uniform sampler2D t, tSubj, tHeat, tPaper, tNorm, tFogS, tLand; uniform vec2 res, uOff, uSun2, uWindS, uView, uHSize; uniform float uHScale, uFxs; uniform int uUnits, uInks; uniform float uDark; uniform sampler2D tH, tFx, tAnc; uniform vec3 uUpV, uDayMul, uDayAdd; uniform float uTime, uK, uRain, uStorm, uSnowF, uSnowC, uFog, uMist, uNight, uWet, uWaterL, uCloudK; uniform int uStyle, uRoad, uOre;
         const vec3 PAPER = vec3(0.949, 0.910, 0.824), INK = vec3(0.122, 0.102, 0.086);
         // The soft axonometric's washes, after the atlas: speckled pale green ground, lilac water, pink paths,
         // three canopy greens, cream roofs over warm grey walls, and the ghost plan's blue-grey for what was.
@@ -4557,11 +4557,17 @@ if (typeof module !== 'undefined') module.exports = Looks;
               ring = max(ring, smoothstep(0.6, 0.7, A(vUv + vec2(cos(an), sin(an)) * k * 4.5)));
             }
             cover *= 1.0 - ring * (1.0 - smoothstep(0.55, 0.65, a)) * 0.95;
-            float heavy = smoothstep(0.1, 0.35, length(vec2(AS(uv + k * vec2(1.2, 0)) - AS(uv - k * vec2(1.2, 0)), AS(uv + k * vec2(0, 1.2)) - AS(uv - k * vec2(0, 1.2)))));
+            // The outline: a building or tree from taps a stride and a fifth out, a unit from closer, so a unit's line
+            // is the thinner.
+            float aR = A(uv + k * vec2(1.2, 0)), aL = A(uv - k * vec2(1.2, 0)), aT = A(uv + k * vec2(0, 1.2)), aB = A(uv - k * vec2(0, 1.2));
+            float unitNear = step(0.9, max(max(aR, aL), max(max(aT, aB), a)));
+            float ox = unitNear > 0.5 ? 0.6 : 1.2;
+            float heavy = smoothstep(0.1, 0.35, length(vec2(AS(uv + k * vec2(ox, 0)) - AS(uv - k * vec2(ox, 0)), AS(uv + k * vec2(0, ox)) - AS(uv - k * vec2(0, ox)))));
+            heavy *= mix(1.0, 0.85, unitNear);
             // The outline swells on the side away from the sun: a pixel just outside a unit or building, with the
             // shape lying sunward of it, is inked.
             float swell = 0.0;
-            if (a < 0.6) for (int i = 1; i <= 9; i++) { if (i > 3 && uUnits != 3) break; swell = max(swell, step(i > 3 ? 0.95 : 0.6, A(uv + uSun2 * k * (float(i) * 1.15)))); }
+            if (a < 0.6) for (int i = 1; i <= 9; i++) { if (i > 3 && uUnits != 3) break; float sa = A(uv + uSun2 * k * (float(i) * 1.15)); swell = max(swell, step(i > 3 ? 0.95 : 0.6, sa) * (i > 1 && sa > 0.9 && uUnits != 3 ? 0.0 : 1.0)); }
             cover = max(cover, max(heavy, swell * (1.0 -step(0.6, a))));
             cover = max(cover, detail * mix(0.75, 1.0, isU));
             // Scratchboard units: a solid body with the inner edges cut out white.
@@ -4649,6 +4655,24 @@ if (typeof module !== 'undefined') module.exports = Looks;
               base = mix(base, OCH * 0.6, hd * halo * isG * (1.0 - isO));
             }
             baseC = base;
+            // Inks by what is drawn: 0 black throughout; 1 survey inks, sepia land and roads, Prussian blue water,
+            // green trees, umber buildings and each side's units in its own ink; 2 sepia throughout with blue water
+            // and the sides' inks; 3 blue-black iron gall throughout with the sides' inks. A line takes the ink of the
+            // nearest thing it outlines.
+            if (uInks > 0) {
+              float aN = max(a, max(max(aR, aL), max(aT, aB)));
+              vec4 an = texture2D(tAnc, vUv);
+              vec4 anN = max(max(texture2D(tAnc, vUv + k * vec2(1.2, 0)), texture2D(tAnc, vUv - k * vec2(1.2, 0))), max(texture2D(tAnc, vUv + k * vec2(0, 1.2)), texture2D(tAnc, vUv - k * vec2(0, 1.2))));
+              vec4 aw = a > 0.9 ? an : anN;
+              vec3 sideInk = clamp(abs(mod(aw.z * 6.0 + vec3(0.0, 4.0, 2.0), 6.0) - 3.0) - 1.0, 0.0, 1.0);
+              sideInk = mix(vec3(0.12), sideInk * 0.5 + 0.02, smoothstep(0.15, 0.4, aw.w));
+              vec3 landI = uInks == 3 ? vec3(0.13, 0.15, 0.27) : vec3(0.34, 0.23, 0.14);
+              vec3 waterI = uInks == 3 ? vec3(0.13, 0.15, 0.27) : vec3(0.12, 0.24, 0.44);
+              vec3 treeI = uInks == 1 ? vec3(0.13, 0.26, 0.12) : landI;
+              vec3 bldI = uInks == 1 ? vec3(0.22, 0.16, 0.12) : landI;
+              float tN = 1.0 - smoothstep(0.012, 0.025, abs(aN - 0.459));
+              inkC = aN > 0.9 ? sideInk : aN > 0.62 ? bldI : tN > 0.5 ? treeI : isW > 0.5 ? waterI : landI;
+            }
           } else {
             // Crow quill sketch: two loose passes of each line and quick scribbled hatching that turns from patch to patch.
             vec2 cell = floor(p / (26.0 * uK));
@@ -4825,7 +4849,7 @@ if (typeof module !== 'undefined') module.exports = Looks;
           const C = ink.uniforms, { w, h, camera, sky } = K, [CX, CY] = K.center;
           if (!C.tPaper.value) C.tPaper.value = K.paper();
           C.t.value = K.ldr.texture; C.tSubj.value = K.mask(); C.tNorm.value = K.norm(); C.tHeat.value = K.a0.texture;
-          C.tFx.value = K.fx(); C.uFxs.value = look.fxs || 0; C.uUnits.value = look.units || 0; C.tAnc.value = K.anchor(); C.uDark.value = Looks.dark ? 1 : 0;
+          C.tFx.value = K.fx(); C.uFxs.value = look.fxs || 0; C.uUnits.value = look.units || 0; C.tAnc.value = K.anchor(); C.uDark.value = Looks.dark ? 1 : 0; C.uInks.value = look.inks || 0;
           C.res.value.set(w, h); C.uTime.value = K.time; C.uK.value = h / 1080;
           C.tFogS.value = K.fog();
           // Distance to the nearest road, per pixel of the land.
@@ -5221,10 +5245,15 @@ const World = (() => {
       // building and tree from its own origin and the hatching travels with it.
       const anchorRes = { value: new THREE.Vector2(1, 1) };
       const anchorMat = new THREE.ShaderMaterial({ uniforms: { uSwayOn: swayU, uTime: SH.uTime, uWind: SH.uWind, uRes: anchorRes }, vertexShader: `
-        varying vec2 vO; uniform float uSwayOn, uTime; uniform vec2 uWind, uRes;
+        varying vec2 vO; varying vec3 vC; uniform float uSwayOn, uTime; uniform vec2 uWind, uRes;
         ${SWAY}
         void main() {
           vec4 p = vec4(position, 1.0), o = vec4(0.0, 0.0, 0.0, 1.0);
+          #ifdef USE_INSTANCING_COLOR
+            vC = instanceColor;
+          #else
+            vC = vec3(0.0);
+          #endif
           #ifdef USE_INSTANCING
             p = instanceMatrix * p; o = instanceMatrix * o;
           #endif
@@ -5232,7 +5261,13 @@ const World = (() => {
           vec4 oc = projectionMatrix * modelViewMatrix * o;
           vO = (oc.xy / oc.w * 0.5 + 0.5) * uRes;
           gl_Position = projectionMatrix * modelViewMatrix * p;
-        }`, fragmentShader: `varying vec2 vO; void main() { gl_FragColor = vec4(gl_FragCoord.xy - vO, 0.0, 1.0); }` });
+        }`, fragmentShader: `varying vec2 vO; varying vec3 vC;
+        // Blue is the offset from the thing's middle; z is its colour's hue and w how coloured it is.
+        void main() {
+          float mx = max(vC.r, max(vC.g, vC.b)), mn = min(vC.r, min(vC.g, vC.b)), d = mx - mn, h = 0.0;
+          if (d > 1e-4) h = mx == vC.r ? mod((vC.g - vC.b) / d, 6.0) : mx == vC.g ? (vC.b - vC.r) / d + 2.0 : (vC.r - vC.g) / d + 4.0;
+          gl_FragColor = vec4(gl_FragCoord.xy - vO, h / 6.0, mx > 0.0 ? d / mx : 0.0);
+        }` });
       // The land alone, for passes that need it: visible, seen, height, and scars with a flag for tread marks.
       const fogPassMat = new THREE.ShaderMaterial({ uniforms: { tFog: SH.tFog, tMarks: SH.tMarks, uFogOn: SH.uFogOn, uMap: SH.uMap }, vertexShader: `
         varying vec3 vW; void main() { vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }`, fragmentShader: `
@@ -5317,7 +5352,8 @@ const World = (() => {
       //   fog()    the land alone: visible, seen, height + 20, scars and tread marks
       //   land()   the land alone: road distance, cloud shadow, fog banks, track hardness
       //   fx()     the fire and smoke alone, bright where hot and covered where smoky
-      //   anchor() each thing drawn in line as offsets in pixels from its own middle on the screen
+      //   anchor() each thing drawn in line as offsets in pixels from its own middle on the screen, with the hue
+      //            and saturation of its colour, which for a unit is its side's
       // and ldr is the graded picture, a0 and a1 quarter-size buffers free once the grade has run.
       const K = {
         THREE, SH, vs, renderer, run, blur: pass,
