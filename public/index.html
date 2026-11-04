@@ -4032,6 +4032,9 @@ if (typeof module !== 'undefined') module.exports = Looks;
   const GL = Looks.GL;
   Looks.add({
     name: 'ink', title: 'Pen and ink', said: 'Pen and ink.', panels: 'ink', hud: 'ink', sceneFog: false, ghost3d: false,
+    // Blasts: flames as flicks of line, fire left white and scorch hatched in the pass, and the drawn burst lives long
+    // enough to be seen. Each kind of thing has its own drawing, set in world.js.
+    fx: 1, fxs: 2, burstLife: 2.5,
     // The lens stands back as far again as frames the same ground, so everything sized by cam.dist holds.
     camera: (c, smooth) => ({ fov: 10, near: 5, far: 1400, D: c.dist * Math.tan(13 * Math.PI / 180) / Math.tan(5 * Math.PI / 180), pitch: c.pitch + (1.4 - c.pitch) * smooth(70, 175, c.dist) }),
     sun: w => w.sunAt(w.day),
@@ -4041,10 +4044,10 @@ if (typeof module !== 'undefined') module.exports = Looks;
       // 45 and 135 degrees, then flat and upright lines for the darkest, each line a little uneven with small gaps.
       // The ground's hatching is pinned to the map so it pans with it, the units' redraws a few times a second.
       const ink = new THREE.ShaderMaterial({ uniforms: { t: { value: null }, tSubj: { value: null }, tHeat: { value: null }, tPaper: { value: null }, res: { value: new THREE.Vector2(1, 1) }, uTime: { value: 0 }, uK: { value: 1 }, uOff: { value: new THREE.Vector2() }, uStyle: { value: 8 }, tNorm: { value: null }, tFogS: { value: null }, tLand: { value: null }, uSun2: { value: new THREE.Vector2(-1, 0) }, uUpV: { value: new THREE.Vector3(0, 1, 0) }, uRoad: { value: 0 }, uOre: { value: 0 },
-        uWindS: { value: new THREE.Vector2() }, uView: { value: new THREE.Vector2(1, 0) }, tH: SH.tH, uHSize: { value: new THREE.Vector2(1, 1) }, uHScale: { value: 1 }, uRain: { value: 0 }, uStorm: { value: 0 }, uSnowF: { value: 0 }, uSnowC: SH.uSnowC, uFog: { value: 0 }, uMist: { value: 0 }, uNight: { value: 0 }, uWet: { value: 0 },
+        uWindS: { value: new THREE.Vector2() }, uView: { value: new THREE.Vector2(1, 0) }, tFx: { value: null }, uFxs: { value: 0 }, tH: SH.tH, uHSize: { value: new THREE.Vector2(1, 1) }, uHScale: { value: 1 }, uRain: { value: 0 }, uStorm: { value: 0 }, uSnowF: { value: 0 }, uSnowC: SH.uSnowC, uFog: { value: 0 }, uMist: { value: 0 }, uNight: { value: 0 }, uWet: { value: 0 },
         uDayMul: { value: new THREE.Vector3(1, 1, 1) }, uDayAdd: { value: new THREE.Vector3() }, uWaterL: { value: -0.15 }, uCloudK: SH.uCloudK,
         uInvVP: { value: new THREE.Matrix4() }, uW2S: { value: new THREE.Vector4(1, 0, 0, 1) }, uLev: { value: 1 } }, vertexShader: vs, depthTest: false, depthWrite: false, fragmentShader: `
-        varying vec2 vUv; uniform sampler2D t, tSubj, tHeat, tPaper, tNorm, tFogS, tLand; uniform vec2 res, uOff, uSun2, uWindS, uView, uHSize; uniform float uHScale; uniform sampler2D tH; uniform vec3 uUpV, uDayMul, uDayAdd; uniform float uTime, uK, uRain, uStorm, uSnowF, uSnowC, uFog, uMist, uNight, uWet, uWaterL, uCloudK; uniform int uStyle, uRoad, uOre;
+        varying vec2 vUv; uniform sampler2D t, tSubj, tHeat, tPaper, tNorm, tFogS, tLand; uniform vec2 res, uOff, uSun2, uWindS, uView, uHSize; uniform float uHScale, uFxs; uniform sampler2D tH, tFx; uniform vec3 uUpV, uDayMul, uDayAdd; uniform float uTime, uK, uRain, uStorm, uSnowF, uSnowC, uFog, uMist, uNight, uWet, uWaterL, uCloudK; uniform int uStyle, uRoad, uOre;
         const vec3 PAPER = vec3(0.949, 0.910, 0.824), INK = vec3(0.122, 0.102, 0.086);
         // The soft axonometric's washes, after the atlas: speckled pale green ground, lilac water, pink paths,
         // three canopy greens, cream roofs over warm grey walls, and the ghost plan's blue-grey for what was.
@@ -4119,6 +4122,10 @@ if (typeof module !== 'undefined') module.exports = Looks;
           float outline = smoothstep(0.12, 0.42, length(e2));
           vec2 e1 = vec2(Ls(uv + k * vec2(2, 0), k) - Ls(uv - k * vec2(2, 0), k), Ls(uv + k * vec2(0, 2), k) - Ls(uv - k * vec2(0, 2), k));
           float edge = smoothstep(0.09, 0.2, length(e1)) * (1.0 - s0);
+          // Fire and smoke, from their own buffer. Drawn as wash (uFxs 1) or as hatched tone (2), they take no outline.
+          vec4 FX = texture2D(tFx, vUv);
+          float fxHeat = smoothstep(0.25, 0.9, max(FX.r, max(FX.g, FX.b))), fxSmk = smoothstep(0.03, 0.35, FX.a) * (1.0 - fxHeat);
+          if (uFxs > 0.5) edge *= 1.0 - max(fxHeat, smoothstep(0.01, 0.1, FX.a));
           vec2 e3 = vec2(L(uv + k * vec2(1, 0)) - L(uv - k * vec2(1, 0)), L(uv + k * vec2(0, 1)) - L(uv - k * vec2(0, 1)));
           float inner = smoothstep(0.05, 0.14, length(e3)) * s0;
           float lines = max(outline, max(edge * 0.85, inner * 0.8));
@@ -4387,7 +4394,14 @@ if (typeof module !== 'undefined') module.exports = Looks;
           float lit = step(0.26, hn), rim = 0.0;
           if (inverse) { cover = max(cover * (1.0 - lit), 0.0); cover = max(cover, rim * 0.0); }
           else { cover *= 1.0 - lit; cover = max(cover, rim); }
+          if (uFxs > 0.5 && uFxs < 1.5) cover *= 1.0 - fxSmk * 0.9;
           vec3 col = mix(uStyle == 8 ? baseC : paperC, inkC, clamp(cover, 0.0, 1.0));
+          // Smoke as a grey wash and fire as a warm wash round a bare-paper core, for the washed effects.
+          if (uFxs > 0.5 && uFxs < 1.5) {
+            col = mix(col, vec3(0.56, 0.53, 0.49), fxSmk * 0.5);
+            col = mix(col, vec3(1.0, 0.82, 0.52), fxHeat * (1.0 - smoothstep(0.6, 0.95, fxHeat)) * 0.7);
+            col = mix(col, paperC, smoothstep(0.6, 0.95, fxHeat));
+          }
           col = mix(col, vec3(0.42, 0.29, 0.12), clamp(oreL, 0.0, 1.0) * 0.85);
           // Colour in the shade: a cool violet wash under the ink where the sun does not reach, warm paper in the light.
           if (uStyle == 8 || uStyle == 0) {
@@ -4418,18 +4432,30 @@ if (typeof module !== 'undefined') module.exports = Looks;
           float trk = step(1.0, F.a), sc = F.a - trk, gnd = 1.0 - step(0.5, s0);
           float scw = max(fwidth(sc), 1e-4);
           float ringS = (1.0 - smoothstep(0.7 * uK, 1.8 * uK, abs(sc - 0.28) / scw)) * step(0.05, sc);
-          float scT = sc > 0.9 ? 1.0 : max(tone(p, sc > 0.62 ? 5.0 : sc > 0.4 ? 3.0 : 0.0, 61.0), ringS);
+          // The scars as rings and solid splatter (uFxs 0), as a grey smudge lightly hatched (1), or as hatched
+          // patches with no ring (2).
+          float scT = 0.0;
+          if (uFxs < 0.5) scT = sc > 0.9 ? 1.0 : max(tone(p, sc > 0.62 ? 5.0 : sc > 0.4 ? 3.0 : 0.0, 61.0), ringS);
+          else if (uFxs < 1.5) {
+            col = mix(col, vec3(0.38, 0.34, 0.3), smoothstep(0.08, 0.7, min(sc, 0.75)) * gnd * 0.5);
+            col = mix(col, inkC, hatch(p, 45.0, 5.0, 0.8, 61.0, 0.2) * smoothstep(0.35, 0.8, min(sc, 0.8)) * gnd * 0.3);
+          } else { float scs = min(sc, 0.8); scT = tone(p, scs > 0.6 ? 4.0 : scs > 0.35 ? 2.0 : scs > 0.12 ? 1.0 : 0.0, 61.0) * 0.85; }
           col = mix(col, inkC, scT * gnd * 0.9);
           col = mix(col, inkC, trk * gnd * 0.5 * step(0.4, noise(px * 0.22 / uK)));
           // Fire in flat bands of coloured ink, red, orange, yellow and a pale core, inside a black boiling outline.
           vec3 c1 = vec3(0.8, 0.17, 0.09), c2 = vec3(0.98, 0.47, 0.1), c3 = vec3(1.0, 0.82, 0.24), c4 = vec3(1.0, 0.97, 0.84);
           if (hz.b > hz.r * 1.1) { c1 = vec3(0.13, 0.33, 0.8); c2 = vec3(0.3, 0.6, 0.95); c3 = vec3(0.65, 0.86, 1.0); c4 = vec3(0.93, 0.97, 1.0); }
+          // Fire as the bands (uFxs 0), as a warm wash round a paper core with no outline (1), or as bare paper
+          // with one thin outline and a halo of hatching, as an engraver leaves a flash white (2).
           vec3 fc = hn < 0.62 ? c1 : hn < 1.35 ? c2 : hn < 2.7 ? c3 : c4;
-          fc = mix(fc, c1 * 0.5, hatch(px, 45.0, 3.4, 1.0, 91.0 + boil, 0.05) * step(hn, 0.62) * 0.65);
+          if (uFxs < 0.5) fc = mix(fc, c1 * 0.5, hatch(px, 45.0, 3.4, 1.0, 91.0 + boil, 0.05) * step(hn, 0.62) * 0.65);
+          else if (uFxs < 1.5) fc = mix(vec3(1.0, 0.76, 0.42), c4, smoothstep(0.8, 2.2, hn));
+          else fc = paperC;
           col = mix(col, fc, lit);
-          float fw = max(fwidth(hn), 1e-4);
-          float o1 = (1.0 - smoothstep(1.0 * uK, 2.3 * uK, abs(hn - 0.26) / fw)) * step(0.12, hr0);
-          float o2 = max(1.0 - smoothstep(0.5 * uK, 1.4 * uK, abs(hn - 0.62) / fw), 1.0 - smoothstep(0.5 * uK, 1.4 * uK, abs(hn - 1.35) / fw));
+          if (uFxs > 1.5) col = mix(col, inkC, hatch(px, 60.0, 3.0, 0.9, 5.0 + boil, 0.3) * smoothstep(0.08, 0.26, hr0) * (1.0 - lit) * 0.7);
+          float fw = max(fwidth(hn), 1e-4), fxO = uFxs < 0.5 ? 1.0 : uFxs < 1.5 ? 0.0 : 0.7;
+          float o1 = (1.0 - smoothstep(1.0 * uK, 2.3 * uK, abs(hn - 0.26) / fw)) * step(0.12, hr0) * fxO;
+          float o2 = max(1.0 - smoothstep(0.5 * uK, 1.4 * uK, abs(hn - 0.62) / fw), 1.0 - smoothstep(0.5 * uK, 1.4 * uK, abs(hn - 1.35) / fw)) * step(uFxs, 0.5);
           col = mix(col, inkC, o1);
           col = mix(col, c1 * 0.45, o2 * lit * 0.85);
           // Cloud shadows passing over what is seen now, as a cool wash.
@@ -4507,11 +4533,13 @@ if (typeof module !== 'undefined') module.exports = Looks;
           vec2 o = vUv - 0.5; col *= 1.0 - dot(o, o) * 0.35;
           gl_FragColor = vec4(col, 1.0);
         }` });
+      const look = Looks.get('ink');
       return {
         render(K) {
           const C = ink.uniforms, { w, h, camera, sky } = K, [CX, CY] = K.center;
           if (!C.tPaper.value) C.tPaper.value = K.paper();
           C.t.value = K.ldr.texture; C.tSubj.value = K.mask(); C.tNorm.value = K.norm(); C.tHeat.value = K.a0.texture;
+          C.tFx.value = K.fx(); C.uFxs.value = look.fxs || 0;
           C.res.value.set(w, h); C.uTime.value = K.time; C.uK.value = h / 1080;
           C.tFogS.value = K.fog();
           // Distance to the nearest road, per pixel of the land.
@@ -4924,13 +4952,14 @@ const World = (() => {
           float fb = texture2D(tDetail, vW.xz * 0.013 + uCloud * 0.7 + 0.37).g;
           gl_FragColor = vec4(min(vR, 20.0), cl, fb, texture2D(tTrail, vW.xz / uMap).r);
         }` });
-      let ldr = null, maskRT = null, normRT = null, fogRT = null, landRT = null;
+      let ldr = null, maskRT = null, normRT = null, fogRT = null, landRT = null, fxRT = null;
       let rt, a0, a1, b0, b1, w = 1, h = 1;
       // Screen-sized targets a look keeps for itself, by name.
       const targets = new Map();
       function size(wp, hp) {
         w = wp; h = hp;
-        for (const r of [rt, a0, a1, b0, b1, ldr, maskRT, normRT, fogRT, landRT, ...targets.values()]) if (r) r.dispose();
+        for (const r of [rt, a0, a1, b0, b1, ldr, maskRT, normRT, fogRT, landRT, fxRT, ...targets.values()]) if (r) r.dispose();
+        fxRT = new THREE.WebGLRenderTarget(w >> 1, h >> 1, { type: THREE.HalfFloatType, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter });
         targets.clear();
         fogRT = new THREE.WebGLRenderTarget(w >> 1, h >> 1, { type: THREE.HalfFloatType, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter });
         landRT = new THREE.WebGLRenderTarget(w >> 1, h >> 1, { type: THREE.HalfFloatType, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter });
@@ -4984,6 +5013,7 @@ const World = (() => {
       //   norm()   surface direction and view distance of everything drawn in line
       //   fog()    the land alone: visible, seen, height + 20, scars and tread marks
       //   land()   the land alone: road distance, cloud shadow, fog banks, track hardness
+      //   fx()     the fire and smoke alone, bright where hot and covered where smoky
       // and ldr is the graded picture, a0 and a1 quarter-size buffers free once the grade has run.
       const K = {
         THREE, SH, vs, renderer, run, blur: pass,
@@ -4997,6 +5027,7 @@ const World = (() => {
         norm: () => drawInto(normRT, 0x808080, 0, 1, normMat),
         fog: () => landInto(fogPassMat, fogRT),
         land: () => landInto(landMat, landRT),
+        fx: () => drawInto(fxRT, 0x000000, 0, 2, null),
         landUniforms,
         paper: () => paperTex || (paperTex = Looks.paper(THREE)),
         target(name) {
@@ -5105,6 +5136,8 @@ const World = (() => {
           }`,
       });
       const mesh = new THREE.Mesh(g, mat);
+      // Drawn again alone, into the effects buffer the looks read fire and smoke from.
+      mesh.layers.enable(2);
       mesh.frustumCulled = false;
       mesh.renderOrder = 10;
       scene.add(mesh);
@@ -5644,7 +5677,7 @@ const World = (() => {
           const b = Hh.hb[i];
           setInst(Hh.hbm, i, r ? Object.assign({}, b, { sy: b.sy * 0.42, c: 0x7a7064 }) : b);
           setInst(Hh.hrm, i, Hh.hr[i], !!r);
-          if (r && !first && VIS(b.x, b.z)) { explosion(b.x, b.y + 0.8, b.z, 1.2); for (let k = 0; k < 5; k++) dustPuff(b.x + (Math.random() - 0.5) * 2, b.y + 0.3, b.z + (Math.random() - 0.5) * 2, 1.6); }
+          if (r && !first && VIS(b.x, b.z)) { explosion(b.x, b.y + 0.8, b.z, 1.2, 30); for (let k = 0; k < 5; k++) dustPuff(b.x + (Math.random() - 0.5) * 2, b.y + 0.3, b.z + (Math.random() - 0.5) * 2, 1.6); }
         }
         if (ch) {
           Hh.win.forEach((w, j) => setInst(Hh.wm, j, w, !!Hh.ruined[w.h]));
@@ -6402,8 +6435,17 @@ const World = (() => {
       glow.add(x, y, z, 0, 0, 0, 0.07, size, size * 0.6, [7, 5, 2.6, 1], [4, 1.8, 0.3, 0], 12);
       glow.add(x, y, z, 0, 0, 0, 0.1, size * 1.8, size * 2.4, [2.2, 1.1, 0.4, 0.6], [0.8, 0.2, 0, 0], 8);
     }
-    function explosion(x, y, z, size) {
-      inkAdd({ k: 'burst', x, y: y + 0.4 * size, z, life: 0.16 + size * 0.05, s: size });
+    // Which of the overlay's blast drawings a thing goes up in, by what it is: a tank in woodcut wedges, a refinery
+    // in an engraved column of smoke, a shell hit in quick scratches, a missile in converging lines, and so on. The
+    // numbers are the HUD's BLAST table.
+    const BLAST_OF = {
+      tank: 5, heavy: 21, ifv: 13, humvee: 31, truck: 17, flak: 27, support: 32, mlrs: 8, fpv: 10, heli: 30, jet: 26,
+      rifle: 24, rocket: 24, engineer: 24, sniper: 24, hero: 24,
+      hq: 30, power: 12, refinery: 7, barracks: 25, factory: 7, radar: 9, airfield: 15, fob: 25, derrick: 7, silo: 26, bunker: 20, atgun: 31, sam: 27, rail: 9,
+    };
+    const HIT_OF = { shell: 31, rocket: 8, missile: 10, beam: 9, bullet: 24, tracer: 24 };
+    function explosion(x, y, z, size, fx) {
+      inkAdd({ k: 'burst', x, y: y + 0.4 * size, z, life: (0.16 + size * 0.05) * (style.burstLife || 1), s: size, fx });
       const sm = theme.smoke, d = dustC(), n = Math.round(6 + size * 7), R = () => Math.random();
       const smoke1 = [sm[0] * 1.6, sm[1] * 1.5, sm[2] * 1.5, 0.82], smoke0 = [sm[0] * 3.4, sm[1] * 3.2, sm[2] * 3.1, 0];
       // The flash, white at its heart.
@@ -6445,7 +6487,7 @@ const World = (() => {
     function bigBlast(x, y, z, size) {
       // The thermobaric fireball, stem and cap. The white-out and the shake reach only a view near the blast.
       const near = nearView(x, z);
-      explosion(x, y, z, size * 0.5);
+      explosion(x, y, z, size * 0.5, 26);
       flash(x, y, z, 900);
       pp.grade.uniforms.uFlash.value = Math.max(pp.grade.uniforms.uFlash.value, 0.5 * near);
       cam.shake = Math.max(cam.shake, 1.4 * near);
@@ -6529,7 +6571,7 @@ const World = (() => {
         for (let i = 0; i < 3; i++) streak.add(mx, up, my, e.tx, e.tz, e.ty, 0.08 + i * 0.05, 0.22 - i * 0.05, [3, 6, 14]);
         const dist = Math.hypot(e.tx - mx, e.ty - my);
         for (let i = 0; i < dist * 2; i++) { const t = i / dist / 2; glow.add(lerp(mx, e.tx, t), lerp(up, e.tz, t), lerp(my, e.ty, t), 0, 0.2, 0, 0.5, 0.26, 0.5, [0.6, 1.4, 3, 0.8], [0.1, 0.2, 0.8, 0], 8); }
-        explosion(e.tx, e.tz, e.ty, 0.8);
+        explosion(e.tx, e.tz, e.ty, 0.8, 11);
         return;
       }
       if (w.fx === 'shell') {
@@ -6585,14 +6627,14 @@ const World = (() => {
           const w = Rules.WEAPONS[e.w];
           startle(e.x, e.y, 8); flatten(e.x, e.y, w.splash || 0.6);
           if (!VIS(e.x, e.y)) break;
-          explosion(e.x, e.z, e.y, w.fx === 'rocket' ? 1.1 : w.fx === 'shell' ? 0.62 : 0.5);
+          explosion(e.x, e.z, e.y, w.fx === 'rocket' ? 1.1 : w.fx === 'shell' ? 0.62 : 0.5, HIT_OF[w.fx]);
           if (w.fx === 'rocket' || w.fx === 'shell') scorch(e.x, e.y, w.fx === 'rocket' ? 1.1 : 0.7, 0.8);
           break;
         }
         case 'boom': {
           const y = heightAt(M, e.x, e.y);
           startle(e.x, e.y, 10 + e.size * 3); flatten(e.x, e.y, e.size * 0.8);
-          if (e.size >= 8) bigBlast(e.x, y, e.y, e.size); else if (VIS(e.x, e.y)) explosion(e.x, y, e.y, e.size);
+          if (e.size >= 8) bigBlast(e.x, y, e.y, e.size); else if (VIS(e.x, e.y)) explosion(e.x, y, e.y, e.size, e.size >= 2.5 ? 16 : 10);
           if (e.size >= 1.5) splatter(e.x, e.y, Math.min(4, e.size * 0.9));
           break;
         }
@@ -6605,7 +6647,7 @@ const World = (() => {
           for (let k = 0; k < 6; k++) {
             const t = 0.25 + k * 0.1, x = lerp(m.x0, m.x1, t), y = lerp(m.y0, m.y1, t);
             if (!VIS(x, y)) continue;
-            setTimeout(() => { explosion(x, m.z, y, 1.1); for (let j = 0; j < 3; j++) steam(x + (Math.random() - 0.5) * 2, M.water + 0.1, y + (Math.random() - 0.5) * 2); }, k * 120);
+            setTimeout(() => { explosion(x, m.z, y, 1.1, 17); for (let j = 0; j < 3; j++) steam(x + (Math.random() - 0.5) * 2, M.water + 0.1, y + (Math.random() - 0.5) * 2); }, k * 120);
           }
           startle(e.x, e.y, 16);
         } break;
@@ -6632,18 +6674,18 @@ const World = (() => {
         const n = Math.max(e.w, e.h) + 2;
         for (let i = 0; i < n; i++) {
           const ox = (Math.random() - 0.5) * e.w, oz = (Math.random() - 0.5) * e.h;
-          setTimeout(() => explosion(e.x + ox, y + Math.random(), e.y + oz, 1.2 + Math.random()), i * 170);
+          setTimeout(() => explosion(e.x + ox, y + Math.random(), e.y + oz, 1.2 + Math.random(), BLAST_OF[e.kind]), i * 170);
         }
-        explosion(e.x, y + 0.6, e.y, Math.max(e.w, e.h) * 0.7);
+        explosion(e.x, y + 0.6, e.y, Math.max(e.w, e.h) * 0.7, BLAST_OF[e.kind]);
         for (let i = 0; i < e.w * e.h / 2; i++) wrecks.push({ rubble: true, x: e.x + (Math.random() - 0.5) * e.w * 0.9, y: y + 0.03, z: e.y + (Math.random() - 0.5) * e.h * 0.9, yaw: Math.random() * 6.28, s: 0.7 + Math.random() * 0.9, t: -1.4 - Math.random() * 0.5, smoke: 0.2 + Math.random() * 2 });
       } else if (e.z > 0 && UNITS[e.kind].move !== 'foot') {
-        explosion(e.x, y + e.z, e.y, UNITS[e.kind].hp > 200 ? 1.2 : 0.4);
+        explosion(e.x, y + e.z, e.y, UNITS[e.kind].hp > 200 ? 1.2 : 0.4, BLAST_OF[e.kind]);
       } else if (UNITS[e.kind].men) {
         const kept = r ? r.alive : 0;
         const list = (SQUADS[UNITS[e.kind].men] || [[0, 0]]).slice(0, kept || 1);
         for (const o of list) corpses.push({ kind: e.kind, x: e.x + o[0], y, z: e.y + o[1], yaw: -e.a, t: 0, color: teamCol[e.team] });
       } else {
-        explosion(e.x, y + 0.4, e.y, UNITS[e.kind].hp > 500 ? 1.4 : 0.9);
+        explosion(e.x, y + 0.4, e.y, UNITS[e.kind].hp > 500 ? 1.4 : 0.9, BLAST_OF[e.kind]);
         scorch(e.x, e.y, 1.1);
         wrecks.push({ kind: e.kind, x: e.x, y, z: e.y, yaw: -e.a, pitch: 0, t: 0, smoke: 0 });
       }
@@ -7579,14 +7621,204 @@ const Hud = (() => {
       }
       og.restore();
     }
+    // Twenty more ways to draw a blast, each from the point, with R the burst's radius on screen, k how far through
+    // its life it is, grow its first swell, seed its own die, and mz true for a muzzle flash. The canvas is already
+    // at the point. Soft ones (WASHY) sit on washed fire and smudged scorch; the rest on white fire and hatching.
+    const INK_C = '#1a1512', PAPER_C = '#f3ecdc';
+    const WASHY = new Set([2, 4, 6, 11, 12, 16, 17, 18, 19, 22, 26, 30]);
+    const BLAST = {
+      // 5 Woodcut: bold black wedges round a paper core.
+      5(R, k, grow, fade, seed, mz) { const rr = i => rnd(seed, i), n = mz ? 5 : 9; og.fillStyle = INK_C; for (let i = 0; i < n; i++) { const a = i / n * 6.283 + seed, w = 0.18 + 0.12 * rr(i), r0 = R * 0.3, r1 = R * (0.9 + 0.5 * rr(i + 9)) * (0.5 + 0.5 * grow); og.beginPath(); og.moveTo(Math.cos(a - w) * r0, Math.sin(a - w) * r0); og.lineTo(Math.cos(a) * r1, Math.sin(a) * r1); og.lineTo(Math.cos(a + w) * r0, Math.sin(a + w) * r0); og.closePath(); og.fill(); } og.fillStyle = PAPER_C; og.beginPath(); og.arc(0, 0, R * 0.28, 0, 6.283); og.fill(); },
+      // 6 Stipple cloud: dots thickest at the heart, lifting as it goes.
+      6(R, k, grow, fade, seed, mz) { const rr = i => rnd(seed, i), n = mz ? 40 : 260; og.fillStyle = INK_C; for (let i = 0; i < n; i++) { const a = rr(i) * 6.283, d = Math.sqrt(rr(i + 500)) * R * 1.3 * (0.6 + 0.4 * grow); og.globalAlpha = fade * Math.max(0, 1 - d / (R * 1.4)) * 0.9; og.beginPath(); og.arc(Math.cos(a) * d, Math.sin(a) * d * 0.8 - R * 0.4 * k * (0.5 + rr(i + 900)), 0.8 + 1.4 * rr(i + 300), 0, 6.283); og.fill(); } },
+      // 7 Engraved column: nested loops of smoke stacked upward, hatched.
+      7(R, k, grow, fade, seed, mz) { const rr = i => rnd(seed, i), n = mz ? 2 : 5; og.strokeStyle = INK_C; for (let i = 0; i < n; i++) { const t = i / n, cy = -R * (0.2 + 1.3 * t) * (0.4 + 0.6 * k), rx = R * (0.35 + 0.35 * t) * (0.6 + 0.4 * grow), ry = rx * 0.6, cx = (rr(i) - 0.5) * R * 0.3; og.save(); og.lineWidth = Math.max(1, R * 0.015); og.beginPath(); og.ellipse(cx, cy, rx, ry, 0, 0, 6.283); og.stroke(); og.clip(); og.lineWidth = Math.max(0.8, R * 0.01); og.globalAlpha = fade * 0.6; og.beginPath(); for (let h = -rx * 1.5; h < rx * 1.5; h += Math.max(2.5, R * 0.06)) { og.moveTo(cx + h - ry, cy + ry); og.lineTo(cx + h + ry * 0.5, cy - ry); } og.stroke(); og.restore(); } og.globalAlpha = fade; og.fillStyle = PAPER_C; og.beginPath(); og.arc(0, 0, R * 0.25, 0, 6.283); og.fill(); },
+      // 8 Spatter: ink flicked from a brush, streaks that end in drops.
+      8(R, k, grow, fade, seed, mz) { const rr = i => rnd(seed, i), n = mz ? 10 : 44; og.strokeStyle = INK_C; og.fillStyle = INK_C; og.lineCap = 'round'; for (let i = 0; i < n; i++) { const a = rr(i) * 6.283, r0 = R * (0.2 + 0.4 * rr(i + 50)), len = R * (0.3 + 1.2 * rr(i + 100)) * grow, w = Math.max(0.6, R * (0.004 + 0.012 * rr(i + 150))); og.lineWidth = w; og.beginPath(); og.moveTo(Math.cos(a) * r0, Math.sin(a) * r0); og.lineTo(Math.cos(a) * (r0 + len), Math.sin(a) * (r0 + len)); og.stroke(); og.beginPath(); og.arc(Math.cos(a) * (r0 + len), Math.sin(a) * (r0 + len), w * 1.6, 0, 6.283); og.fill(); } },
+      // 9 Shock rings: thin circles running outward, as a diagram of the blast wave.
+      9(R, k, grow, fade, seed, mz) { og.strokeStyle = INK_C; for (let i = 0; i < 3; i++) { og.globalAlpha = fade * (1 - i * 0.25) * (1 - k * 0.5); og.lineWidth = Math.max(0.8, R * (0.02 - 0.005 * i)); og.beginPath(); og.arc(0, 0, R * (0.35 + 0.45 * i) * (0.3 + 0.9 * k), 0, 6.283); og.stroke(); } og.globalAlpha = fade; og.fillStyle = PAPER_C; og.beginPath(); og.arc(0, 0, R * 0.2 * (1 - k * 0.5), 0, 6.283); og.fill(); },
+      // 10 Impact lines: strokes converging on the point from outside, as manga draws a hit.
+      10(R, k, grow, fade, seed, mz) { const rr = i => rnd(seed, i), n = mz ? 8 : 26; og.strokeStyle = INK_C; og.lineCap = 'round'; for (let i = 0; i < n; i++) { const a = i / n * 6.283 + seed + rr(i) * 0.2, r0 = R * (0.5 + 0.3 * rr(i + 7)), r1 = R * (1.4 + 1.2 * rr(i + 13)); og.lineWidth = Math.max(0.6, R * (0.006 + 0.02 * rr(i + 20))); og.beginPath(); og.moveTo(Math.cos(a) * r0, Math.sin(a) * r0); og.lineTo(Math.cos(a) * r1, Math.sin(a) * r1); og.stroke(); } },
+      // 11 Sumi splash: one wet blot with dry-brush flares.
+      11(R, k, grow, fade, seed, mz) { const rr = i => rnd(seed, i); og.fillStyle = 'rgba(30,24,20,0.55)'; og.beginPath(); for (let i = 0; i <= 40; i++) { const a = i / 40 * 6.283, r = R * (0.6 + 0.5 * rr(i % 40 + 3)) * (0.5 + 0.5 * grow); og.lineTo(Math.cos(a) * r, Math.sin(a) * r); } og.closePath(); og.fill(); og.strokeStyle = 'rgba(30,24,20,0.7)'; og.lineCap = 'butt'; for (let i = 0; i < (mz ? 3 : 7); i++) { const a = rr(i + 60) * 6.283, r1 = R * (1.2 + 0.9 * rr(i + 70)); og.lineWidth = Math.max(1, R * 0.05 * (1 - 0.5 * rr(i + 80))); og.setLineDash([Math.max(2, R * 0.05), Math.max(1, R * 0.03 * rr(i + 90))]); og.beginPath(); og.moveTo(Math.cos(a) * R * 0.7, Math.sin(a) * R * 0.7); og.lineTo(Math.cos(a) * r1, Math.sin(a) * r1); og.stroke(); } og.setLineDash([]); },
+      // 12 White-out: the paper bleached round the point, with a faint grey ring.
+      12(R, k, grow, fade, seed, mz) { const g = og.createRadialGradient(0, 0, 0, 0, 0, R * 1.5); g.addColorStop(0, 'rgba(243,236,220,1)'); g.addColorStop(0.5, 'rgba(243,236,220,0.9)'); g.addColorStop(1, 'rgba(243,236,220,0)'); og.fillStyle = g; og.beginPath(); og.arc(0, 0, R * 1.5, 0, 6.283); og.fill(); og.strokeStyle = 'rgba(80,70,60,0.5)'; og.lineWidth = Math.max(1, R * 0.02); og.beginPath(); og.arc(0, 0, R * (0.9 + 0.4 * k), 0, 6.283); og.stroke(); },
+      // 13 Crosshatch blot: a ragged disc of nothing but hatching in three directions.
+      13(R, k, grow, fade, seed, mz) { const rr = i => rnd(seed, i); og.save(); og.beginPath(); for (let i = 0; i <= 30; i++) { const a = i / 30 * 6.283, r = R * (0.75 + 0.3 * rr(i % 30 + 11)) * (0.5 + 0.5 * grow); og.lineTo(Math.cos(a) * r, Math.sin(a) * r); } og.closePath(); og.clip(); og.strokeStyle = INK_C; og.lineWidth = Math.max(0.8, R * 0.012); const sp = Math.max(2.5, R * 0.07); for (const ang of [0.6, 2.0, 1.3]) { og.save(); og.rotate(ang); og.beginPath(); for (let h = -R * 1.5; h <= R * 1.5; h += sp) { og.moveTo(h, -R * 1.5); og.lineTo(h, R * 1.5); } og.stroke(); og.restore(); } og.restore(); if (!mz) { og.fillStyle = PAPER_C; og.beginPath(); og.arc(0, 0, R * 0.2, 0, 6.283); og.fill(); } },
+      // 14 Scribble: a frantic line thrown round the point, rising.
+      14(R, k, grow, fade, seed, mz) { const rr = i => rnd(seed, i), n = mz ? 20 : 70; og.strokeStyle = INK_C; og.lineWidth = Math.max(0.8, R * 0.012); og.beginPath(); og.moveTo(0, 0); for (let i = 0; i < n; i++) { const a = rr(i) * 6.283, d = Math.sqrt(rr(i + 200)) * R * (0.4 + 0.6 * grow); og.lineTo(Math.cos(a) * d, Math.sin(a) * d * 0.8 - R * 0.5 * k); } og.stroke(); },
+      // 15 Debris arcs: dotted paths of fragments flung out, each ending in a lump.
+      15(R, k, grow, fade, seed, mz) { const rr = i => rnd(seed, i), n = mz ? 3 : 8; og.strokeStyle = INK_C; og.fillStyle = INK_C; og.setLineDash([2, Math.max(2, R * 0.04)]); og.lineWidth = Math.max(0.8, R * 0.012); for (let i = 0; i < n; i++) { const a = i / n * 6.283 + seed + rr(i) * 0.4, dist = R * (0.9 + 0.9 * rr(i + 9)) * grow, up = R * (0.5 + 0.6 * rr(i + 19)), ex = Math.cos(a) * dist, ey = Math.sin(a) * dist * 0.6; og.beginPath(); og.moveTo(0, 0); og.quadraticCurveTo(ex * 0.5, ey * 0.5 - up, ex, ey); og.stroke(); og.beginPath(); og.arc(ex, ey, Math.max(1, R * 0.03), 0, 6.283); og.fill(); } og.setLineDash([]); },
+      // 16 Ink bleed: a blot with a fibrous fringe, as ink spreads in wet paper.
+      16(R, k, grow, fade, seed, mz) { const rr = i => rnd(seed, i), n = mz ? 20 : 90, r0 = R * 0.55 * (0.5 + 0.5 * grow); og.fillStyle = 'rgba(40,32,26,0.6)'; og.beginPath(); og.arc(0, 0, r0 * 1.1, 0, 6.283); og.fill(); og.strokeStyle = 'rgba(40,32,26,0.55)'; og.lineWidth = Math.max(0.6, R * 0.008); og.beginPath(); for (let i = 0; i < n; i++) { const a = i / n * 6.283 + rr(i) * 0.1, r1 = r0 + R * (0.1 + 0.5 * rr(i + 40)) * grow; og.moveTo(Math.cos(a) * r0, Math.sin(a) * r0); og.lineTo(Math.cos(a) * r1, Math.sin(a) * r1); } og.stroke(); },
+      // 17 Dust puff: a pale cloud low and wide, outlined, stippled inside, and no fire.
+      17(R, k, grow, fade, seed, mz) { const rr = i => rnd(seed, i), w = R * (1.0 + 0.6 * k), h = R * 0.5; og.fillStyle = 'rgba(243,236,220,0.9)'; og.strokeStyle = INK_C; og.lineWidth = Math.max(0.8, R * 0.012); og.beginPath(); for (let i = 0; i <= 24; i++) { const a = i / 24 * 6.283, r = 1 + 0.18 * rr(i % 24 + 5); og.lineTo(Math.cos(a) * w * r, Math.sin(a) * h * r - R * 0.15); } og.closePath(); og.fill(); og.stroke(); og.fillStyle = INK_C; for (let i = 0; i < (mz ? 10 : 50); i++) { const a = rr(i + 300) * 6.283, d = Math.sqrt(rr(i + 400)); og.beginPath(); og.arc(Math.cos(a) * d * w * 0.9, Math.sin(a) * d * h * 0.9 - R * 0.15, Math.max(0.5, R * 0.012), 0, 6.283); og.fill(); } },
+      // 18 Halftone: a printed disc of dots, large at the heart and vanishing outward.
+      18(R, k, grow, fade, seed, mz) { og.fillStyle = INK_C; const sp = Math.max(3, R * 0.1), Rm = R * 1.3 * (0.5 + 0.5 * grow); for (let gx = -Rm; gx <= Rm; gx += sp) for (let gy = -Rm; gy <= Rm; gy += sp) { const d = Math.hypot(gx, gy) / Rm; if (d > 1) continue; const r = sp * 0.5 * (1 - d) * (1 - k * 0.5); if (r < 0.4) continue; og.beginPath(); og.arc(gx, gy, r, 0, 6.283); og.fill(); } },
+      // 19 Charcoal smudge: a soft dark cloud with the finger dragged through it.
+      19(R, k, grow, fade, seed, mz) { const rr = i => rnd(seed, i), g = og.createRadialGradient(0, 0, 0, 0, 0, R * 1.2); g.addColorStop(0, 'rgba(50,44,40,0.75)'); g.addColorStop(0.6, 'rgba(50,44,40,0.35)'); g.addColorStop(1, 'rgba(50,44,40,0)'); og.fillStyle = g; og.beginPath(); og.arc(0, 0, R * 1.2, 0, 6.283); og.fill(); og.strokeStyle = 'rgba(50,44,40,0.25)'; og.lineCap = 'round'; og.lineWidth = Math.max(2, R * 0.12); for (let i = 0; i < (mz ? 3 : 9); i++) { const yy = (rr(i) - 0.5) * R * 1.4, len = R * (0.8 + 0.8 * rr(i + 9)); og.beginPath(); og.moveTo(-len * 0.3, yy); og.lineTo(len * 0.9, yy - len * 0.15); og.stroke(); } },
+      // 20 Cracked ground: a web of cracks running out from the point, with a dark heart.
+      20(R, k, grow, fade, seed, mz) { const rr = i => rnd(seed, i), n = mz ? 4 : 9; og.strokeStyle = INK_C; og.lineCap = 'round'; og.lineWidth = Math.max(0.8, R * 0.02); for (let i = 0; i < n; i++) { let a = i / n * 6.283 + seed + rr(i) * 0.3, px = 0, py = 0; og.beginPath(); og.moveTo(0, 0); for (let s2 = 1; s2 <= 4; s2++) { const len = R * (0.25 + 0.25 * rr(i * 7 + s2)) * (0.5 + 0.5 * grow); a += (rr(i * 11 + s2) - 0.5) * 0.8; px += Math.cos(a) * len; py += Math.sin(a) * len * 0.7; og.lineTo(px, py); if (s2 === 2) { const b = a + (rr(i + 50) - 0.5) * 2; og.lineTo(px + Math.cos(b) * len * 0.6, py + Math.sin(b) * len * 0.4); og.moveTo(px, py); } } og.stroke(); } og.fillStyle = INK_C; og.beginPath(); og.arc(0, 0, R * 0.12, 0, 6.283); og.fill(); },
+      // 21 Negative cut: a pool of ink with the burst cut out of it white.
+      21(R, k, grow, fade, seed, mz) { const rr = i => rnd(seed, i); og.fillStyle = INK_C; og.beginPath(); og.arc(0, 0, R * 1.1 * (0.6 + 0.4 * grow), 0, 6.283); og.fill(); og.fillStyle = PAPER_C; og.beginPath(); for (let i = 0; i < 16; i++) { const a = i / 16 * 6.283 + seed, r = i % 2 ? R * 0.3 : R * (0.8 + 0.2 * rr(i)); og.lineTo(Math.cos(a) * r, Math.sin(a) * r); } og.closePath(); og.fill(); },
+      // 22 Spiral smoke: one line unwinding upward from the point.
+      22(R, k, grow, fade, seed, mz) { og.strokeStyle = INK_C; og.lineCap = 'round'; og.lineWidth = Math.max(0.8, R * 0.012); og.beginPath(); for (let i = 0; i <= 80; i++) { const t = i / 80, a = t * 2.5 * 6.283 + seed, r = R * (0.1 + 0.6 * t) * (0.5 + 0.5 * grow); og.lineTo(Math.cos(a) * r, Math.sin(a) * r * 0.5 - R * 1.6 * t * k); } og.stroke(); },
+      // 23 Flames in line: tongues drawn in outline alone, no fill.
+      23(R, k, grow, fade, seed, mz) { const rr = i => rnd(seed, i), n = mz ? 2 : 5; og.strokeStyle = INK_C; og.lineWidth = Math.max(0.8, R * 0.015); for (let i = 0; i < n; i++) { const bx = (n > 1 ? i / (n - 1) - 0.5 : 0) * R * 1.1, h = R * (0.8 + 0.7 * rr(i + 3 + Math.floor(k * 6))), w = R * 0.25; og.beginPath(); og.moveTo(bx - w, 0); og.quadraticCurveTo(bx - w * 0.6, -h * 0.5, bx + (rr(i + 30) - 0.5) * w, -h); og.quadraticCurveTo(bx + w * 0.7, -h * 0.4, bx + w, 0); og.stroke(); } },
+      // 25 Hergé cloud: a cumulus of round puffs under one clean outline, growing and lifting.
+      25(R, k, grow, fade, seed, mz) { const rr = i => rnd(seed, i), n = mz ? 3 : 8, cs = []; for (let i = 0; i < n; i++) { const a = rr(i) * 6.283, d = R * 0.45 * Math.sqrt(rr(i + 9)) * (0.4 + 0.6 * grow); cs.push([Math.cos(a) * d, Math.sin(a) * d * 0.7 - R * 0.5 * k, R * (0.28 + 0.3 * rr(i + 19)) * (0.5 + 0.5 * grow)]); } og.strokeStyle = INK_C; og.lineWidth = Math.max(2, R * 0.03); for (const [x, y, r] of cs) { og.beginPath(); og.arc(x, y, r, 0, 6.283); og.stroke(); } og.fillStyle = PAPER_C; for (const [x, y, r] of cs) { og.beginPath(); og.arc(x, y, r, 0, 6.283); og.fill(); } },
+      // 26 Akira dome: a thin edge racing outward with the inside bleached, and a second edge behind it.
+      26(R, k, grow, fade, seed, mz) { const r1 = R * (0.3 + 1.4 * k), r2 = R * (0.1 + 1.0 * k); og.fillStyle = 'rgba(243,236,220,' + (0.9 * (1 - k)).toFixed(2) + ')'; og.beginPath(); og.arc(0, 0, r1, 0, 6.283); og.fill(); og.strokeStyle = INK_C; og.lineWidth = Math.max(0.8, R * 0.012); og.beginPath(); og.arc(0, 0, r1, 0, 6.283); og.stroke(); og.globalAlpha = fade * 0.5; og.beginPath(); og.arc(0, 0, r2, 0, 6.283); og.stroke(); },
+      // 27 Kirby krackle: a ring of black dots of every size round a paper core.
+      27(R, k, grow, fade, seed, mz) { const rr = i => rnd(seed, i), n = mz ? 10 : 40; og.fillStyle = PAPER_C; og.beginPath(); og.arc(0, 0, R * 0.45 * grow, 0, 6.283); og.fill(); og.fillStyle = INK_C; for (let i = 0; i < n; i++) { const a = rr(i) * 6.283, d = R * (0.5 + 0.75 * rr(i + 50)) * grow, r = R * (0.03 + 0.09 * rr(i + 100) * rr(i + 100)); og.beginPath(); og.arc(Math.cos(a) * d, Math.sin(a) * d * 0.9, r, 0, 6.283); og.fill(); } },
+      // 28 Callot smoke: small spirals piled above the point, as the old battle etchings curl their smoke.
+      28(R, k, grow, fade, seed, mz) { const rr = i => rnd(seed, i), n = mz ? 2 : 7; og.strokeStyle = INK_C; og.lineWidth = Math.max(0.8, R * 0.012); og.lineCap = 'round'; for (let i = 0; i < n; i++) { const cx = (rr(i) - 0.5) * R * 1.1, cy = -R * (0.1 + 0.9 * rr(i + 9)) * (0.3 + 0.7 * k) - R * 0.3 * k, sr = R * (0.12 + 0.16 * rr(i + 19)) * (0.5 + 0.5 * grow), dirn = rr(i + 29) < 0.5 ? 1 : -1; og.beginPath(); for (let j = 0; j <= 30; j++) { const t = j / 30, a = dirn * t * 2.2 * 6.283, r = sr * (0.15 + 0.85 * t); og.lineTo(cx + Math.cos(a) * r, cy + Math.sin(a) * r * 0.8); } og.stroke(); } og.fillStyle = PAPER_C; og.beginPath(); og.arc(0, 0, R * 0.2, 0, 6.283); og.fill(); },
+      // 29 Mignola cut: one flat black jagged shape with a white jag cut inside it.
+      29(R, k, grow, fade, seed, mz) { const rr = i => rnd(seed, i), jag = (rad, off, fill) => { og.fillStyle = fill; og.beginPath(); for (let i = 0; i < 14; i++) { const a = i / 14 * 6.283 + seed, r = rad * (i % 2 ? 0.55 : 0.85 + 0.3 * rr(i + off)); og.lineTo(Math.cos(a) * r, Math.sin(a) * r); } og.closePath(); og.fill(); }; jag(R * 1.1 * (0.5 + 0.5 * grow), 0, INK_C); jag(R * 0.55 * (0.5 + 0.5 * grow), 30, PAPER_C); },
+      // 30 Effects bloom: a flash, then a crown with a scalloped edge on a stem, then puffs that part and go.
+      30(R, k, grow, fade, seed, mz) { const rr = i => rnd(seed, i); og.strokeStyle = INK_C; og.lineWidth = Math.max(1, R * 0.015); if (k < 0.12) { og.fillStyle = PAPER_C; og.beginPath(); og.arc(0, 0, R * 1.3, 0, 6.283); og.fill(); return; } if (k < 0.55) { const t = (k - 0.12) / 0.43, cy = -R * 0.6 * t, cr = R * (0.5 + 0.5 * t); og.fillStyle = PAPER_C; og.beginPath(); for (let i = 0; i < 7; i++) { const a = Math.PI + i / 6 * Math.PI; og.arc(Math.cos(a) * cr * 0.8, cy + Math.sin(a) * cr * 0.6, cr * 0.32, 0, 6.283); } og.fill(); og.beginPath(); for (let i = 0; i < 7; i++) { const a = Math.PI + i / 6 * Math.PI; og.moveTo(Math.cos(a) * cr * 0.8 + cr * 0.32, cy + Math.sin(a) * cr * 0.6); og.arc(Math.cos(a) * cr * 0.8, cy + Math.sin(a) * cr * 0.6, cr * 0.32, 0, 6.283); } og.stroke(); og.beginPath(); og.moveTo(-cr * 0.25, 0); og.lineTo(-cr * 0.2, cy); og.moveTo(cr * 0.25, 0); og.lineTo(cr * 0.2, cy); og.stroke(); return; } const t = (k - 0.55) / 0.45; for (let i = 0; i < (mz ? 2 : 4); i++) { const a = rr(i) * 6.283, d = R * (0.3 + 0.6 * t) * (0.5 + rr(i + 9)), pr = R * 0.3 * (1 - t) * (0.7 + 0.6 * rr(i + 19)); if (pr < 1) continue; const px = Math.cos(a) * d, py = -R * 0.6 - R * 0.8 * t + Math.sin(a) * d * 0.5; og.fillStyle = PAPER_C; og.beginPath(); og.arc(px, py, pr, 0, 6.283); og.fill(); og.beginPath(); og.arc(px, py, pr, 0, 6.283); og.stroke(); } },
+      // 31 Scratch: quick scratchy strokes every way, and bits of debris thrown clear.
+      31(R, k, grow, fade, seed, mz) { const rr = i => rnd(seed, i), n = mz ? 10 : 34; og.strokeStyle = INK_C; og.lineCap = 'round'; for (let i = 0; i < n; i++) { const a = rr(i) * 6.283, d = R * 0.9 * rr(i + 50) * grow, len = R * (0.15 + 0.45 * rr(i + 100)), b = rr(i + 150) * 6.283; og.lineWidth = Math.max(0.6, R * (0.006 + 0.018 * rr(i + 200))); og.beginPath(); og.moveTo(Math.cos(a) * d, Math.sin(a) * d); og.lineTo(Math.cos(a) * d + Math.cos(b) * len, Math.sin(a) * d + Math.sin(b) * len); og.stroke(); } og.fillStyle = INK_C; for (let i = 0; i < (mz ? 3 : 12); i++) { const a = rr(i + 300) * 6.283, d = R * (1.0 + 1.2 * k) * (0.5 + 0.5 * rr(i + 400)); og.beginPath(); og.arc(Math.cos(a) * d, Math.sin(a) * d * 0.8 - R * 0.6 * k * rr(i + 500), Math.max(0.8, R * 0.025), 0, 6.283); og.fill(); } },
+      // 32 Ring and skirt: a thin blast ring running out, a low hatched skirt of dust spreading, and a stem.
+      32(R, k, grow, fade, seed, mz) { og.strokeStyle = INK_C; og.lineWidth = Math.max(0.8, R * 0.012); og.beginPath(); og.arc(0, 0, R * (0.4 + 1.3 * k), 0, 6.283); og.stroke(); const w = R * (0.6 + 0.9 * k), h = w * 0.35; og.save(); og.beginPath(); og.ellipse(0, R * 0.1, w, h, 0, 0, 6.283); og.clip(); og.lineWidth = Math.max(0.6, R * 0.008); og.globalAlpha = fade * 0.7; og.beginPath(); for (let x = -w; x <= w; x += Math.max(2.5, R * 0.06)) { og.moveTo(x - h, R * 0.1 + h); og.lineTo(x + h, R * 0.1 - h); } og.stroke(); og.restore(); og.globalAlpha = fade; og.beginPath(); og.ellipse(0, R * 0.1, w, h, 0, 0, 6.283); og.stroke(); if (!mz) { og.beginPath(); for (let i = -1; i <= 1; i++) { og.moveTo(i * R * 0.12, 0); og.lineTo(i * R * 0.18, -R * (0.6 + 0.6 * k)); } og.stroke(); } },
+      // 24 Fragments: small asterisks flung outward, the pieces of what went up.
+      24(R, k, grow, fade, seed, mz) { const rr = i => rnd(seed, i), n = mz ? 4 : 14; og.strokeStyle = INK_C; og.lineCap = 'round'; og.lineWidth = Math.max(0.8, R * 0.012); for (let i = 0; i < n; i++) { const a = rr(i) * 6.283, d = R * (0.5 + 0.9 * rr(i + 9)) * grow, s2 = R * (0.06 + 0.06 * rr(i + 19)), cx = Math.cos(a) * d, cy = Math.sin(a) * d * 0.8 - R * 0.3 * k; og.beginPath(); for (let j = 0; j < 3; j++) { const b = j * 1.047 + rr(i + 29); og.moveTo(cx - Math.cos(b) * s2, cy - Math.sin(b) * s2); og.lineTo(cx + Math.cos(b) * s2, cy + Math.sin(b) * s2); } og.stroke(); } },
+    };
+    // A study of fixed points for orders, after Rainbow Six: the places on the land a squad would be sent to hold,
+    // found once from the map. Each has a kind, and a way it faces.
+    let tacCache = null;
+    function tacPoints(s) {
+      const M = s.map;
+      if (tacCache && tacCache.seed === M.seed) return tacCache.pts;
+      const pts = [], put = (x, y, kind, dir) => { if (x > 1 && y > 1 && x < W - 1 && y < H - 1) pts.push({ x, y, kind, dir }); };
+      // The corners of each house's yard, where a wall or fence gives cover on two sides.
+      for (const h of M.houses) for (const [cx, cy, dx, dy] of [[h.x, h.y, -1, -1], [h.x + h.w, h.y, 1, -1], [h.x + h.w, h.y + h.h, 1, 1], [h.x, h.y + h.h, -1, 1]]) put(cx + dx * 1.6, cy + dy * 1.6, 'wall', Math.atan2(dy, dx));
+      // Both ends of every bridge, and both banks of every ford.
+      for (const b of M.bridges) { put(b.x0 - b.ux * 2.2, b.y0 - b.uy * 2.2, 'bridge', Math.atan2(b.uy, b.ux)); put(b.x1 + b.ux * 2.2, b.y1 + b.uy * 2.2, 'bridge', Math.atan2(-b.uy, -b.ux)); }
+      for (const [fx, fy, dx, dy] of M.fords) { put(fx + dx * 3.6, fy + dy * 3.6, 'ford', Math.atan2(-dy, -dx)); put(fx - dx * 3.6, fy - dy * 3.6, 'ford', Math.atan2(dy, dx)); }
+      // The edge of a wood: a tree with few neighbours on one side, kept a stride apart from the next.
+      const trees = M.scatter.filter(o => o.k === 'tree'), edge = [];
+      for (const t of trees) {
+        let n = 0, sx = 0, sy = 0;
+        for (const u of trees) if (u !== t && Math.hypot(u.x - t.x, u.y - t.y) < 3.4) { n++; sx += u.x - t.x; sy += u.y - t.y; }
+        if (n >= 1 && n <= 4 && !edge.some(e => Math.hypot(e.x - t.x, e.y - t.y) < 3.5)) { const a = Math.atan2(-sy, -sx); edge.push(t); put(t.x + Math.cos(a) * 1.4, t.y + Math.sin(a) * 1.4, 'wood', a); }
+      }
+      for (const r of M.scatter) if (r.k === 'rock' && r.s > 0.9) put(r.x + 1.2, r.y + 1.0, 'rock', 0.8);
+      // Crests: a spot higher than all the ground within six strides, by more than a man's height.
+      for (let y = 4; y < H - 4; y += 3) for (let x = 4; x < W - 4; x += 3) {
+        const h0 = terrainAt(M, x, y); let top = true, low = h0;
+        for (let dy = -6; dy <= 6 && top; dy += 2) for (let dx = -6; dx <= 6; dx += 2) { if (!dx && !dy) continue; const h = terrainAt(M, clamp(x + dx, 0, W), clamp(y + dy, 0, H)); if (h > h0) { top = false; break; } low = Math.min(low, h); }
+        if (top && h0 - low > 0.9 && h0 > s.map.water + 0.5) put(x, y, 'crest', 0);
+      }
+      tacCache = { seed: M.seed, pts };
+      return pts;
+    }
+    const TAC_NAMES = { wall: 'hold the yard corner', bridge: 'hold the bridge end', ford: 'cover the ford', wood: 'lie in the tree line', rock: 'take cover at the rock', crest: 'overwatch from the crest' };
+    function tacSymbol(kind, px, py, r, dir) {
+      og.beginPath();
+      if (kind === 'wall') { og.moveTo(px - r, py + r * 0.2); og.lineTo(px - r, py - r); og.lineTo(px + r * 0.2, py - r); }
+      else if (kind === 'bridge') { og.moveTo(px - r * 0.4, py - r); og.lineTo(px - r * 0.4, py + r); og.moveTo(px + r * 0.4, py - r); og.lineTo(px + r * 0.4, py + r); }
+      else if (kind === 'ford') { og.moveTo(px - r, py); og.quadraticCurveTo(px - r * 0.5, py - r, px, py); og.quadraticCurveTo(px + r * 0.5, py + r, px + r, py); }
+      else if (kind === 'wood') { for (let i = -1; i <= 1; i++) { og.moveTo(px + i * r * 0.7, py + r); og.lineTo(px + i * r * 0.7, py - r * (i ? 0.6 : 1)); } }
+      else if (kind === 'rock') { og.moveTo(px - r, py + r * 0.7); og.lineTo(px, py - r); og.lineTo(px + r, py + r * 0.7); og.closePath(); }
+      else { og.moveTo(px - r, py + r * 0.6); og.lineTo(px, py - r); og.lineTo(px + r, py + r * 0.6); }
+      og.stroke();
+    }
+    function drawTactical(s, t) {
+      const v = world.style.tac, inf = state.sel.filter(e => !e.b && e.team === t && e.d && e.d.men);
+      if (!inf.length) return;
+      const pts = tacPoints(s), m = state.mouse, SEP = '#5a4636';
+      let best = null, bd = 1e9;
+      og.save(); og.setLineDash([]); og.lineCap = 'round'; og.lineJoin = 'round';
+      for (const q of pts) {
+        const [px, py] = world.project(q.x, terrainAt(s.map, q.x, q.y) + 0.05, q.y);
+        if (!onView(px, py, 20)) continue;
+        q.px = px; q.py = py;
+        const dm = Math.hypot(px - m.x, py - m.y);
+        if (dm < bd) { bd = dm; best = q; }
+      }
+      for (const q of pts) {
+        if (q.px === undefined || !onView(q.px, q.py, 20)) continue;
+        const dm = Math.hypot(q.px - m.x, q.py - m.y), u = world.ppu(q.x, 0, q.y);
+        let a = 0.85;
+        if (v === 2) { a = 1 - smoothstepJ(u * 5, u * 9, dm); if (a <= 0) continue; }
+        og.globalAlpha = a; og.strokeStyle = SEP; og.lineWidth = 1.4;
+        tacSymbol(q.kind, q.px, q.py, 6, q.dir);
+        og.fillStyle = SEP; og.beginPath(); og.arc(q.px, q.py + 9, 1.2, 0, 6.283); og.fill();
+        if (v === 3) {
+          // The arc the point faces, as a light hatch between two radii.
+          const r = u * 5, a0 = q.dir - 0.6, a1 = q.dir + 0.6;
+          og.save(); og.globalAlpha = a * 0.5; og.beginPath(); og.moveTo(q.px, q.py); og.arc(q.px, q.py, r, a0, a1); og.closePath(); og.clip();
+          og.lineWidth = 0.8; og.beginPath(); for (let h = -r; h <= r; h += 4) { og.moveTo(q.px + h - r, q.py + r); og.lineTo(q.px + h + r, q.py - r); } og.stroke(); og.restore();
+          og.beginPath(); og.arc(q.px, q.py, r, a0, a1); og.stroke();
+        }
+      }
+      og.globalAlpha = 1;
+      if (best && bd < 60) {
+        // The snapped point: a dashed ring, the order line from the squad, and what the order would be.
+        og.strokeStyle = PLAN; og.setLineDash([3, 3]); og.lineWidth = 1.5; og.beginPath(); og.arc(best.px, best.py, 13, 0, 6.283); og.stroke();
+        const e = inf[0], [ex, ey] = world.project(e.x, terrainAt(s.map, e.x, e.y) + 0.3, e.y);
+        dotted(); og.strokeStyle = PLAN; og.beginPath(); og.moveTo(ex, ey); og.lineTo(best.px, best.py); og.stroke();
+        og.setLineDash([]); og.font = 'italic 14px "IM Fell English", Georgia, serif'; og.fillStyle = '#1a1512'; og.textAlign = 'left'; og.textBaseline = 'middle';
+        const label = TAC_NAMES[best.kind], tw = og.measureText(label).width;
+        og.fillStyle = 'rgba(243,236,220,0.9)'; og.fillRect(best.px + 16, best.py - 10, tw + 10, 20);
+        og.fillStyle = '#1a1512'; og.fillText(label, best.px + 21, best.py);
+      }
+      og.restore();
+    }
+    const smoothstepJ = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
     function drawInk(s, t) {
+      // The blasts, in the manner the look asks for: 0 the comic burst, 1 an engraver's rays and scribbled smoke, 2 an
+      // ink blot with flung drops, 3 a plan's dashed circle of the blast, 4 nothing drawn over the scene.
+      const INKC = '#1a1512', PAPERC = '#f3ecdc';
       for (const f of world.inkFx) {
+        // A burst carries the style of what went up; a muzzle flash is always a few rays.
+        const fx = f.k === 'star' ? 1 : f.fx !== undefined ? f.fx : (world.style.fx || 0);
+        if (fx === 4) continue;
         const [x, y] = world.project(f.x, f.y, f.z);
         if (x < -60 || y < -60 || x > world.vw + 60 || y > world.vh + 60) continue;
         const u = world.ppu(f.x, f.y, f.z), k = f.t / f.life, grow = Math.min(1, k / 0.25), fade = k > 0.7 ? 1 - (k - 0.7) / 0.3 : 1;
+        const muzzle = f.k === 'star', R = muzzle ? f.s * u * (0.5 + 0.5 * grow) : Math.min(f.s * u * 0.95, 140) * (0.4 + 0.6 * grow);
+        if (!(R > 0.5)) continue;
         og.globalAlpha = fade;
-        if (f.k === 'star') star(x, y, f.s * u * (0.5 + 0.5 * grow), f.seed, 6, '#ff9a1e', '#ffe680', 0);
-        else star(x, y, Math.min(f.s * u * 0.95, 140) * (0.4 + 0.6 * grow), f.seed, 9, '#e8471c', '#ffd84a', 10);
+        if (fx === 0) { if (muzzle) star(x, y, R, f.seed, 6, '#ff9a1e', '#ffe680', 0); else star(x, y, R, f.seed, 9, '#e8471c', '#ffd84a', 10); }
+        else if (fx === 1) {
+          og.save(); og.translate(x, y); og.strokeStyle = INKC; og.lineCap = 'round';
+          if (!muzzle) { og.fillStyle = PAPERC; og.beginPath(); og.arc(0, 0, R * 0.32, 0, 6.283); og.fill(); }
+          const n = muzzle ? 4 : 16;
+          for (let i = 0; i < n; i++) {
+            const a = i / n * 6.283 + f.seed + rnd(f.seed, i) * 0.25, r0 = R * (muzzle ? 0.2 : 0.36 + 0.1 * rnd(f.seed, i + 3)), r1 = r0 + R * (muzzle ? 0.9 : 0.5 + 0.9 * rnd(f.seed, i + 9)) * (0.6 + 0.4 * grow);
+            og.lineWidth = Math.max(1, R * (i % 2 ? 0.012 : 0.02)); og.beginPath(); og.moveTo(Math.cos(a) * r0, Math.sin(a) * r0); og.lineTo(Math.cos(a) * r1, Math.sin(a) * r1); og.stroke();
+          }
+          // Smoke as an engraver scribbles it: loops piled above the burst, rising as it dies.
+          if (!muzzle && k > 0.2) {
+            og.lineWidth = Math.max(0.8, R * 0.01); og.globalAlpha = fade * 0.8;
+            for (let i = 0; i < 6; i++) { const q = rnd(f.seed, i + 20), cx = (q - 0.5) * R * 0.9, cy = -R * (0.3 + 0.9 * k) - rnd(f.seed, i + 30) * R * 0.5, rr = R * (0.18 + 0.2 * rnd(f.seed, i + 40)) * (0.5 + k);
+              og.beginPath(); for (let j = 0; j < 3; j++) og.ellipse(cx + (rnd(f.seed, i * 3 + j) - 0.5) * rr * 0.5, cy + (rnd(f.seed, i * 5 + j) - 0.5) * rr * 0.3, rr, rr * 0.7, j, 0, 6.283); og.stroke(); }
+          }
+          og.restore();
+        } else if (fx === 2) {
+          og.save(); og.translate(x, y);
+          const g = og.createRadialGradient(0, 0, 0, 0, 0, R * 1.3);
+          g.addColorStop(0, 'rgba(40,32,26,0.1)'); g.addColorStop(0.35, 'rgba(40,32,26,0.55)'); g.addColorStop(1, 'rgba(40,32,26,0)');
+          og.fillStyle = g; og.beginPath(); og.arc(0, 0, R * 1.3, 0, 6.283); og.fill();
+          if (!muzzle) { og.fillStyle = PAPERC; og.globalAlpha = fade * (1 - grow * 0.6); og.beginPath(); og.arc(0, 0, R * 0.25, 0, 6.283); og.fill(); og.globalAlpha = fade; }
+          og.fillStyle = 'rgba(40,32,26,0.8)';
+          for (let i = 0; i < (muzzle ? 3 : 9); i++) { const a = rnd(f.seed, i) * 6.283, d = R * (1.1 + 0.9 * rnd(f.seed, i + 11)) * grow, rr = R * (0.03 + 0.05 * rnd(f.seed, i + 23)); og.beginPath(); og.arc(Math.cos(a) * d, Math.sin(a) * d, rr, 0, 6.283); og.fill(); }
+          og.restore();
+        } else if (fx === 3) {
+          og.save(); og.translate(x, y); og.strokeStyle = INKC; og.lineWidth = Math.max(1, R * 0.012); og.lineCap = 'butt';
+          og.setLineDash([Math.max(2, R * 0.08), Math.max(2, R * 0.06)]); og.beginPath(); og.arc(0, 0, R, 0, 6.283); og.stroke();
+          if (!muzzle) { og.setLineDash([1, Math.max(2, R * 0.05)]); og.beginPath(); og.arc(0, 0, R * 0.5, 0, 6.283); og.stroke(); }
+          og.setLineDash([]);
+          for (let i = 0; i < 8; i++) { const a = i / 8 * 6.283; og.beginPath(); og.moveTo(Math.cos(a) * R * 0.92, Math.sin(a) * R * 0.92); og.lineTo(Math.cos(a) * R * 1.1, Math.sin(a) * R * 1.1); og.stroke(); }
+          const c = R * 0.14; og.lineWidth = Math.max(1, R * 0.02); og.beginPath(); og.moveTo(-c, -c); og.lineTo(c, c); og.moveTo(c, -c); og.lineTo(-c, c); og.stroke();
+          og.restore();
+        } else if (BLAST[fx]) {
+          og.save(); og.translate(x, y); og.lineJoin = 'round'; og.setLineDash([]);
+          BLAST[fx](R, k, grow, fade, f.seed, muzzle);
+          og.restore();
+        }
         og.globalAlpha = 1;
       }
       if (world.cam.dist > 140) return;
@@ -7719,9 +7951,11 @@ const Hud = (() => {
           og.quadraticCurveTo(x + w * 0.6, y + h * 0.12, x - w, y); og.closePath();
           og.fillStyle = col; og.fill(); if (lw) { og.lineWidth = lw; og.stroke(); }
         };
-        tongue(u * 0.95, u * 0.42, '#d8401c', Math.max(1, u * 0.05));
-        tongue(u * 0.62, u * 0.3, '#f5891e', 0);
-        tongue(u * 0.32, u * 0.17, '#ffd84a', 0);
+        // Flames in the look's manner: filled bands, flicks of line alone, or a warm wash.
+        const fx = world.style.fx || 0;
+        if (fx === 0) { tongue(u * 0.95, u * 0.42, '#d8401c', Math.max(1, u * 0.05)); tongue(u * 0.62, u * 0.3, '#f5891e', 0); tongue(u * 0.32, u * 0.17, '#ffd84a', 0); }
+        else if (WASHY.has(fx)) { tongue(u * 0.95, u * 0.42, 'rgba(232,110,40,0.45)', 0); tongue(u * 0.55, u * 0.26, 'rgba(255,200,90,0.6)', 0); }
+        else { tongue(u * 0.95, u * 0.42, 'rgba(0,0,0,0)', Math.max(1, u * 0.05)); tongue(u * 0.55, u * 0.22, 'rgba(0,0,0,0)', Math.max(0.8, u * 0.035)); }
       }
       og.restore();
     }
@@ -7923,7 +8157,7 @@ const Hud = (() => {
         for (const o of world.onScreen) if (o.e.team !== t && (o.e === hv || Rules.gap(hv.x, hv.y, o.e) <= STRIKE_R) && Rules.seenBy(s, t, o.e)) brackets(o.x, o.y, Math.max(9, o.e.b ? Math.max(o.e.w, o.e.h) * o.scale * 0.5 : o.r * 1.3), o.e === hv, o.e === hv ? '#ff5a40' : 'rgba(255,110,80,0.85)');
       }
 
-      if (inked()) { drawGhostPlan(s, t, selected); drawKey(); drawInk(s, t); }
+      if (inked()) { drawGhostPlan(s, t, selected); drawKey(); drawInk(s, t); if (world.style.tac) drawTactical(s, t); }
       drawBridges(s, t); drawFires(); drawBirds(); drawLightning(dt);
       if (game.playing) { drawSkyNote(s); drawGroundTip(s, dt); }
 
