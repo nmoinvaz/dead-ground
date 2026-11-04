@@ -129,9 +129,14 @@ const Rules = (() => {
   const DIFFICULTY = {
     // tech1 and tech2 are the minutes before reaching for Tech II and Tech III. gap is seconds between powers.
     // ramp caps the army at ramp[0] units plus ramp[1] a minute. def is the most defences it builds.
+    // delay is the seconds before the first wave. raid, if set, is how long a wave stays out before it goes
+    // home. pulse, if set, says whether units built during a wave guard home instead of joining it.
     recruit: { think: 4, income: 0.55, wave: 2600, grow: 300, delay: 720, power: false, tech: 2, apm: 1, tech1: 12, tech2: 99, gap: 90, silo: false, ramp: [4, 0.8], def: 2, name: 'Recruit' },
-    regular: { think: 3, income: 0.7, wave: 2600, grow: 400, delay: 600, power: true, tech: 3, apm: 2, tech1: 10, tech2: 22, gap: 120, silo: false, ramp: [5, 1.2], def: 3, name: 'Regular' },
-    veteran: { think: 0.75, income: 1.25, wave: 1500, grow: 1100, delay: 110, power: true, tech: 3, apm: 8, tech1: 3, tech2: 8, gap: 20, silo: true, def: 8, name: 'Veteran' },
+    regular: { think: 3, income: 0.7, wave: 2600, grow: 400, delay: 420, power: true, tech: 3, apm: 2, tech1: 8, tech2: 22, gap: 120, silo: false, ramp: [6, 1.6], def: 3, name: 'Regular' },
+    veteran: { think: 0.75, income: 1.25, wave: 1500, grow: 1100, delay: 360, power: true, tech: 3, apm: 8, tech1: 3, tech2: 8, gap: 20, silo: true, ramp: [8, 3], def: 8, name: 'Veteran' },
+    // The shared world's commanders: a Regular with the patience of the old one, so a newcomer beside seven of
+    // them can get going, and waves that leave home guarded.
+    world: { think: 3, income: 0.7, wave: 2600, grow: 400, delay: 600, power: true, tech: 3, apm: 2, tech1: 10, tech2: 22, gap: 120, silo: false, ramp: [5, 1.2], def: 3, pulse: true, name: 'Regular' },
     // Holds a player's base while they are away: builds and defends, never sets out.
     keeper: { think: 3, income: 1, wave: 1e9, grow: 0, delay: 1e9, power: false, tech: 2, apm: 2, tech1: 10, tech2: 99, gap: 90, silo: false, ramp: [8, 1], def: 6, stay: true, name: 'Keeper' },
   };

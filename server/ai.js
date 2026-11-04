@@ -251,9 +251,10 @@ const AI = (() => {
     if (!me.D.power || !has(P, 'radar') || S.tick - me.lastPower < me.D.gap * HZ) return;
     // An easier commander calls no powers before Tech II.
     if (me.level !== 'veteran' && P.tech < 2) return;
-    // A strike goes where the most of the other side has been seen together.
+    // A strike goes where the most of the other side has been seen together. A shielded commander, a
+    // newcomer's slot, makes no strike, since any would end its own shield.
     const foes = S.ents.filter(e => e.team !== me.team && R.seenBy(S, me.team, e) && !((S.P[e.team].shield || 0) > S.tick));
-    if (foes.length) {
+    if (foes.length && !R.shielded(S, me.team)) {
       let best = null, top = 0;
       for (const f of foes) {
         let n = 0;
@@ -341,36 +342,49 @@ const AI = (() => {
     defendTowns(S, me, fight);
     defendBridges(S, me, fight);
 
+    // In the world a wave is the army that set out, and what is built meanwhile guards home, so no slot
+    // streams everything into one war while a second neighbour walks in. A duel presses on with every unit.
+    // A level's `pulse` overrides that choice.
+    const wave = me.waveIds ? fight.filter(u => me.waveIds.includes(u.id)) : fight;
+    const guard = me.waveIds ? fight.filter(u => !me.waveIds.includes(u.id)) : [];
     if (me.state === 'attack') {
-      if (strength < me.startStrength * 0.3 || !fight.length) {
-        me.state = 'build'; me.waves++;
-        const ids = fight.map(u => u.id);
+      const ws = wave.reduce((a, u) => a + value(u), 0);
+      // A wave ends when it has lost most of its worth, or when its raid time is up at a level that has one.
+      if (ws < me.startStrength * 0.3 || !wave.length || (me.D.raid && S.tick >= me.attackUntil)) {
+        me.state = 'build'; me.waves++; me.waveIds = null;
+        const ids = wave.map(u => u.id);
         if (ids.length) R.push(S, team, { c: 'move', ids, x: me.gather[0], y: me.gather[1] });
       } else if (S.tick >= me.attackT) {
         me.attackT = S.tick + 12 * HZ;
         me.target = pickTarget(S, me);
-        if (!me.target) { me.state = 'build'; return; }
-        const ids = fight.filter(u => !u.tgt).map(u => u.id);
+        if (!me.target) { me.state = 'build'; me.waveIds = null; return; }
+        const ids = wave.filter(u => !u.tgt).map(u => u.id);
         if (ids.length) R.push(S, team, { c: 'move', ids, x: me.target[0], y: me.target[1], a: true });
       }
+      gatherAt(S, me, guard, foe);
       return;
     }
     me.gather = [R.lerp(b[0], foe[0], 0.22), R.lerp(b[1], foe[1], 0.22)];
-    if (S.tick % (8 * HZ) < me.D.think * HZ) {
-      // Infantry wait in cover round the gathering place, facing the enemy, and the rest in the open.
-      const dg = u => Math.hypot(u.x - me.gather[0], u.y - me.gather[1]);
-      const idle = fight.filter(u => !u.ord && !u.tgt && (dg(u) > 8 || (u.d.men && u.cov < 0)) && !(u.cov >= 0 && dg(u) < 16));
-      const held = new Set(toCover(S, me, idle.filter(u => u.d.men), me.gather[0], me.gather[1], foe[0], foe[1], 12, 10 * me.D.apm).map(u => u.id));
-      const ids = idle.filter(u => !held.has(u.id) && dg(u) > 8).map(u => u.id);
-      if (ids.length) R.push(S, team, { c: 'move', ids, x: me.gather[0], y: me.gather[1], a: true });
-    }
+    gatherAt(S, me, fight, foe);
     const need = me.D.wave + me.D.grow * me.waves;
     // A keeper holds a player's base while they are away and never sets out.
     if (me.D.stay || foeTeam < 0) return;
     if (m >= me.D.delay && strength >= need) {
-      me.state = 'attack'; me.startStrength = strength; me.attackT = S.tick;
+      me.state = 'attack'; me.startStrength = strength; me.attackT = S.tick; me.attackUntil = S.tick + (me.D.raid || 0) * HZ;
+      me.waveIds = (me.D.pulse !== undefined ? me.D.pulse : S.layout !== 'duel') ? fight.map(u => u.id) : null;
       S.ev.push({ t: 'wave', team, n: me.waves + 1 });
     }
+  }
+
+  // Idle units gather at the rally point now and then. Infantry wait in cover round it, facing the enemy,
+  // and the rest in the open.
+  function gatherAt(S, me, units, foe) {
+    if (S.tick % (8 * HZ) >= me.D.think * HZ) return;
+    const dg = u => Math.hypot(u.x - me.gather[0], u.y - me.gather[1]);
+    const idle = units.filter(u => !u.ord && !u.tgt && (dg(u) > 8 || (u.d.men && u.cov < 0)) && !(u.cov >= 0 && dg(u) < 16));
+    const held = new Set(toCover(S, me, idle.filter(u => u.d.men), me.gather[0], me.gather[1], foe[0], foe[1], 12, 10 * me.D.apm).map(u => u.id));
+    const ids = idle.filter(u => !held.has(u.id) && dg(u) > 8).map(u => u.id);
+    if (ids.length) R.push(S, me.team, { c: 'move', ids, x: me.gather[0], y: me.gather[1], a: true });
   }
 
   // What a commander remembers, for a saved game: its plain fields and where its dice stand.

@@ -10,7 +10,7 @@ const HZ = R.HZ, SEED = 4;
 // A newcomer's base cannot attack or be attacked for ten minutes. A player away for two hours gives up
 // the slot. A computer's fallen base comes back after a minute.
 const SHIELD = 600, AWAY = 2 * 3600 * 1000, RESPAWN = 60;
-const LEVEL = 'regular';
+const LEVEL = 'world';
 
 // The commands a player may send and the fields each takes. 'restart', 'raze' and 'income' are the
 // server's own and never come from a player.
@@ -187,7 +187,7 @@ export class World {
         if (!this.respawnAt[t]) this.respawnAt[t] = S.tick + RESPAWN * HZ;
         else if (S.tick >= this.respawnAt[t]) {
           this.respawnAt[t] = 0;
-          this.pending.push({ team: t, c: { c: 'restart', shield: 0 }, at: S.tick }, { team: t, c: { c: 'income', v: R.DIFFICULTY[LEVEL].income }, at: S.tick });
+          this.pending.push({ team: t, c: { c: 'restart', shield: 240 }, at: S.tick }, { team: t, c: { c: 'income', v: R.DIFFICULTY[LEVEL].income }, at: S.tick });
           this.ais[t] = AI.create(t, LEVEL, S.seed + t + S.tick);
           changed = true;
         }
