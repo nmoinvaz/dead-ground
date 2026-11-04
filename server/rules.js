@@ -128,6 +128,14 @@ const Rules = (() => {
   // Each change of a track makes the shared ways be worked out again, so tracks change only every 45 seconds.
   const TRACK_COST = TRACK_GO.map(g => 1 / g), TRACK_EVERY = 45 * HZ;
 
+  // The record kept for the closing report. Each side's figures are sampled every HIST_EVERY ticks. At HIST_MAX
+  // samples every other one goes and the gap doubles, so a long game's record stays small.
+  const HIST_EVERY = 10 * HZ, HIST_MAX = 240;
+  // What a thing is worth, with oil at four times supply, as it is that much scarcer.
+  const worth = d => (d.cost || 0) + 4 * (d.oil || 0);
+  // The points a tech level is worth, from what reaching it costs.
+  const TECH_PTS = [0, 0, worth(TECH[2]) / 10, (worth(TECH[2]) + worth(TECH[3])) / 10];
+
   // A bridge stands this much damage. A house stands less, more for each floor.
   const BRIDGE_HP = 1500;
   const houseHp = h => 260 + 220 * h.floors;
@@ -680,11 +688,15 @@ const Rules = (() => {
   const sky = S => S._wx && S._wx.at === S.tick ? S._wx : (S._wx = Object.assign(weatherAt(S.seed, S.tick), { at: S.tick }));
   // The time of day, from 0 at dawn round to 1. A day lasts twenty minutes and a game starts early in the morning.
   const dayAt = t => (t / (HZ * 1200) + 0.03) % 1;
+  // A side's running totals. made, lost, killed and razed count units and buildings. mined is supply from
+  // trucks, townIn supply from towns and oilIn oil from towns and derricks. killV and lostV are the worth of
+  // what was destroyed. inf, veh and air count units made by kind, and built the buildings placed.
+  const freshStats = () => ({ made: 0, lost: 0, blost: 0, killed: 0, razed: 0, mined: 0, townIn: 0, oilIn: 0, spent: 0, spentOil: 0, killV: 0, lostV: 0, inf: 0, veh: 0, air: 0, built: 0 });
   function freshPlayer(team, o = {}) {
     return {
       team, supply: o.supply || 3500, oil: o.oil || 250, tech: 1, income: 1, carried: 0,
       q: { bld: [], def: [], inf: [], veh: [], air: [], tech: [] }, prod: 0, use: 0, low: false, vis: new Uint8Array(N), seen: new Uint8Array(N),
-      counts: {}, cooldown: { uav: 0, barrage: 0, para: 0 }, stats: { made: 0, lost: 0, killed: 0, razed: 0, mined: 0 }, spoke: {}, hints: {}, exposed: false,
+      counts: {}, cooldown: { uav: 0, barrage: 0, para: 0 }, stats: freshStats(), spoke: {}, hints: {}, exposed: false,
       silo: 0, alive: true, shield: 0, born: 0,
     };
   }
@@ -724,6 +736,7 @@ const Rules = (() => {
       if (!seats.includes(t)) { P.alive = false; P.out = true; }
       S.P.push(P); S.infl.push(new Float32Array(N));
     }
+    S.hist = freshHist(S);
     for (const m of M.towns) m.owner = -1;
     S.towns = M.towns.map(t => Object.assign({}, t));
     if (!o.empty) for (const t of seats) spawnBase(S, t);
@@ -731,6 +744,54 @@ const Rules = (() => {
     recount(S);
     vision(S);
     return S;
+  }
+
+  // The game's record. t holds the sample ticks. P holds each seated side's series, one value per sample: score,
+  // army worth, units, buildings, land in tenths of a percent, supply and oil earned, towns held and the worth
+  // destroyed. war holds, per sample, the fighting since the last as flat triples of attacker, target and
+  // damage, which acc gathers meanwhile. marks are the moments worth showing on the timeline.
+  const SERIES = ['sc', 'ar', 'un', 'bl', 'ld', 'su', 'oi', 'tw', 'kv'];
+  function freshHist(S) {
+    const P = S.P.map(p => p.out ? null : Object.fromEntries(SERIES.map(k => [k, []])));
+    return { every: HIST_EVERY, t: [], P, war: [], acc: {}, marks: [] };
+  }
+  // A side's score in four parts, after Age of Empires. Military is a tenth of the worth it destroyed, economy a
+  // twentieth of what it earned, technology the worth of its tech levels, and territory its towns and land.
+  function scoreOf(S, team, land) {
+    const P = S.P[team], s = P.stats;
+    if (land === undefined) { land = 0; for (let c = 0; c < N; c++) if (S.terr[c] === team) land++; }
+    const towns = S.towns.reduce((n, t) => n + (t.owner === team), 0);
+    const mil = s.killV / 10, eco = (s.mined + s.townIn + 4 * s.oilIn) / 20, tec = TECH_PTS[P.tech] || 0, ter = towns * 40 + land * 1000 / N;
+    return { mil: Math.round(mil), eco: Math.round(eco), tec: Math.round(tec), ter: Math.round(ter), total: Math.round(mil + eco + tec + ter), land: Math.round(land * 1000 / N), towns };
+  }
+  function mark(S, team, k, v) { if (S.hist) S.hist.marks.push(v === undefined ? { t: S.tick, team, k } : { t: S.tick, team, k, v }); }
+  // Samples every side's figures when the gap has passed, or now when forced, at the game's end.
+  function record(S, force) {
+    const h = S.hist, last = h.t.length ? h.t[h.t.length - 1] : -Infinity;
+    if (last === S.tick || (!force && S.tick - last < h.every)) return;
+    const n = S.P.length, land = new Int32Array(n), un = new Int32Array(n), bl = new Int32Array(n), ar = new Float64Array(n);
+    for (let c = 0; c < N; c++) if (S.terr[c] >= 0) land[S.terr[c]]++;
+    for (const e of S.ents) if (e.hp > 0 && e.team >= 0 && e.team < n) { if (e.b) bl[e.team]++; else { un[e.team]++; if (!e.d.cargo) ar[e.team] += worth(e.d); } }
+    h.t.push(S.tick);
+    h.P.forEach((a, t) => {
+      if (!a) return;
+      const s = S.P[t].stats, sc = scoreOf(S, t, land[t]);
+      a.sc.push(sc.total); a.ar.push(Math.round(ar[t])); a.un.push(un[t]); a.bl.push(bl[t]); a.ld.push(sc.land);
+      a.su.push(Math.round(s.mined + s.townIn)); a.oi.push(Math.round(s.oilIn)); a.tw.push(sc.towns); a.kv.push(Math.round(s.killV));
+    });
+    const war = [];
+    for (const k in h.acc) if (h.acc[k] >= 1) war.push(k / n | 0, k % n, Math.round(h.acc[k]));
+    h.war.push(war); h.acc = {};
+    // Past the most samples, every other one goes, its fighting folded into the next one kept.
+    if (h.t.length >= HIST_MAX) {
+      const L = h.t.length, kept = i => i % 2 === 0 || i === L - 1, keep = a => a.filter((_, i) => kept(i));
+      const war2 = [];
+      let carry = [];
+      for (let i = 0; i < h.war.length; i++) if (kept(i)) { war2.push(carry.concat(h.war[i])); carry = []; } else carry.push(...h.war[i]);
+      h.t = keep(h.t); h.war = war2;
+      for (const a of h.P) if (a) for (const k of SERIES) a[k] = keep(a[k]);
+      h.every *= 2;
+    }
   }
 
   // A headquarters and three units at a slot's own place, facing the middle of the map.
@@ -797,7 +858,7 @@ const Rules = (() => {
       P: S.P.map(P => { const o = plain(P); o.vis = bits(P.vis); o.seen = bits(P.seen); o.q = {}; for (const c in P.q) o.q[c] = P.q[c].map(it => { const j = Object.assign({}, it); delete j.cost; return j; }); return o; }),
       // The ground and the trees as pairs of cell and value, only where they differ from the map's start.
       gnd: diffs(S.gnd, S.map.ground), wood: diffs(S.wood, null), gndVer: S.gndVer, woodVer: S.woodVer, burn: S.burn, bridges: S.bridges, hh: S.hh, flooded: S.flooded,
-      trail: b64.en(S.trail), trailSum: S.trailSum,
+      trail: b64.en(S.trail), trailSum: S.trailSum, hist: S.hist,
     };
   }
   function diffs(a, base) { const o = []; for (let c = 0; c < a.length; c++) if (a[c] !== (base ? base[c] : 0)) o.push(c, a[c]); return o; }
@@ -810,6 +871,7 @@ const Rules = (() => {
     S.fields = new Map(o.fields.map(([k, v, u, m, r]) => [k, { ver: v, used: u, made: m, reach: r }]));
     S.P = o.P.map(p => {
       const P = Object.assign(freshPlayer(p.team), p);
+      P.stats = Object.assign(freshStats(), p.stats);
       P.vis = unbits(p.vis, N); P.seen = unbits(p.seen, N);
       for (const c in P.q) P.q[c] = p.q[c].map(it => Object.assign({}, it, { cost: c === 'tech' ? TECH[it.level] : (UNITS[it.kind] || BUILDINGS[it.kind]) }));
       return P;
@@ -822,6 +884,8 @@ const Rules = (() => {
     for (let i = 0; i < wd.length; i += 2) S.wood[wd[i]] = wd[i + 1];
     S.gndVer = o.gndVer || 0; S.woodVer = o.woodVer || 0; S.burn = o.burn || []; S.flooded = !!o.flooded;
     if (o.trail) S.trail = new Uint8Array(b64.de(o.trail)); S.trailSum = o.trailSum || 0;
+    // A game saved before the record was kept starts its record now.
+    if (o.hist) S.hist = o.hist;
     if (o.hh && o.hh.length === S.hh.length) S.hh = o.hh.slice();
     if (o.bridges && o.bridges.length === S.bridges.length) S.bridges = o.bridges.map(b => Object.assign({}, b));
     S.bridges.forEach((b, i) => { if (b.hp <= 0) for (const v of S.map.bridges[i].verts) S.map.deck[v] = 0; });
@@ -1334,10 +1398,12 @@ const Rules = (() => {
     else if (!t.b && t.d.cargo) { ownEvent(S, t.team, 'truckattack'); S.ev.push({ t: 'alert', team: t.team, x: t.x, y: t.y }); }
     // A unit under fire with nothing better to do answers it.
     if (!t.b && by && !t.ord && !t.tgt && armed(t)) t.tgt = by;
+    if (team >= 0 && t.team >= 0 && team !== t.team && S.hist) { const k = team * S.P.length + t.team; S.hist.acc[k] = (S.hist.acc[k] || 0) + Math.min(dmg, t.hp + dmg); }
     if (t.hp <= 0) {
       kill(S, t, team);
-      if (S.P[team] && team !== t.team) S.P[team].stats[t.b ? 'razed' : 'killed']++;
-      P.stats.lost++;
+      const w = worth(t.d);
+      if (S.P[team] && team !== t.team) { const s = S.P[team].stats; s[t.b ? 'razed' : 'killed']++; s.killV += w; }
+      P.stats[t.b ? 'blost' : 'lost']++; P.stats.lostV += w;
       reward(S, by, t);
     }
   }
@@ -2075,9 +2141,9 @@ const Rules = (() => {
     if (e.d.weapons) bldTurret(S, e);
     if (e.repairing && e.hp < e.max) {
       const rate = e.max * 0.04 * DT, price = (e.d.cost || 2000) * 0.5 * (rate / e.max);
-      if (P.supply >= price) { P.supply -= price; e.hp = Math.min(e.max, e.hp + rate); }
+      if (P.supply >= price) { P.supply -= price; P.stats.spent += price; e.hp = Math.min(e.max, e.hp + rate); }
     } else e.repairing = false;
-    if (e.kind === 'derrick' && S.tick % HZ === 0) P.oil += e.d.yield * P.income;
+    if (e.kind === 'derrick' && S.tick % HZ === 0) { P.oil += e.d.yield * P.income; P.stats.oilIn += e.d.yield * P.income; }
     if (e.d.charge && !P.low) { e.charge = Math.min(e.d.charge, e.charge + DT); if (e.charge >= e.d.charge && !e.told) { e.told = true; ownEvent(S, e.team, 'siloready'); S.ev.push({ t: 'hint', team: e.team, hint: 'silo' }); } }
     if (e.c4 && S.tick >= e.c4) {
       e.c4 = 0;
@@ -2116,7 +2182,7 @@ const Rules = (() => {
 
   function stepEconomy(S) {
     if (S.tick % HZ === 0) {
-      for (const t of S.towns) if (t.owner >= 0) { const P = S.P[t.owner]; P.supply += 5 * P.income; P.oil += 0.25 * P.income; }
+      for (const t of S.towns) if (t.owner >= 0) { const P = S.P[t.owner]; P.supply += 5 * P.income; P.oil += 0.25 * P.income; P.stats.townIn += 5 * P.income; P.stats.oilIn += 0.25 * P.income; }
     }
     for (const P of S.P) {
       for (const k in P.cooldown) if (P.cooldown[k] > 0) P.cooldown[k] -= DT;
@@ -2133,7 +2199,7 @@ const Rules = (() => {
         const pay = (d.cost || 0) * rate, payOil = (d.oil || 0) * rate;
         if (P.supply < pay || P.oil < payOil) { if (!item.short) { item.short = true; ownEvent(S, P.team, P.supply < pay ? 'nosupply' : 'nooil'); } continue; }
         item.short = false;
-        P.supply -= pay; P.oil -= payOil; item.paid += pay; item.paidOil += payOil;
+        P.supply -= pay; P.oil -= payOil; item.paid += pay; item.paidOil += payOil; P.stats.spent += pay; P.stats.spentOil += payOil;
         item.prog += rate;
         if (item.prog >= 1) {
           item.prog = 1;
@@ -2152,6 +2218,7 @@ const Rules = (() => {
     if (cat === 'tech') {
       P.tech = item.level;
       S.ev.push({ t: 'tech', team: P.team, level: item.level });
+      mark(S, P.team, 'tech', item.level);
       ownEvent(S, P.team, 'newtech');
       return;
     }
@@ -2161,7 +2228,7 @@ const Rules = (() => {
     if (!best) return;
     const [x, y] = exitOf(S, best);
     const kind = item.kind, u = spawn(S, kind, P.team, x, y);
-    P.stats.made++;
+    P.stats.made++; P.stats[u.d.cat === 'air' ? 'air' : u.d.cat === 'veh' ? 'veh' : 'inf']++;
     S.ev.push({ t: 'built', team: P.team, kind, id: u.id, x, y });
     ownEvent(S, P.team, 'unitready');
     if (u.d.move === 'jet') { u.ord = null; return; }
@@ -2305,13 +2372,14 @@ const Rules = (() => {
       if (it && it.prog < 1) it.hold = !it.hold;
     } else if (c.c === 'cancel') {
       const q = P.q[c.cat], it = q[c.i];
-      if (it) { P.supply += it.paid; P.oil += it.paidOil; q.splice(c.i, 1); }
+      if (it) { P.supply += it.paid; P.oil += it.paidOil; P.stats.spent -= it.paid; P.stats.spentOil -= it.paidOil; q.splice(c.i, 1); }
     } else if (c.c === 'place') {
       const d = BUILDINGS[c.kind], q = P.q[d.cat], it = q[0];
       if (!it || it.kind !== c.kind || it.prog < 1) return;
       if (!fits(S, team, c.kind, c.x, c.y)) return;
       q.shift();
       addBuilding(S, c.kind, team, c.x, c.y);
+      P.stats.built++;
       S.ev.push({ t: 'placed', team, kind: c.kind, x: c.x + d.w / 2, y: c.y + d.h / 2 });
     } else if (c.c === 'sell') {
       const e = S.byId.get(c.id);
@@ -2339,6 +2407,7 @@ const Rules = (() => {
       S.P[team].alive = false;
       territory(S); recount(S);
       S.ev.push({ t: 'fallen', team });
+      mark(S, team, 'out');
     } else if (c.c === 'launch') {
       const s = S.ents.find(e => e.b && e.team === team && e.kind === 'silo' && e.hp > 0 && e.charge >= e.d.charge);
       if (!s) return;
@@ -2350,6 +2419,7 @@ const Rules = (() => {
   function launch(S, team, s, x, y) {
     const dur = 11;
     S.ev.push({ t: 'launch', team, x: s.x, y: s.y, tx: x, ty: y, dur });
+    mark(S, team, 'launch');
     for (const P of S.P) if (P.team !== team) { ownEvent(S, P.team, 'missile'); S.ev.push({ t: 'alert', team: P.team, x, y }); }
     S.shots.push({ w: 'nuke', kind: 'nuke', team, by: s.id, t: 0, dur, x, y, tx: x, ty: y, tz: 0 });
   }
@@ -2357,7 +2427,7 @@ const Rules = (() => {
   function callPower(S, team, name, x, y) {
     const P = S.P[team], d = POWERS[name];
     if (!d || P.cooldown[name] > 0 || P.tech < d.tech || !P.counts.radar || P.low || P.supply < d.cost) return;
-    P.supply -= d.cost;
+    P.supply -= d.cost; P.stats.spent += d.cost;
     P.cooldown[name] = d.cd;
     if (name === 'uav') {
       S.sweeps.push({ team, x, y, r: d.r, until: S.tick + d.life * HZ });
@@ -2501,14 +2571,18 @@ const Rules = (() => {
         razeSlot(S, P.team);
         territory(S); recount(S);
         S.ev.push({ t: 'fallen', team: P.team });
+        mark(S, P.team, 'out');
       }
       const left = S.P.filter(P => P.alive);
       if (left.length <= 1) {
         const winner = left.length ? left[0].team : -1;
         S.over = { winner, tick: S.tick };
         S.ev.push({ t: 'over', winner });
+        if (winner >= 0) mark(S, winner, 'won');
+        record(S, true);
       }
     }
+    if (!S.over) record(S);
     S.tick++;
   }
 
@@ -2551,7 +2625,7 @@ const Rules = (() => {
   return {
     HZ, DT, RES, UNITS, BUILDINGS, WEAPONS, TECH, POWERS, DIFFICULTY, LAYOUT, SIZES, MAPS, spread, use,
     get W() { return W; }, get H() { return H; }, get VW() { return VW; }, get VH() { return VH; },
-    newGame, step, push, spawn, addBuilding, pickFrom, fits, spotFor, roomy, blockedReason, near, rehash, seenBy, terrainAt, heightAt, los, isAir, armed, cellOf, summary, exitOf,
+    newGame, step, push, spawn, addBuilding, scoreOf, worth, SERIES, pickFrom, fits, spotFor, roomy, blockedReason, near, rehash, seenBy, terrainAt, heightAt, los, isAir, armed, cellOf, summary, exitOf,
     mulberry, noiser, clamp, lerp, smooth, angleTo, toXY, toUV, gap, setSize, save, load, hashOf, restartSlot, razeSlot, makeMap, mapFor, layoutFor,
     msin, mcos, matan2, mhypot,
     BRIDGE_HP, SPELL, weatherAt, sky, dayAt, spellOf, bridgeAt, clsOf, houseHp, hurtBridge, ignite, shielded,
