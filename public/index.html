@@ -340,7 +340,7 @@ body[data-look="ink"] #menu, body[data-look="ink"] #quit, body[data-look="ink"] 
       <h1>Dead <span>Ground</span></h1>
       <p class="lede">Build a base, dig ore, take the towns, and flatten the other side before it flattens you.</p>
       <div class="choice"><h2>Theatre</h2><div id="m-theme"><button data-v="desert">Salt Flats</button><button data-v="steppe">Black Steppe</button><button data-v="winter">White Pass</button></div></div>
-      <div class="choice"><h2>Look</h2><div id="m-look"><button data-v="ink">Pen and ink</button><button data-v="film">Sunset</button></div></div>
+      <div class="choice"><h2>Look</h2><div id="m-look"><button data-v="ink">Pen and ink</button><button data-v="film">Daylight</button><button data-v="hudson">Hudson River</button></div></div>
       <div class="choice"><h2>Enemy</h2><div id="m-diff"><button data-v="recruit">Recruit</button><button data-v="regular">Regular</button><button data-v="veteran">Veteran</button></div></div>
       <button id="deploy">Deploy</button>
       <div class="choice" id="m-online" hidden><h2>The shared world</h2>
@@ -4173,24 +4173,108 @@ const World = (() => {
           c += (texture2D(t, vUv + d * 1.385).rgb + texture2D(t, vUv - d * 1.385).rgb) * 0.316;
           c += (texture2D(t, vUv + d * 3.231).rgb + texture2D(t, vUv - d * 3.231).rgb) * 0.07;
           gl_FragColor = vec4(c, 1.0); }` });
-      const grade = new THREE.ShaderMaterial({ uniforms: { t: { value: null }, b1: { value: null }, b2: { value: null }, uTime: { value: 0 }, uFlash: { value: 0 }, uBloom: { value: 0.6 }, uGlow: { value: new THREE.Vector2(-0.2, 0.9) }, uGlowC: { value: new THREE.Color(0xff9550) }, uAspect: { value: 1.6 } }, vertexShader: vs, depthTest: false, depthWrite: false, fragmentShader: `
-        varying vec2 vUv; uniform sampler2D t, b1, b2; uniform float uTime, uFlash, uBloom, uAspect; uniform vec2 uGlow; uniform vec3 uGlowC;
+      const grade = new THREE.ShaderMaterial({ uniforms: { t: { value: null }, b1: { value: null }, b2: { value: null }, uTime: { value: 0 }, uFlash: { value: 0 }, uBloom: { value: 0.6 }, uGlow: { value: new THREE.Vector2(-0.2, 0.9) }, uGlowC: { value: new THREE.Color(0xff9550) }, uAspect: { value: 1.6 }, uVivid: { value: 0 } }, vertexShader: vs, depthTest: false, depthWrite: false, fragmentShader: `
+        varying vec2 vUv; uniform sampler2D t, b1, b2; uniform float uTime, uFlash, uBloom, uAspect, uVivid; uniform vec2 uGlow; uniform vec3 uGlowC;
         vec3 aces(vec3 x){ return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0); }
         void main(){
-          vec3 c = texture2D(t, vUv).rgb + (texture2D(b1, vUv).rgb * 0.55 + texture2D(b2, vUv).rgb * 0.45) * uBloom;
+          // Daylight (uVivid) keeps only a touch of bloom and of the sun's spill, and none of the haze's lift.
+          vec3 c = texture2D(t, vUv).rgb + (texture2D(b1, vUv).rgb * 0.55 + texture2D(b2, vUv).rgb * 0.45) * uBloom * mix(1.0, 0.3, uVivid);
           c += vec3(uFlash * 6.0, uFlash * 5.6, uFlash * 5.0);
           // Light from the low sun spills in from its side of the frame.
           vec2 gq = (vUv - uGlow) * vec2(uAspect, 1.0);
-          c += uGlowC * (exp(-length(gq) * 1.8) * 0.2 + exp(-length(gq) * 4.5) * 0.18);
-          vec2 q = vUv - 0.5; float vig = 1.0 - dot(q, q) * 0.7;
-          c = aces(c * 0.86 * vig);
+          c += uGlowC * (exp(-length(gq) * 1.8) * 0.2 + exp(-length(gq) * 4.5) * 0.18) * (1.0 - uVivid);
+          vec2 q = vUv - 0.5; float vig = 1.0 - dot(q, q) * mix(0.7, 0.45, uVivid);
+          c = aces(c * mix(0.86, 0.8, uVivid) * vig);
           float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
-          c *= mix(vec3(0.9, 0.9, 1.06), vec3(1.04, 1.0, 0.92), smoothstep(0.05, 0.6, l));
-          c = mix(vec3(l), c, 1.06);
-          c += vec3(0.012, 0.008, 0.014) * (1.0 - l);
+          c *= mix(vec3(0.9, 0.9, 1.06), vec3(1.04, 1.0, 0.92), smoothstep(0.05, 0.6, l) * (1.0 - uVivid * 0.6));
+          // Colour held full through the lights, and a firm contrast in the middle values.
+          c = mix(vec3(l), c, mix(1.06, 1.18, uVivid));
+          c = mix(c, c * c * (3.0 - 2.0 * c), 0.22 * uVivid);
+          c += vec3(0.012, 0.008, 0.014) * (1.0 - l) * (1.0 - uVivid);
           c = pow(max(c, 0.0), vec3(1.0 / 2.2));
           float n = fract(sin(dot(vUv + fract(uTime), vec2(12.9898, 78.233))) * 43758.5453);
           gl_FragColor = vec4(c + (n - 0.5) * 0.018, 1.0); }` });
+      // Hudson River School: the graded picture glazed as an oil landscape in a golden light. The far ground melts into
+      // soft glazes and a gold haze, colour settles into umber, olive, ochre and cream, water turns to a mirror of the
+      // sky, and fine strokes, canvas and varnish lie over it all. Units and buildings keep their detail and colour.
+      const hudson = new THREE.ShaderMaterial({ uniforms: { t: { value: null }, tSoft: { value: null }, tSubj: { value: null }, tFogS: { value: null }, res: { value: new THREE.Vector2(1, 1) }, uTime: { value: 0 }, uK: { value: 1 }, uOff: { value: new THREE.Vector2() }, uGlow: { value: new THREE.Vector2(-0.2, 0.9) }, uAspect: { value: 1.6 }, uWaterL: { value: -0.15 } }, vertexShader: vs, depthTest: false, depthWrite: false, fragmentShader: `
+        varying vec2 vUv; uniform sampler2D t, tSoft, tSubj, tFogS; uniform vec2 res, uOff, uGlow; uniform float uTime, uK, uAspect, uWaterL;
+        float hash(vec2 p) { p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
+        float noise(vec2 p) { vec2 i = floor(p), f = fract(p), u = f * f * (3. - 2. * f);
+          return mix(mix(hash(i), hash(i + vec2(1, 0)), u.x), mix(hash(i + vec2(0, 1)), hash(i + vec2(1, 1)), u.x), u.y); }
+        float luma(vec3 c) { return dot(c, vec3(0.299, 0.587, 0.114)); }
+        vec3 ramp(float v, vec3 a, vec3 b, vec3 c, vec3 d) { return v < 0.35 ? mix(a, b, v / 0.35) : v < 0.7 ? mix(b, c, (v - 0.35) / 0.35) : mix(c, d, (v - 0.7) / 0.3); }
+        const vec3 UMBER = vec3(0.165, 0.141, 0.118), HAZE = vec3(0.72, 0.71, 0.76), BLUE = vec3(0.6, 0.67, 0.78), GOLD = vec3(0.98, 0.92, 0.78);
+        const vec3 FRAME = vec3(0.1, 0.13, 0.08);
+        // The valley floor: near black green in shade, deep green, sunlit olive, and gold where the light is fullest.
+        const vec3 G0 = vec3(0.05, 0.07, 0.04), G1 = vec3(0.15, 0.23, 0.09), G2 = vec3(0.43, 0.49, 0.19), G3 = vec3(0.9, 0.78, 0.42);
+        // Woods: near black green, deep green, and olive gold where the light catches the crowns.
+        const vec3 T0 = vec3(0.03, 0.05, 0.03), T1 = vec3(0.1, 0.17, 0.07), T2 = vec3(0.33, 0.4, 0.14), T3 = vec3(0.72, 0.64, 0.3);
+        void main() {
+          vec2 px = vUv * res, e = 3.0 * uK / res, pq = px - uOff;
+          float a = texture2D(tSubj, vUv).a;
+          // Water where the land lies under the water line, as the ink pass finds it.
+          float fb = texture2D(tFogS, vUv).b, land = step(1.0, fb);
+          float low = 1.0 - smoothstep(0.3, 0.37, a), wl = uWaterL - (fb - 20.0);
+          float isW = low * land * smoothstep(0.0, 0.04, wl), isG = low * land * (1.0 - isW);
+          float isU = smoothstep(0.62, 0.72, a), isT = 1.0 - smoothstep(0.012, 0.025, abs(a - 0.459));
+          vec3 c = texture2D(t, vUv).rgb, s = texture2D(tSoft, vUv).rgb;
+          // The top of the frame lies farthest off, and melts into soft glazes.
+          float far = smoothstep(0.15, 1.0, vUv.y);
+          c = mix(c, s, (0.06 + 0.22 * far) * (1.0 - isU));
+          float l = luma(c), own = 0.2;
+          // The land repainted as the valley, whatever the theatre, in broad warm and cool patches.
+          float v = clamp((l - 0.12) / 0.62, 0.0, 1.0), pn = noise(pq / (260.0 * uK));
+          v = v * v * (3.0 - 2.0 * v);
+          vec3 G = ramp(v, G0, G1, G2, G3) * mix(vec3(0.9, 1.02, 0.92), vec3(1.1, 1.02, 0.84), pn);
+          c = mix(c, mix(G, c / max(l, 0.02) * luma(G), own), isG * 0.92);
+          // Woods massed dark, dabbed with small leaves of light.
+          float dab = smoothstep(0.6, 0.8, noise(pq / (2.6 * uK)));
+          vec3 T = ramp(clamp((l - 0.05) / 0.6, 0.0, 1.0), T0, T1, T2, T3) + vec3(0.08, 0.07, 0.02) * dab * smoothstep(0.25, 0.5, l);
+          c = mix(c, T, isT * 0.9);
+          // Other scenery, ore and the like, settle into the same earth colours.
+          float isS = (1.0 - low) * (1.0 - isU) * (1.0 - isT);
+          c = mix(c, mix(ramp(clamp(l / 0.85, 0.0, 1.0), UMBER, vec3(0.4, 0.36, 0.3), vec3(0.66, 0.6, 0.5), vec3(0.92, 0.88, 0.76)), c, 0.15), isS * 0.85);
+          // Still water mirrors the sky, gold toward the sun and pale blue away from it, with the banks reflected dark
+          // along its edge and thin lines of light across it.
+          vec2 gq = (vUv - uGlow) * vec2(uAspect, 1.0);
+          vec3 sky = mix(vec3(0.26, 0.34, 0.45), vec3(0.96, 0.8, 0.5), clamp(exp(-length(gq) * 1.5) * 1.3, 0.0, 1.0));
+          sky = mix(sky, vec3(0.06, 0.09, 0.06), (1.0 - smoothstep(0.02, 0.35, wl)) * 0.7);
+          // The lines of light follow the banks, a little apart, and break as they run.
+          // They keep off the banks, where the depth changes fastest and the lines would crowd.
+          float wq = wl / 0.12, ww = max(fwidth(wq), 1e-4), wf = fract(wq);
+          float rip = (1.0 - smoothstep(0.4, 1.1, min(wf, 1.0 - wf) / ww)) * step(0.62, noise(pq / (40.0 * uK) + floor(wq) * 3.7));
+          rip *= smoothstep(0.06, 0.25, wl) * (1.0 - smoothstep(1.5, 3.0, ww * 12.0)) * 0.45;
+          vec3 wc = mix(vec3(luma(c)), c, 0.4);
+          c = mix(c, mix(mix(sky, wc, 0.15), vec3(0.98, 0.94, 0.84), rip), isW * 0.92);
+          // Beyond the map's edge lies dark ground.
+          c = mix(c, UMBER * 0.7, (1.0 - land) * low);
+          // Units and buildings keep their colour under a light warm glaze.
+          c = mix(c, c * vec3(1.02, 0.98, 0.9), isU * 0.6);
+          // Air between the eye and the far ground, lavender grey, cream toward the sun, and blue at the very top.
+          c = mix(c, mix(mix(HAZE, GOLD, clamp(exp(-length(gq) * 1.6) * 1.3, 0.0, 1.0)), BLUE, smoothstep(0.8, 1.0, vUv.y) * 0.35), far * far * 0.18 * (1.0 - isU * 0.5));
+          // The near ground lies in shade, as the paintings keep their foregrounds dark.
+          c *= mix(0.8, 1.0, smoothstep(0.0, 0.45, vUv.y)) * mix(1.0, 0.85, isG * (1.0 - smoothstep(0.0, 0.3, vUv.y)));
+          // The light floods in from the sun's side.
+          c += vec3(1.0, 0.82, 0.5) * exp(-length(gq) * 2.4) * 0.2 * (1.0 - isU * 0.5);
+          // Fine strokes laid along the form, and level across flat ground, moving with the map as it pans.
+          vec2 g = vec2(luma(texture2D(tSoft, vUv + vec2(e.x, 0.0)).rgb) - luma(texture2D(tSoft, vUv - vec2(e.x, 0.0)).rgb),
+                        luma(texture2D(tSoft, vUv + vec2(0.0, e.y)).rgb) - luma(texture2D(tSoft, vUv - vec2(0.0, e.y)).rgb));
+          vec2 dir = normalize(mix(vec2(1.0, 0.12), normalize(vec2(-g.y, g.x) + 1e-5), smoothstep(0.01, 0.06, length(g))));
+          vec2 sq = vec2(dot(pq, dir), dot(pq, vec2(-dir.y, dir.x))) / uK;
+          c *= 1.0 + (noise(vec2(sq.x / 6.0, sq.y / 1.3)) - 0.5) * 0.09 * (1.0 - isU * 0.6);
+          // Varnish: warm and deep, the darks sunk and the colour held full.
+          c = pow(max(c, 0.0), vec3(1.12)) * vec3(1.04, 1.0, 0.9);
+          c = mix(vec3(luma(c)), c, 1.15);
+          // Canvas under it all, fixed to the picture.
+          vec2 cv = px / (1.3 * uK);
+          c *= 1.0 + 0.03 * sin(cv.x * 3.14159) * sin(cv.y * 3.14159);
+          // The corners darken to deep green, as dark trees frame the view in the paintings.
+          vec2 vq = (vUv - 0.5) * vec2(uAspect * 0.7, 1.0);
+          c = mix(c, FRAME, smoothstep(0.45, 1.0, length(vq)) * 0.45);
+          c += (hash(px + fract(uTime)) - 0.5) * 0.012;
+          gl_FragColor = vec4(c, 1.0);
+        }` });
       // Charcoal: the graded picture's darkness pressed into toothy paper as charcoal, with streaked strokes, drawn
       // outlines that boil, lights lifted to bare paper, and colour kept only for fire, sunset and the sides' marks.
       const charcoal = new THREE.ShaderMaterial({ uniforms: { t: { value: null }, tSubj: { value: null }, tHeat: { value: null }, tPaper: { value: null }, res: { value: new THREE.Vector2(1, 1) }, uTime: { value: 0 }, uK: { value: 1 } }, vertexShader: vs, depthTest: false, depthWrite: false, fragmentShader: `
@@ -4852,6 +4936,27 @@ const World = (() => {
         renderer.shadowMap.autoUpdate = true;
         scene.overrideMaterial = null; camera.layers.mask = was;
         renderer.setClearColor(theme ? theme.shroud : 0, 1);
+        if (look === 'hudson') {
+          // The picture blurred at a quarter size for the glazes, then painted.
+          pass(ldr.texture, a1, 1.6 / a1.width, 0); pass(a1.texture, a0, 0, 1.6 / a0.height);
+          const H = hudson.uniforms, q = new THREE.Vector3(CX, 1, CY).project(camera);
+          H.t.value = ldr.texture; H.tSoft.value = a0.texture; H.tSubj.value = mask.texture; H.res.value.set(w, h);
+          H.uTime.value = SH.uTime.value; H.uK.value = h / 1080; H.uOff.value.set((q.x + 1) / 2 * w, (q.y + 1) / 2 * h);
+          H.uGlow.value.copy(grade.uniforms.uGlow.value); H.uAspect.value = w / h;
+          H.uWaterL.value = (M ? M.water : -0.15) + waterRise.value;
+          if (terrainMesh) {
+            // The land's height, to find the true water line.
+            const keep = terrainMesh.material;
+            terrainMesh.material = fogPassMat;
+            renderer.setRenderTarget(fogRT); renderer.setClearColor(0x000000, 0); renderer.clear();
+            renderer.render(terrainMesh, camera);
+            terrainMesh.material = keep;
+            renderer.setClearColor(theme ? theme.shroud : 0, 1);
+            H.tFogS.value = fogRT.texture;
+          }
+          run(hudson, null);
+          return;
+        }
         const pass2 = look === 'ink' ? ink : charcoal, C = pass2.uniforms;
         if (C.tPaper && !C.tPaper.value) C.tPaper.value = makePaper();
         C.t.value = ldr.texture; C.tSubj.value = mask.texture; C.tHeat.value = a0.texture; C.res.value.set(w, h); C.uTime.value = SH.uTime.value; C.uK.value = h / 1080;
@@ -5797,7 +5902,7 @@ const World = (() => {
       waterRise.value = Math.min(1.25, sky.flood) * 0.26;
       right3.setFromMatrixColumn(camera.matrixWorld, 0);
       sky.windS = right3.x * U.x + right3.z * U.y;
-      // The hour, in pen and ink only. The sunset look keeps its sunset.
+      // The hour, in pen and ink only. The painted looks keep their own light.
       const d = sky.day = studySky && studySky.day !== undefined ? studySky.day : Rules.dayAt(S.tick);
       let i = 0;
       while (i < DAY.length - 2 && DAY[i + 1][0] <= d) i++;
@@ -5806,7 +5911,7 @@ const World = (() => {
       sky.night = lerp(a[3], b[3], f);
       // Mist in the low ground at first light, burnt off by mid morning, and gone in rain or a strong wind.
       sky.mist = Math.max(1 - smooth(0.05, 0.17, d), smooth(0.9, 1.0, d) * 0.6) * (1 - 0.7 * sky.rain) * (1 - 0.4 * Math.min(1, Math.hypot(U.x, U.y)));
-      sky.sun = look === 'ink' ? sunAt(d) : theme.sun;
+      sky.sun = look === 'ink' || !light ? sunAt(d) : light.sun;
     }
 
     function buildSets() {
@@ -5827,6 +5932,31 @@ const World = (() => {
       put('rubble', [{ id: 'r', geo: MODELS.scenery.rubble }], 60);
     }
 
+    // Each painted look has its own light. Pen and ink keeps the theatre's sunset, as it was drawn for it, and turns
+    // with the hour. Daylight is a clear afternoon under a blue sky, and Hudson River a golden late light.
+    let light = null;
+    const lightOf = th => look === 'film' ? Object.assign({}, th, {
+      name: th.name + ' day', sun: SUN(-0.62, 0.82), sunColor: 0xfff2dc, sunPower: 3.2, hemi: [0x8db4ee, 0x6a5a46, 1.1],
+      env: [0x4f7fb2, 0xc2d6ea, 0x584a3a], haze: 0xc4d8ee, hazeK: 0.0035,
+    }) : look === 'hudson' ? Object.assign({}, th, {
+      name: th.name + ' hudson', sun: SUN(-0.55, 0.46), sunColor: 0xffe2b4, sunPower: 3.5, hemi: [0x8aa2cc, 0x5e5240, 0.95],
+      env: [0x5c7aa8, 0xf0dcb0, 0x4a4030], haze: 0xe4dac4, hazeK: 0.006,
+    }) : th;
+    function applyLight() {
+      if (!theme) return;
+      const L = light = lightOf(theme);
+      sun.color.set(L.sunColor); sun.intensity = L.sunPower;
+      sun.position.set(...L.sun);
+      hemi.color.set(L.hemi[0]); hemi.groundColor.set(L.hemi[1]); hemi.intensity = L.hemi[2];
+      scene.environment = skyEnv(L);
+      SH.uHaze.value.set(L.haze); SH.uHazeK.value = L.hazeK; SH.uSunDir.value.set(...L.sun).normalize();
+      pp.grade.uniforms.uGlowC.value.set(L.sunColor); pp.grade.uniforms.uVivid.value = look === 'film' || look === 'hudson' ? 1 : 0;
+      if (waterMesh) {
+        const u = waterMesh.material.uniforms;
+        u.uSun.value.set(...L.sun).normalize(); u.uSunC.value.set(L.sunColor); u.uSky.value.set(L.env[1]); u.uZen.value.set(L.env[0]);
+      }
+    }
+
     function load(state, themeName, team) {
       clearWorld();
       S = state; M = S.map; theme = THEMES[themeName] || THEMES.desert; viewTeam = team;
@@ -5835,13 +5965,9 @@ const World = (() => {
       SH.uMap.value = W;
       SH.uTeam0.value.copy(teamCol[Math.max(0, team)]).offsetHSL(0, 0, 0.06);
       SH.uFogOn.value = team < 0 ? 0 : 1;
-      sun.color.set(theme.sunColor); sun.intensity = theme.sunPower;
-      sun.position.set(...theme.sun);
-      hemi.color.set(theme.hemi[0]); hemi.groundColor.set(theme.hemi[1]); hemi.intensity = theme.hemi[2];
-      scene.environment = skyEnv(theme);
-      SH.uHaze.value.set(theme.haze); SH.uHazeK.value = theme.hazeK; SH.uShroud.value.set(theme.shroud); SH.uSunDir.value.set(...theme.sun).normalize();
+      applyLight();
+      SH.uShroud.value.set(theme.shroud);
       renderer.setClearColor(theme.shroud, 1);
-      pp.grade.uniforms.uGlowC.value.set(theme.sunColor);
 
       fogData = new Uint8Array(W * H * 4); fogR = new Float32Array(W * H); fogG = new Float32Array(W * H);
       if (fogTex) fogTex.dispose();
@@ -5864,7 +5990,7 @@ const World = (() => {
       marks.ctx.globalCompositeOperation = 'source-over';
       marks.ctx.fillStyle = '#000'; marks.ctx.fillRect(0, 0, mk, mk); marksTex.needsUpdate = true;
 
-      buildTerrain(); buildWater(); buildScenery(); buildSets(); buildLife();
+      buildTerrain(); buildWater(); buildScenery(); buildSets(); buildLife(); applyLight();
       for (const k in sky) if (typeof sky[k] === 'number') sky[k] = 0;
       Object.assign(sky, Rules.sky(S), { wind: undefined });
       sky.wet = 0; sky.day = Rules.dayAt(S.tick); waterRise.value = Math.min(1.25, sky.flood) * 0.26;
@@ -6474,7 +6600,7 @@ const World = (() => {
     // Dust in the low sun. Colour rises from nothing and falls again over the mote's life.
     function moteColor() {
       // The last particle written holds the mote. Its start and end colours are set to fade in and out.
-      const c = new THREE.Color(theme.sunColor);
+      const c = new THREE.Color((light || theme).sunColor);
       glow.tint([c.r * 1.6, c.g * 1.4, c.b * 1.1, 0.5]);
     }
     // Pen and ink looks down a long lens, nearly an axonometric, standing back as far again as frames the same
@@ -6701,7 +6827,8 @@ const World = (() => {
       // Screen pixels to a world unit at a point, for sizing drawn marks.
       ppu(x, y, z) { p1.set(x, y, z); return world.vh / (2 * Math.tan(camera.fov * Math.PI / 360) * camera.position.distanceTo(p1)); },
       setLook(name) {
-        look = name === 'film' ? 'film' : name === 'charcoal' ? 'charcoal' : 'ink';
+        look = name === 'film' || name === 'hudson' || name === 'charcoal' ? name : 'ink';
+        applyLight();
         // The page dresses its panels to match.
         if (typeof document !== 'undefined') document.body.dataset.look = look;
       },
@@ -7347,7 +7474,7 @@ const Hud = (() => {
         return;
       }
       if (k === 'KeyL') {
-        const order = ['ink', 'film'], said = { ink: 'Pen and ink.', film: 'Sunset.' };
+        const order = ['ink', 'film', 'hudson'], said = { ink: 'Pen and ink.', film: 'Daylight.', hudson: 'Hudson River.' };
         game.look = order[(order.indexOf(world.look) + 1) % order.length]; world.setLook(game.look);
         try { localStorage.setItem('dg-look', game.look); } catch (e) { /* no store */ }
         say(said[game.look]); return;
