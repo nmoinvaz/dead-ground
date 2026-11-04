@@ -7303,6 +7303,8 @@ const Hud = (() => {
     const local = e => { const r = rect(); return [e.clientX - r.left, e.clientY - r.top]; };
 
     function down(e) {
+      // The top bar and the notes live inside the view. A press on them is theirs, not the map's.
+      if (e.target !== view && e.target !== gl && e.target !== ov) return;
       state.alt = e.altKey;
       if (!game.playing) return;
       e.preventDefault();
