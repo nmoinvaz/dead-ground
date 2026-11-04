@@ -7,7 +7,7 @@
 <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='6' fill='%23efe6d2'/%3E%3Ccircle cx='16' cy='16' r='9' fill='none' stroke='%231c1a17' stroke-width='3'/%3E%3Cpath d='M16 3v8M16 21v8M3 16h8M21 16h8' stroke='%231c1a17' stroke-width='3'/%3E%3Ccircle cx='16' cy='16' r='2.5' fill='%23c8321e'/%3E%3C/svg%3E">
 <meta name="claude:viewport-fit-sides" content="cover">
 <link rel="preconnect" href="https://fonts.googleapis.com">
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;500;600;700&family=Saira+Stencil+One&family=Share+Tech+Mono&family=IM+Fell+English+SC&family=IM+Fell+English:ital@0;1&family=Courier+Prime:wght@400;700&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;500;600;700&family=Saira+Stencil+One&family=Share+Tech+Mono&family=Jost:ital,wght@0,400;0,500;0,600;1,400&family=Courier+Prime:wght@400;700&display=swap">
 <style>
 /* Field radio. Painted steel, stencilled labels, amber readouts, recessed wells for the pictures. */
 :root {
@@ -146,7 +146,7 @@ body[data-look="ink"][data-scheme="dark"] #end, body[data-look="ink"][data-schem
 /* Title. */
 #title, #end, #veil { position: absolute; inset: 0; z-index: 10; display: flex; }
 #title { background: linear-gradient(90deg, rgba(6,7,4,.86) 0, rgba(6,7,4,.62) 34%, rgba(6,7,4,.04) 62%); padding: 5vh max(4vw, env(safe-area-inset-right, 0px)) 4vh max(4vw, env(safe-area-inset-left, 0px)); box-sizing: border-box; overflow: auto; touch-action: pan-y; }
-#title > div { align-self: center; width: min(460px, 100%); display: flex; flex-direction: column; gap: 14px; }
+#title > .menu { align-self: center; width: min(460px, 100%); display: flex; flex-direction: column; gap: 14px; }
 #title h1 { margin: 0; font: clamp(58px, 9.4vw, 112px)/.86 var(--display); color: var(--stencil); letter-spacing: .005em; text-wrap: balance; text-shadow: 0 2px 0 #000, 0 0 30px rgba(0,0,0,.6); }
 #title h1 span { display: block; color: var(--amber); }
 #title .lede { margin: 0; font: 500 19px/1.25 var(--ui); max-width: 40ch; color: #dcd9c3; text-wrap: pretty; }
@@ -166,39 +166,30 @@ body[data-look="ink"][data-scheme="dark"] #end, body[data-look="ink"][data-schem
 body.ready #loading { display: none; }
 
 #end { background: rgba(5,6,3,.76); align-items: center; justify-content: center; }
-#end > div { width: min(420px, calc(100% - 32px)); background: linear-gradient(#3a3f31, #262a20); border: 1px solid #000; box-shadow: inset 0 1px 0 var(--steel-hi), 0 12px 40px #000; padding: 20px 22px; display: flex; flex-direction: column; gap: 12px; }
+#end > div { width: min(580px, calc(100% - 32px)); background: linear-gradient(#3a3f31, #262a20); border: 1px solid #000; box-shadow: inset 0 1px 0 var(--steel-hi), 0 12px 40px #000; padding: 20px 22px; display: flex; flex-direction: column; gap: 12px; }
 #end h2 { margin: 0; font: 38px/1 var(--display); color: var(--amber); text-wrap: balance; }
 #end.lost h2 { color: var(--red); }
 #end p { margin: 0; font: 13px var(--mono); color: var(--dim); }
 #end table { border-collapse: collapse; font: 500 15px var(--ui); width: 100%; }
 #end th { text-align: left; font-weight: 500; color: #b9b8a2; padding: 3px 0; }
+#end .dot { display: inline-block; width: 10px; height: 10px; margin-right: 6px; border: 1px solid var(--ink, #000); vertical-align: 0; }
 #end td { text-align: right; font: 14px var(--mono); color: var(--amber); padding: 3px 0 3px 12px; font-variant-numeric: tabular-nums; }
 #end .row, #veil .row { display: flex; gap: 6px; }
 #end .row button { flex: 1; }
-#menu, #quit, #resume { padding: 10px 14px; background: linear-gradient(#2f3328, #1d1f17); border: 1px solid #000; font: 600 17px var(--ui); }
+#menu, #watch, #quit, #resume { padding: 10px 14px; background: linear-gradient(#2f3328, #1d1f17); border: 1px solid #000; font: 600 17px var(--ui); }
 #veil { background: rgba(5,6,3,.6); align-items: center; justify-content: center; flex-direction: column; gap: 14px; backdrop-filter: blur(3px); }
 #veil h2 { margin: 0; font: 44px var(--display); color: var(--stencil); }
 
 body:not(.in-game) #top, body:not(.in-game) #side, body:not(.in-game) #sel, body:not(.in-game) #notes { display: none !important; }
 
-/* The shared world: a callsign and a way in on the title, and who holds each slot over the picture. */
-.online { display: grid !important; grid-template-columns: 1fr auto !important; gap: 3px; }
-#callsign { min-height: 40px; padding: 0 10px; background: #14160f; border: 1px solid #000; color: var(--stencil); font: 500 17px var(--ui); }
-#callsign::placeholder { color: #6e6e5c; }
-#join { padding: 0 16px; min-height: 40px; background: linear-gradient(#e0a02c, #a86f12); color: #1a1205; font: 19px/1 var(--display); letter-spacing: .04em; border: 1px solid #000; }
-#join:disabled { filter: grayscale(.6) brightness(.8); }
-#online-n { margin: 4px 0 0; font: 13px var(--mono); color: var(--dim); }
-#roster { position: absolute; top: calc(52px + env(safe-area-inset-top, 0px)); right: 10px; display: flex; flex-direction: column; gap: 2px; padding: 5px 8px; background: rgba(12,14,9,.72); border: 1px solid var(--edge); font: 500 13px/1.15 var(--ui); pointer-events: none; min-width: 120px; }
+/* A game with other people: who holds each side, over the picture, and the note while reconnecting. */
+#roster { position: absolute; top: calc(100px + env(safe-area-inset-top, 0px)); right: 10px; display: flex; flex-direction: column; gap: 2px; padding: 5px 8px; background: rgba(12,14,9,.72); border: 1px solid var(--edge); font: 500 13px/1.15 var(--ui); pointer-events: none; min-width: 120px; }
 #roster div { display: flex; align-items: center; gap: 6px; white-space: nowrap; }
 #roster i { width: 9px; height: 9px; flex: none; border: 1px solid #000; }
 #roster .cpu span { color: var(--dim); }
 #roster .down { opacity: .45; text-decoration: line-through; }
 #net { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); padding: 10px 18px; background: rgba(12,14,9,.86); border: 1px solid var(--amber); font: 20px var(--display); color: var(--amber); letter-spacing: .06em; z-index: 4; }
 body.online #b-speed { visibility: hidden; }
-body[data-look="ink"] #callsign { background: var(--paper-hi); border: 1.5px solid var(--ink); color: var(--ink); font-family: var(--ui); }
-body[data-look="ink"] #callsign::placeholder { color: var(--ink-dim); }
-body[data-look="ink"] #join { background: var(--redink); color: var(--paper-hi); font-family: var(--display); font-size: 21px; border: 2px solid var(--ink); box-shadow: 3px 3px 0 var(--ink); }
-body[data-look="ink"] #online-n { color: var(--ink-dim); }
 body[data-look="ink"] #roster { background: rgba(250,244,228,.92); border: 1.5px solid var(--ink); color: var(--ink); box-shadow: 2px 2px 0 rgba(31,26,22,.4); }
 body[data-look="ink"] #roster .cpu span { color: var(--ink-dim); }
 body[data-look="ink"] #net { background: var(--paper-hi); border: 2px solid var(--ink); color: var(--redink); }
@@ -225,7 +216,7 @@ body[data-look="ink"] #net { background: var(--paper-hi); border: 2px solid var(
   .line { font-size: 13px; }
   #objective { font-size: 13px; padding: 4px 8px; }
   #title { background: linear-gradient(90deg, rgba(6,7,4,.9), rgba(6,7,4,.5)); padding-block: 8px; }
-  #title > div { gap: 8px; width: min(560px, 100%); }
+  #title > .menu { gap: 8px; width: min(560px, 100%); }
   #title h1 { font-size: 46px; }
   #title h1 span { display: inline; }
   #title .lede, .help { display: none; }
@@ -252,12 +243,12 @@ body[data-look="ink"] #net { background: var(--paper-hi); border: 2px solid var(
   .cam.ready, #pwrbar.low, .tab.lit i { animation: none; }
 }
 
-/* Pen and ink: the panels are cream paper ruled in black ink, labels in an engraver's capitals, figures typed,
+/* Pen and ink: the panels are cream paper ruled in black ink, labels in a draughtsman's plain lettering, figures typed,
    the player's blue and the warnings' red as coloured inks, and the pictures printed in ink on the paper. */
 body[data-look="ink"] {
   --paper: #f2e8d2; --paper-hi: #faf4e4; --paper-lo: #e4d8bc; --ink: #1f1a16; --ink-dim: #6b6052; --redink: #a3301e; --blueink: #23458c;
   --stencil: var(--ink); --dim: var(--ink-dim); --amber: var(--redink); --amber-dim: #c98a7c; --good: #3f7a4a; --warn: #b07a14; --red: var(--redink);
-  --display: "IM Fell English SC", Georgia, serif; --mono: "Courier Prime", "Courier New", monospace;
+  --display: "Jost", "Futura", "Trebuchet MS", sans-serif; --mono: "Courier Prime", "Courier New", monospace; --label: "Jost", "Futura", "Trebuchet MS", sans-serif;
 }
 body[data-look="ink"] #side { background: repeating-linear-gradient(135deg, rgba(31,26,22,.035) 0 1px, transparent 1px 7px), var(--paper); border-left: 2px solid var(--ink); box-shadow: inset 3px 0 0 var(--paper-lo); color: var(--ink); }
 body[data-look="ink"] #plate { color: var(--ink); font-size: 19px; opacity: 1; }
@@ -305,7 +296,7 @@ body[data-look="ink"] #cams { scrollbar-color: #8a7f70 transparent; }
 body[data-look="ink"] #title { background: linear-gradient(90deg, rgba(242,232,210,.95) 0, rgba(242,232,210,.82) 34%, rgba(242,232,210,0) 64%); color: var(--ink); }
 body[data-look="ink"] #title h1 { color: var(--ink); text-shadow: none; font-size: clamp(56px, 9vw, 108px); letter-spacing: 0; }
 body[data-look="ink"] #title h1 span { color: var(--redink); }
-body[data-look="ink"] #title .lede { color: #3d352c; font-family: "IM Fell English", Georgia, serif; font-style: italic; font-weight: 400; }
+body[data-look="ink"] #title .lede { color: #3d352c; font-family: var(--label); font-style: italic; font-weight: 400; }
 body[data-look="ink"] .choice h2 { color: var(--ink-dim); font-family: var(--display); font-weight: 400; font-size: 16px; letter-spacing: .04em; text-transform: none; }
 body[data-look="ink"] .choice button { background: var(--paper-hi); border: 1.5px solid var(--ink); color: var(--ink); }
 body[data-look="ink"] .choice button.on { background: var(--ink); color: var(--paper); border-color: var(--ink); }
@@ -317,7 +308,7 @@ body[data-look="ink"] #end, body[data-look="ink"] #veil { background: rgba(242,2
 body[data-look="ink"] #end > div { background: var(--paper); border: 2px solid var(--ink); box-shadow: 4px 4px 0 var(--ink); }
 body[data-look="ink"] #end th { color: #3d352c; }
 body[data-look="ink"] #veil h2 { color: var(--ink); }
-body[data-look="ink"] #menu, body[data-look="ink"] #quit, body[data-look="ink"] #resume { background: var(--paper-hi); border: 1.5px solid var(--ink); color: var(--ink); }
+body[data-look="ink"] #menu, body[data-look="ink"] #watch, body[data-look="ink"] #quit, body[data-look="ink"] #resume { background: var(--paper-hi); border: 1.5px solid var(--ink); color: var(--ink); }
 @media (max-aspect-ratio: 1/1) {
   body[data-look="ink"] #side { border-top: 2px solid var(--ink); border-left: 0; }
   body[data-look="ink"] #title { background: rgba(242,232,210,.86); }
@@ -325,6 +316,82 @@ body[data-look="ink"] #menu, body[data-look="ink"] #quit, body[data-look="ink"] 
 @media (max-height: 520px) {
   body[data-look="ink"] #title { background: linear-gradient(90deg, rgba(242,232,210,.94), rgba(242,232,210,.6)); }
 }
+
+/* The menus. The title stands at the left over the battle. The set-up of a game, a game's room and the list of
+   games are a sheet in the middle, in the panels' paper and ink. */
+:root { --paper: #262a20; --paper-hi: #30352a; --paper-lo: #1c1f17; --ink: var(--stencil); --ink-dim: var(--dim); --redink: var(--amber); }
+#title.on-sheet { background: rgba(6,7,4,.62); justify-content: center; align-items: center; }
+.sheet { width: min(1000px, 100%); max-height: 100%; overflow: auto; display: flex; flex-direction: column; gap: 14px; padding: 18px 22px; background: var(--paper); color: var(--ink); border: 2px solid var(--ink); box-shadow: 4px 4px 0 rgba(0,0,0,.45); }
+.sheet header { display: flex; align-items: center; gap: 14px; }
+.sheet header h2 { margin: 0; flex: 1; font: 34px/1 var(--display); color: var(--ink); }
+#setup-code { font: 15px var(--mono); color: var(--ink-dim); }
+.sheet h3 { margin: 0 0 6px; font: 600 13px var(--ui); letter-spacing: .12em; text-transform: uppercase; color: var(--ink-dim); }
+.sheet button { font: 600 16px var(--ui); color: var(--ink); background: var(--paper-hi); border: 1.5px solid var(--ink); min-height: 36px; padding: 4px 12px; }
+.sheet button:hover:not(:disabled) { background: var(--paper-lo); }
+.sheet button.on, .sheet button.on:hover { background: var(--ink); color: var(--paper); }
+.sheet button:disabled { opacity: .4; }
+.cols { display: grid; grid-template-columns: minmax(250px, 310px) 1fr; gap: 24px; align-items: start; }
+.pick { display: grid; gap: 4px; }
+.pick.three { grid-template-columns: repeat(3, 1fr); }
+.pick.three button { padding: 4px 2px; }
+#maps button { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; text-align: left; }
+#maps button small { font: 13px var(--mono); opacity: .8; white-space: nowrap; }
+.preview { margin-top: 8px; }
+#preview { width: 100%; aspect-ratio: 1; display: block; border: 1.5px solid var(--ink); background: var(--paper-hi); }
+#map-about { margin: 6px 0 0; font: 500 15px/1.25 var(--ui); color: var(--ink-dim); text-wrap: pretty; }
+.seedrow { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin: 8px 0 14px; font: 500 16px var(--ui); }
+.seedrow b { font: 15px var(--mono); }
+#slots { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
+#slots li { display: grid; grid-template-columns: 18px 1fr auto; align-items: center; gap: 10px; min-height: 42px; padding: 3px 6px 3px 10px; border: 1.5px solid var(--ink); background: var(--paper-hi); }
+#slots li.open { border-style: dashed; background: transparent; }
+#slots li.closed { border-style: dotted; background: transparent; opacity: .6; }
+#slots .chip { width: 16px; height: 16px; border: 1.5px solid var(--ink); }
+#slots .who { font: 600 18px var(--ui); display: flex; gap: 8px; align-items: baseline; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#slots .who small { font: 13px var(--mono); color: var(--ink-dim); }
+#slots .acts { display: flex; gap: 4px; align-items: center; }
+#slots select { font: 600 16px var(--ui); color: var(--ink); background: var(--paper-hi); border: 1.5px solid var(--ink); min-height: 34px; padding: 0 6px; border-radius: 0; }
+#slots .tag { font: 13px var(--mono); }
+#slots .tag.ready { color: var(--good); }
+#slots .tag.wait { color: var(--warn); }
+#slots button { min-height: 32px; font-size: 15px; }
+#watchers { margin: 8px 0 0; font: 500 15px var(--ui); color: var(--ink-dim); }
+#chat { margin-top: 12px; border: 1.5px solid var(--ink); background: var(--paper-hi); display: flex; flex-direction: column; }
+#chat-log { height: 150px; overflow-y: auto; padding: 6px 9px; font: 500 16px/1.3 var(--ui); color: var(--ink); -webkit-user-select: text; user-select: text; }
+#chat-log b { margin-right: 6px; }
+#chat-log .sys { color: var(--ink-dim); font-style: italic; }
+#chat-in { border: 0; border-top: 1.5px solid var(--ink); background: transparent; color: var(--ink); font: 500 16px var(--ui); padding: 8px 9px; outline: none; border-radius: 0; }
+.sheet footer { display: flex; align-items: center; gap: 8px; }
+#go-why { flex: 1; margin: 0; font: 500 16px/1.2 var(--ui); color: var(--ink-dim); }
+.sheet #deploy { min-width: 190px; }
+.sheet #ready.on { background: var(--good); border-color: var(--ink); color: var(--paper-hi); }
+.menu .big { display: grid; gap: 8px; }
+.menu .big button { display: flex; flex-direction: column; align-items: flex-start; gap: 4px; padding: 12px 18px; font: 30px/1 var(--display); color: var(--ink); background: var(--paper-hi); border: 2px solid var(--ink); box-shadow: 3px 3px 0 var(--ink); text-align: left; }
+.menu .big button small { font: 500 16px var(--ui); color: var(--ink-dim); letter-spacing: 0; }
+.menu .big #b-skirmish { background: var(--redink); color: var(--paper-hi); }
+.menu .big #b-skirmish small { color: var(--paper-hi); opacity: .85; }
+.menu .big button:hover { filter: brightness(1.06); }
+.menu .quiet { align-self: flex-start; font: 600 16px var(--ui); color: var(--ink); background: transparent; border: 1.5px dashed var(--ink); padding: 6px 12px; }
+.me { display: flex; align-items: center; gap: 10px; font: 600 16px var(--ui); }
+.me input, #room-title { font: 500 18px var(--ui); color: var(--ink); background: var(--paper-hi); border: 1.5px solid var(--ink); min-height: 38px; padding: 0 10px; border-radius: 0; }
+#room-title { flex: 1; min-width: 0; }
+.rooms-wrap { min-height: 160px; }
+#rooms { width: 100%; border-collapse: collapse; font: 500 17px var(--ui); color: var(--ink); }
+#rooms th { text-align: left; font: 600 12px var(--ui); letter-spacing: .1em; text-transform: uppercase; color: var(--ink-dim); padding: 4px 6px; border-bottom: 1.5px solid var(--ink); }
+#rooms td { padding: 6px; border-bottom: 1px dashed var(--ink-dim); }
+#rooms td small { font: 13px var(--mono); color: var(--ink-dim); }
+#rooms td:last-child { text-align: right; }
+#rooms-none { margin: 10px 0 0; font: 500 16px var(--ui); color: var(--ink-dim); }
+@media (max-width: 760px) {
+  .cols { grid-template-columns: 1fr; }
+  .sheet { padding: 12px; gap: 10px; }
+  #title.on-sheet { padding: 6px; align-items: stretch; }
+  .sheet footer { flex-wrap: wrap; }
+  #go-why { flex-basis: 100%; }
+  #rooms th:nth-child(2), #rooms td:nth-child(2) { display: none; }
+}
+body[data-look="ink"] #title.on-sheet { background: rgba(242,232,210,.62); }
+body[data-look="ink"][data-scheme="dark"] #title.on-sheet { background: rgba(26,24,20,.7); }
+body[data-look="ink"] .sheet { box-shadow: 4px 4px 0 var(--ink); }
 </style>
 </head>
 <body>
@@ -366,17 +433,14 @@ body[data-look="ink"] #menu, body[data-look="ink"] #quit, body[data-look="ink"] 
   </aside>
 
   <div id="title">
-    <div>
+    <div id="t-main" class="menu">
       <h1>Dead <span>Ground</span></h1>
-      <p class="lede">Build a base, dig ore, take the towns, and flatten the other side before it flattens you.</p>
-      <div class="choice"><h2>Theatre</h2><div id="m-theme"><button data-v="desert">Salt Flats</button><button data-v="steppe">Black Steppe</button><button data-v="winter">White Pass</button></div></div>
-      <div class="choice" hidden><h2>Look</h2><div id="m-look"></div></div>
-      <div class="choice"><h2>Enemy</h2><div id="m-diff"><button data-v="recruit">Recruit</button><button data-v="regular">Regular</button><button data-v="veteran">Veteran</button></div></div>
-      <button id="deploy">Deploy</button>
-      <div class="choice" id="m-online" hidden><h2>The shared world</h2>
-        <div class="online"><input id="callsign" maxlength="16" placeholder="Your callsign" autocomplete="nickname" spellcheck="false"><button id="join">Join the war</button></div>
-        <p id="online-n"></p>
+      <p class="lede">Build a base, dig ore, take the towns, and flatten the other sides before they flatten you.</p>
+      <div class="big">
+        <button id="b-skirmish">Skirmish<small>Against the computer</small></button>
+        <button id="b-multi" hidden>Multiplayer<small>Open a game or join one</small></button>
       </div>
+      <button id="b-resume" class="quiet" hidden>Rejoin your game</button>
       <dl class="help">
         <dt>Left</dt><dd>Select, or drag a box round units</dd>
         <dt>Right</dt><dd>Move, take a town, mine ore, or mark an enemy and all near it</dd>
@@ -388,6 +452,36 @@ body[data-look="ink"] #menu, body[data-look="ink"] #quit, body[data-look="ink"] 
       </dl>
       <div id="credit">x.com/nmnvzr &middot; Opus 5.5</div>
     </div>
+
+    <div id="t-setup" class="sheet" hidden>
+      <header><button class="back" id="setup-back">Back</button><h2 id="setup-h">Skirmish</h2><span id="setup-code"></span></header>
+      <div class="cols">
+        <section class="mapcol">
+          <h3>Map</h3>
+          <div id="maps" class="pick"></div>
+          <div class="preview"><canvas id="preview"></canvas><p id="map-about"></p></div>
+          <div class="seedrow"><span>Terrain <b id="seed"></b></span><button id="reseed">New terrain</button></div>
+          <h3>Theatre</h3>
+          <div id="m-theme" class="pick three"><button data-v="desert">Salt Flats</button><button data-v="steppe">Black Steppe</button><button data-v="winter">White Pass</button></div>
+        </section>
+        <section class="slotcol">
+          <h3>Players</h3>
+          <ol id="slots"></ol>
+          <p id="watchers"></p>
+          <div id="chat" hidden><div id="chat-log"></div><input id="chat-in" maxlength="200" placeholder="Say something, then Enter" autocomplete="off" spellcheck="false"></div>
+        </section>
+      </div>
+      <footer><p id="go-why"></p><button id="ready" hidden>Ready</button><button id="deploy">Start</button></footer>
+    </div>
+
+    <div id="t-rooms" class="sheet" hidden>
+      <header><button class="back" id="rooms-back">Back</button><h2>Multiplayer</h2></header>
+      <div class="me"><label for="callsign">Your callsign</label><input id="callsign" maxlength="16" placeholder="Commander" autocomplete="nickname" spellcheck="false"></div>
+      <h3>Open games</h3>
+      <div class="rooms-wrap"><table id="rooms"><thead><tr><th>Game</th><th>Host</th><th>Map</th><th>Players</th><th></th></tr></thead><tbody></tbody></table>
+      <p id="rooms-none">No games are open. Open one, and it shows here for others to join.</p></div>
+      <footer><input id="room-title" maxlength="32" placeholder="Name your game" autocomplete="off" spellcheck="false"><button id="create">Open a game</button></footer>
+    </div>
   </div>
 
   <div id="end" hidden>
@@ -395,7 +489,7 @@ body[data-look="ink"] #menu, body[data-look="ink"] #quit, body[data-look="ink"] 
       <h2 id="end-title"></h2>
       <p id="end-sub"></p>
       <table id="end-stats"></table>
-      <div class="row"><button id="again">Again</button><button id="menu">Menu</button></div>
+      <div class="row"><button id="again">Again</button><button id="watch" hidden>Watch</button><button id="menu">Menu</button></div>
     </div>
   </div>
 
@@ -418,12 +512,18 @@ const Rules = (() => {
   const HZ = 20, DT = 1 / HZ, RES = 2;
   // The map's size is set per game. Everything sized by it is made again when it changes.
   let W = 128, H = 128, N = W * H, VW = W * RES + 1, VH = H * RES + 1, CX = W / 2, CY = H / 2;
-  let HW = Math.ceil(W / 8), heapC = new Int32Array(N * 8), heapD = new Float32Array(N * 8);
+  // The path heap is made once for the largest map, since games of several sizes may share these rules, as
+  // rooms do on the server, and each sets the size again as it steps.
+  const MAXN = 256 * 256;
+  let HW = Math.ceil(W / 8);
+  const heapC = new Int32Array(MAXN * 8), heapD = new Float32Array(MAXN * 8);
   function setSize(w) {
     if (w === W) return;
     W = H = w; N = W * H; VW = W * RES + 1; VH = H * RES + 1; CX = W / 2; CY = H / 2;
-    HW = Math.ceil(W / HC); heapC = new Int32Array(N * 8); heapD = new Float32Array(N * 8);
+    HW = Math.ceil(W / HC);
   }
+  // Sets the rules to a game's map, before its commanders think or it steps.
+  const use = S => setSize(S.map.W);
   const PI = 3.141592653589793, TAU = 6.283185307179586, HALF = 1.5707963267948966;
   // Sine, cosine and arctangent from + - * / and the square root alone, which IEEE fixes to the bit, so
   // every browser and the server step the same world. The engines' own may differ in the last place.
@@ -546,9 +646,6 @@ const Rules = (() => {
     recruit: { think: 4, income: 0.55, wave: 2600, grow: 300, delay: 720, power: false, tech: 2, apm: 1, tech1: 12, tech2: 99, gap: 90, silo: false, ramp: [4, 0.8], def: 2, name: 'Recruit' },
     regular: { think: 3, income: 0.7, wave: 2600, grow: 400, delay: 420, power: true, tech: 3, apm: 2, tech1: 8, tech2: 22, gap: 120, silo: false, ramp: [6, 1.6], def: 3, name: 'Regular' },
     veteran: { think: 0.75, income: 1.25, wave: 1500, grow: 1100, delay: 360, power: true, tech: 3, apm: 8, tech1: 3, tech2: 8, gap: 20, silo: true, ramp: [8, 3], def: 8, name: 'Veteran' },
-    // The shared world's commanders: a Regular with the patience of the old one, so a newcomer beside seven of
-    // them can get going, and waves that leave home guarded.
-    world: { think: 3, income: 0.7, wave: 2600, grow: 400, delay: 600, power: true, tech: 3, apm: 2, tech1: 10, tech2: 22, gap: 120, silo: false, ramp: [5, 1.2], def: 3, pulse: true, name: 'Regular' },
     // Holds a player's base while they are away: builds and defends, never sets out.
     keeper: { think: 3, income: 1, wave: 1e9, grow: 0, delay: 1e9, power: false, tech: 2, apm: 2, tech1: 10, tech2: 99, gap: 90, silo: false, ramp: [8, 1], def: 6, stay: true, name: 'Keeper' },
   };
@@ -598,7 +695,22 @@ const Rules = (() => {
     wells: [[-64, -16], [-64, 16], [-16, 28], [-26, -50], [-20, -26]],
     bridges: [0, 40, -40],
   };
-  const SIZES = { duel: 128, world: 256 };
+  const SIZES = { duel: 128, quad: 192, world: 256 };
+  // The maps a game may be set on, each a layout and the most sides it seats.
+  const MAPS = {
+    duel: { name: 'River Duel', layout: 'duel', seats: 2, about: 'Two bases across one river, three bridges and a ford.' },
+    quad: { name: 'Four Quarters', layout: 'quad', seats: 4, about: 'Four corners parted by two crossing rivers.' },
+    world: { name: 'Crossed Rivers', layout: 'world', seats: 8, about: 'Eight bases round a ring, two to each quarter.' },
+  };
+  // Which of a map's bases each seated slot starts at: spread evenly round the ring, in slot order.
+  function spread(seats, n) {
+    const pos = new Array(n).fill(-1), used = new Set();
+    seats.forEach((t, j) => { const p = Math.round(j * n / seats.length) % n; pos[t] = p; used.add(p); });
+    // The empty slots take the bases left over.
+    const rest = [...Array(n).keys()].filter(p => !used.has(p));
+    for (let t = 0; t < n; t++) if (pos[t] < 0) pos[t] = rest.shift();
+    return pos;
+  }
 
   // Where everything goes on a kind of map. syms are the turns that carry the map onto itself. Each
   // feature is listed with all of its images in a row, so one town's images sit side by side.
@@ -608,10 +720,13 @@ const Rules = (() => {
     // A ford's images, each its middle and the unit way along the river.
     const fordAt = (p, q) => { for (const T of L.syms) { const a = T(p), b = T(q), d = mhypot(b[0] - a[0], b[1] - a[1]); L.fords.push([a[0], a[1], (b[0] - a[0]) / d, (b[1] - a[1]) / d]); } };
     const R = (a, b, wig, rep = true) => L.roads.push({ a, b, wig, rep });
-    if (kind === 'world') {
+    if (kind === 'world' || kind === 'quad') {
       const rot = ([x, y], k) => { let dx = x - CX, dy = y - CY; for (let i = 0; i < k; i++) { const t = dx; dx = -dy; dy = t; } return [CX + dx, CY + dy]; };
       L.syms = [0, 1, 2, 3].map(k => p => rot(p, k));
-      const polar = (r, deg) => [CX + r * mcos(deg * PI / 180), CY + r * msin(deg * PI / 180)];
+      // Four Quarters is the world drawn smaller, with a base only in each corner. What lies round a base keeps
+      // its size.
+      const sc = W / 256, quad = kind === 'quad';
+      const polar = (r, deg) => [CX + r * sc * mcos(deg * PI / 180), CY + r * sc * msin(deg * PI / 180)];
       // Two rivers cross at the middle, at 22.5 and 112.5 degrees, and part the land into quarters.
       const rivers = [22.5 * PI / 180, 22.5 * PI / 180 + HALF].map(a => [mcos(a), msin(a)]);
       const along = ([dx, dy], x, y) => { const px = x - CX, py = y - CY; return [px * dx + py * dy, -px * dy + py * dx]; };
@@ -625,10 +740,12 @@ const Rules = (() => {
       // One quarter holds a base in the corner and one at the edge, and two towns, one between them and one
       // toward the middle. Slots run round the ring.
       const C = polar(120, 45), E = polar(95, 90);
-      for (const T of L.syms) L.bases.push(T(C), T(E));
+      for (const T of L.syms) { L.bases.push(T(C)); if (!quad) L.bases.push(T(E)); }
       const tOut = polar(100, 67.5), tIn = polar(52, 67.5);
       all(L.towns, tOut); all(L.towns, tIn);
-      for (const b of [C, E]) {
+      // Where the world has its second base, Four Quarters has one ore field between two corners, to fight over.
+      if (quad) all(L.ore, E, [6]);
+      for (const b of quad ? [C] : [C, E]) {
         const m = mhypot(CX - b[0], CY - b[1]), f = [(CX - b[0]) / m, (CY - b[1]) / m], s = [-f[1], f[0]];
         all(L.ore, [b[0] + f[0] * 7 + s[0] * 18, b[1] + f[1] * 7 + s[1] * 18], [7]);
         all(L.ore, [b[0] + f[0] * 7 - s[0] * 19, b[1] + f[1] * 7 - s[1] * 19], [6.5]);
@@ -640,13 +757,14 @@ const Rules = (() => {
       // Two bridges on the quarter's own half river. A bridge's + end is on this quarter's side of the 22.5
       // degree river, its - end on this quarter's side of the 112.5 degree one.
       const span = (r, s) => [fromRiver(r, s, riverU(s) - 8.5), fromRiver(r, s, riverU(s) + 8.5)];
-      for (const s of [45, 95]) { const [a, b] = span(rivers[0], s); for (const T of L.syms) L.bridges.push([T(a), T(b)]); }
+      const s1 = 45 * sc, s2 = 95 * sc, sf = 70 * sc;
+      for (const s of [s1, s2]) { const [a, b] = span(rivers[0], s); for (const T of L.syms) L.bridges.push([T(a), T(b)]); }
       R(C, tOut, 2); R(E, tOut, 2); R(tOut, tIn, 3);
-      R(tIn, span(rivers[0], 45)[1], 2.5); R(tIn, span(rivers[1], 45)[0], 2.5);
-      R(C, span(rivers[0], 95)[1], 2.5); R(E, span(rivers[1], 95)[0], 2.5);
-      for (const s of [45, 95]) { const [a, b] = span(rivers[0], s); R(a, b, 0); }
+      R(tIn, span(rivers[0], s1)[1], 2.5); R(tIn, span(rivers[1], s1)[0], 2.5);
+      R(C, span(rivers[0], s2)[1], 2.5); R(E, span(rivers[1], s2)[0], 2.5);
+      for (const s of [s1, s2]) { const [a, b] = span(rivers[0], s); R(a, b, 0); }
       // A ford between the two bridges, as a middle point and the river's way there.
-      fordAt(fromRiver(rivers[0], 70, riverU(70)), fromRiver(rivers[0], 71, riverU(71)));
+      fordAt(fromRiver(rivers[0], sf, riverU(sf)), fromRiver(rivers[0], sf + 1, riverU(sf + 1)));
       return L;
     }
     L.syms = [p => [p[0], p[1]], mirror];
@@ -1077,20 +1195,29 @@ const Rules = (() => {
     };
   }
 
-  // A new game. layout is 'duel' (two sides, 128 cells) or 'world' (eight slots, 256 cells). Every slot
-  // starts with a base unless `empty` is set.
+  // The map a seed makes, or if it fails the checks, the next one along that passes, as a game would be set on.
+  function mapFor(seed, kind, debug) {
+    let M = makeMap(seed, kind);
+    for (let tries = 0; tries < 12 && !goodMap(M); tries++) { if (debug) console.log('map', seed, M.why); seed += 1000; M = makeMap(seed, kind); }
+    return M;
+  }
+
+  // A new game. layout is 'duel' (two slots, 128 cells), 'quad' (four, 192) or 'world' (eight, 256). seats
+  // lists the slots that play, every slot unless given; the others stay empty. Each seated slot starts with a
+  // base unless `empty` is set, and the seated slots' bases are spread evenly round the map. The game is over
+  // when one side is left.
   function newGame(o = {}) {
-    const kind = o.layout || 'duel';
-    let seed = o.seed || 1, M = makeMap(seed, kind);
-    for (let tries = 0; tries < 12 && !goodMap(M); tries++) { if (o.debug) console.log('map', seed, M.why); seed += 1000; M = makeMap(seed, kind); }
+    const kind = o.layout || 'duel', M = mapFor(o.seed || 1, kind, o.debug), seed = M.seed;
     coverPoints(M);
     const n = M.bases.length;
+    const seats = (o.seats || [...Array(n).keys()]).filter(t => t >= 0 && t < n);
+    const pos = o.pos || spread(seats, n);
     const S = {
       HZ, tick: 0, seed, layout: kind, map: M, rs: seed ^ 0x51ed, ents: [], next: 1, byId: new Map(), cmds: [], log: [], keepLog: !!o.log, ev: [], shots: [], fields: new Map(),
       fieldQueue: 0, occVer: 1, occ: new Int32Array(N), occLog: [], over: null, ais: [], sweeps: [], hash: [], bldHash: [], flights: [],
       terr: new Int8Array(N).fill(-1), infl: [], terrVer: 0, townOwnerVer: 0,
       ore: new Uint16Array(M.ore), oreVer: 0,
-      P: [], bases: M.bases, faces: M.faces, _fields: new Map(),
+      P: [], bases: pos.map(p => M.bases[p]), faces: pos.map(p => M.faces[p]), seats, pos, _fields: new Map(),
       // The ground as it now is, which woods, bridges and fords change, and what has happened to the trees,
       // bridges and houses.
       gnd: new Uint8Array(M.ground), gndVer: 0, wood: new Uint8Array(N), woodVer: 0, burn: [], crush: [],
@@ -1098,10 +1225,14 @@ const Rules = (() => {
       trail: new Uint8Array(N), trailSum: 0,
     };
     S.rand = rngOf(S);
-    for (let t = 0; t < n; t++) { S.P.push(freshPlayer(t, o)); S.infl.push(new Float32Array(N)); }
+    for (let t = 0; t < n; t++) {
+      const P = freshPlayer(t, o);
+      if (!seats.includes(t)) { P.alive = false; P.out = true; }
+      S.P.push(P); S.infl.push(new Float32Array(N));
+    }
     for (const m of M.towns) m.owner = -1;
     S.towns = M.towns.map(t => Object.assign({}, t));
-    if (!o.empty) for (let t = 0; t < n; t++) spawnBase(S, t);
+    if (!o.empty) for (const t of seats) spawnBase(S, t);
     territory(S);
     recount(S);
     vision(S);
@@ -1165,7 +1296,7 @@ const Rules = (() => {
   const plain = e => { const o = {}; for (const k in e) if (k !== 'd' && k[0] !== '_') o[k] = e[k]; return o; };
   function save(S) {
     return {
-      v: 1, seed: S.seed, layout: S.layout, tick: S.tick, rs: S.rs, next: S.next, occVer: S.occVer, oreVer: S.oreVer, terrVer: S.terrVer, dirty: !!S.dirty, over: S.over,
+      v: 1, seed: S.seed, layout: S.layout, seats: S.seats, pos: S.pos, tick: S.tick, rs: S.rs, next: S.next, occVer: S.occVer, oreVer: S.oreVer, terrVer: S.terrVer, dirty: !!S.dirty, over: S.over,
       ents: S.ents.map(plain), towns: S.towns, shots: S.shots, sweeps: S.sweeps, flights: S.flights, occLog: S.occLog,
       fields: [...S.fields].map(([k, f]) => [k, f.ver, f.used, f.made, f.reach]),
       ore: b64.en(new Uint8Array(S.ore.buffer.slice(0))),
@@ -1177,7 +1308,7 @@ const Rules = (() => {
   }
   function diffs(a, base) { const o = []; for (let c = 0; c < a.length; c++) if (a[c] !== (base ? base[c] : 0)) o.push(c, a[c]); return o; }
   function load(o) {
-    const S = newGame({ seed: o.seed, layout: o.layout, empty: true });
+    const S = newGame({ seed: o.seed, layout: o.layout, seats: o.seats, pos: o.pos, empty: true });
     if (S.seed !== o.seed) throw new Error('map seed mismatch');
     Object.assign(S, { tick: o.tick, rs: o.rs, next: o.next, occVer: o.occVer, oreVer: o.oreVer, terrVer: o.terrVer, dirty: o.dirty, over: o.over, shots: o.shots, sweeps: o.sweeps, flights: o.flights, occLog: o.occLog || [] });
     S.towns = o.towns.map(t => Object.assign({}, t));
@@ -2709,9 +2840,11 @@ const Rules = (() => {
     } else if (c.c === 'restart') {
       restartSlot(S, team, { shield: +c.shield || 0 });
     } else if (c.c === 'raze') {
+      if (!S.P[team].alive) return;
       razeSlot(S, team);
       S.P[team].alive = false;
       territory(S); recount(S);
+      S.ev.push({ t: 'fallen', team });
     } else if (c.c === 'launch') {
       const s = S.ents.find(e => e.b && e.team === team && e.kind === 'silo' && e.hp > 0 && e.charge >= e.d.charge);
       if (!s) return;
@@ -2826,6 +2959,7 @@ const Rules = (() => {
   }
 
   function step(S) {
+    use(S);
     S.fieldQueue = 0;
     for (const a of S.ais) a.tick(S);
     rehash(S);
@@ -2866,19 +3000,19 @@ const Rules = (() => {
     }
     if (S.tick % 10 === 0) vision(S);
     S.sweeps = S.sweeps.filter(s => s.until > S.tick);
-    if (S.layout === 'duel' && !S.over && S.tick % HZ === 0) {
-      for (const team of [0, 1]) {
-        const left = S.ents.some(e => e.b && e.team === team);
-        if (!left) { S.over = { loser: team, winner: 1 - team, tick: S.tick }; S.ev.push({ t: 'over', winner: 1 - team }); break; }
-      }
-    }
-    // In the world a slot whose last building falls is out. What it had left goes with it.
-    if (S.layout !== 'duel' && S.tick % HZ === 0) {
+    // A side whose last building falls is out, and what it had left goes with it. The last side standing wins.
+    if (!S.over && S.tick % HZ === 0) {
       for (const P of S.P) if (P.alive && !S.ents.some(e => e.b && e.team === P.team && e.hp > 0)) {
         P.alive = false;
         razeSlot(S, P.team);
         territory(S); recount(S);
         S.ev.push({ t: 'fallen', team: P.team });
+      }
+      const left = S.P.filter(P => P.alive);
+      if (left.length <= 1) {
+        const winner = left.length ? left[0].team : -1;
+        S.over = { winner, tick: S.tick };
+        S.ev.push({ t: 'over', winner });
       }
     }
     S.tick++;
@@ -2921,10 +3055,10 @@ const Rules = (() => {
   }
 
   return {
-    HZ, DT, RES, UNITS, BUILDINGS, WEAPONS, TECH, POWERS, DIFFICULTY, LAYOUT, SIZES,
+    HZ, DT, RES, UNITS, BUILDINGS, WEAPONS, TECH, POWERS, DIFFICULTY, LAYOUT, SIZES, MAPS, spread, use,
     get W() { return W; }, get H() { return H; }, get VW() { return VW; }, get VH() { return VH; },
     newGame, step, push, spawn, addBuilding, pickFrom, fits, spotFor, roomy, blockedReason, near, rehash, seenBy, terrainAt, heightAt, los, isAir, armed, cellOf, summary, exitOf,
-    mulberry, noiser, clamp, lerp, smooth, angleTo, toXY, toUV, gap, setSize, save, load, hashOf, restartSlot, razeSlot, makeMap, layoutFor,
+    mulberry, noiser, clamp, lerp, smooth, angleTo, toXY, toUV, gap, setSize, save, load, hashOf, restartSlot, razeSlot, makeMap, mapFor, layoutFor,
     msin, mcos, matan2, mhypot,
     BRIDGE_HP, SPELL, weatherAt, sky, dayAt, spellOf, bridgeAt, clsOf, houseHp, hurtBridge, ignite, shielded,
     coverPoints, coverNear, COVER_R, COVER_ARC,
@@ -2935,9 +3069,8 @@ if (typeof module !== 'undefined') module.exports = Rules;
 </script>
 <script>
 // Dead Ground, the enemy commander. It sends the same commands a player can, on a clock set by its
-// difficulty. It may only act on what it has seen, except that it knows where the other bases are. In
-// the world it fights whichever living neighbour is nearest, counting people's bases as further off, and
-// leaves alone a newcomer still shielded, whom the rules also keep it from hurting.
+// difficulty. It may only act on what it has seen, except that it knows where the other bases are. With
+// more than one foe it fights whichever living neighbour is nearest.
 // It draws on random numbers of its own, never the world's, since on a server only the server runs it.
 const AI = (() => {
   const R = typeof Rules !== 'undefined' ? Rules : require('./rules.js');
@@ -2964,8 +3097,7 @@ const AI = (() => {
     let best = -1, bd = Infinity;
     for (const P of S.P) {
       if (P.team === me.team || P.alive === false || (P.shield || 0) > S.tick) continue;
-      // A person's base counts as half again as far, so computers mostly fight each other.
-      const f = S.bases[P.team], d = Math.hypot(f[0] - b[0], f[1] - b[1]) * (me.people && me.people.has(P.team) ? 1.6 : 1);
+      const f = S.bases[P.team], d = Math.hypot(f[0] - b[0], f[1] - b[1]);
       if (d < bd) { bd = d; best = P.team; }
     }
     return me.foe = best;
@@ -3278,8 +3410,9 @@ const AI = (() => {
     defendTowns(S, me, fight);
     defendBridges(S, me, fight);
 
-    // In the world a wave is the army that set out, and what is built meanwhile guards home, so no slot
-    // streams everything into one war while a second neighbour walks in. A duel presses on with every unit.
+    // With more than one foe a wave is the army that set out, and what is built meanwhile guards home, so no
+    // side streams everything into one war while a second neighbour walks in. Against one foe it presses on
+    // with every unit.
     // A level's `pulse` overrides that choice.
     const wave = me.waveIds ? fight.filter(u => me.waveIds.includes(u.id)) : fight;
     const guard = me.waveIds ? fight.filter(u => !me.waveIds.includes(u.id)) : [];
@@ -3307,7 +3440,7 @@ const AI = (() => {
     if (me.D.stay || foeTeam < 0) return;
     if (m >= me.D.delay && strength >= need) {
       me.state = 'attack'; me.startStrength = strength; me.attackT = S.tick; me.attackUntil = S.tick + (me.D.raid || 0) * HZ;
-      me.waveIds = (me.D.pulse !== undefined ? me.D.pulse : S.layout !== 'duel') ? fight.map(u => u.id) : null;
+      me.waveIds = (me.D.pulse !== undefined ? me.D.pulse : (S.seats || S.P).length > 2) ? fight.map(u => u.id) : null;
       S.ev.push({ t: 'wave', team, n: me.waves + 1 });
     }
   }
@@ -3326,7 +3459,7 @@ const AI = (() => {
   // What a commander remembers, for a saved game: its plain fields and where its dice stand.
   function save(me) {
     const o = {};
-    for (const k in me) if (k !== 'D' && k !== 'rand' && k !== 'tick' && k !== 'people') o[k] = me[k];
+    for (const k in me) if (k !== 'D' && k !== 'rand' && k !== 'tick') o[k] = me[k];
     o.rand = me.rand.state();
     return o;
   }
@@ -7330,6 +7463,8 @@ const World = (() => {
       teamCol, THEMES,
       get baseImage() { return baseImage; },
       get viewTeam() { return viewTeam; },
+      // Sees the whole map with no fog, as one watching a game does.
+      watchAll() { viewTeam = -1; SH.uFogOn.value = 0; },
       visible: VIS,
       focus(x, y, d) { cam.x = x; cam.y = y; if (d) cam.dist = d; },
     };
@@ -7933,7 +8068,7 @@ const Hud = (() => {
 
     function keyDown(e) {
       if (e.target && /INPUT|SELECT|TEXTAREA/.test(e.target.tagName)) return;
-      if (!game.playing) { if (e.code === 'Enter' && !$('title').hidden) $('deploy').click(); return; }
+      if (!game.playing) { if (e.code === 'Enter' && !$('title').hidden) game.menuEnter(); return; }
       const k = e.code, s = S(), t = team();
       state.keys.add(k);
       if (/^Digit[1-9]$/.test(k)) {
@@ -8137,7 +8272,7 @@ const Hud = (() => {
         og.strokeStyle = PLAN; og.setLineDash([3, 3]); og.lineWidth = 1.5; og.beginPath(); og.arc(best.px, best.py, 13, 0, 6.283); og.stroke();
         const e = inf[0], [ex, ey] = world.project(e.x, terrainAt(s.map, e.x, e.y) + 0.3, e.y);
         dotted(); og.strokeStyle = PLAN; og.beginPath(); og.moveTo(ex, ey); og.lineTo(best.px, best.py); og.stroke();
-        og.setLineDash([]); og.font = 'italic 14px "IM Fell English", Georgia, serif'; og.fillStyle = '#1a1512'; og.textAlign = 'left'; og.textBaseline = 'middle';
+        og.setLineDash([]); og.font = `italic 14px ${labelFont()}`; og.fillStyle = '#1a1512'; og.textAlign = 'left'; og.textBaseline = 'middle';
         const label = TAC_NAMES[best.kind], tw = og.measureText(label).width;
         og.fillStyle = 'rgba(243,236,220,0.9)'; og.fillRect(best.px + 16, best.py - 10, tw + 10, 20);
         og.fillStyle = '#1a1512'; og.fillText(label, best.px + 21, best.py);
@@ -8203,7 +8338,7 @@ const Hud = (() => {
       // a lozenge for theirs, in the side's ink.
       if (world.style.units === 6 && world.cam.dist > 100) {
         const TAG = { tank: 'T', heavy: 'H', ifv: 'I', humvee: 'J', truck: 'Tk', flak: 'AA', support: 'S', mlrs: 'R', rifle: 'i', rocket: 'at', engineer: 'e', sniper: 's', hero: 'h', heli: 'He', jet: 'Jt', fpv: 'd' };
-        og.save(); og.setLineDash([]); og.font = 'italic 11px "IM Fell English", Georgia, serif'; og.textAlign = 'center'; og.textBaseline = 'middle';
+        og.save(); og.setLineDash([]); og.font = `italic 11px ${labelFont()}`; og.textAlign = 'center'; og.textBaseline = 'middle';
         for (const o of world.onScreen) {
           const e = o.e; if (e.b || !e.d) continue;
           const own = e.team === t, c = world.teamCol[Math.max(0, e.team)], ink = own ? '#1f3f8a' : '#8a2a1e', s2 = 8;
@@ -8289,7 +8424,7 @@ const Hud = (() => {
       og.save(); og.setLineDash([]);
       og.fillStyle = 'rgba(250,244,228,0.9)'; og.strokeStyle = 'rgba(31,26,22,0.85)'; og.lineWidth = 1;
       og.fillRect(x, y, 104, 58); og.strokeRect(x + 0.5, y + 0.5, 103, 57);
-      og.font = 'italic 14px "IM Fell English", Georgia, serif'; og.textBaseline = 'middle'; og.textAlign = 'left';
+      og.font = `italic 14px ${labelFont()}`; og.textBaseline = 'middle'; og.textAlign = 'left';
       const row = (i, label, draw) => { const yy = y + 12 + i * 17; draw(x + 10, yy); og.setLineDash([]); og.fillStyle = '#3d352c'; og.fillText(label, x + 46, yy + 1); };
       row(0, 'was', (a, b) => { og.strokeStyle = WAS; dashed(); og.beginPath(); og.moveTo(a, b); og.lineTo(a + 28, b); og.stroke(); });
       row(1, 'planned', (a, b) => { og.strokeStyle = PLAN; dotted(); og.beginPath(); og.moveTo(a, b); og.lineTo(a + 28, b); og.stroke(); });
@@ -8390,6 +8525,13 @@ const Hud = (() => {
       star(ex, ey, 16, bolt.pts[1][0], 9, '#fff2a0', '#ffffff', 8);
       og.restore();
     }
+    // The face for notes written on the map, as the page's --label sets it, looked up again each second.
+    let labelF = 'Georgia, serif', labelT = -1e9;
+    function labelFont() {
+      const now = performance.now();
+      if (now - labelT > 1000) { labelT = now; labelF = getComputedStyle(document.body).getPropertyValue('--label').trim() || labelF; }
+      return labelF;
+    }
     // The weather and the hour in a corner, with what the weather does, and a word of what is coming.
     const SKY_NAME = { clear: 'Fair', cloud: 'Overcast', rain: 'Rain', storm: 'Storm', fog: 'Fog', snow: 'Snow' };
     const SKY_NOTE = { rain: 'Wheels bog down off the roads', storm: 'Aircraft grounded', fog: 'Sight cut short', snow: 'Everyone slowed' };
@@ -8404,7 +8546,7 @@ const Hud = (() => {
       if (left) note = `Protected ${left / 60 | 0}:${String(left % 60).padStart(2, '0')} · until you attack`;
       const top = `${SKY_NAME[w.kind] || ''} · ${hourName(world.sky.day)}`, x = world.vw - 12, y = 52;
       og.save(); og.setLineDash([]); og.textAlign = 'right'; og.textBaseline = 'middle';
-      const f1 = ink ? 'italic 16px "IM Fell English", Georgia, serif' : '600 14px "Barlow Condensed", system-ui, sans-serif', f2 = ink ? 'italic 13px "IM Fell English", Georgia, serif' : '500 12px "Barlow Condensed", system-ui, sans-serif';
+      const f1 = ink ? `italic 16px ${labelFont()}` : '600 14px "Barlow Condensed", system-ui, sans-serif', f2 = ink ? `italic 13px ${labelFont()}` : '500 12px "Barlow Condensed", system-ui, sans-serif';
       og.font = f1; let tw = og.measureText(top).width;
       og.font = f2; if (note) tw = Math.max(tw, og.measureText(note).width);
       const bh = note ? 40 : 24;
@@ -8428,7 +8570,7 @@ const Hud = (() => {
           const c = [[m.x0 - m.ux + nx, m.y0 - m.uy + ny], [m.x1 + m.ux + nx, m.y1 + m.uy + ny], [m.x1 + m.ux - nx, m.y1 + m.uy - ny], [m.x0 - m.ux - nx, m.y0 - m.uy - ny]].map(([a, b]) => world.project(a, z, b));
           if (st.fix) { og.strokeStyle = PLAN; dotted(); } else { og.strokeStyle = WAS; dashed(); }
           og.beginPath(); c.forEach(([a, b], k) => k ? og.lineTo(a, b) : og.moveTo(a, b)); og.closePath(); og.stroke();
-          if (st.fix) { og.setLineDash([]); og.fillStyle = PLAN; og.font = 'italic 14px "IM Fell English", Georgia, serif'; og.textAlign = 'center'; og.fillText(`rebuilding, ${Math.max(0, Math.ceil((st.fix - s.tick) / HZ))}s`, cx, cy - 14); }
+          if (st.fix) { og.setLineDash([]); og.fillStyle = PLAN; og.font = `italic 14px ${labelFont()}`; og.textAlign = 'center'; og.fillText(`rebuilding, ${Math.max(0, Math.ceil((st.fix - s.tick) / HZ))}s`, cx, cy - 14); }
         }
         if (st.c4) { og.setLineDash([]); og.fillStyle = '#ff5040'; og.font = '700 13px "Share Tech Mono", monospace'; og.textAlign = 'center'; og.fillText('C4 ' + Math.max(0, Math.ceil((st.c4 - s.tick) / HZ)), cx, cy - 14); }
         og.restore();
@@ -8878,15 +9020,23 @@ const Game = (() => {
     const params = new URLSearchParams(location.search);
     const world = World.create(THREE, canvas, { low: mobile, keep: params.has('keep') });
     const G = {
-      S: null, team: 0, playing: false, paused: false, speed: 1, showHints: true, audio: null, world, theme: 'desert', diff: 'regular', look: 'ink', online: false, name: '',
+      S: null, team: 0, playing: false, paused: false, speed: 1, showHints: true, audio: null, world, theme: 'desert', look: 'ink', online: false, name: '',
+      // Each slot's name and the map of the game being played.
+      names: [], mapKey: 'duel',
       // Online the world never pauses, so the veil only offers the way out.
       togglePause() { if (!G.playing) return; if (G.online) { $('veil').hidden = !$('veil').hidden; return; } G.paused = !G.paused; $('veil').hidden = !G.paused; },
       setSpeed(d) { if (G.online) return; const i = Rules.clamp(SPEEDS.indexOf(G.speed) + d, 0, SPEEDS.length - 1); G.speed = SPEEDS[i]; hud.say(`Game speed ${G.speed}x.`); $('speed').textContent = G.speed + 'x'; },
       // Every order goes to the server online, and straight into the rules otherwise.
-      order(S, team, c) { if (G.online) { if (net.ws && net.ws.readyState === 1) net.ws.send(JSON.stringify({ t: 'cmd', c })); } else Rules.push(S, team, c); },
+      order(S, team, c) { if (G.online) send({ t: 'cmd', c }); else Rules.push(S, team, c); },
       fullscreen() { const el = document.documentElement; if (document.fullscreenElement) document.exitFullscreen?.(); else el.requestFullscreen?.().catch(() => {}); },
+      // Enter on the title: the first choice on the main menu, or start the game being set up.
+      menuEnter() { if (!$('t-main').hidden) $('b-skirmish').click(); else if (!$('t-setup').hidden && !$('deploy').hidden && !$('deploy').disabled) $('deploy').click(); },
     };
     const SPEEDS = [0.5, 1, 1.5, 2, 3];
+    const SLOT_CSS = ['#6fb0ff', '#ff7a60', '#6fd47f', '#b98af0', '#ffae52', '#4fd8d4', '#ff7ac0', '#c99a6c'];
+    const LEVELS = ['recruit', 'regular', 'veteran'];
+    const THEATRES = { desert: 'Salt Flats', steppe: 'Black Steppe', winter: 'White Pass' };
+    const store = { get(k, d = '') { try { return localStorage.getItem(k) ?? d; } catch (e) { return d; } }, set(k, v) { try { if (v === null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch (e) { /* no store */ } } };
     const audio = G.audio = makeAudio(typeof SOUNDS === 'object' ? SOUNDS : {}, world);
     const hud = Hud.create(world, G);
 
@@ -8923,64 +9073,129 @@ const Game = (() => {
       world.focus(Rules.W / 2, Rules.H / 2, 110);
     }
 
-    function start() {
-      const seed = params.has('seed') ? +params.get('seed') : (Date.now() % 100000) + 1;
-      const S = Rules.newGame({ seed });
-      S.ais.push(AI.create(1, G.diff));
-      $('title').hidden = true; $('end').hidden = true;
-      clearSave();
-      begin(S, G.theme, 0);
+    // Into a game, local or online: the title goes and the view goes to the player's base.
+    function enterPlay(S, theme, team) {
+      $('title').hidden = true; $('end').hidden = true; $('veil').hidden = true;
+      begin(S, theme, team);
       hud.reset();
-      G.playing = true; G.paused = false; $('veil').hidden = true;
+      G.playing = true; G.paused = false; G.outcome = null;
       document.body.classList.add('in-game');
-      home(S, 0);
-      saveT = 0;
-      hud.say(`Deployed: ${world.THEMES[G.theme].name}. Enemy to the north. Good hunting, Commander.`);
+      if (team >= 0) home(S, team); else world.focus(S.map.W / 2, S.map.H / 2, 150);
+      drawRoster();
       fit();
     }
 
+    // ---- A skirmish against computers, kept in the browser ------------------------------------------------
+
+    // The skirmish being set up: the map, its terrain, the theatre, and who sits in each slot.
+    const SK = 'dg-skirmish';
+    const newSeed = () => 1 + Math.floor(Math.random() * 99990);
+    let sk = null;
+    try { sk = JSON.parse(store.get(SK, 'null')); } catch (e) { sk = null; }
+    if (!sk || !Rules.MAPS[sk.map] || !Array.isArray(sk.slots)) sk = { map: 'duel', seed: newSeed(), theme: store.get('dg-theme', 'desert'), slots: [{ kind: 'you' }, { kind: 'ai', level: store.get('dg-diff', 'regular') }] };
+    if (!THEATRES[sk.theme]) sk.theme = 'desert';
+    fitSlots(sk);
+    // Slots to the map's number of seats, keeping the player and the computers in order, the player always in one.
+    function fitSlots(o) {
+      const n = Rules.MAPS[o.map].seats, keep = o.slots.filter(s => s.kind === 'you' || s.kind === 'ai');
+      if (!keep.some(s => s.kind === 'you')) keep.unshift({ kind: 'you' });
+      const you = keep.find(s => s.kind === 'you'), cpus = keep.filter(s => s.kind === 'ai');
+      // The player's own place in the list is kept where it fits.
+      const at = Math.min(o.slots.indexOf(you) >= 0 ? o.slots.indexOf(you) : 0, n - 1);
+      const out = [...Array(n)].map(() => ({ kind: 'open' }));
+      out[at] = you;
+      let i = 0;
+      for (const c of cpus) { while (i < n && out[i].kind !== 'open') i++; if (i < n) out[i] = { kind: 'ai', level: LEVELS.includes(c.level) ? c.level : 'regular' }; }
+      if (!out.some(s => s.kind === 'ai')) { const j = out.findIndex(s => s.kind === 'open'); if (j >= 0) out[j] = { kind: 'ai', level: 'regular' }; }
+      o.slots = out;
+    }
+    const saveSk = () => store.set(SK, JSON.stringify(sk));
+
+    function startSkirmish() {
+      const m = Rules.MAPS[sk.map], seats = [], you = sk.slots.findIndex(s => s.kind === 'you');
+      sk.slots.forEach((s, t) => { if (s.kind === 'you' || s.kind === 'ai') seats.push(t); });
+      if (seats.length < 2 || you < 0) return;
+      const S = Rules.newGame({ seed: params.has('seed') ? +params.get('seed') : sk.seed, layout: m.layout, seats });
+      sk.slots.forEach((s, t) => { if (s.kind === 'ai') S.ais.push(AI.create(t, s.level, S.seed + t)); });
+      G.names = sk.slots.map(s => s.kind === 'you' ? (G.name || 'You') : s.kind === 'ai' ? `Computer (${Rules.DIFFICULTY[s.level].name})` : '');
+      G.theme = sk.theme; G.mapKey = sk.map; G.online = false;
+      clearSave();
+      enterPlay(S, G.theme, you);
+      saveT = 0;
+      const foes = seats.length - 1;
+      hud.say(`Deployed: ${m.name}, ${THEATRES[G.theme]}. ${foes === 1 ? 'One enemy' : foes + ' enemies'} on the map. Good hunting, Commander.`);
+    }
+
     // A game against the computer is kept in the browser, so a refresh or a closed tab loses nothing. The world, the
-    // commander's mind, the view and the control groups are written every few seconds and as the page goes.
+    // commanders' minds, the view and the control groups are written every few seconds and as the page goes.
     const SAVE = 'dg-save';
     let saveT = 0;
     function saveGame() {
       if (!G.playing || G.online || !G.S || G.S.over) return;
       const c = world.cam;
-      try { localStorage.setItem(SAVE, JSON.stringify({ v: 1, at: Date.now(), theme: G.theme, diff: G.diff, speed: G.speed, cam: { x: c.x, y: c.y, dist: c.dist, yaw: c.yaw }, groups: hud.groupIds(), S: Rules.save(G.S), ais: G.S.ais.map(AI.save) })); } catch (e) { /* no store, or full */ }
+      store.set(SAVE, JSON.stringify({ v: 2, at: Date.now(), theme: G.theme, map: G.mapKey, names: G.names, team: G.team, speed: G.speed, cam: { x: c.x, y: c.y, dist: c.dist, yaw: c.yaw }, groups: hud.groupIds(), S: Rules.save(G.S), ais: G.S.ais.map(AI.save) }));
     }
-    function clearSave() { try { localStorage.removeItem(SAVE); } catch (e) { /* no store */ } }
+    function clearSave() { store.set(SAVE, null); }
     function restore() {
       let o = null;
-      try { o = JSON.parse(localStorage.getItem(SAVE)); } catch (e) { /* no store */ }
-      if (!o || o.v !== 1) return false;
+      try { o = JSON.parse(store.get(SAVE, 'null')); } catch (e) { /* none */ }
+      if (!o || (o.v !== 1 && o.v !== 2)) return false;
       let S;
       try { S = Rules.load(o.S); S.ais = o.ais.map(AI.load); } catch (e) { clearSave(); return false; }
-      G.theme = o.theme; G.diff = o.diff; G.speed = o.speed; $('speed').textContent = G.speed + 'x';
-      for (const [box, key] of [['m-theme', 'theme'], ['m-diff', 'diff']]) $(box).querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.v === G[key]));
-      $('title').hidden = true; $('end').hidden = true;
-      begin(S, G.theme, 0);
-      hud.reset(); hud.setGroups(o.groups);
-      G.playing = true; G.paused = false; $('veil').hidden = true;
-      document.body.classList.add('in-game');
+      G.theme = o.theme; G.speed = o.speed; $('speed').textContent = G.speed + 'x';
+      G.mapKey = o.map || 'duel'; G.names = o.names || ['You', `Computer (${Rules.DIFFICULTY[o.diff || 'regular'].name})`];
+      enterPlay(S, G.theme, o.team ?? 0);
+      hud.setGroups(o.groups);
       Object.assign(world.cam, o.cam);
       hud.say('Resumed where you left off.');
-      fit();
       return true;
     }
     window.addEventListener('pagehide', saveGame);
     window.addEventListener('beforeunload', saveGame);
 
-    function finish(won) {
-      G.playing = false;
-      clearSave();
-      const S = G.S, a = Rules.summary(S, 0), b = Rules.summary(S, 1), sec = S.tick / Rules.HZ | 0;
-      $('end-title').textContent = won ? 'Mission Accomplished' : 'Mission Failed';
-      $('end').className = won ? 'won' : 'lost';
-      $('end-sub').textContent = `${world.THEMES[G.theme].name} · ${Rules.DIFFICULTY[G.diff].name} · ${sec / 60 | 0}m ${String(sec % 60).padStart(2, '0')}s`;
-      const row = (n, x, y) => `<tr><th>${n}</th><td>${x}</td><td>${y}</td></tr>`;
-      $('end-stats').innerHTML = '<tr><th></th><td>You</td><td>Enemy</td></tr>' + row('Units built', a.made, b.made) + row('Kills', a.killed, b.killed) + row('Buildings razed', a.razed, b.razed) + row('Ore mined', Math.round(a.mined).toLocaleString('en-US'), Math.round(b.mined).toLocaleString('en-US')) + row('Towns held', a.towns, b.towns);
+    // ---- How a game ends ----------------------------------------------------------------------------------
+
+    // A side's name, marked when it is the player's own.
+    const youName = t => { const n = G.names[t] || `Side ${t + 1}`; return t === G.team && n !== 'You' ? n + ' (you)' : n; };
+    // Each side's figures, the winner first, then by how long they lasted.
+    function standings() {
+      const S = G.S, row = (n, cells) => `<tr><th>${n}</th>${cells.map(c => `<td>${c}</td>`).join('')}</tr>`;
+      const seats = (S.seats || [0, 1]).slice().sort((a, b) => (S.over && S.over.winner === b) - (S.over && S.over.winner === a) || S.P[b].alive - S.P[a].alive);
+      let h = row('', ['Built', 'Kills', 'Razed', 'Ore', 'Towns']);
+      for (const t of seats) {
+        const s = Rules.summary(S, t), nm = document.createElement('span');
+        nm.textContent = youName(t);
+        h += row(`<i class="dot" style="background:${SLOT_CSS[t]}"></i>${nm.innerHTML}`, [s.made, s.killed, s.razed, Math.round(s.mined).toLocaleString('en-US'), s.towns]);
+      }
+      return h;
+    }
+    // Shows how things stand once a side falls or the game is won: the final table, or, for a player whose base
+    // has fallen while others fight on, the table so far and a choice to watch the rest.
+    function outcome() {
+      const S = G.S;
+      if (!S || G.outcome === 'final') return;
+      const sec = S.tick / Rules.HZ | 0, map = Rules.MAPS[G.mapKey] || Rules.MAPS.duel;
+      $('end-sub').textContent = `${map.name} · ${THEATRES[G.theme] || ''} · ${sec / 60 | 0}m ${String(sec % 60).padStart(2, '0')}s`;
+      $('end-stats').innerHTML = standings();
+      const me = G.team >= 0 ? S.P[G.team] : null;
+      if (S.over) {
+        G.outcome = 'final'; G.playing = false;
+        clearSave();
+        const won = S.over.winner === G.team && G.team >= 0;
+        $('end-title').textContent = won ? 'Mission Accomplished' : me ? 'Mission Failed' : `${G.names[S.over.winner] || 'Nobody'} won`;
+        $('end').className = won ? 'won' : 'lost';
+        $('watch').hidden = true;
+        audio.play(won ? 'won' : 'lost', { gain: 0.8 });
+      } else if (me && !me.alive && G.outcome !== 'fallen') {
+        G.outcome = 'fallen';
+        $('end-title').textContent = 'Your base has fallen';
+        $('end').className = 'lost';
+        $('watch').hidden = false;
+        audio.play('lost', { gain: 0.8 });
+      } else return;
+      $('again').textContent = G.online ? 'Back to the room' : 'Again';
+      $('menu').textContent = G.online ? 'Leave' : 'Menu';
       $('end').hidden = false;
-      audio.play(won ? 'won' : 'lost', { gain: 0.8 });
     }
 
     // Hands what the rules did to the picture, the sound and the reports.
@@ -9006,10 +9221,12 @@ const Game = (() => {
           case 'hint': if (G.playing && e.team === G.team && e.hint === 'attrition') hud.say('Attrition: troops wear down abroad. A Support Truck stops it.', 'bad'); break;
           case 'launch': if (G.playing && e.team === G.team) audio.play('launch', { gain: 0.9 }); break;
           case 'placed': if (G.playing && e.team === G.team) audio.at('place', e.x, e.y, { gain: 0.8 }); break;
-          case 'over': if (G.playing && !G.online) setTimeout(() => finish(e.winner === G.team), 1800); break;
-          case 'fallen': if (G.online && e.team === G.team) setTimeout(fallen, 1500); break;
-          case 'spawned': if (G.online && e.team === G.team) { $('end').hidden = true; home(G.S, G.team); hud.say('Deployed. For ten minutes nobody can attack you, and you cannot attack anyone. Ordering an attack ends it.', 'good'); } break;
-          case 'unshield': if (G.playing && e.team === G.team) hud.say('You ordered an attack, so your protection is over.', 'bad'); break;
+          case 'over': if (G.playing) setTimeout(outcome, 1800); drawRoster(); break;
+          case 'fallen':
+            if (G.playing && e.team === G.team) setTimeout(outcome, 1800);
+            else if (G.playing && G.names[e.team]) hud.say(`${G.names[e.team]} is out.`, 'good');
+            drawRoster();
+            break;
           case 'weather': if (G.playing) { const v = SKY_SAY[e.kind]; if (v && !(e.kind === 'cloud' && e.was === 'clear')) { hud.say(v[0], v[1]); if (v[2]) audio.voice('sky', v[2]); } } break;
           case 'flood': if (G.playing) hud.say(e.on ? 'The rivers are up. The fords are closed.' : 'The rivers are down. The fords are open again.', e.on ? 'bad' : 'good'); break;
           case 'bridge': if (G.playing && G.team >= 0 && G.S.P[G.team].seen[Rules.cellOf(e.x, e.y)]) { hud.say(e.down ? 'A bridge is down.' : 'A bridge is open again.', e.down ? 'bad' : 'good'); if (e.down) audio.voice('bridge', 'Bridge destroyed'); } break;
@@ -9071,52 +9288,230 @@ const Game = (() => {
       }
     }
 
-    // The menu.
-    const pick = (box, key, data) => {
-      box.querySelectorAll('button').forEach(b => {
-        b.classList.toggle('on', b.dataset.v === G[key]);
-        b.addEventListener('click', () => { G[key] = b.dataset.v; box.querySelectorAll('button').forEach(o => o.classList.toggle('on', o === b)); audio.wake(); audio.ui('click'); try { localStorage.setItem('dg-' + key, b.dataset.v); } catch (e) { /* no store */ } });
-      });
-    };
-    try { G.theme = localStorage.getItem('dg-theme') || G.theme; G.diff = localStorage.getItem('dg-diff') || G.diff; G.look = localStorage.getItem('dg-look') || G.look; G.look = { film: 'daylight', charcoal: 'ink', hudson: 'ink', hills: 'ink' }[G.look] || G.look; G.showHints = !localStorage.getItem('dg-played'); } catch (e) { /* no store */ }
+    // ---- The menus ----------------------------------------------------------------------------------------
+
+    // One screen of the title at a time: the main menu, a game's set-up, or the list of games.
+    function screen(name) {
+      for (const id of ['t-main', 't-setup', 't-rooms']) $(id).hidden = id !== 't-' + name;
+      $('title').classList.toggle('on-sheet', name !== 'main');
+      if (name === 'rooms') pollRooms(); else stopPolling();
+    }
+
+    try { G.name = store.get('dg-name', ''); G.look = store.get('dg-look', G.look); G.look = { film: 'daylight', charcoal: 'ink', hudson: 'ink', hills: 'ink' }[G.look] || G.look; G.showHints = !store.get('dg-played'); } catch (e) { /* no store */ }
     if (params.get('look')) G.look = params.get('look');
     // A saved look the settings offer is kept; anything else opens as pen and ink.
     if (!Looks.all().some(l => l.name === G.look)) G.look = 'ink';
-    // The look menu lists every look in the registry.
-    $('m-look').innerHTML = Looks.list().map(l => `<button data-v="${l.name}">${l.title}</button>`).join('');
     world.setLook(G.look);
-    pick($('m-theme'), 'theme'); pick($('m-diff'), 'diff'); pick($('m-look'), 'look');
-    $('m-look').addEventListener('click', () => world.setLook(G.look));
     // The paper's scheme: as the system has it, or light or dark by the player's choice, kept in the browser.
     const darkQ = window.matchMedia ? matchMedia('(prefers-color-scheme: dark)') : null;
-    let scheme = 'auto';
-    try { scheme = localStorage.getItem('dg-scheme') || 'auto'; } catch (e) { /* no store */ }
+    let scheme = store.get('dg-scheme', 'auto');
     function applyScheme() {
       const dark = scheme === 'dark' || (scheme === 'auto' && !!darkQ && darkQ.matches);
       Looks.dark = dark; document.body.dataset.scheme = dark ? 'dark' : 'light';
       $('s-scheme').querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.v === scheme));
+      if (!$('t-setup').hidden) renderSetup();
     }
     darkQ?.addEventListener?.('change', applyScheme);
-    applyScheme();
     // The settings panel, from the gear at the top right: the look, Daylight among them, and the paper's scheme.
     $('s-look').innerHTML = Looks.all().map(l => `<button data-v="${l.name}">${l.title}</button>`).join('');
     const markLook = () => $('s-look').querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.v === world.look));
     $('s-look').querySelectorAll('button').forEach(b => b.addEventListener('click', () => {
       G.look = b.dataset.v; world.setLook(G.look); markLook(); audio.ui('click');
-      try { localStorage.setItem('dg-look', G.look); } catch (e) { /* no store */ }
+      store.set('dg-look', G.look);
     }));
     $('s-scheme').querySelectorAll('button').forEach(b => b.addEventListener('click', () => {
       scheme = b.dataset.v; applyScheme(); audio.ui('click');
-      try { localStorage.setItem('dg-scheme', scheme); } catch (e) { /* no store */ }
+      store.set('dg-scheme', scheme);
     }));
     const setOpen = open => { $('settings').hidden = !open; $('b-set').setAttribute('aria-expanded', String(open)); if (open) markLook(); };
     $('b-set').addEventListener('click', e => { e.stopPropagation(); setOpen($('settings').hidden); audio.ui('click'); });
     document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('settings').hidden) setOpen(false); });
     document.addEventListener('pointerdown', e => { if (!$('settings').hidden && !$('settings').contains(e.target) && e.target !== $('b-set')) setOpen(false); });
-    $('deploy').addEventListener('click', () => { audio.wake(); audio.ui('click'); start(); try { localStorage.setItem('dg-played', '1'); } catch (e) { /* no store */ } });
-    $('again').addEventListener('click', () => { audio.ui('click'); if (G.online) { if (net.ws) net.ws.send(JSON.stringify({ t: 'respawn' })); $('end').hidden = true; } else start(); });
-    $('menu').addEventListener('click', () => { $('end').hidden = true; leave(); toTitle(); });
-    $('quit').addEventListener('click', () => { G.paused = false; $('veil').hidden = true; G.playing = false; clearSave(); leave(); toTitle(); });
+
+    // The map's picture in the set-up: land by height, water, ore, towns, roads and bridges, and a numbered mark at
+    // each seated slot's base in its colour. Each map is worked out once and kept.
+    const previews = new Map();
+    let previewWant = '';
+    function drawPreview(key, seed, slots) {
+      const m = Rules.MAPS[key], id = m.layout + ':' + seed + ':' + (Looks.dark ? 'd' : 'l'), cv = $('preview');
+      const css = Math.max(120, cv.clientWidth || 280), px = Math.round(css * Math.min(2, devicePixelRatio || 1));
+      if (cv.width !== px) { cv.width = cv.height = px; }
+      const g = cv.getContext('2d');
+      const paint = P => {
+        g.clearRect(0, 0, px, px);
+        g.imageSmoothingEnabled = true;
+        g.drawImage(P.img, 0, 0, px, px);
+        const k = px / P.W, seats = [];
+        slots.forEach((s, t) => { if (s.kind === 'human' || s.kind === 'ai' || s.kind === 'you') seats.push(t); });
+        const pos = Rules.spread(seats, P.bases.length), ink = getComputedStyle(document.body).getPropertyValue('--ink').trim() || '#1f1a16';
+        const r = Math.max(7, px * 0.03);
+        pos.forEach((p, t) => {
+          const [x, y] = P.bases[p], on = seats.includes(t);
+          g.beginPath(); g.arc(x * k, y * k, on ? r : r * 0.55, 0, Math.PI * 2);
+          g.lineWidth = Math.max(1.5, px / 300); g.strokeStyle = ink;
+          if (on) { g.fillStyle = SLOT_CSS[t]; g.fill(); g.stroke(); g.fillStyle = '#111'; g.font = `700 ${Math.round(r * 1.25)}px "Barlow Condensed", system-ui, sans-serif`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(String(t + 1), x * k, y * k + r * 0.06); }
+          else { g.setLineDash([3, 3]); g.stroke(); g.setLineDash([]); }
+        });
+      };
+      if (previews.has(id)) { previewWant = ''; paint(previews.get(id)); return; }
+      previewWant = id;
+      g.clearRect(0, 0, px, px);
+      setTimeout(() => {
+        if (previewWant !== id) return;
+        const M = Rules.mapFor(seed, m.layout), W = M.W, dark = Looks.dark;
+        const img = document.createElement('canvas'); img.width = img.height = W;
+        const c = img.getContext('2d'), d = c.createImageData(W, W);
+        const land = dark ? [[38, 38, 36], [92, 90, 84]] : [[236, 232, 214], [198, 178, 140]], water = dark ? [40, 54, 86] : [168, 184, 222], ore = dark ? [200, 154, 70] : [214, 166, 58];
+        for (let y = 0; y < W; y++) for (let x = 0; x < W; x++) {
+          const c0 = y * W + x, h = Rules.terrainAt(M, x + 0.5, y + 0.5), b = M.ground[c0], i = c0 * 4;
+          let col;
+          if (M.ore[c0]) col = ore;
+          else if (b === 7 && h < 0.3) col = water;
+          else { const t = Math.max(0, Math.min(1, h / 5)); col = land[0].map((v, j) => v + (land[1][j] - v) * t); if (b & 8) col = col.map((v, j) => v * 0.82 + (dark ? [40, 70, 40] : [120, 160, 100])[j] * 0.18); }
+          d.data[i] = col[0]; d.data[i + 1] = col[1]; d.data[i + 2] = col[2]; d.data[i + 3] = 255;
+        }
+        c.putImageData(d, 0, 0);
+        const lineC = dark ? 'rgba(220,210,190,.75)' : 'rgba(60,45,30,.7)';
+        c.strokeStyle = lineC; c.lineWidth = W / 220;
+        for (const rd of M.roads) { c.beginPath(); rd.forEach((p, j) => j ? c.lineTo(p[0], p[1]) : c.moveTo(p[0], p[1])); c.stroke(); }
+        c.lineWidth = W / 60; c.strokeStyle = dark ? 'rgba(200,190,170,.9)' : 'rgba(90,70,50,.85)';
+        for (const br of M.bridges) { c.beginPath(); c.moveTo(br.x0, br.y0); c.lineTo(br.x1, br.y1); c.stroke(); }
+        c.fillStyle = dark ? '#e8e0cf' : '#3a2e22';
+        for (const t of M.towns) c.fillRect(t.x - W / 90, t.y - W / 90, W / 45, W / 45);
+        // The rules are set back to the game behind the title.
+        if (G.S) Rules.use(G.S);
+        previews.set(id, { img, bases: M.bases, W });
+        if (previewWant === id) { previewWant = ''; paint(previews.get(id)); }
+      }, 20);
+    }
+
+    // The set-up, for a skirmish or for a game's room. Who may change what, and how a change is made, depends on
+    // which: a skirmish changes here, a room asks the server, and only its host may.
+    function setupView() {
+      if (net.view && net.inRoom) return Object.assign({ mode: 'room' }, net.view);
+      return { mode: 'skirmish', map: sk.map, seed: sk.seed, theme: sk.theme, phase: 'lobby', host: true, you: sk.slots.findIndex(s => s.kind === 'you'), slots: sk.slots.map(s => s.kind === 'you' ? { kind: 'human', name: G.name || 'You', you: true } : s), watch: [] };
+    }
+    function renderSetup() {
+      const v = setupView(), room = v.mode === 'room', edit = v.host && v.phase === 'lobby', m = Rules.MAPS[v.map];
+      $('setup-h').textContent = room ? v.title : 'Skirmish';
+      $('setup-code').textContent = room ? `Room ${v.code}` : '';
+      $('maps').innerHTML = '';
+      for (const [k, d] of Object.entries(Rules.MAPS)) {
+        const b = document.createElement('button');
+        b.innerHTML = `<span></span><small>${d.seats} players</small>`; b.firstChild.textContent = d.name;
+        b.classList.toggle('on', k === v.map); b.disabled = !edit && k !== v.map;
+        b.addEventListener('click', () => { if (!edit || k === v.map) return; audio.ui('click'); change({ map: k }); });
+        $('maps').append(b);
+      }
+      $('map-about').textContent = m.about;
+      $('seed').textContent = '#' + v.seed;
+      $('reseed').disabled = !edit;
+      $('m-theme').querySelectorAll('button').forEach(b => { b.classList.toggle('on', b.dataset.v === v.theme); b.disabled = !edit && b.dataset.v !== v.theme; });
+      drawPreview(v.map, v.seed, v.slots);
+      // The slots.
+      const list = $('slots');
+      list.innerHTML = '';
+      v.slots.forEach((s, i) => {
+        const li = document.createElement('li'), chip = document.createElement('i'), who = document.createElement('span'), acts = document.createElement('span');
+        const seated = s.kind === 'human' || s.kind === 'ai';
+        li.className = seated ? s.kind : s.kind; chip.className = 'chip'; who.className = 'who'; acts.className = 'acts';
+        chip.style.background = seated ? SLOT_CSS[i] : 'transparent';
+        const mine = room ? i === v.you : !!s.you;
+        if (s.kind === 'human') {
+          who.textContent = s.name || 'Commander';
+          const tags = [mine && room ? 'you' : '', s.host && room ? 'host' : '', s.away ? 'away' : '', s.left ? 'left' : '', s.out && v.phase !== 'lobby' ? 'out' : ''].filter(Boolean);
+          if (tags.length) { const sm = document.createElement('small'); sm.textContent = tags.join(' · '); who.append(sm); }
+          if (room && v.phase === 'lobby') {
+            const tag = document.createElement('span');
+            tag.className = 'tag ' + (s.host || s.ready ? 'ready' : 'wait'); tag.textContent = s.host ? 'host' : s.ready ? 'ready' : 'not ready';
+            acts.append(tag);
+            if (v.host && !mine) acts.append(button('Remove', () => send({ t: 'slot', i, kind: 'open' })));
+          }
+        } else if (edit) {
+          const sel = document.createElement('select');
+          const opts = [['open', room ? 'Open' : 'Empty'], ...(room ? [['closed', 'Closed']] : []), ...LEVELS.map(l => ['ai:' + l, 'Computer · ' + Rules.DIFFICULTY[l].name])];
+          for (const [val, label] of opts) { const o = document.createElement('option'); o.value = val; o.textContent = label; sel.append(o); }
+          sel.value = s.kind === 'ai' ? 'ai:' + s.level : s.kind;
+          sel.addEventListener('change', () => { const [kind, level] = sel.value.split(':'); audio.ui('click'); setSlot(i, kind, level); });
+          who.append(sel);
+          if (s.kind === 'open') acts.append(button(room ? 'Sit here' : 'Move here', () => seat(i)));
+        } else {
+          who.textContent = s.kind === 'ai' ? 'Computer' : s.kind === 'open' ? 'Open' : 'Closed';
+          if (s.kind === 'ai') { const sm = document.createElement('small'); sm.textContent = Rules.DIFFICULTY[s.level].name; who.append(sm); }
+          if (s.kind === 'open' && room && v.phase === 'lobby') acts.append(button('Sit here', () => seat(i)));
+        }
+        li.append(chip, who, acts);
+        list.append(li);
+      });
+      $('watchers').textContent = room && v.watch.length ? 'Watching: ' + v.watch.join(', ') : room && v.you < 0 ? 'You are watching. Sit in an open seat to play.' : '';
+      $('chat').hidden = !room;
+      // The way forward.
+      const sides = v.slots.filter(s => s.kind === 'human' || s.kind === 'ai').length, waiting = v.slots.filter(s => s.kind === 'human' && !s.host && !s.ready).length;
+      let why = '', can = true;
+      if (sides < 2) { why = 'A game needs at least two sides. Add a computer or open a seat.'; can = false; }
+      else if (room && waiting) { why = waiting === 1 ? 'Waiting for one player to be ready.' : `Waiting for ${waiting} players to be ready.`; can = false; }
+      const go = $('deploy'), ready = $('ready');
+      ready.hidden = true; go.hidden = false;
+      if (!room) { go.textContent = 'Start'; go.disabled = !can; }
+      else if (v.phase === 'game') { go.hidden = true; why = 'This game is under way.'; }
+      else if (v.phase === 'over') { go.textContent = 'New game'; go.hidden = !v.host; go.disabled = false; why = v.host ? 'The game is over. Set up the next one.' : 'The game is over. The host sets up the next one.'; }
+      else if (v.host) { go.textContent = 'Start'; go.disabled = !can; }
+      else {
+        go.hidden = true;
+        if (v.you >= 0) { ready.hidden = false; const on = v.slots[v.you].ready; ready.classList.toggle('on', on); ready.textContent = on ? 'Ready' : 'Not ready'; }
+        why = why || 'The host starts the game once everyone is ready.';
+      }
+      $('go-why').textContent = why;
+    }
+    function button(text, fn) { const b = document.createElement('button'); b.textContent = text; b.addEventListener('click', () => { audio.ui('click'); fn(); }); return b; }
+    // A change to the set-up: made here for a skirmish, asked of the server in a room.
+    function change(o) {
+      if (net.inRoom) { send(Object.assign({ t: 'set' }, o)); return; }
+      Object.assign(sk, o);
+      if (o.map) fitSlots(sk);
+      saveSk(); renderSetup();
+    }
+    function setSlot(i, kind, level) {
+      if (net.inRoom) { send({ t: 'slot', i, kind, level }); return; }
+      if (sk.slots[i].kind === 'you') return;
+      sk.slots[i] = kind === 'ai' ? { kind, level } : { kind: 'open' };
+      saveSk(); renderSetup();
+    }
+    function seat(i) {
+      if (net.inRoom) { send({ t: 'seat', i }); return; }
+      const you = sk.slots.findIndex(s => s.kind === 'you');
+      if (sk.slots[i].kind !== 'open' || you < 0) return;
+      sk.slots[i] = sk.slots[you]; sk.slots[you] = { kind: 'open' };
+      saveSk(); renderSetup();
+    }
+
+    $('m-theme').querySelectorAll('button').forEach(b => b.addEventListener('click', () => { if (b.disabled) return; audio.ui('click'); change({ theme: b.dataset.v }); }));
+    $('reseed').addEventListener('click', () => { audio.ui('click'); change({ seed: newSeed() }); });
+    $('b-skirmish').addEventListener('click', () => { audio.wake(); audio.ui('click'); net.inRoom = false; screen('setup'); renderSetup(); });
+    $('setup-back').addEventListener('click', () => { audio.ui('click'); if (net.inRoom) { leaveRoom(); screen('rooms'); } else screen('main'); });
+    $('deploy').addEventListener('click', () => {
+      audio.wake(); audio.ui('click'); store.set('dg-played', '1');
+      if (!net.inRoom) { startSkirmish(); return; }
+      send({ t: net.view && net.view.phase === 'over' ? 'again' : 'start' });
+    });
+    $('ready').addEventListener('click', () => { audio.ui('click'); const v = net.view; if (v && v.you >= 0) send({ t: 'ready', on: !v.slots[v.you].ready }); });
+    $('chat-in').addEventListener('keydown', e => {
+      if (e.key !== 'Enter') return;
+      const s = $('chat-in').value.trim();
+      if (s) send({ t: 'chat', s });
+      $('chat-in').value = '';
+    });
+
+    // The end of a game and the pause veil.
+    $('again').addEventListener('click', () => {
+      audio.ui('click'); $('end').hidden = true;
+      if (G.online) { backToRoom(); return; }
+      startSkirmish();
+    });
+    // A player whose base has fallen watches the rest with the whole map in view.
+    $('watch').addEventListener('click', () => { audio.ui('click'); $('end').hidden = true; world.watchAll(); hud.say('Watching the rest of the game.'); });
+    $('menu').addEventListener('click', () => { $('end').hidden = true; if (G.online) leaveRoom(); toTitle(); });
+    $('quit').addEventListener('click', () => { G.paused = false; $('veil').hidden = true; G.playing = false; clearSave(); if (G.online) leaveRoom(); toTitle(); });
     $('resume').addEventListener('click', () => G.togglePause());
     $('b-pause').addEventListener('click', () => G.togglePause());
     $('b-mute').addEventListener('click', () => { audio.wake(); audio.toggle(); $('b-mute').classList.toggle('off', audio.muted); });
@@ -9125,25 +9520,44 @@ const Game = (() => {
     $('b-mute').classList.toggle('off', audio.muted);
     document.addEventListener('visibilitychange', () => { if (document.hidden) { saveGame(); if (G.playing && !G.paused && !G.online) G.togglePause(); } });
 
-    // The shared world. The server sends each step's commands; this copy steps the same world from them, and
-    // checks it against the server's every two seconds.
-    const net = { ws: null, slot: -1, queue: [], hashes: new Map(), roster: [], want: false, tries: 0, theme: 'desert', resyncing: false, joined: false };
+    // ---- Games with other people ----------------------------------------------------------------------------
+
+    // A room on the server: its lobby, then its game. The server sends each step's commands; this copy steps the
+    // same world from them, and checks it against the server's every two seconds.
+    const net = { ws: null, code: '', want: false, tries: 0, queue: [], hashes: new Map(), slot: -1, theme: 'desert', map: 'duel', view: null, inRoom: false, inGame: false, resyncing: false, hello: null };
     const playerId = (() => {
-      try { let id = localStorage.getItem('dg-id'); if (!id) { id = (crypto.randomUUID ? crypto.randomUUID() : String(Math.random()).slice(2)); localStorage.setItem('dg-id', id); } return id; }
-      catch (e) { return String(Math.random()).slice(2); }
+      let id = store.get('dg-id', '');
+      if (!id) { id = crypto.randomUUID ? crypto.randomUUID() : String(Math.random()).slice(2); store.set('dg-id', id); }
+      return id;
     })();
-    const wsUrl = () => (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws';
+    const ROOM = 'dg-room';
+    // A ping now and then tells the room this page is still here.
+    setInterval(() => send({ t: 'ping', at: Date.now() }), 15000);
+    const wsUrl = code => (location.protocol === 'https:' ? 'wss://' : 'ws://') + location.host + '/ws/room/' + code;
+    function send(o) { if (net.ws && net.ws.readyState === 1) net.ws.send(JSON.stringify(o)); }
+    function joinRoom(code, create) {
+      if (net.ws) { net.want = false; try { net.ws.close(); } catch (e) { /* gone */ } net.ws = null; }
+      net.code = code; net.create = create || null; net.inRoom = true; net.view = null; net.tries = 0;
+      $('chat-log').innerHTML = '';
+      store.set(ROOM, code);
+      connect();
+    }
     function connect() {
       net.want = true;
-      const ws = net.ws = new WebSocket(wsUrl());
+      const ws = net.ws = new WebSocket(wsUrl(net.code));
       ws.binaryType = 'arraybuffer';
-      ws.onopen = () => { net.tries = 0; ws.send(JSON.stringify({ t: 'join', id: playerId, name: G.name })); };
+      ws.onopen = () => {
+        net.tries = 0; $('net').hidden = true;
+        ws.send(JSON.stringify(Object.assign({ t: 'join', id: playerId, name: G.name || 'Commander' }, net.create ? { create: true, title: net.create.title, map: net.create.map } : {})));
+        // A room is opened once; joining again after a drop only finds it.
+        net.create = null;
+      };
       ws.onmessage = ev => onNet(ev.data).catch(e => console.log('net', e.message));
       ws.onclose = () => {
         if (net.ws !== ws) return;
         net.ws = null;
         if (!net.want) return;
-        $('net').hidden = false; $('net').textContent = 'Reconnecting';
+        if (net.inGame) { $('net').hidden = false; $('net').textContent = 'Reconnecting'; }
         setTimeout(() => { if (net.want) connect(); }, Math.min(8000, 700 * 2 ** net.tries++));
       };
     }
@@ -9157,11 +9571,35 @@ const Game = (() => {
         return;
       }
       const m = JSON.parse(data);
-      if (m.t === 'hello') { net.slot = m.slot; net.theme = m.theme || 'desert'; net.roster = m.roster || []; net.queue = []; net.hashes.clear(); }
-      else if (m.t === 'ticks') { for (const b of m.b) net.queue.push(b); if (m.h) net.hashes.set(m.h[0], m.h[1]); }
-      else if (m.t === 'roster') { net.roster = m.r; drawRoster(); }
-      else if (m.t === 'taken') { net.want = false; hud.say('This world was opened in another window.', 'bad'); }
+      switch (m.t) {
+        case 'room': {
+          const was = net.view;
+          net.view = m;
+          if (G.online && G.S) G.names = m.slots.map(s => s.kind === 'human' ? s.name : s.kind === 'ai' ? `Computer (${Rules.DIFFICULTY[s.level].name})` : '');
+          // The host set up the next game: everyone still in the game's picture goes back to the room.
+          if (m.phase === 'lobby' && net.inGame) backToRoom();
+          if (!net.inGame) { if ($('t-setup').hidden || !was) screen('setup'); renderSetup(); }
+          drawRoster();
+          break;
+        }
+        case 'chatlog': $('chat-log').innerHTML = ''; for (const c of m.list) chatLine(c.n, c.s); break;
+        case 'chat': chatLine(m.n, m.s); if (G.online && net.inGame) hud.say(`${m.n}: ${m.s}`); break;
+        case 'hello': net.slot = m.slot; net.theme = m.theme || 'desert'; net.map = m.map || 'duel'; net.queue = []; net.hashes.clear(); break;
+        case 'ticks': for (const b of m.b) net.queue.push(b); if (m.h) net.hashes.set(m.h[0], m.h[1]); break;
+        case 'gone': net.want = false; net.inRoom = false; net.view = null; store.set(ROOM, null); if (!$('title').hidden && !$('t-setup').hidden) screen('rooms'); toast('That game has closed.'); break;
+        case 'taken': net.want = false; net.inRoom = false; toast('This game was opened in another window.'); break;
+        case 'moved': chatLine('', 'The host moved you out of your seat. You are watching.'); break;
+      }
     }
+    function chatLine(n, s) {
+      const log = $('chat-log'), p = document.createElement('div');
+      if (n) { const b = document.createElement('b'); b.textContent = n + ':'; p.append(b, document.createTextNode(s)); }
+      else { p.className = 'sys'; p.textContent = s; }
+      log.append(p);
+      while (log.children.length > 60) log.firstChild.remove();
+      log.scrollTop = log.scrollHeight;
+    }
+    function toast(s) { if (!$('title').hidden) $('go-why').textContent = s; else hud.say(s, 'bad'); const n = $('rooms-none'); if (n && !$('t-rooms').hidden) n.textContent = s; }
     function stepNet() {
       const S = G.S, [tick, list] = net.queue.shift();
       if (tick < S.tick) return;
@@ -9177,58 +9615,95 @@ const Game = (() => {
     function resync() {
       if (net.resyncing || !net.ws || net.ws.readyState !== 1) return;
       net.resyncing = true; net.queue = [];
-      net.ws.send(JSON.stringify({ t: 'resync' }));
+      send({ t: 'resync' });
     }
+    // The world from the server: a game starting, a player coming back to one, or a fresh copy after a drop.
     function enterWorld(S) {
-      const first = !net.joined;
-      G.online = true; net.joined = true;
-      const cam = { ...world.cam };
-      begin(S, net.theme, net.slot);
+      const first = !net.inGame;
+      G.online = true; net.inGame = true;
+      G.mapKey = net.map; G.theme = net.theme;
+      const v = net.view;
+      G.names = v ? v.slots.map(s => s.kind === 'human' ? s.name : s.kind === 'ai' ? `Computer (${Rules.DIFFICULTY[s.level].name})` : '') : [];
       $('net').hidden = true;
+      document.body.classList.add('online');
       if (first) {
-        $('title').hidden = true; $('end').hidden = true; $('veil').hidden = true;
-        hud.reset();
-        G.playing = true; G.paused = false;
-        document.body.classList.add('in-game', 'online');
-        if (net.slot >= 0) { home(S, net.slot); hud.say(`Joined the world as ${G.name}, beside its newest base. For ten minutes nobody can attack you, and you cannot attack anyone.`, 'good'); }
-        else { world.focus(S.map.W / 2, S.map.H / 2, 150); hud.say('Every slot is taken, so you are watching.', 'bad'); }
-      } else Object.assign(world.cam, cam);
+        clearSave();
+        enterPlay(S, net.theme, net.slot);
+        if (net.slot >= 0) hud.say(`${Rules.MAPS[net.map].name}. ${S.seats.length - 1 === 1 ? 'One enemy' : S.seats.length - 1 + ' enemies'} on the map. Good hunting, ${G.name || 'Commander'}.`, 'good');
+        else hud.say('You are watching this game.', '');
+      } else { const cam = { ...world.cam }; begin(S, net.theme, net.slot); Object.assign(world.cam, cam); }
       drawRoster();
     }
-    function fallen() {
-      if (!G.online || G.S.P[G.team].alive) return;
-      $('end-title').textContent = 'Your base has fallen';
-      $('end').className = 'lost';
-      $('end-sub').textContent = 'Deploy again for a new base in a free slot.';
-      $('end-stats').innerHTML = '';
-      $('again').textContent = 'Deploy again';
-      $('end').hidden = false;
-      audio.play('lost', { gain: 0.8 });
+    // From a finished game back to its room, which the host sets up again.
+    function backToRoom() {
+      net.inGame = false; G.online = false; G.playing = false; net.queue = [];
+      document.body.classList.remove('online', 'in-game');
+      $('end').hidden = true; $('veil').hidden = true; $('roster').hidden = true;
+      $('title').hidden = false;
+      screen('setup'); renderSetup();
+      attract();
     }
-    function leave() {
-      if (!G.online) return;
-      net.want = false; net.joined = false;
-      if (net.ws) { try { net.ws.close(); } catch (e) { /* gone */ } net.ws = null; }
+    function leaveRoom() {
+      if (net.ws) send({ t: 'leave' });
+      net.want = false; net.inRoom = false; net.inGame = false; net.view = null;
+      if (net.ws) { const ws = net.ws; net.ws = null; setTimeout(() => { try { ws.close(); } catch (e) { /* gone */ } }, 200); }
       G.online = false; net.queue = [];
+      store.set(ROOM, null);
       document.body.classList.remove('online');
-      $('roster').hidden = true; $('net').hidden = true; $('again').textContent = 'Again';
+      $('roster').hidden = true; $('net').hidden = true;
     }
-    // Who holds each slot, in their colours.
-    const CSS = ['#6fb0ff', '#ff7a60', '#6fd47f', '#b98af0', '#ffae52', '#4fd8d4', '#ff7ac0', '#c99a6c'];
+    // Who holds each side of the game being played, in their colours.
     function drawRoster() {
-      const box = $('roster');
-      if (!G.online) { box.hidden = true; return; }
+      const box = $('roster'), S = G.S;
+      if (!G.playing || !S || !S.seats || (S.seats.length < 3 && !G.online)) { box.hidden = true; return; }
       box.hidden = false;
       box.innerHTML = '';
-      for (const r of net.roster) {
-        const row = document.createElement('div'), dot = document.createElement('i'), nm = document.createElement('span');
-        dot.style.background = CSS[r.slot];
-        nm.textContent = r.slot === net.slot ? r.name + ' (you)' : r.kind === 'away' ? r.name + ' (away)' : r.name;
-        row.className = (r.alive ? '' : 'down ') + (r.kind === 'ai' ? 'cpu' : '');
+      const v = G.online ? net.view : null;
+      for (const t of S.seats) {
+        const row = document.createElement('div'), dot = document.createElement('i'), nm = document.createElement('span'), s = v && v.slots[t];
+        dot.style.background = SLOT_CSS[t];
+        nm.textContent = youName(t) + (t !== G.team && s && s.left ? ' (left)' : t !== G.team && s && s.away ? ' (away)' : '');
+        row.className = (S.P[t].alive ? '' : 'down ') + (G.names[t] && G.names[t].startsWith('Computer') ? 'cpu' : '');
         row.append(dot, nm); box.append(row);
       }
     }
-    // The title offers the shared world only when this page is served by its server.
+
+    // The list of games, asked for every few seconds while it shows.
+    let hasServer = false, pollT = null;
+    function stopPolling() { if (pollT) { clearTimeout(pollT); pollT = null; } }
+    async function pollRooms() {
+      stopPolling();
+      try {
+        const r = await fetch('/api/rooms', { cache: 'no-store' }), j = await r.json();
+        drawRooms(j.rooms || []);
+      } catch (e) { $('rooms-none').hidden = false; $('rooms-none').textContent = 'The list of games cannot be reached just now.'; }
+      if (!$('t-rooms').hidden) pollT = setTimeout(pollRooms, 3000);
+    }
+    function drawRooms(list) {
+      const body = $('rooms').tBodies[0];
+      body.innerHTML = '';
+      $('rooms-none').hidden = list.length > 0;
+      $('rooms-none').textContent = 'No games are open. Open one, and it shows here for others to join.';
+      $('rooms').hidden = !list.length;
+      for (const r of list) {
+        const tr = document.createElement('tr'), cells = [r.title, r.host, r.mapName, ''].map(t => { const td = document.createElement('td'); td.textContent = t; return td; });
+        cells[3].innerHTML = `${r.humans + r.ais}/${r.seats} <small>${r.phase === 'lobby' ? (r.open ? r.open + ' open' : 'full') : 'playing'}</small>`;
+        const td = document.createElement('td');
+        td.append(button(r.phase === 'lobby' && r.open ? 'Join' : 'Watch', () => { G.name = callsign(); joinRoom(r.code); }));
+        tr.append(...cells, td); body.append(tr);
+      }
+    }
+    const callsign = () => { const n = ($('callsign').value || '').trim().slice(0, 16) || 'Commander'; store.set('dg-name', n); return n; };
+    const roomCode = () => { const a = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; let s = ''; for (let i = 0; i < 5; i++) s += a[Math.random() * a.length | 0]; return s; };
+    $('b-multi').addEventListener('click', () => { audio.wake(); audio.ui('click'); screen('rooms'); });
+    $('rooms-back').addEventListener('click', () => { audio.ui('click'); screen('main'); });
+    $('create').addEventListener('click', () => {
+      audio.wake(); audio.ui('click');
+      G.name = callsign();
+      joinRoom(roomCode(), { title: ($('room-title').value || '').trim() || `${G.name}'s game`, map: sk.map });
+    });
+    $('callsign').addEventListener('change', () => { G.name = callsign(); });
+    // The title offers games with other people only when this page is served by its server.
     async function probe(n = 0) {
       if (!/^https?:$/.test(location.protocol)) return;
       // A server waking up may fail the first ask, so a network error or 5xx is asked again.
@@ -9239,31 +9714,28 @@ const Game = (() => {
         if (!r.ok) return;
         const j = await r.json();
         if (!j.ok) return;
-        $('m-online').hidden = false;
-        $('online-n').textContent = j.players === 1 ? '1 commander online' : `${j.players} commanders online`;
+        hasServer = true;
+        $('b-multi').hidden = false;
+        // A player who was in a room when the page went comes back to it.
+        const code = store.get(ROOM, '');
+        if (code && !G.playing) { G.name = G.name || 'Commander'; joinRoom(code); }
       } catch (e) { again(); }
-    }
-    function joinWorld() {
-      G.name = ($('callsign').value || '').trim().slice(0, 16) || 'Commander';
-      try { localStorage.setItem('dg-name', G.name); } catch (e) { /* no store */ }
-      $('join').disabled = true; $('join').textContent = 'Joining';
-      net.joined = false;
-      connect();
-      setTimeout(() => { $('join').disabled = false; $('join').textContent = 'Join the war'; }, 4000);
     }
 
     function toTitle() {
       document.body.classList.remove('in-game');
+      G.playing = false;
       $('title').hidden = false;
+      screen('main');
       attract();
       fit();
     }
 
     function boot() {
       fit();
-      if (!restore()) attract();
-      try { $('callsign').value = localStorage.getItem('dg-name') || ''; } catch (e) { /* no store */ }
-      $('join').addEventListener('click', () => { audio.wake(); audio.ui('click'); joinWorld(); });
+      applyScheme();
+      if (!restore()) { attract(); screen('main'); }
+      $('callsign').value = G.name;
       probe();
       const list = [
         ...Object.keys(Rules.BUILDINGS).filter(k => k !== 'hq').map(k => ({ kind: k, b: true })), { kind: 'hq', b: true },
@@ -9273,7 +9745,7 @@ const Game = (() => {
       hud.setCameos(world.cameos(list, 0));
       document.body.classList.add('ready');
       G.save = saveGame;
-      window.__game = G; window.__hud = hud;
+      window.__game = G; window.__hud = hud; window.__net = net;
       requestAnimationFrame(loop);
     }
     return { boot, G };

@@ -1,7 +1,6 @@
 // Dead Ground, the enemy commander. It sends the same commands a player can, on a clock set by its
-// difficulty. It may only act on what it has seen, except that it knows where the other bases are. In
-// the world it fights whichever living neighbour is nearest, counting people's bases as further off, and
-// leaves alone a newcomer still shielded, whom the rules also keep it from hurting.
+// difficulty. It may only act on what it has seen, except that it knows where the other bases are. With
+// more than one foe it fights whichever living neighbour is nearest.
 // It draws on random numbers of its own, never the world's, since on a server only the server runs it.
 const AI = (() => {
   const R = typeof Rules !== 'undefined' ? Rules : require('./rules.js');
@@ -28,8 +27,7 @@ const AI = (() => {
     let best = -1, bd = Infinity;
     for (const P of S.P) {
       if (P.team === me.team || P.alive === false || (P.shield || 0) > S.tick) continue;
-      // A person's base counts as half again as far, so computers mostly fight each other.
-      const f = S.bases[P.team], d = Math.hypot(f[0] - b[0], f[1] - b[1]) * (me.people && me.people.has(P.team) ? 1.6 : 1);
+      const f = S.bases[P.team], d = Math.hypot(f[0] - b[0], f[1] - b[1]);
       if (d < bd) { bd = d; best = P.team; }
     }
     return me.foe = best;
@@ -342,8 +340,9 @@ const AI = (() => {
     defendTowns(S, me, fight);
     defendBridges(S, me, fight);
 
-    // In the world a wave is the army that set out, and what is built meanwhile guards home, so no slot
-    // streams everything into one war while a second neighbour walks in. A duel presses on with every unit.
+    // With more than one foe a wave is the army that set out, and what is built meanwhile guards home, so no
+    // side streams everything into one war while a second neighbour walks in. Against one foe it presses on
+    // with every unit.
     // A level's `pulse` overrides that choice.
     const wave = me.waveIds ? fight.filter(u => me.waveIds.includes(u.id)) : fight;
     const guard = me.waveIds ? fight.filter(u => !me.waveIds.includes(u.id)) : [];
@@ -371,7 +370,7 @@ const AI = (() => {
     if (me.D.stay || foeTeam < 0) return;
     if (m >= me.D.delay && strength >= need) {
       me.state = 'attack'; me.startStrength = strength; me.attackT = S.tick; me.attackUntil = S.tick + (me.D.raid || 0) * HZ;
-      me.waveIds = (me.D.pulse !== undefined ? me.D.pulse : S.layout !== 'duel') ? fight.map(u => u.id) : null;
+      me.waveIds = (me.D.pulse !== undefined ? me.D.pulse : (S.seats || S.P).length > 2) ? fight.map(u => u.id) : null;
       S.ev.push({ t: 'wave', team, n: me.waves + 1 });
     }
   }
@@ -390,7 +389,7 @@ const AI = (() => {
   // What a commander remembers, for a saved game: its plain fields and where its dice stand.
   function save(me) {
     const o = {};
-    for (const k in me) if (k !== 'D' && k !== 'rand' && k !== 'tick' && k !== 'people') o[k] = me[k];
+    for (const k in me) if (k !== 'D' && k !== 'rand' && k !== 'tick') o[k] = me[k];
     o.rand = me.rand.state();
     return o;
   }

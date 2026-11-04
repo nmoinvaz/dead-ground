@@ -6,12 +6,18 @@ const Rules = (() => {
   const HZ = 20, DT = 1 / HZ, RES = 2;
   // The map's size is set per game. Everything sized by it is made again when it changes.
   let W = 128, H = 128, N = W * H, VW = W * RES + 1, VH = H * RES + 1, CX = W / 2, CY = H / 2;
-  let HW = Math.ceil(W / 8), heapC = new Int32Array(N * 8), heapD = new Float32Array(N * 8);
+  // The path heap is made once for the largest map, since games of several sizes may share these rules, as
+  // rooms do on the server, and each sets the size again as it steps.
+  const MAXN = 256 * 256;
+  let HW = Math.ceil(W / 8);
+  const heapC = new Int32Array(MAXN * 8), heapD = new Float32Array(MAXN * 8);
   function setSize(w) {
     if (w === W) return;
     W = H = w; N = W * H; VW = W * RES + 1; VH = H * RES + 1; CX = W / 2; CY = H / 2;
-    HW = Math.ceil(W / HC); heapC = new Int32Array(N * 8); heapD = new Float32Array(N * 8);
+    HW = Math.ceil(W / HC);
   }
+  // Sets the rules to a game's map, before its commanders think or it steps.
+  const use = S => setSize(S.map.W);
   const PI = 3.141592653589793, TAU = 6.283185307179586, HALF = 1.5707963267948966;
   // Sine, cosine and arctangent from + - * / and the square root alone, which IEEE fixes to the bit, so
   // every browser and the server step the same world. The engines' own may differ in the last place.
@@ -134,9 +140,6 @@ const Rules = (() => {
     recruit: { think: 4, income: 0.55, wave: 2600, grow: 300, delay: 720, power: false, tech: 2, apm: 1, tech1: 12, tech2: 99, gap: 90, silo: false, ramp: [4, 0.8], def: 2, name: 'Recruit' },
     regular: { think: 3, income: 0.7, wave: 2600, grow: 400, delay: 420, power: true, tech: 3, apm: 2, tech1: 8, tech2: 22, gap: 120, silo: false, ramp: [6, 1.6], def: 3, name: 'Regular' },
     veteran: { think: 0.75, income: 1.25, wave: 1500, grow: 1100, delay: 360, power: true, tech: 3, apm: 8, tech1: 3, tech2: 8, gap: 20, silo: true, ramp: [8, 3], def: 8, name: 'Veteran' },
-    // The shared world's commanders: a Regular with the patience of the old one, so a newcomer beside seven of
-    // them can get going, and waves that leave home guarded.
-    world: { think: 3, income: 0.7, wave: 2600, grow: 400, delay: 600, power: true, tech: 3, apm: 2, tech1: 10, tech2: 22, gap: 120, silo: false, ramp: [5, 1.2], def: 3, pulse: true, name: 'Regular' },
     // Holds a player's base while they are away: builds and defends, never sets out.
     keeper: { think: 3, income: 1, wave: 1e9, grow: 0, delay: 1e9, power: false, tech: 2, apm: 2, tech1: 10, tech2: 99, gap: 90, silo: false, ramp: [8, 1], def: 6, stay: true, name: 'Keeper' },
   };
@@ -186,7 +189,22 @@ const Rules = (() => {
     wells: [[-64, -16], [-64, 16], [-16, 28], [-26, -50], [-20, -26]],
     bridges: [0, 40, -40],
   };
-  const SIZES = { duel: 128, world: 256 };
+  const SIZES = { duel: 128, quad: 192, world: 256 };
+  // The maps a game may be set on, each a layout and the most sides it seats.
+  const MAPS = {
+    duel: { name: 'River Duel', layout: 'duel', seats: 2, about: 'Two bases across one river, three bridges and a ford.' },
+    quad: { name: 'Four Quarters', layout: 'quad', seats: 4, about: 'Four corners parted by two crossing rivers.' },
+    world: { name: 'Crossed Rivers', layout: 'world', seats: 8, about: 'Eight bases round a ring, two to each quarter.' },
+  };
+  // Which of a map's bases each seated slot starts at: spread evenly round the ring, in slot order.
+  function spread(seats, n) {
+    const pos = new Array(n).fill(-1), used = new Set();
+    seats.forEach((t, j) => { const p = Math.round(j * n / seats.length) % n; pos[t] = p; used.add(p); });
+    // The empty slots take the bases left over.
+    const rest = [...Array(n).keys()].filter(p => !used.has(p));
+    for (let t = 0; t < n; t++) if (pos[t] < 0) pos[t] = rest.shift();
+    return pos;
+  }
 
   // Where everything goes on a kind of map. syms are the turns that carry the map onto itself. Each
   // feature is listed with all of its images in a row, so one town's images sit side by side.
@@ -196,10 +214,13 @@ const Rules = (() => {
     // A ford's images, each its middle and the unit way along the river.
     const fordAt = (p, q) => { for (const T of L.syms) { const a = T(p), b = T(q), d = mhypot(b[0] - a[0], b[1] - a[1]); L.fords.push([a[0], a[1], (b[0] - a[0]) / d, (b[1] - a[1]) / d]); } };
     const R = (a, b, wig, rep = true) => L.roads.push({ a, b, wig, rep });
-    if (kind === 'world') {
+    if (kind === 'world' || kind === 'quad') {
       const rot = ([x, y], k) => { let dx = x - CX, dy = y - CY; for (let i = 0; i < k; i++) { const t = dx; dx = -dy; dy = t; } return [CX + dx, CY + dy]; };
       L.syms = [0, 1, 2, 3].map(k => p => rot(p, k));
-      const polar = (r, deg) => [CX + r * mcos(deg * PI / 180), CY + r * msin(deg * PI / 180)];
+      // Four Quarters is the world drawn smaller, with a base only in each corner. What lies round a base keeps
+      // its size.
+      const sc = W / 256, quad = kind === 'quad';
+      const polar = (r, deg) => [CX + r * sc * mcos(deg * PI / 180), CY + r * sc * msin(deg * PI / 180)];
       // Two rivers cross at the middle, at 22.5 and 112.5 degrees, and part the land into quarters.
       const rivers = [22.5 * PI / 180, 22.5 * PI / 180 + HALF].map(a => [mcos(a), msin(a)]);
       const along = ([dx, dy], x, y) => { const px = x - CX, py = y - CY; return [px * dx + py * dy, -px * dy + py * dx]; };
@@ -213,10 +234,12 @@ const Rules = (() => {
       // One quarter holds a base in the corner and one at the edge, and two towns, one between them and one
       // toward the middle. Slots run round the ring.
       const C = polar(120, 45), E = polar(95, 90);
-      for (const T of L.syms) L.bases.push(T(C), T(E));
+      for (const T of L.syms) { L.bases.push(T(C)); if (!quad) L.bases.push(T(E)); }
       const tOut = polar(100, 67.5), tIn = polar(52, 67.5);
       all(L.towns, tOut); all(L.towns, tIn);
-      for (const b of [C, E]) {
+      // Where the world has its second base, Four Quarters has one ore field between two corners, to fight over.
+      if (quad) all(L.ore, E, [6]);
+      for (const b of quad ? [C] : [C, E]) {
         const m = mhypot(CX - b[0], CY - b[1]), f = [(CX - b[0]) / m, (CY - b[1]) / m], s = [-f[1], f[0]];
         all(L.ore, [b[0] + f[0] * 7 + s[0] * 18, b[1] + f[1] * 7 + s[1] * 18], [7]);
         all(L.ore, [b[0] + f[0] * 7 - s[0] * 19, b[1] + f[1] * 7 - s[1] * 19], [6.5]);
@@ -228,13 +251,14 @@ const Rules = (() => {
       // Two bridges on the quarter's own half river. A bridge's + end is on this quarter's side of the 22.5
       // degree river, its - end on this quarter's side of the 112.5 degree one.
       const span = (r, s) => [fromRiver(r, s, riverU(s) - 8.5), fromRiver(r, s, riverU(s) + 8.5)];
-      for (const s of [45, 95]) { const [a, b] = span(rivers[0], s); for (const T of L.syms) L.bridges.push([T(a), T(b)]); }
+      const s1 = 45 * sc, s2 = 95 * sc, sf = 70 * sc;
+      for (const s of [s1, s2]) { const [a, b] = span(rivers[0], s); for (const T of L.syms) L.bridges.push([T(a), T(b)]); }
       R(C, tOut, 2); R(E, tOut, 2); R(tOut, tIn, 3);
-      R(tIn, span(rivers[0], 45)[1], 2.5); R(tIn, span(rivers[1], 45)[0], 2.5);
-      R(C, span(rivers[0], 95)[1], 2.5); R(E, span(rivers[1], 95)[0], 2.5);
-      for (const s of [45, 95]) { const [a, b] = span(rivers[0], s); R(a, b, 0); }
+      R(tIn, span(rivers[0], s1)[1], 2.5); R(tIn, span(rivers[1], s1)[0], 2.5);
+      R(C, span(rivers[0], s2)[1], 2.5); R(E, span(rivers[1], s2)[0], 2.5);
+      for (const s of [s1, s2]) { const [a, b] = span(rivers[0], s); R(a, b, 0); }
       // A ford between the two bridges, as a middle point and the river's way there.
-      fordAt(fromRiver(rivers[0], 70, riverU(70)), fromRiver(rivers[0], 71, riverU(71)));
+      fordAt(fromRiver(rivers[0], sf, riverU(sf)), fromRiver(rivers[0], sf + 1, riverU(sf + 1)));
       return L;
     }
     L.syms = [p => [p[0], p[1]], mirror];
@@ -665,20 +689,29 @@ const Rules = (() => {
     };
   }
 
-  // A new game. layout is 'duel' (two sides, 128 cells) or 'world' (eight slots, 256 cells). Every slot
-  // starts with a base unless `empty` is set.
+  // The map a seed makes, or if it fails the checks, the next one along that passes, as a game would be set on.
+  function mapFor(seed, kind, debug) {
+    let M = makeMap(seed, kind);
+    for (let tries = 0; tries < 12 && !goodMap(M); tries++) { if (debug) console.log('map', seed, M.why); seed += 1000; M = makeMap(seed, kind); }
+    return M;
+  }
+
+  // A new game. layout is 'duel' (two slots, 128 cells), 'quad' (four, 192) or 'world' (eight, 256). seats
+  // lists the slots that play, every slot unless given; the others stay empty. Each seated slot starts with a
+  // base unless `empty` is set, and the seated slots' bases are spread evenly round the map. The game is over
+  // when one side is left.
   function newGame(o = {}) {
-    const kind = o.layout || 'duel';
-    let seed = o.seed || 1, M = makeMap(seed, kind);
-    for (let tries = 0; tries < 12 && !goodMap(M); tries++) { if (o.debug) console.log('map', seed, M.why); seed += 1000; M = makeMap(seed, kind); }
+    const kind = o.layout || 'duel', M = mapFor(o.seed || 1, kind, o.debug), seed = M.seed;
     coverPoints(M);
     const n = M.bases.length;
+    const seats = (o.seats || [...Array(n).keys()]).filter(t => t >= 0 && t < n);
+    const pos = o.pos || spread(seats, n);
     const S = {
       HZ, tick: 0, seed, layout: kind, map: M, rs: seed ^ 0x51ed, ents: [], next: 1, byId: new Map(), cmds: [], log: [], keepLog: !!o.log, ev: [], shots: [], fields: new Map(),
       fieldQueue: 0, occVer: 1, occ: new Int32Array(N), occLog: [], over: null, ais: [], sweeps: [], hash: [], bldHash: [], flights: [],
       terr: new Int8Array(N).fill(-1), infl: [], terrVer: 0, townOwnerVer: 0,
       ore: new Uint16Array(M.ore), oreVer: 0,
-      P: [], bases: M.bases, faces: M.faces, _fields: new Map(),
+      P: [], bases: pos.map(p => M.bases[p]), faces: pos.map(p => M.faces[p]), seats, pos, _fields: new Map(),
       // The ground as it now is, which woods, bridges and fords change, and what has happened to the trees,
       // bridges and houses.
       gnd: new Uint8Array(M.ground), gndVer: 0, wood: new Uint8Array(N), woodVer: 0, burn: [], crush: [],
@@ -686,10 +719,14 @@ const Rules = (() => {
       trail: new Uint8Array(N), trailSum: 0,
     };
     S.rand = rngOf(S);
-    for (let t = 0; t < n; t++) { S.P.push(freshPlayer(t, o)); S.infl.push(new Float32Array(N)); }
+    for (let t = 0; t < n; t++) {
+      const P = freshPlayer(t, o);
+      if (!seats.includes(t)) { P.alive = false; P.out = true; }
+      S.P.push(P); S.infl.push(new Float32Array(N));
+    }
     for (const m of M.towns) m.owner = -1;
     S.towns = M.towns.map(t => Object.assign({}, t));
-    if (!o.empty) for (let t = 0; t < n; t++) spawnBase(S, t);
+    if (!o.empty) for (const t of seats) spawnBase(S, t);
     territory(S);
     recount(S);
     vision(S);
@@ -753,7 +790,7 @@ const Rules = (() => {
   const plain = e => { const o = {}; for (const k in e) if (k !== 'd' && k[0] !== '_') o[k] = e[k]; return o; };
   function save(S) {
     return {
-      v: 1, seed: S.seed, layout: S.layout, tick: S.tick, rs: S.rs, next: S.next, occVer: S.occVer, oreVer: S.oreVer, terrVer: S.terrVer, dirty: !!S.dirty, over: S.over,
+      v: 1, seed: S.seed, layout: S.layout, seats: S.seats, pos: S.pos, tick: S.tick, rs: S.rs, next: S.next, occVer: S.occVer, oreVer: S.oreVer, terrVer: S.terrVer, dirty: !!S.dirty, over: S.over,
       ents: S.ents.map(plain), towns: S.towns, shots: S.shots, sweeps: S.sweeps, flights: S.flights, occLog: S.occLog,
       fields: [...S.fields].map(([k, f]) => [k, f.ver, f.used, f.made, f.reach]),
       ore: b64.en(new Uint8Array(S.ore.buffer.slice(0))),
@@ -765,7 +802,7 @@ const Rules = (() => {
   }
   function diffs(a, base) { const o = []; for (let c = 0; c < a.length; c++) if (a[c] !== (base ? base[c] : 0)) o.push(c, a[c]); return o; }
   function load(o) {
-    const S = newGame({ seed: o.seed, layout: o.layout, empty: true });
+    const S = newGame({ seed: o.seed, layout: o.layout, seats: o.seats, pos: o.pos, empty: true });
     if (S.seed !== o.seed) throw new Error('map seed mismatch');
     Object.assign(S, { tick: o.tick, rs: o.rs, next: o.next, occVer: o.occVer, oreVer: o.oreVer, terrVer: o.terrVer, dirty: o.dirty, over: o.over, shots: o.shots, sweeps: o.sweeps, flights: o.flights, occLog: o.occLog || [] });
     S.towns = o.towns.map(t => Object.assign({}, t));
@@ -2297,9 +2334,11 @@ const Rules = (() => {
     } else if (c.c === 'restart') {
       restartSlot(S, team, { shield: +c.shield || 0 });
     } else if (c.c === 'raze') {
+      if (!S.P[team].alive) return;
       razeSlot(S, team);
       S.P[team].alive = false;
       territory(S); recount(S);
+      S.ev.push({ t: 'fallen', team });
     } else if (c.c === 'launch') {
       const s = S.ents.find(e => e.b && e.team === team && e.kind === 'silo' && e.hp > 0 && e.charge >= e.d.charge);
       if (!s) return;
@@ -2414,6 +2453,7 @@ const Rules = (() => {
   }
 
   function step(S) {
+    use(S);
     S.fieldQueue = 0;
     for (const a of S.ais) a.tick(S);
     rehash(S);
@@ -2454,19 +2494,19 @@ const Rules = (() => {
     }
     if (S.tick % 10 === 0) vision(S);
     S.sweeps = S.sweeps.filter(s => s.until > S.tick);
-    if (S.layout === 'duel' && !S.over && S.tick % HZ === 0) {
-      for (const team of [0, 1]) {
-        const left = S.ents.some(e => e.b && e.team === team);
-        if (!left) { S.over = { loser: team, winner: 1 - team, tick: S.tick }; S.ev.push({ t: 'over', winner: 1 - team }); break; }
-      }
-    }
-    // In the world a slot whose last building falls is out. What it had left goes with it.
-    if (S.layout !== 'duel' && S.tick % HZ === 0) {
+    // A side whose last building falls is out, and what it had left goes with it. The last side standing wins.
+    if (!S.over && S.tick % HZ === 0) {
       for (const P of S.P) if (P.alive && !S.ents.some(e => e.b && e.team === P.team && e.hp > 0)) {
         P.alive = false;
         razeSlot(S, P.team);
         territory(S); recount(S);
         S.ev.push({ t: 'fallen', team: P.team });
+      }
+      const left = S.P.filter(P => P.alive);
+      if (left.length <= 1) {
+        const winner = left.length ? left[0].team : -1;
+        S.over = { winner, tick: S.tick };
+        S.ev.push({ t: 'over', winner });
       }
     }
     S.tick++;
@@ -2509,10 +2549,10 @@ const Rules = (() => {
   }
 
   return {
-    HZ, DT, RES, UNITS, BUILDINGS, WEAPONS, TECH, POWERS, DIFFICULTY, LAYOUT, SIZES,
+    HZ, DT, RES, UNITS, BUILDINGS, WEAPONS, TECH, POWERS, DIFFICULTY, LAYOUT, SIZES, MAPS, spread, use,
     get W() { return W; }, get H() { return H; }, get VW() { return VW; }, get VH() { return VH; },
     newGame, step, push, spawn, addBuilding, pickFrom, fits, spotFor, roomy, blockedReason, near, rehash, seenBy, terrainAt, heightAt, los, isAir, armed, cellOf, summary, exitOf,
-    mulberry, noiser, clamp, lerp, smooth, angleTo, toXY, toUV, gap, setSize, save, load, hashOf, restartSlot, razeSlot, makeMap, layoutFor,
+    mulberry, noiser, clamp, lerp, smooth, angleTo, toXY, toUV, gap, setSize, save, load, hashOf, restartSlot, razeSlot, makeMap, mapFor, layoutFor,
     msin, mcos, matan2, mhypot,
     BRIDGE_HP, SPELL, weatherAt, sky, dayAt, spellOf, bridgeAt, clsOf, houseHp, hurtBridge, ignite, shielded,
     coverPoints, coverNear, COVER_R, COVER_ARC,

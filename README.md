@@ -1,12 +1,14 @@
 # Dead Ground
 
-A real-time strategy game in three.js after Red Alert and Rise of Nations, with a shared world of eight
-slots: anyone who opens the page and joins takes a slot, and computers hold the rest.
+A real-time strategy game in three.js after Red Alert and Rise of Nations. Play a skirmish against computers, or
+open a game room that others join from the list. The host picks the map, the terrain and how many computers play
+and how hard, and the room plays out once everyone is ready.
 
 - `public/index.html` is the game, built from the game's own folder by `site.sh`.
-- `server/index.js` is a Cloudflare Worker with one Durable Object that steps the world and sends each
-  step's commands to every player. `server/rules.js` and `server/ai.js` are the same rules and commander
-  the page runs, so every copy of the world stays the same.
+- `server/index.js` is a Cloudflare Worker. Each game room is a Durable Object that holds its lobby, then steps
+  the game and sends each step's commands to every player. A Directory object lists the rooms.
+  `server/rules.js` and `server/ai.js` are the same rules and commander the page runs, so every copy of a game
+  stays the same.
 
 Run locally with `npx wrangler dev`, deploy with `npx wrangler deploy`.
 

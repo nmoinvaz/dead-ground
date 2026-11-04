@@ -1,19 +1,19 @@
-// Dead Ground's shared world: a Cloudflare Worker with one Durable Object. The object steps the world twenty
-// times a second while anyone is connected, runs a computer commander in every slot no person holds, and
-// sends each step's commands to every player, whose own copy of the rules steps the same world from them.
-// A newcomer is sent the whole world once, saved and gzipped, then the steps that follow. Every two seconds
-// a check of the world goes out too, and a player whose copy differs asks for the world again.
+// Dead Ground's server: a Cloudflare Worker with two kinds of Durable Object. A Room is one game. First it is a
+// lobby, where players take seats and the host picks the map, the terrain and the computers. Then it is the game,
+// which the room steps twenty times a second while it runs the computers, sending each step's commands to every
+// player, whose own copy of the rules steps the same world from them. The Directory lists the rooms.
 import R from './rules.js';
 import AI from './ai.js';
 
-const HZ = R.HZ, SEED = 4;
-// A newcomer's base cannot attack or be attacked for ten minutes. A player away for two hours gives up
-// the slot. A computer's fallen base comes back after a minute.
-const SHIELD = 600, AWAY = 2 * 3600 * 1000, RESPAWN = 60;
-const LEVEL = 'world';
+const HZ = R.HZ;
+const LEVELS = ['recruit', 'regular', 'veteran'];
+const THEMES = ['desert', 'steppe', 'winter'];
+// A player who drops out of a game has this long to come back before a computer takes their side over.
+const GRACE = 90 * 1000;
+// A room nobody is in closes after this long.
+const EMPTY = 3 * 60 * 1000;
 
-// The commands a player may send and the fields each takes. 'restart', 'raze' and 'income' are the
-// server's own and never come from a player.
+// The commands a player may send in a game and the fields each takes. 'raze' and 'income' are the server's own.
 const CMDS = {
   move: ['ids', 'x', 'y', 'a'], attack: ['ids', 'id'], strike: ['ids', 'id', 'x', 'y', 'r'], stop: ['ids'], harvest: ['ids', 'cell'],
   capture: ['ids', 'town'], train: ['kind'], build: ['kind'], research: [], hold: ['cat', 'i'], cancel: ['cat', 'i'],
@@ -42,8 +42,10 @@ function clean(S, c) {
   }
   return o;
 }
-const cleanName = s => String(s || '').replace(/[^\p{L}\p{N} ._'-]/gu, '').trim().slice(0, 16) || 'Commander';
+const cleanText = (s, n) => String(s || '').replace(/[^\p{L}\p{N}\p{P}\p{Zs}]/gu, '').replace(/\s+/g, ' ').trim().slice(0, n);
+const cleanName = s => cleanText(s, 16) || 'Commander';
 const cleanId = s => String(s || '').replace(/[^A-Za-z0-9-]/g, '').slice(0, 40);
+const json = (o, status = 200) => Response.json(o, { status, headers: { 'cache-control': 'no-store' } });
 
 async function gzip(text) {
   const cs = new CompressionStream('gzip'), w = cs.writable.getWriter();
@@ -56,85 +58,322 @@ async function gunzip(bytes) {
   return new Response(ds.readable).text();
 }
 
+const directory = env => env.DIR.get(env.DIR.idFromName('directory'));
+
 export default {
   async fetch(req, env) {
-    const url = new URL(req.url);
-    if (url.pathname === '/ws' || url.pathname.startsWith('/api/')) return env.WORLD.get(env.WORLD.idFromName('world')).fetch(req);
+    const url = new URL(req.url), p = url.pathname;
+    if (p === '/api/hello') return json({ ok: true });
+    if (p === '/api/rooms') return directory(env).fetch('https://dir/list');
+    const m = p.match(/^\/ws\/room\/([A-Z0-9]{4,8})$/);
+    if (m) return env.ROOM.get(env.ROOM.idFromName(m[1])).fetch(req);
     return env.ASSETS.fetch(req);
   },
 };
 
-export class World {
+// The list of rooms, as each room last told it. A room that has not spoken for a while is taken to be gone.
+export class Directory {
+  constructor(ctx) {
+    this.ctx = ctx; this.rooms = new Map();
+    ctx.blockConcurrencyWhile(async () => { this.rooms = new Map(Object.entries((await ctx.storage.get('rooms')) || {})); });
+  }
+  async fetch(req) {
+    const url = new URL(req.url), now = Date.now();
+    for (const [k, r] of this.rooms) if (now - r.at > 75000) this.rooms.delete(k);
+    if (url.pathname === '/list') {
+      const list = [...this.rooms.values()].sort((a, b) => (a.phase === 'lobby' ? 0 : 1) - (b.phase === 'lobby' ? 0 : 1) || b.made - a.made);
+      return json({ rooms: list });
+    }
+    const o = await req.json();
+    if (url.pathname === '/put') this.rooms.set(o.code, Object.assign(o, { at: now }));
+    else if (url.pathname === '/drop') this.rooms.delete(o.code);
+    await this.ctx.storage.put('rooms', Object.fromEntries(this.rooms));
+    return json({ ok: true });
+  }
+}
+
+export class Room {
   constructor(ctx, env) {
     this.ctx = ctx; this.env = env;
-    this.socks = new Set(); this.pending = []; this.batch = []; this.hash = null; this.timer = null; this.due = 0; this.saving = false;
+    this.socks = new Set(); this.phase = 'none'; this.slots = []; this.chat = [];
+    this.S = null; this.ais = []; this.pending = []; this.batch = []; this.hash = null; this.timer = null; this.due = 0; this.saving = false;
+    this.upkeepT = null; this.emptySince = 0; this.listT = 0; this.listing = null;
     ctx.blockConcurrencyWhile(() => this.restore());
   }
 
-  // The world as last saved, or a new one with a computer in every slot.
-  async restore() {
-    const meta = await this.ctx.storage.get('meta');
-    if (meta) {
-      try {
-        const parts = await this.ctx.storage.get([...Array(meta.n).keys()].map(i => 'snap' + i));
-        const all = new Uint8Array(meta.bytes);
-        let at = 0;
-        for (let i = 0; i < meta.n; i++) { const p = parts.get('snap' + i); all.set(p, at); at += p.length; }
-        this.S = R.load(JSON.parse(await gunzip(all)));
-        this.roster = meta.roster;
-      } catch (e) { console.log('restore failed, starting a new world', e.message); this.S = null; }
-    }
-    if (!this.S) {
-      this.S = R.newGame({ seed: SEED, layout: 'world' });
-      this.roster = this.S.P.map(() => ({ kind: 'ai' }));
-    }
-    this.S.ev.length = 0;
-    this.respawnAt = this.S.P.map(() => 0);
-    // Nobody is connected after a restart, so every person's slot is held for them while away.
-    this.ais = this.roster.map((r, t) => {
-      // A check player's slot goes back to the computer.
-      if (r.id && r.id.startsWith('check-')) r = this.roster[t] = { kind: 'ai' };
-      if (r.kind === 'human') { r.kind = 'away'; r.since = r.since || Date.now(); }
-      return AI.create(t, r.kind === 'away' ? 'keeper' : LEVEL, this.S.seed + t);
-    });
-  }
+  // ---- Keeping the room across a restart ----------------------------------------------------------------
 
+  async restore() {
+    const o = await this.ctx.storage.get('room');
+    if (!o) return;
+    Object.assign(this, { code: o.code, title: o.title, map: o.map, seed: o.seed, theme: o.theme, host: o.host, slots: o.slots, phase: o.phase, made: o.made });
+    if (this.phase !== 'game') { if (this.phase === 'over') this.phase = 'lobby'; return; }
+    try {
+      const meta = await this.ctx.storage.get('meta');
+      const parts = await this.ctx.storage.get([...Array(meta.n).keys()].map(i => 'snap' + i));
+      const all = new Uint8Array(meta.bytes);
+      let at = 0;
+      for (let i = 0; i < meta.n; i++) { const p = parts.get('snap' + i); all.set(p, at); at += p.length; }
+      const snap = JSON.parse(await gunzip(all));
+      this.S = R.load(snap.S);
+      this.ais = snap.ais.map(a => a ? AI.load(a) : null);
+      this.S.ev.length = 0;
+      // Nobody is connected after a restart, so every person's side is held for them while they are away.
+      const now = Date.now();
+      this.slots.forEach((s, t) => { if (s.kind === 'human' && !s.left) { s.away = s.away || now; if (!this.ais[t]) this.ais[t] = AI.create(t, 'keeper', this.S.seed + t + this.S.tick); } });
+    } catch (e) { console.log('restore failed', e.message); this.phase = 'lobby'; this.S = null; }
+  }
+  saveRoom() {
+    return this.ctx.storage.put('room', { code: this.code, title: this.title, map: this.map, seed: this.seed, theme: this.theme, host: this.host, slots: this.slots, phase: this.phase, made: this.made });
+  }
   async persist() {
-    if (this.saving) return;
+    if (this.saving || !this.S) return;
     this.saving = true;
     try {
-      const bytes = await gzip(JSON.stringify(R.save(this.S))), size = 120000, put = {};
+      R.use(this.S);
+      const snap = { S: R.save(this.S), ais: this.ais.map(a => a ? AI.save(a) : null) };
+      const bytes = await gzip(JSON.stringify(snap)), size = 120000, put = {};
       const n = Math.ceil(bytes.length / size);
       for (let i = 0; i < n; i++) put['snap' + i] = bytes.slice(i * size, (i + 1) * size);
-      put.meta = { n, bytes: bytes.length, roster: this.roster, tick: this.S.tick };
+      put.meta = { n, bytes: bytes.length };
       await this.ctx.storage.put(put);
+      await this.saveRoom();
     } finally { this.saving = false; }
   }
-
-  humans() { return this.roster.filter(r => r.kind === 'human').length; }
-  rosterView() {
-    return this.roster.map((r, t) => ({ slot: t, kind: r.kind, name: r.kind === 'ai' ? 'Computer' : r.name, alive: this.S.P[t].alive !== false }));
+  async close() {
+    this.stop();
+    this.phase = 'none';
+    try { await directory(this.env).fetch('https://dir/drop', { method: 'POST', body: JSON.stringify({ code: this.code }) }); } catch (e) { /* gone */ }
+    await this.ctx.storage.deleteAll();
   }
-  broadcast(msg) { const s = JSON.stringify(msg); for (const k of this.socks) if (k.ready) this.send(k, s); }
+
+  // ---- What players see ---------------------------------------------------------------------------------
+
+  // The room as one player sees it: everyone's seat, but nobody's id.
+  view(k) {
+    const mapD = R.MAPS[this.map];
+    return {
+      t: 'room', code: this.code, title: this.title, phase: this.phase, map: this.map, seed: this.seed, theme: this.theme,
+      seats: mapD.seats, you: k.slot, host: k.id === this.host,
+      slots: this.slots.map(s => ({ kind: s.kind, level: s.level, name: s.kind === 'human' ? s.name : '', ready: !!s.ready, away: !!s.away, left: !!s.left, host: s.kind === 'human' && s.id === this.host, out: !!s.out })),
+      watch: [...this.socks].filter(o => o.slot < 0 && o.id).map(o => o.name),
+    };
+  }
+  tell() {
+    for (const k of this.socks) if (k.id) this.send(k, JSON.stringify(this.view(k)));
+    this.list();
+  }
+  // Tells the directory how the room stands, at most once a second.
+  list() {
+    if (this.listing) return;
+    this.listing = setTimeout(async () => {
+      this.listing = null;
+      if (this.phase === 'none') return;
+      // A room with nobody in it is left off the list, though a player who dropped out can still come back to it.
+      if (![...this.socks].some(k => k.id)) { try { await directory(this.env).fetch('https://dir/drop', { method: 'POST', body: JSON.stringify({ code: this.code }) }); } catch (e) { /* try later */ } return; }
+      const hostSlot = this.slots.find(s => s.kind === 'human' && s.id === this.host);
+      const o = {
+        code: this.code, title: this.title, host: hostSlot ? hostSlot.name : '', map: this.map, mapName: R.MAPS[this.map].name, phase: this.phase, made: this.made,
+        seats: this.slots.length, humans: this.slots.filter(s => s.kind === 'human').length, ais: this.slots.filter(s => s.kind === 'ai').length,
+        open: this.slots.filter(s => s.kind === 'open').length,
+      };
+      try { await directory(this.env).fetch('https://dir/put', { method: 'POST', body: JSON.stringify(o) }); } catch (e) { /* try later */ }
+    }, 1000);
+  }
   send(k, s) { try { k.ws.send(s); } catch (e) { /* closed */ } }
+  broadcast(msg) { const s = JSON.stringify(msg); for (const k of this.socks) if (k.ready) this.send(k, s); }
+
+  // ---- Connections --------------------------------------------------------------------------------------
 
   async fetch(req) {
     const url = new URL(req.url);
-    if (url.pathname === '/api/hello') return Response.json({ ok: true, players: this.humans(), slots: this.roster.length, roster: this.rosterView() }, { headers: { 'cache-control': 'no-store' } });
     if (req.headers.get('Upgrade') !== 'websocket') return new Response('expected a websocket', { status: 426 });
+    const code = url.pathname.split('/').pop();
     const pair = new WebSocketPair(), client = pair[0], server = pair[1];
     server.accept();
-    const k = { ws: server, slot: -1, id: '', name: '', ready: false, backlog: null, n: 0, nT: 0 };
+    const k = { ws: server, code, slot: -1, id: '', name: '', ready: false, backlog: null, n: 0, nT: 0, seen: Date.now() };
     this.socks.add(k);
     server.addEventListener('message', ev => { try { this.onMessage(k, ev.data); } catch (e) { console.log('message failed', e.message); } });
     server.addEventListener('close', () => this.onClose(k));
     server.addEventListener('error', () => this.onClose(k));
-    this.run();
+    if (!this.upkeepT) this.upkeepT = setInterval(() => this.upkeep(), 5000);
     return new Response(null, { status: 101, webSocket: client });
   }
 
+  onMessage(k, data) {
+    if (typeof data !== 'string' || data.length > 20000) return;
+    // A player may send thirty messages a second.
+    const now = Date.now();
+    k.seen = now;
+    if (now - k.nT > 1000) { k.nT = now; k.n = 0; }
+    if (++k.n > 30) return;
+    const m = JSON.parse(data);
+    if (m.t === 'join') { if (!k.id) this.join(k, m); return; }
+    if (!k.id) return;
+    const host = k.id === this.host, lobby = this.phase === 'lobby';
+    switch (m.t) {
+      case 'set': if (host && lobby) this.setup(m); break;
+      case 'slot': if (host && lobby) this.setSlot(m.i | 0, m.kind, m.level); break;
+      case 'seat': if (lobby) this.seat(k, m.i | 0); break;
+      case 'ready': if (lobby && k.slot >= 0) { this.slots[k.slot].ready = !!m.on; this.tell(); } break;
+      case 'chat': { const s = cleanText(m.s, 200); if (s) { this.chat.push({ n: k.name, s }); if (this.chat.length > 40) this.chat.shift(); for (const o of this.socks) if (o.id) this.send(o, JSON.stringify({ t: 'chat', n: k.name, s })); } break; }
+      case 'start': if (host && lobby) this.start(); break;
+      case 'again': if (host && this.phase === 'over') this.toLobby(); break;
+      case 'cmd': if (this.phase === 'game' && this.mine(k)) { const c = clean(this.S, m.c); if (c) this.pending.push({ team: k.slot, c, at: this.S.tick }); } break;
+      // A player who gives up loses their side at once and stays to watch.
+      case 'surrender': if (this.phase === 'game' && this.mine(k) && this.S.P[k.slot].alive) { this.pending.push({ team: k.slot, c: { c: 'raze' }, at: this.S.tick }); this.slots[k.slot].out = true; this.tell(); } break;
+      case 'resync': if (this.S && (this.phase === 'game' || this.phase === 'over') && k.ready) this.welcome(k); break;
+      case 'leave': this.leave(k); break;
+      case 'ping': this.send(k, JSON.stringify({ t: 'pong', tick: this.S ? this.S.tick : 0, at: m.at })); break;
+    }
+  }
+  mine(k) { return k.slot >= 0 && this.slots[k.slot] && this.slots[k.slot].kind === 'human' && this.slots[k.slot].id === k.id; }
+
+  join(k, m) {
+    k.id = cleanId(m.id) || crypto.randomUUID(); k.name = cleanName(m.name);
+    if (this.phase === 'none') {
+      // Only a player who asks to open the room may; anyone else has found a room that has closed.
+      if (!m.create) { this.send(k, JSON.stringify({ t: 'gone' })); k.id = ''; return; }
+      this.code = k.code; this.title = cleanText(m.title, 32) || `${k.name}'s game`; this.made = Date.now();
+      this.map = R.MAPS[m.map] ? m.map : 'duel'; this.seed = (Date.now() % 99991) + 1; this.theme = 'desert'; this.host = k.id;
+      this.slots = this.blank(R.MAPS[this.map].seats);
+      this.slots[1] = { kind: 'ai', level: 'regular' };
+      this.phase = 'lobby';
+    }
+    // The same person in a second window takes over from the first.
+    for (const o of this.socks) if (o !== k && o.id === k.id) { this.send(o, JSON.stringify({ t: 'taken' })); o.id = ''; o.slot = -1; try { o.ws.close(4000, 'opened elsewhere'); } catch (e) { /* gone */ } }
+    // Back in the same seat, or a free one in the lobby, or watching.
+    const back = this.slots.findIndex(s => s.kind === 'human' && s.id === k.id);
+    if (back >= 0) {
+      k.slot = back;
+      const s = this.slots[back];
+      s.name = k.name; s.away = 0;
+      if (s.left) { s.left = false; }
+      if (this.phase === 'game') this.ais[back] = null;
+    } else if (this.phase === 'lobby') {
+      const i = this.slots.findIndex(s => s.kind === 'open');
+      if (i >= 0) { this.slots[i] = { kind: 'human', id: k.id, name: k.name, ready: false }; k.slot = i; }
+    }
+    if (!this.host || !this.slots.some(s => s.kind === 'human' && s.id === this.host)) this.host = k.slot >= 0 ? k.id : this.host;
+    this.emptySince = 0;
+    this.send(k, JSON.stringify({ t: 'chatlog', list: this.chat }));
+    this.tell();
+    this.saveRoom();
+    if (this.phase === 'game' || this.phase === 'over') { this.welcome(k); this.run(); }
+  }
+
+  leave(k) {
+    // A player who leaves a game they are still in gives it up.
+    if (this.phase === 'game' && this.mine(k) && this.S.P[k.slot].alive) this.pending.push({ team: k.slot, c: { c: 'raze' }, at: this.S.tick });
+    if (k.slot >= 0 && this.slots[k.slot] && this.slots[k.slot].id === k.id) {
+      if (this.phase === 'lobby') this.slots[k.slot] = { kind: 'open' };
+      else { this.slots[k.slot].left = true; this.slots[k.slot].out = true; }
+    }
+    k.slot = -1; k.id = '';
+    try { k.ws.close(1000, 'left'); } catch (e) { /* gone */ }
+    this.socks.delete(k);
+    this.afterLeaving();
+  }
+
+  onClose(k) {
+    if (!this.socks.delete(k)) return;
+    if (k.id && k.slot >= 0 && this.slots[k.slot] && this.slots[k.slot].id === k.id) {
+      const s = this.slots[k.slot];
+      if (this.phase === 'lobby') this.slots[k.slot] = { kind: 'open' };
+      else if (this.phase === 'game' && !s.left) {
+        // Away: a keeper holds the base, and after a while a computer plays the side on.
+        s.away = Date.now();
+        this.ais[k.slot] = AI.create(k.slot, 'keeper', this.S.seed + k.slot + this.S.tick);
+      }
+    }
+    this.afterLeaving();
+  }
+
+  afterLeaving() {
+    const people = [...this.socks].filter(o => o.id);
+    // The host's part passes to the next person seated.
+    if (!people.some(o => o.id === this.host)) { const next = people.find(o => o.slot >= 0) || people[0]; if (next) this.host = next.id; }
+    if (!people.length) {
+      this.emptySince = Date.now();
+      if (this.phase === 'lobby' || this.phase === 'over') { this.close(); return; }
+      // A game with nobody left in it waits, still, for a while.
+      this.stop(); this.persist();
+      this.ctx.storage.setAlarm(Date.now() + EMPTY + 1000);
+    }
+    this.tell();
+    this.saveRoom();
+  }
+
+  // ---- The lobby ----------------------------------------------------------------------------------------
+
+  blank(n) { return [...Array(n)].map(() => ({ kind: 'open' })); }
+  setup(m) {
+    if (typeof m.title === 'string') this.title = cleanText(m.title, 32) || this.title;
+    if (THEMES.includes(m.theme)) this.theme = m.theme;
+    if (m.seed !== undefined) { const s = Math.round(+m.seed); if (s >= 1 && s <= 99999) this.seed = s; }
+    if (R.MAPS[m.map] && m.map !== this.map) {
+      // A new map keeps the people first, then the computers, in as many seats as it has.
+      const n = R.MAPS[m.map].seats, people = this.slots.filter(s => s.kind === 'human'), cpus = this.slots.filter(s => s.kind === 'ai');
+      const next = [...people, ...cpus].slice(0, n);
+      while (next.length < n) next.push({ kind: 'open' });
+      for (const k of this.socks) k.slot = next.findIndex(s => s.kind === 'human' && s.id === k.id);
+      this.slots = next; this.map = m.map;
+    }
+    for (const s of this.slots) if (s.kind === 'human') s.ready = false;
+    this.tell(); this.saveRoom();
+  }
+  setSlot(i, kind, level) {
+    const s = this.slots[i];
+    if (!s || !['open', 'closed', 'ai'].includes(kind)) return;
+    if (s.kind === 'human') {
+      // Opening a person's seat sends them to watch. The host cannot send themselves.
+      if (s.id === this.host) return;
+      for (const k of this.socks) if (k.id === s.id) { k.slot = -1; this.send(k, JSON.stringify({ t: 'moved' })); }
+    }
+    this.slots[i] = kind === 'ai' ? { kind, level: LEVELS.includes(level) ? level : 'regular' } : { kind };
+    this.tell(); this.saveRoom();
+  }
+  seat(k, i) {
+    const was = k.slot;
+    if (i < 0) { if (was >= 0) this.slots[was] = { kind: 'open' }; k.slot = -1; this.tell(); return; }
+    const s = this.slots[i];
+    if (!s || s.kind !== 'open') return;
+    this.slots[i] = { kind: 'human', id: k.id, name: k.name, ready: false };
+    if (was >= 0) this.slots[was] = { kind: 'open' };
+    k.slot = i;
+    this.tell(); this.saveRoom();
+  }
+
+  start() {
+    const seats = [];
+    this.slots.forEach((s, t) => { if (s.kind === 'human' || s.kind === 'ai') seats.push(t); });
+    const waiting = this.slots.some(s => s.kind === 'human' && s.id !== this.host && !s.ready);
+    if (seats.length < 2 || waiting) return;
+    this.S = R.newGame({ seed: this.seed, layout: R.MAPS[this.map].layout, seats });
+    this.S.ev.length = 0;
+    this.ais = this.slots.map((s, t) => s.kind === 'ai' ? AI.create(t, s.level, this.seed + t) : null);
+    for (const s of this.slots) { s.out = false; s.left = false; s.away = 0; }
+    this.pending = []; this.batch = []; this.hash = null;
+    this.phase = 'game';
+    this.tell();
+    for (const k of this.socks) if (k.id) this.welcome(k);
+    this.run();
+    this.persist();
+  }
+  toLobby() {
+    this.stop();
+    this.S = null; this.ais = [];
+    this.phase = 'lobby';
+    // Seats of those who left are opened again.
+    this.slots = this.slots.map(s => s.kind === 'human' && (s.left || ![...this.socks].some(k => k.id === s.id)) ? { kind: 'open' } : Object.assign(s, { ready: false, out: false, away: 0 }));
+    this.tell(); this.saveRoom();
+    this.ctx.storage.delete(['meta']);
+  }
+
+  // ---- The game -----------------------------------------------------------------------------------------
+
   run() {
-    if (this.timer) return;
+    if (this.timer || !this.S || this.phase !== 'game') return;
     this.due = Date.now();
     this.timer = setInterval(() => this.tick(), 50);
   }
@@ -143,7 +382,7 @@ export class World {
   tick() {
     const now = Date.now();
     let n = 0;
-    while (this.due <= now && n < 4) { this.stepOnce(); this.due += 1000 / HZ; n++; }
+    while (this.due <= now && n < 4 && this.phase === 'game') { this.stepOnce(); this.due += 1000 / HZ; n++; }
     // Fallen far behind, as after a pause: let the lost time go.
     if (this.due < now - 1000) this.due = now;
     if (this.batch.length) this.flush();
@@ -151,20 +390,23 @@ export class World {
 
   stepOnce() {
     const S = this.S;
-    // The computers are told which slots people hold, so they fight each other first.
-    const people = new Set();
-    this.roster.forEach((r, t) => { if (r.kind === 'human' || r.kind === 'away') people.add(t); });
-    for (let t = 0; t < this.ais.length; t++) if (this.ais[t] && S.P[t].alive) { this.ais[t].people = people; this.ais[t].tick(S); }
+    R.use(S);
+    for (let t = 0; t < this.ais.length; t++) if (this.ais[t] && S.P[t].alive) this.ais[t].tick(S);
     for (const q of this.pending) S.cmds.push(q);
     this.pending = [];
     const tick = S.tick, list = S.cmds.map(q => [q.team, q.c]);
     R.step(S);
-    for (const e of S.ev) if (e.t === 'fallen') this.onFallen(e.team);
+    let changed = false;
+    for (const e of S.ev) {
+      if (e.t === 'fallen' && this.slots[e.team]) { this.slots[e.team].out = true; changed = true; }
+      if (e.t === 'over') { this.phase = 'over'; changed = true; }
+    }
     S.ev.length = 0;
     this.batch.push([tick, list]);
     if (S.tick % 40 === 0) this.hash = [S.tick, R.hashOf(S)];
-    if (S.tick % HZ === 0) this.upkeep();
     if (S.tick % (60 * HZ) === 0) this.persist();
+    if (changed) this.tell();
+    if (this.phase === 'over') { this.flush(); this.stop(); this.saveRoom(); }
   }
 
   flush() {
@@ -176,139 +418,44 @@ export class World {
     this.batch = []; this.hash = null;
   }
 
-  // Slots without a person: a fallen computer comes back after a while, and a person long away gives
-  // their slot up to a computer.
-  upkeep() {
-    const S = this.S, now = Date.now();
-    let changed = false;
-    this.roster.forEach((r, t) => {
-      if (r.kind === 'away' && now - r.since > AWAY) { this.roster[t] = r = { kind: 'ai' }; this.ais[t] = AI.create(t, LEVEL, S.seed + t + S.tick); changed = true; }
-      if (r.kind === 'ai' && !S.P[t].alive) {
-        if (!this.respawnAt[t]) this.respawnAt[t] = S.tick + RESPAWN * HZ;
-        else if (S.tick >= this.respawnAt[t]) {
-          this.respawnAt[t] = 0;
-          this.pending.push({ team: t, c: { c: 'restart', shield: 240 }, at: S.tick }, { team: t, c: { c: 'income', v: R.DIFFICULTY[LEVEL].income }, at: S.tick });
-          this.ais[t] = AI.create(t, LEVEL, S.seed + t + S.tick);
-          changed = true;
-        }
-      }
-    });
-    if (changed) this.broadcast({ t: 'roster', r: this.rosterView() });
-  }
-
-  onFallen(t) {
-    const r = this.roster[t];
-    if (r.kind === 'human') for (const k of this.socks) if (k.slot === t) this.send(k, JSON.stringify({ t: 'fallen' }));
-    if (r.kind === 'away') this.roster[t] = { kind: 'ai' };
-    this.broadcast({ t: 'roster', r: this.rosterView() });
-  }
-
-  // A slot for a newcomer: their own if they were here before and it still stands. Otherwise a computer's slot,
-  // or their own fallen one, beside the newest base in the world, so a new base starts next to a young one and
-  // not among armies that have been building for an hour. Of the slots as near the newest, the one whose other
-  // neighbour has the smallest army.
-  pickSlot(id) {
-    const S = this.S, mine = this.roster.findIndex(r => r.id === id && (r.kind === 'away' || r.kind === 'human'));
-    if (mine >= 0 && S.P[mine].alive) return { slot: mine, fresh: false };
-    const free = [];
-    this.roster.forEach((r, t) => { if (r.kind === 'ai' || t === mine) free.push(t); });
-    if (!free.length) return { slot: -1, fresh: false };
-    const B = S.bases, d = (a, b) => Math.hypot(B[a][0] - B[b][0], B[a][1] - B[b][1]);
-    const army = t => S.P[t].alive ? R.summary(S, t).army : 0;
-    // The newest by when it started, and of bases started together the one with the smallest army.
-    let newest = -1;
-    S.P.forEach((P, t) => { if (P.alive && t !== mine && (newest < 0 || P.born > S.P[newest].born || (P.born === S.P[newest].born && army(t) < army(newest)))) newest = t; });
-    const cands = free.filter(t => t !== newest);
-    if (newest < 0 || !cands.length) return { slot: free[0], fresh: true };
-    const nearest = Math.min(...cands.map(t => d(t, newest)));
-    let best = -1, bs = Infinity;
-    for (const t of cands) {
-      if (d(t, newest) > nearest * 1.25) continue;
-      // The strongest of the other bases as near this slot as its nearest one.
-      const others = S.P.filter(P => P.alive && P.team !== t && P.team !== newest).map(P => P.team);
-      const close = others.length ? Math.min(...others.map(o => d(t, o))) : 0;
-      const score = Math.max(0, ...others.filter(o => d(t, o) <= close * 1.25).map(army)) + (S.P[t].alive ? 1 : 0);
-      if (score < bs) { bs = score; best = t; }
-    }
-    return { slot: best, fresh: true };
-  }
-
-  // A fallen player starts again beside the newest base, which may be another slot. Their old one goes back to a
-  // computer, and they are sent the world again as the new slot.
-  async respawn(k) {
-    const S = this.S, old = k.slot, { slot } = this.pickSlot(k.id);
-    if (slot < 0) return;
-    if (slot !== old) {
-      this.roster[old] = { kind: 'ai' };
-      this.ais[old] = AI.create(old, LEVEL, S.seed + old + S.tick);
-      this.respawnAt[old] = 0;
-      this.roster[slot] = { kind: 'human', id: k.id, name: k.name, since: Date.now() };
-      this.ais[slot] = null; this.respawnAt[slot] = 0;
-      k.slot = slot;
-    }
-    this.pending.push({ team: slot, c: { c: 'restart', shield: SHIELD }, at: S.tick }, { team: slot, c: { c: 'income', v: 1 }, at: S.tick });
-    if (slot !== old) await this.welcome(k);
-    this.broadcast({ t: 'roster', r: this.rosterView() });
-  }
-
-  async join(k, msg) {
-    const S = this.S;
-    k.id = cleanId(msg.id) || crypto.randomUUID(); k.name = cleanName(msg.name);
-    // The same person in a second tab takes the slot over from the first.
-    for (const o of this.socks) if (o !== k && o.id === k.id && o.slot >= 0) { o.slot = -1; this.send(o, JSON.stringify({ t: 'taken' })); try { o.ws.close(4000, 'opened elsewhere'); } catch (e) { /* gone */ } }
-    const { slot, fresh } = this.pickSlot(k.id);
-    k.slot = slot;
-    if (slot >= 0) {
-      this.roster[slot] = { kind: 'human', id: k.id, name: k.name, since: Date.now() };
-      this.ais[slot] = null;
-      this.respawnAt[slot] = 0;
-      if (fresh) this.pending.push({ team: slot, c: { c: 'restart', shield: SHIELD }, at: S.tick });
-      this.pending.push({ team: slot, c: { c: 'income', v: 1 }, at: S.tick });
-    }
-    await this.welcome(k);
-    this.broadcast({ t: 'roster', r: this.rosterView() });
-  }
-
   // The whole world as it stands, then everything since.
   async welcome(k) {
+    if (!this.S) return;
     k.ready = false; k.backlog = [];
+    R.use(this.S);
     const text = JSON.stringify(R.save(this.S)), tick = this.S.tick;
-    this.send(k, JSON.stringify({ t: 'hello', slot: k.slot, tick, theme: 'desert', roster: this.rosterView() }));
+    this.send(k, JSON.stringify({ t: 'hello', slot: k.slot, tick, theme: this.theme, map: this.map }));
     const bytes = await gzip(text);
     try { k.ws.send(bytes); } catch (e) { return; }
     for (const s of k.backlog) this.send(k, s);
     k.backlog = null; k.ready = true;
   }
 
-  onMessage(k, data) {
-    if (typeof data !== 'string' || data.length > 20000) return;
-    // A player may send thirty messages a second.
-    const now = Date.now();
-    if (now - k.nT > 1000) { k.nT = now; k.n = 0; }
-    if (++k.n > 30) return;
-    const msg = JSON.parse(data);
-    if (msg.t === 'join' && !k.id) this.join(k, msg);
-    else if (msg.t === 'cmd' && k.slot >= 0) { const c = clean(this.S, msg.c); if (c) this.pending.push({ team: k.slot, c, at: this.S.tick }); }
-    else if (msg.t === 'respawn' && k.slot >= 0 && !this.S.P[k.slot].alive) this.respawn(k);
-    else if (msg.t === 'resync' && k.id && k.ready) this.welcome(k);
-    // A player who quits hands the slot straight back to a computer.
-    else if (msg.t === 'quit' && k.slot >= 0 && this.roster[k.slot].id === k.id) {
-      this.roster[k.slot] = { kind: 'ai' };
-      this.ais[k.slot] = AI.create(k.slot, LEVEL, this.S.seed + k.slot + this.S.tick);
-      k.slot = -1;
-      this.broadcast({ t: 'roster', r: this.rosterView() });
-    }
-    else if (msg.t === 'ping') this.send(k, JSON.stringify({ t: 'pong', tick: this.S.tick, at: msg.at }));
+  // A room still empty when its alarm rings closes, even if it was put away in the meantime.
+  async alarm() {
+    if ([...this.socks].some(k => k.id)) return;
+    if (this.phase === 'none') { await this.ctx.storage.deleteAll(); return; }
+    await this.close();
   }
 
-  onClose(k) {
-    if (!this.socks.delete(k)) return;
-    const t = k.slot;
-    if (t >= 0 && this.roster[t].id === k.id && ![...this.socks].some(o => o.slot === t)) {
-      this.roster[t] = { kind: 'away', id: k.id, name: k.name, since: Date.now() };
-      this.ais[t] = AI.create(t, 'keeper', this.S.seed + t + this.S.tick);
-      this.broadcast({ t: 'roster', r: this.rosterView() });
+  // Every few seconds: a silent player is let go, a side away too long is played on by a computer, the directory
+  // hears the room is still here, and a room long empty closes.
+  upkeep() {
+    const now = Date.now();
+    // A player's page pings every fifteen seconds; one silent for longer than three pings is gone.
+    for (const k of [...this.socks]) if (now - k.seen > 50000) { try { k.ws.close(4001, 'silent'); } catch (e) { /* gone */ } this.onClose(k); }
+    if (this.phase === 'game') {
+      let changed = false;
+      this.slots.forEach((s, t) => {
+        if (s.kind === 'human' && s.away && !s.left && now - s.away > GRACE) {
+          s.left = true;
+          this.ais[t] = AI.create(t, 'regular', this.S.seed + t + this.S.tick);
+          changed = true;
+        }
+      });
+      if (changed) this.tell();
     }
-    if (!this.socks.size) { this.stop(); this.persist(); }
+    if (this.phase !== 'none' && now - this.listT > 30000) { this.listT = now; this.list(); }
+    if (this.emptySince && now - this.emptySince > EMPTY) { clearInterval(this.upkeepT); this.upkeepT = null; this.close(); }
   }
 }
