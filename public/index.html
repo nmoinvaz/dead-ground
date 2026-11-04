@@ -4001,8 +4001,8 @@ const Looks = (() => {
     },
     // GLSL the passes share.
     GL: {
-      // Points and ways back to the land, for passes that lay marks on it. The pass sets uInvVP, uW2S and uLev with
-      // K.landUniforms, and gLm, gLf and gW2S itself before calling landPt.
+      // The way back from a pixel to the land, for passes that lay marks on it. The pass sets uInvVP, uW2S and uLev
+      // with K.landUniforms.
       LAND: `
         uniform mat4 uInvVP; uniform vec4 uW2S; uniform float uLev;
         // The land under a pixel, where the ray from the eye meets the height the land pass left there. The ground's
@@ -4011,23 +4011,6 @@ const Looks = (() => {
           vec4 a = uInvVP * vec4(uv * 2.0 - 1.0, -1.0, 1.0), b = uInvVP * vec4(uv * 2.0 - 1.0, 1.0, 1.0);
           a.xyz /= a.w; b.xyz /= b.w;
           return mix(a.xz, b.xz, (y - a.y) / (b.y - a.y));
-        }
-        // The zoom as a level. A cell at level m is 2^m base cells wide, and the base cell of g px is g / 80 land
-        // units, which is g px across at the nearest zoom. gLf fades one level into the next.
-        float gLm = 0.0, gLf = 0.0;
-        mat2 gW2S = mat2(1.0);
-        // Hashes of a cell and a seed, true for cells counted in the tens of thousands.
-        vec2 hc2(vec2 c, float s) { vec3 q = fract(vec3(c.xyx + s * vec3(7.13, 3.71, 5.29)) * vec3(0.1031, 0.103, 0.0973)); q += dot(q, q.yzx + 33.33); return fract((q.xx + q.yz) * q.zy); }
-        vec3 hc3(vec2 c, float s) { vec3 q = fract(vec3(c.xyx + s * vec3(7.13, 3.71, 5.29)) * vec3(0.1031, 0.103, 0.0973)); q += dot(q, q.yxz + 33.33); return fract((q.xxy + q.yzz) * q.zyx); }
-        // Points fixed on the land that keep one density on screen at any zoom. A cell's point is the point of the
-        // child it picks, so a point never moves. One its parent passes over fades as the zoom nears the next level.
-        vec2 landPt(vec2 c, float sd, out float id, out float keep) {
-          vec2 pc = floor(c * 0.5);
-          keep = gLf > 0.0 && all(equal(pc * 2.0 + step(0.5, hc2(pc, sd + gLm + 1.0)), c)) ? 1.0 : 0.0;
-          for (int l = 3; l >= 1; l--) if (float(l) <= gLm) c = c * 2.0 + step(0.5, hc2(c, sd + float(l)));
-          vec3 h = hc3(c, sd + 77.0);
-          id = h.x;
-          return c + 0.2 + 0.6 * h.yz;
         }`,
       // Value noise, its fractal sum, and luminance.
       NOISE: `
@@ -4058,10 +4041,10 @@ if (typeof module !== 'undefined') module.exports = Looks;
       // 45 and 135 degrees, then flat and upright lines for the darkest, each line a little uneven with small gaps.
       // The ground's hatching is pinned to the map so it pans with it, the units' redraws a few times a second.
       const ink = new THREE.ShaderMaterial({ uniforms: { t: { value: null }, tSubj: { value: null }, tHeat: { value: null }, tPaper: { value: null }, res: { value: new THREE.Vector2(1, 1) }, uTime: { value: 0 }, uK: { value: 1 }, uOff: { value: new THREE.Vector2() }, uStyle: { value: 8 }, tNorm: { value: null }, tFogS: { value: null }, tLand: { value: null }, uSun2: { value: new THREE.Vector2(-1, 0) }, uUpV: { value: new THREE.Vector3(0, 1, 0) }, uRoad: { value: 0 }, uOre: { value: 0 },
-        uWindS: { value: new THREE.Vector2() }, uRain: { value: 0 }, uStorm: { value: 0 }, uSnowF: { value: 0 }, uSnowC: SH.uSnowC, uFog: { value: 0 }, uMist: { value: 0 }, uNight: { value: 0 }, uWet: { value: 0 },
+        uWindS: { value: new THREE.Vector2() }, uView: { value: new THREE.Vector2(1, 0) }, tH: SH.tH, uHSize: { value: new THREE.Vector2(1, 1) }, uHScale: { value: 1 }, uRain: { value: 0 }, uStorm: { value: 0 }, uSnowF: { value: 0 }, uSnowC: SH.uSnowC, uFog: { value: 0 }, uMist: { value: 0 }, uNight: { value: 0 }, uWet: { value: 0 },
         uDayMul: { value: new THREE.Vector3(1, 1, 1) }, uDayAdd: { value: new THREE.Vector3() }, uWaterL: { value: -0.15 }, uCloudK: SH.uCloudK,
         uInvVP: { value: new THREE.Matrix4() }, uW2S: { value: new THREE.Vector4(1, 0, 0, 1) }, uLev: { value: 1 } }, vertexShader: vs, depthTest: false, depthWrite: false, fragmentShader: `
-        varying vec2 vUv; uniform sampler2D t, tSubj, tHeat, tPaper, tNorm, tFogS, tLand; uniform vec2 res, uOff, uSun2, uWindS; uniform vec3 uUpV, uDayMul, uDayAdd; uniform float uTime, uK, uRain, uStorm, uSnowF, uSnowC, uFog, uMist, uNight, uWet, uWaterL, uCloudK; uniform int uStyle, uRoad, uOre;
+        varying vec2 vUv; uniform sampler2D t, tSubj, tHeat, tPaper, tNorm, tFogS, tLand; uniform vec2 res, uOff, uSun2, uWindS, uView, uHSize; uniform float uHScale; uniform sampler2D tH; uniform vec3 uUpV, uDayMul, uDayAdd; uniform float uTime, uK, uRain, uStorm, uSnowF, uSnowC, uFog, uMist, uNight, uWet, uWaterL, uCloudK; uniform int uStyle, uRoad, uOre;
         const vec3 PAPER = vec3(0.949, 0.910, 0.824), INK = vec3(0.122, 0.102, 0.086);
         // The soft axonometric's washes, after the atlas: speckled pale green ground, lilac water, pink paths,
         // three canopy greens, cream roofs over warm grey walls, and the ghost plan's blue-grey for what was.
@@ -4103,23 +4086,20 @@ if (typeof module !== 'undefined') module.exports = Looks;
           return c;
         }
         ${GL.LAND}
-        // Dots on the land g px apart at 1080p: every one a stipple dot r px across, and a share th of them a speck
-        // rs across as well. A fading dot shrinks.
-        vec2 landDots(vec2 w, float g, float r, float rs, float th, float sd) {
-          float g0 = g / 80.0;
-          vec2 c0 = floor(w / (g0 * exp2(gLm)) - 0.5), v = vec2(0.0);
-          for (int i = 0; i < 4; i++) {
-            float fi = float(i), id, keep;
-            vec2 q = landPt(c0 + vec2(mod(fi, 2.0), floor(fi / 2.0)), sd, id, keep) * g0;
-            float f = mix(1.0 - gLf, 1.0, keep), d = length(gW2S * (w - q)), r1 = r * f, r2 = rs * f;
-            v = max(v, vec2(step(0.05, r1) * (1.0 - smoothstep(r1 - 0.3, r1 + 0.3, d)), step(id, th) * step(0.05, r2) * (1.0 - smoothstep(r2 - 0.3, r2 + 0.3, d))));
-          }
-          return v;
-        }
-        // Noise on the land about g px across at 1080p at any zoom, in two octaves that hand over as it shrinks.
-        float landNoise(vec2 w, float g, vec2 o) {
-          float s = g / 80.0 * exp2(gLm);
-          return mix(noise(w / s + gLm * 17.0 + o), noise(w / (2.0 * s) + (gLm + 1.0) * 17.0 + o), gLf);
+        // The zoom as a level, for marks that keep one density on screen at any zoom, and noise on the land about
+        // g px across at 1080p at any zoom, in two octaves that hand over as it shrinks.
+        float gLm = 0.0, gLf = 0.0;
+        mat2 gW2S = mat2(1.0);
+        float landNoise(vec2 w, float g, vec2 o) { float s = g / 80.0 * exp2(gLm); return mix(noise(w / s + gLm * 17.0 + o), noise(w / (2.0 * s) + (gLm + 1.0) * 17.0 + o), gLf); }
+        // The land's height between its grid points as a smooth cubic, from four filtered reads of the height map.
+        vec4 cubicW(float v) { vec4 n = vec4(1.0, 2.0, 3.0, 4.0) - v, s = n * n * n; float x = s.x, y = s.y - 4.0 * s.x, z = s.z - 4.0 * s.y + 6.0 * s.x; return vec4(x, y, z, 6.0 - x - y - z) / 6.0; }
+        float hCubic(vec2 p) {
+          p -= 0.5; vec2 f = fract(p); p -= f;
+          vec4 xc = cubicW(f.x), yc = cubicW(f.y), c = p.xxyy + vec2(-0.5, 1.5).xyxy, s = vec4(xc.xz + xc.yw, yc.xz + yc.yw);
+          vec4 o = (c + vec4(xc.yw, yc.yw) / s) / uHSize.xxyy;
+          float a = texture2D(tH, o.xz).r, b = texture2D(tH, o.yz).r, cc = texture2D(tH, o.xw).r, d = texture2D(tH, o.yw).r;
+          float sx = s.x / (s.x + s.y), sy = s.z / (s.z + s.w);
+          return mix(mix(d, cc, sx), mix(b, a, sx), sy);
         }
         void main() {
           vec2 px = vUv * res, k = uK / res;
@@ -4221,6 +4201,24 @@ if (typeof module !== 'undefined') module.exports = Looks;
             float lev = clamp(uLev, 0.0, 2.999);
             gLm = floor(lev); gLf = smoothstep(0.15, 0.85, lev - gLm); gW2S = mat2(uW2S.xy, uW2S.zw) / uK;
             mat2 S2W = mat2(gW2S[1][1], -gW2S[0][1], -gW2S[1][0], gW2S[0][0]) / (gW2S[0][0] * gW2S[1][1] - gW2S[1][0] * gW2S[0][1]);
+            // The ground's form as relief maps draw it: the land's height read smoothly from the map, its slopes lit
+            // from the upper left of the page, and contours every third of a unit, every fifth one heavier.
+            float lhS = hCubic(Wl * uHScale + 0.5);
+            vec2 gJx = dFdx(Wl), gJy = dFdy(Wl);
+            float hdx = dFdx(lhS), hdy = dFdy(lhS);
+            float rfDark = 0.0, rfLight = 0.0, contour = 0.0, hyps = clamp(lhS / 3.2, 0.0, 1.0);
+            if (isG > 0.01) {
+              float gDet = gJx.x * gJy.y - gJx.y * gJy.x;
+              vec2 gh = vec2(gJy.y * hdx - gJx.y * hdy, -gJy.x * hdx + gJx.x * hdy) / (gDet + sign(gDet) * 1e-9);
+              vec2 ul = normalize(vec2(uView.x + uView.y, uView.y - uView.x));
+              vec3 nrm = normalize(vec3(-gh.x * 2.2, 1.0, -gh.y * 2.2)), lit = normalize(vec3(ul.x, 1.0, ul.y));
+              float sh = dot(nrm, lit) - lit.y;
+              rfDark = clamp(-sh * 2.6, 0.0, 1.0); rfLight = clamp(sh * 2.6, 0.0, 1.0);
+              float ci = lhS / 0.33, cw = max(fwidth(ci), 1e-4), idx = step(abs(mod(floor(ci + 0.5), 5.0)), 0.5);
+              contour = (1.0 - smoothstep(0.45 * cw * uK, 1.3 * cw * uK, abs(fract(ci) - 0.5))) * mix(0.45, 0.85, idx);
+              // Contours stop short of the water's edge, where the bank is drawn as a line of its own.
+              contour *= smoothstep(0.15, 0.4, abs(wl));
+            }
             float bankZone = 1.0 - smoothstep(0.15, 0.4, abs(wl));
             float low = 1.0 - smoothstep(0.3, 0.37, a), wet = smoothstep(0.0, 0.04, dep);
             isW = low * wet; isG = low * (1.0 - wet); waterK = isW;
@@ -4238,8 +4236,6 @@ if (typeof module !== 'undefined') module.exports = Looks;
             detail *= mix(0.55, 1.0, smoothstep(0.25, 0.6, dens));
             // Ground: a pale green wash speckled in olive, thicker in the middle values, with black ink only for
             // crosshatch in the deepest shade.
-            vec2 dots = isG > 0.01 ? landDots(Wl, 3.6, sqrt(clamp(dens * 1.3 - 0.52, 0.0, 1.0)) * 1.44, 0.48, 0.45, 3.0) : vec2(0.0);
-            float stip = dots.x, speck = dots.y;
             float gC = dens > 0.74 ? tone(p, n - 2.0, 0.0) : 0.0;
             gC = max(gC, smoothstep(0.92, 0.96, dens));
             gC = max(gC, edge * 0.55 * (1.0 - bankZone));
@@ -4306,7 +4302,13 @@ if (typeof module !== 'undefined') module.exports = Looks;
             // The washes: the land green, roads and bridge decks pink, water lilac with white ripples, canopies in
             // three greens, roofs cream and walls warm grey by which way they face.
             vec3 base = mix(paperC, SOFT_G, isG);
-            base = mix(base, OLIVE, max(stip * 0.55, speck * 0.4) * isG * (1.0 - onRoad) * (1.0 - uSnowC * 0.8));
+            // Layer tints by height, pale green lowland to cream to tan upland, the slopes away from the light shaded
+            // in a cool sepia and the slopes toward it lifted a little, and the contours in sepia.
+            vec3 tint = hyps < 0.5 ? mix(vec3(0.84, 0.90, 0.80), vec3(0.94, 0.93, 0.82), hyps * 2.0) : mix(vec3(0.94, 0.93, 0.82), vec3(0.88, 0.80, 0.64), hyps * 2.0 - 1.0);
+            base = mix(base, tint, isG * (1.0 - onRoad));
+            base = mix(base, base * vec3(0.72, 0.70, 0.68), rfDark * 0.65 * isG);
+            base = mix(base, min(base * 1.05 + 0.03, vec3(1.0)), rfLight * 0.6 * isG);
+            base = mix(base, vec3(0.42, 0.33, 0.24), contour * isG * (1.0 - onRoad) * (1.0 - wet));
             base = mix(base, base * vec3(0.9, 0.93, 0.97), uWet * isG * 0.7);
             // Tracks worn by traffic: beaten earth, and a hardened track drawn as a site plan draws a path, its edges
             // in dashed sepia.
@@ -4321,30 +4323,6 @@ if (typeof module !== 'undefined') module.exports = Looks;
             float tEdge = (1.0 - smoothstep(0.35 * uK, 1.0 * uK, abs(trk - 0.8) / tgl)) * mix(step(0.45, fract(tPh)), step(0.45, fract(tPh * 0.5)), gLf);
             base = mix(base, vec3(0.42, 0.36, 0.28), tEdge * 0.8 * isG * (1.0 - onRoad));
             // Grass in tufts of three short strokes, leaning and stirring with the wind, thicker in the meadows.
-            // Each tuft grows from a point on the land, and stands upright on the page at one size at any zoom.
-            // Cells are 13 to 26 px across, so the roots that can reach a pixel, which lie a little below it, fall in
-            // the four cells nearest that spot.
-            float grass = 0.0, meadow = smoothstep(0.35, 0.65, noise(Wl / 6.5 + 5.0)), gTh = 1.2 * meadow * (1.0 - uSnowC);
-            if (isG > 0.01 && gTh > 0.0) {
-              float g0 = 26.0 / 80.0;
-              vec2 c0 = floor((Wl - S2W * vec2(0.0, 2.7)) / (g0 * exp2(gLm)) - 0.5);
-              for (int j = 0; j < 4; j++) {
-                float fj = float(j), id, keep;
-                vec2 at = landPt(c0 + vec2(mod(fj, 2.0), floor(fj / 2.0)), 13.0, id, keep) * g0;
-                // The pixel from the tuft's root, in thirteenths of a pixel at 1080p.
-                vec2 d = gW2S * (Wl - at) / 13.0;
-                if (id >= gTh || dot(d, d) > 0.3) continue;
-                float fade = mix(1.0 - gLf, 1.0, keep);
-                float lean = uWindS.x * (0.4 + 0.3 * sin(uTime * 2.3 + id * 40.0 + at.x * 1.4));
-                for (int i = 0; i < 3; i++) {
-                  float fi = float(i) - 1.0, an = lean + fi * 0.36, ln = (0.42 - abs(fi) * 0.1) * fade;
-                  vec2 dir = vec2(sin(an), cos(an)), q2 = d - vec2(fi * 0.08, 0.0);
-                  float tq = clamp(dot(q2, dir), 0.0, ln);
-                  grass = max(grass, (1.0 - smoothstep(0.03, 0.075, length(q2 - dir * tq))) * fade);
-                }
-              }
-            }
-            base = mix(base, vec3(0.33, 0.43, 0.22), grass * 0.8 * isG * (1.0 - onRoad) * (1.0 - wet) * (1.0 - onTrk));
             // Lying snow whitens the land, and the roads less.
             base = mix(base, vec3(0.975, 0.975, 0.965), uSnowC * isG * (1.0 - onRoad * 0.5));
             float rH = hatch(p, 60.0, 4.0, 0.8, 53.0, 0.1);
@@ -4550,6 +4528,7 @@ if (typeof module !== 'undefined') module.exports = Looks;
           C.uRain.value = sky.rain; C.uStorm.value = sky.storm; C.uSnowF.value = sky.snow; C.uFog.value = sky.fog; C.uMist.value = sky.mist;
           C.uNight.value = sky.night; C.uWet.value = sky.wet; C.uDayMul.value.set(...sky.mul); C.uDayAdd.value.set(...sky.add);
           C.uWaterL.value = K.waterLevel; C.uWindS.value.set(sky.windS, 0);
+          C.uView.value.set(Math.cos(K.cam.yaw), Math.sin(K.cam.yaw)); C.uHSize.value.set(Rules.VW, Rules.VH); C.uHScale.value = Rules.RES;
           K.run(ink, null);
         },
       };
@@ -4567,130 +4546,6 @@ if (typeof module !== 'undefined') module.exports = Looks;
       name: th.name + ' day', sun: SUN(-0.62, 0.82), sunColor: 0xfff2dc, sunPower: 3.2, hemi: [0x8db4ee, 0x6a5a46, 1.1],
       env: [0x4f7fb2, 0xc2d6ea, 0x584a3a], haze: 0xc4d8ee, hazeK: 0.0035,
     }),
-  });
-})();
-
-</script>
-<script>
-// Dotted hills: a flat illustration. The land is a few flat colours, green, yellow green, tan and sand, meeting at
-// crisp wavy edges, each covered in rows of dots that run across the view and bend over the rises. Trees are
-// lollipops with one highlight, buildings flat by face, units in three steps of their own colour, water a flat
-// blue grey. Nothing casts a shadow, and the far ground pales a little.
-(() => {
-  const GL = Looks.GL;
-  Looks.add({
-    name: 'hills', title: 'Dotted hills', said: 'Dotted hills.', vivid: 1, sceneFog: false,
-    light: (th, SUN) => Object.assign({}, th, {
-      name: th.name + ' hills', sun: SUN(-0.62, 0.82), sunColor: 0xfff2dc, sunPower: 3.2, hemi: [0x8db4ee, 0x6a5a46, 1.1],
-      env: [0x4f7fb2, 0xc2d6ea, 0x584a3a], haze: 0xc4d8ee, hazeK: 0.0,
-    }),
-    create(K) {
-      const { THREE, SH, vs } = K;
-      const hills = new THREE.ShaderMaterial({ uniforms: { t: { value: null }, tSubj: { value: null }, tNorm: { value: null }, tFogS: { value: null }, tLand: { value: null }, res: { value: new THREE.Vector2(1, 1) }, uK: { value: 1 }, uWaterL: { value: -0.15 }, uFogOn: SH.uFogOn, uSunV: { value: new THREE.Vector3(0, 1, 0) }, uUpV: { value: new THREE.Vector3(0, 1, 0) }, uView: { value: new THREE.Vector2(1, 0) },
-        uInvVP: { value: new THREE.Matrix4() }, uW2S: { value: new THREE.Vector4(1, 0, 0, 1) }, uLev: { value: 1 } }, vertexShader: vs, depthTest: false, depthWrite: false, fragmentShader: `
-        varying vec2 vUv; uniform sampler2D t, tSubj, tNorm, tFogS, tLand; uniform vec2 res, uView; uniform vec3 uSunV, uUpV; uniform float uK, uWaterL, uFogOn;
-        ${GL.LAND}
-        ${GL.NOISE}
-        // The hills' five colours, and the darker dot of each.
-        vec3 fill(float k) { return k < 1.0 ? vec3(0.56, 0.67, 0.40) : k < 2.0 ? vec3(0.72, 0.75, 0.50) : k < 3.0 ? vec3(0.78, 0.70, 0.47) : k < 4.0 ? vec3(0.85, 0.80, 0.62) : vec3(0.44, 0.60, 0.34); }
-        vec3 dotc(float k) { return k < 1.0 ? vec3(0.33, 0.45, 0.24) : k < 2.0 ? vec3(0.46, 0.50, 0.30) : k < 3.0 ? vec3(0.52, 0.45, 0.28) : k < 4.0 ? vec3(0.58, 0.52, 0.36) : vec3(0.25, 0.38, 0.20); }
-        // A crisp edge with a pixel of smoothing.
-        float crisp(float v, float at) { float w = max(fwidth(v), 1e-4); return smoothstep(at - w, at + w, v); }
-        // Light in three flat steps, by how a surface faces the sun.
-        float cel(vec3 n) { float d = dot(n, uSunV); return d > 0.75 ? 1.0 : d > 0.2 ? 0.8 : 0.62; }
-        void main() {
-          vec2 px = vUv * res;
-          float a = texture2D(tSubj, vUv).a;
-          vec4 F = texture2D(tFogS, vUv), Ld = texture2D(tLand, vUv), N0 = texture2D(tNorm, vUv);
-          vec3 n = normalize(N0.xyz * 2.0 - 1.0), src = texture2D(t, vUv).rgb;
-          float hgt = F.b - 20.0, land = step(1.0, F.b), wl = uWaterL - hgt;
-          float low = 1.0 - smoothstep(0.3, 0.37, a);
-          float isW = low * land * crisp(wl, 0.02), isG = low * land * (1.0 - isW);
-          float isU = smoothstep(0.85, 0.95, a), isB = 1.0 - smoothstep(0.02, 0.035, abs(a - 0.75));
-          float isT = 1.0 - smoothstep(0.012, 0.025, abs(a - 0.459)), isO = 1.0 - smoothstep(0.02, 0.035, abs(a - 0.55));
-          float isBr = 1.0 - smoothstep(0.02, 0.035, abs(a - 0.42)), isL = 1.0 - smoothstep(0.02, 0.035, abs(a - 0.6));
-          float isS = max(0.0, smoothstep(0.4, 0.45, a) * (1.0 - smoothstep(0.65, 0.7, a)) - isO - isT - isBr - isL);
-          vec2 Wl = landAt(vUv, hgt);
-          // Which colour this ground is: broad regions with wavy edges.
-          vec2 wq = Wl + (vec2(noise(Wl / 2.5), noise(Wl / 2.5 + 9.0)) - 0.5) * 1.6;
-          float r1 = noise(wq / 13.0), r2 = noise(wq / 7.0 + 31.0);
-          float k = r1 < 0.36 ? 2.0 : r1 < 0.52 ? 0.0 : r1 < 0.6 ? 1.0 : r1 < 0.72 ? 3.0 : 4.0;
-          if (r2 > 0.68) k = k == 0.0 ? 4.0 : k == 2.0 ? 3.0 : k;
-          vec3 G = fill(k), D = dotc(k);
-          // Lighter on the rises, and on the slopes that face the light.
-          vec2 gh = vec2(dFdx(hgt), dFdy(hgt));
-          float slope = smoothstep(0.0, 0.03, length(gh)) * dot(normalize(gh + 1e-6), vec2(-0.6, 0.8));
-          float lit = 1.0 + 0.07 * smoothstep(-1.0, 4.0, hgt) + 0.06 * slope;
-          // Rows of dots across the view, bending over the rises. The spacing doubles as the view pulls back, the
-          // dots that go fading out first.
-          vec2 fwd = uView, rgt = vec2(-uView.y, uView.x);
-          vec2 uv2 = vec2(dot(Wl, rgt), dot(Wl, fwd) + hgt * 1.3);
-          // The rows' own coordinates to the screen at this pixel, so a dot is round and one size wherever it lies.
-          vec2 jx = dFdx(uv2), jy = dFdy(uv2);
-          float det = jx.x * jy.y - jx.y * jy.x;
-          mat2 toS = mat2(jy.y, -jx.y, -jy.x, jx.x) / (det + sign(det) * 1e-9);
-          float ppu = 1.0 / max(sqrt(abs(det)), 1e-5);
-          float s0 = 0.42, L = max(log2(8.5 / (ppu * s0)), 0.0), m = floor(L), tt = smoothstep(0.25, 0.75, fract(L));
-          float dots = 0.0;
-          for (int i = 0; i < 2; i++) {
-            float s = s0 * exp2(m + float(i));
-            vec2 dl = uv2 - (floor(uv2 / s) + 0.5) * s;
-            float dpx = length(toS * dl), r = 0.26 * s * ppu;
-            float d = 1.0 - smoothstep(r - 0.7, r + 0.7, dpx);
-            dots = i == 0 ? d * (1.0 - tt) : max(dots, d * tt);
-          }
-          // Roads and hardened tracks are bare sand, with no dots. Scorched ground darkens.
-          float onRoad = 1.0 - crisp(Ld.r, 1.2), trk = smoothstep(0.5, 0.8, Ld.a);
-          float scorch = min(F.a, 0.99) * (1.0 - step(0.99, F.a));
-          vec3 c = mix(G, D, dots * 0.85) * lit;
-          c = mix(c, vec3(0.86, 0.80, 0.60), onRoad);
-          c = mix(c, mix(G, vec3(0.80, 0.74, 0.55), 0.6) * lit, trk * (1.0 - onRoad));
-          c *= 1.0 - 0.45 * scorch;
-          c = mix(src, c, isG);
-          // Water flat, a little lighter toward the light, with a darker line along the shore.
-          vec3 W = mix(vec3(0.58, 0.70, 0.74), vec3(0.70, 0.80, 0.82), smoothstep(0.0, 1.0, vUv.y));
-          W = mix(W * 0.78, W, crisp(wl, 0.08));
-          c = mix(c, W, isW);
-          // Lollipop trees: one green in three steps, a highlight toward the light, and a dark trunk.
-          float trunk = step(src.g * 1.02, src.r) * step(src.b, src.g);
-          vec3 T = mix(vec3(0.22, 0.42, 0.20), vec3(0.42, 0.66, 0.30), step(0.7, cel(n))) ;
-          T = mix(T, vec3(0.62, 0.80, 0.44), step(0.95, cel(n)) * step(0.82, dot(n, uSunV)));
-          T = mix(T, vec3(0.30, 0.22, 0.14), trunk);
-          c = mix(c, T, isT);
-          // Buildings flat by face: the roof light, the walls two tones, in the building's own hue.
-          float l = luma(src);
-          vec3 hue = src / max(l, 0.03);
-          float up = dot(n, uUpV), face = up > 0.6 ? 0.62 : n.x < 0.0 ? 0.46 : 0.36;
-          c = mix(c, clamp(hue * face, 0.0, 1.0), isB);
-          // Rock grey, ore gold and bridges sand, each in flat steps. Units and creatures in their own colours.
-          c = mix(c, vec3(0.62, 0.60, 0.55) * cel(n), isS);
-          c = mix(c, vec3(0.92, 0.74, 0.32) * cel(n), isO);
-          c = mix(c, vec3(0.80, 0.72, 0.54) * (up > 0.6 ? 1.0 : 0.75), isBr);
-          float lb = l > 0.55 ? 1.05 : l > 0.25 ? 0.85 : 0.6;
-          c = mix(c, clamp(hue * lb * max(l, 0.3), 0.0, 1.0), max(isU, isL));
-          // The fog of war: what was never seen is blank paper, what is out of sight now goes grey.
-          vec2 fg = mix(vec2(1.0), F.rg, uFogOn);
-          vec3 paper = vec3(0.88, 0.86, 0.78);
-          c = mix(c, mix(vec3(luma(c)), c, 0.45) * 0.92 + 0.04, (1.0 - fg.r) * fg.g * land * (1.0 - isU));
-          c = mix(c, paper, (1.0 - fg.g) * land * (1.0 - isU));
-          c = mix(c, vec3(0.26, 0.29, 0.21), (1.0 - land) * low);
-          // The far ground pales into the air.
-          c = mix(c, vec3(0.86, 0.88, 0.86), smoothstep(0.55, 1.0, vUv.y) * 0.22 * (1.0 - isU));
-          gl_FragColor = vec4(c, 1.0);
-        }` });
-      return {
-        render(K) {
-          const C = hills.uniforms, { w, h, camera, cam } = K;
-          C.t.value = K.ldr.texture; C.tSubj.value = K.mask(); C.tNorm.value = K.norm(); C.tFogS.value = K.fog(); C.tLand.value = K.land();
-          C.res.value.set(w, h); C.uK.value = h / 1080; C.uWaterL.value = K.waterLevel;
-          K.landUniforms(C);
-          C.uSunV.value.copy(SH.uSunDir.value).transformDirection(camera.matrixWorldInverse);
-          C.uUpV.value.set(0, 1, 0).transformDirection(camera.matrixWorldInverse);
-          C.uView.value.set(Math.cos(cam.yaw), Math.sin(cam.yaw));
-          K.run(hills, null);
-        },
-      };
-    },
   });
 })();
 
@@ -4826,7 +4681,7 @@ const World = (() => {
     const white = new THREE.DataTexture(new Uint8Array([255, 255, 255, 255]), 1, 1); white.needsUpdate = true;
     const black = new THREE.DataTexture(new Uint8Array([0, 0, 0, 0]), 1, 1); black.needsUpdate = true;
     const SH = {
-      tFog: { value: white }, tDetail: { value: null }, tTerr: { value: white }, tMarks: { value: white }, uTime: { value: 0 },
+      tFog: { value: white }, tDetail: { value: null }, tTerr: { value: white }, tH: { value: white }, tMarks: { value: white }, uTime: { value: 0 },
       uTeam0: { value: new THREE.Color(0x3f8cff) }, uTeams: { value: SLOT_COLORS.map(c => new THREE.Color(c).offsetHSL(0, 0, 0.06)) }, uFogOn: { value: 1 }, uBorder: { value: 1 }, uMap: { value: 128 },
       uHaze: { value: new THREE.Color(0xf29a5e) }, uHazeK: { value: 0.012 }, uHazeFrom: { value: 80 }, uShroud: { value: new THREE.Color(0x120907) }, uSunDir: { value: new THREE.Vector3(1, 0.3, 0) },
       // The wind on the ground, how far it has carried the clouds, how overcast it is, and lying snow.
@@ -5372,7 +5227,14 @@ const World = (() => {
     let S = null, M = null, theme = null, viewTeam = 0, sets = {}, terrainMesh = null, waterMesh = null, statics = [], baseImage = null;
     const rs = new Map();
     let wrecks = [], corpses = [], flyers = [], planes = [], falls = [], marks = null, marksTex = null, marksDirty = false, marksLast = 0;
-    let fogTex = null, fogData = null, fogR = null, fogG = null, terrTex = null, terrData = null, terrSeen = -1;
+    let fogTex = null, fogData = null, fogR = null, fogG = null, terrTex = null, terrData = null, terrSeen = -1, hTex = null;
+    // A number as a half float, for heights within a few units of the ground.
+    const halfBuf = new Float32Array(1), halfBits = new Uint32Array(halfBuf.buffer);
+    function toHalf(v) {
+      halfBuf[0] = v;
+      const x = halfBits[0], sign = (x >>> 16) & 0x8000, exp = ((x >>> 23) & 0xff) - 112;
+      return exp <= 0 ? sign : exp >= 31 ? sign | 0x7c00 : sign | (exp << 10) | ((x & 0x7fffff) >>> 13);
+    }
     let ore = null, oreSeen = -1, flagMeshes = [], ghost = null, ghostCells = null;
     // How far the rivers stand above their usual line.
     const waterRise = { value: 0 };
@@ -6146,6 +6008,13 @@ const World = (() => {
       marks.ctx.fillStyle = '#000'; marks.ctx.fillRect(0, 0, mk, mk); marksTex.needsUpdate = true;
 
       buildTerrain(); buildWater(); buildScenery(); buildSets(); buildLife(); applyLight();
+      // The land's heights as a texture, for passes that draw the ground's form.
+      if (hTex) hTex.dispose();
+      const hd = new Uint16Array(M.h.length);
+      for (let i = 0; i < hd.length; i++) hd[i] = toHalf(M.h[i]);
+      hTex = new THREE.DataTexture(hd, VW, VH, THREE.RedFormat, THREE.HalfFloatType);
+      hTex.magFilter = hTex.minFilter = THREE.LinearFilter; hTex.wrapS = hTex.wrapT = THREE.ClampToEdgeWrapping; hTex.needsUpdate = true;
+      SH.tH.value = hTex;
       for (const k in sky) if (typeof sky[k] === 'number') sky[k] = 0;
       Object.assign(sky, Rules.sky(S), { wind: undefined });
       sky.wet = 0; sky.day = Rules.dayAt(S.tick); waterRise.value = Math.min(1.25, sky.flood) * 0.26;
@@ -8550,7 +8419,7 @@ const Game = (() => {
         b.addEventListener('click', () => { G[key] = b.dataset.v; box.querySelectorAll('button').forEach(o => o.classList.toggle('on', o === b)); audio.wake(); audio.ui('click'); try { localStorage.setItem('dg-' + key, b.dataset.v); } catch (e) { /* no store */ } });
       });
     };
-    try { G.theme = localStorage.getItem('dg-theme') || G.theme; G.diff = localStorage.getItem('dg-diff') || G.diff; G.look = localStorage.getItem('dg-look') || G.look; G.look = { film: 'daylight', charcoal: 'ink', hudson: 'hills' }[G.look] || G.look; G.showHints = !localStorage.getItem('dg-played'); } catch (e) { /* no store */ }
+    try { G.theme = localStorage.getItem('dg-theme') || G.theme; G.diff = localStorage.getItem('dg-diff') || G.diff; G.look = localStorage.getItem('dg-look') || G.look; G.look = { film: 'daylight', charcoal: 'ink', hudson: 'ink', hills: 'ink' }[G.look] || G.look; G.showHints = !localStorage.getItem('dg-played'); } catch (e) { /* no store */ }
     if (params.get('look')) G.look = params.get('look');
     if (!Looks.has(G.look) || Looks.get(G.look).hidden) G.look = 'ink';
     // The look menu lists every look in the registry.
