@@ -279,6 +279,19 @@ const AI = (() => {
     }
   }
 
-  return { create };
+  // What a commander remembers, for a saved game: its plain fields and where its dice stand.
+  function save(me) {
+    const o = {};
+    for (const k in me) if (k !== 'D' && k !== 'rand' && k !== 'tick' && k !== 'people') o[k] = me[k];
+    o.rand = me.rand.state();
+    return o;
+  }
+  function load(o) {
+    const me = create(o.team, o.level), rand = me.rand;
+    Object.assign(me, o);
+    me.rand = rand; rand.seed(o.rand);
+    return me;
+  }
+  return { create, save, load };
 })();
 if (typeof module !== 'undefined') module.exports = AI;

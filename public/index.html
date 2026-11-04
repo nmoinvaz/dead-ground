@@ -519,13 +519,16 @@ const Rules = (() => {
   };
 
   // Seeded numbers and value noise.
+  // The dice can tell where they stand and be set there again, so a saved game rolls on as it would have.
   function mulberry(a) {
-    return () => {
+    const r = () => {
       a = (a | 0) + 0x6D2B79F5 | 0;
       let t = Math.imul(a ^ a >>> 15, 1 | a);
       t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
       return ((t ^ t >>> 14) >>> 0) / 4294967296;
     };
+    r.state = () => a; r.seed = v => { a = v | 0; };
+    return r;
   }
   function noiser(rand) {
     const g = new Float32Array(65536);
@@ -3061,7 +3064,20 @@ const AI = (() => {
     }
   }
 
-  return { create };
+  // What a commander remembers, for a saved game: its plain fields and where its dice stand.
+  function save(me) {
+    const o = {};
+    for (const k in me) if (k !== 'D' && k !== 'rand' && k !== 'tick' && k !== 'people') o[k] = me[k];
+    o.rand = me.rand.state();
+    return o;
+  }
+  function load(o) {
+    const me = create(o.team, o.level), rand = me.rand;
+    Object.assign(me, o);
+    me.rand = rand; rand.seed(o.rand);
+    return me;
+  }
+  return { create, save, load };
 })();
 if (typeof module !== 'undefined') module.exports = AI;
 
@@ -4556,202 +4572,6 @@ if (typeof module !== 'undefined') module.exports = Looks;
 
 </script>
 <script>
-// Hudson River School, after Cole, Kensett, Church and Durand, seen from the game's own view.
-(() => {
-  const GL = Looks.GL;
-  // A colour by value through four stops.
-  const RAMP = 'vec3 ramp(float v, vec3 a, vec3 b, vec3 c, vec3 d) { return v < 0.35 ? mix(a, b, v / 0.35) : v < 0.7 ? mix(b, c, (v - 0.35) / 0.35) : mix(c, d, (v - 0.7) / 0.3); }';
-  Looks.add({
-    name: 'hudson', title: 'Hudson River', said: 'Hudson River.', vivid: 1, sceneFog: false,
-    light: (th, SUN) => Object.assign({}, th, {
-      name: th.name + ' hudson', sun: SUN(-0.55, 0.46), sunColor: 0xffe2b4, sunPower: 3.5, hemi: [0x8aa2cc, 0x5e5240, 0.95],
-      env: [0x6c88b4, 0xf2e2bc, 0x4a4030], haze: 0xece0c4, hazeK: 0.0,
-    }),
-    create(K) {
-      const { THREE, SH, vs } = K;
-      // Hudson River School, after Cole, Kensett, Church and Durand, in two passes. The first colours the scene as the valley: fields of gold, yellow green and olive laid on the land, cloud
-      // shadows drifting over them, dark woods, warm shade, and mist over what is unexplored. Its alpha tells the
-      // second pass what each pixel is: 0.1 land, 0.3 water, 0.5 scenery, 0.6 woods, 0.8 buildings, 1 units, 0 sky.
-      const hudsonColor = new THREE.ShaderMaterial({ uniforms: { t: { value: null }, tSubj: { value: null }, tFogS: { value: null }, res: { value: new THREE.Vector2(1, 1) }, uTime: { value: 0 }, uK: { value: 1 }, uWaterL: { value: -0.15 }, uWind: SH.uWind, uFogOn: SH.uFogOn,
-        uInvVP: { value: new THREE.Matrix4() }, uW2S: { value: new THREE.Vector4(1, 0, 0, 1) }, uLev: { value: 1 } }, vertexShader: vs, depthTest: false, depthWrite: false, fragmentShader: `
-        varying vec2 vUv; uniform sampler2D t, tSubj, tFogS; uniform vec2 res, uWind; uniform float uTime, uK, uWaterL, uFogOn;
-        ${GL.LAND}
-        ${GL.NOISE}
-        ${RAMP}
-        // The four crops of the valley, close in hue: ripe wheat, yellow green, pale grass and meadow.
-        vec3 crop(float k) { return k < 0.25 ? vec3(0.84, 0.74, 0.44) : k < 0.5 ? vec3(0.73, 0.71, 0.42) : k < 0.75 ? vec3(0.63, 0.66, 0.4) : vec3(0.54, 0.59, 0.35); }
-        void main() {
-          float a = texture2D(tSubj, vUv).a;
-          vec4 F = texture2D(tFogS, vUv);
-          float fb = F.b, land = step(1.0, fb);
-          float low = 1.0 - smoothstep(0.3, 0.37, a), wl = uWaterL - (fb - 20.0);
-          float isW = low * land * smoothstep(0.0, 0.04, wl), isG = low * land * (1.0 - isW);
-          float isU = step(0.9, a), isB = step(0.7, a) * (1.0 - isU), isT = 1.0 - smoothstep(0.012, 0.025, abs(a - 0.459));
-          float isS = (1.0 - low) * (1.0 - isU) * (1.0 - isB) * (1.0 - isT), isO = 1.0 - smoothstep(0.02, 0.035, abs(a - 0.55));
-          vec3 c = texture2D(t, vUv).rgb;
-          float l = luma(c), v = clamp((l - 0.06) / 0.6, 0.0, 1.0);
-          vec2 Wl = landAt(vUv, fb - 20.0);
-          // Fields: the nearest of points scattered on the land, small and ragged, their colours meeting softly at the
-          // hedges.
-          vec2 fq = Wl / 4.0 + (vec2(noise(Wl / 2.2), noise(Wl / 2.2 + 7.0)) - 0.5) * 0.55, fi = floor(fq), fid = fi;
-          float d1 = 9.0, d2 = 9.0;
-          for (int j = 0; j < 9; j++) {
-            vec2 n = vec2(mod(float(j), 3.0) - 1.0, floor(float(j) / 3.0) - 1.0), o = fi + n + 0.15 + 0.7 * hc2(fi + n, 5.0);
-            float d = length(fq - o);
-            if (d < d1) { d2 = d1; d1 = d; fid = fi + n; } else if (d < d2) d2 = d;
-          }
-          vec3 fh = hc3(fid, 9.0);
-          float hedge = 1.0 - smoothstep(0.0, 0.14, d2 - d1);
-          vec3 sun = mix(crop(fh.x), vec3(0.7, 0.7, 0.44), 0.3 + 0.5 * hedge), shade = sun * vec3(0.4, 0.42, 0.34);
-          vec3 G = mix(shade, sun, v * v * (3.0 - 2.0 * v));
-          float fa = fh.y * 3.14159, row = abs(fract(dot(Wl, vec2(cos(fa), sin(fa))) / 0.32) - 0.5);
-          G *= 1.0 - 0.07 * step(0.55, fh.z) * (1.0 - smoothstep(0.12, 0.2, row));
-          // The shadows of clouds drift over the valley with the wind.
-          float cs = smoothstep(0.42, 0.68, noise(Wl / 30.0 - uWind * uTime * 0.02 + 3.0));
-          G = mix(G, G * vec3(0.6, 0.62, 0.58), cs * 0.55);
-          c = mix(c, G, isG);
-          // Woods dark at their roots and yellow green where the light catches them, in clumps of leaves.
-          float lc = noise(Wl / 0.32) * 0.65 + noise(Wl / 0.14 + 3.0) * 0.35, lt = l * (0.62 + 0.8 * lc * lc);
-          vec3 T = ramp(clamp((lt - 0.04) / 0.6, 0.0, 1.0), vec3(0.08, 0.1, 0.05), vec3(0.2, 0.26, 0.1), vec3(0.43, 0.48, 0.19), vec3(0.7, 0.69, 0.34));
-          c = mix(c, T * mix(1.0, 0.7, cs), isT);
-          // Rock and the like in warm greys. Ore keeps its gold, warmed, as the game needs to read it.
-          c = mix(c, ramp(clamp(l / 0.8, 0.0, 1.0), vec3(0.2, 0.18, 0.14), vec3(0.42, 0.39, 0.32), vec3(0.66, 0.62, 0.52), vec3(0.9, 0.87, 0.76)), isS * (1.0 - isO) * 0.85);
-          c = mix(c, c * vec3(1.02, 0.94, 0.76), isO);
-          // Houses and works keep their colour, softened toward the valley's; units keep theirs.
-          c = mix(c, mix(c, ramp(v, vec3(0.2, 0.17, 0.13), vec3(0.5, 0.42, 0.33), vec3(0.78, 0.7, 0.58), vec3(0.95, 0.92, 0.84)), 0.45), isB);
-          // What is unexplored lies under mist, and what was seen but is out of sight now under a thin haze.
-          vec2 fg = mix(vec2(1.0), F.rg, uFogOn);
-          c = mix(c, mix(vec3(0.82, 0.8, 0.76), c, 0.18), (1.0 - fg.g) * land * (1.0 - isU));
-          c = mix(c, mix(c, vec3(0.78, 0.77, 0.74), 0.32), (1.0 - fg.r) * fg.g * land * (1.0 - isU));
-          float k = land < 0.5 && low > 0.5 ? 0.0 : isU > 0.5 ? 1.0 : isB > 0.5 ? 0.8 : isT > 0.5 ? 0.6 : isW > 0.5 ? 0.3 : low > 0.5 ? 0.1 : 0.5;
-          gl_FragColor = vec4(c, k);
-        }` });
-      // The second pass paints it: a soft underpainting, then strokes, each at a point on the land and carrying the
-      // colour found at its centre. Long strokes lie along each field, dabs on the woods spill over their edges, and
-      // long thin strokes lie on the water, which mirrors the sky overhead with its clouds. The air thickens with
-      // distance, and canvas and varnish lie over all.
-      const hudson = new THREE.ShaderMaterial({ uniforms: { tP: { value: null }, tPS: { value: null }, tFogS: { value: null }, res: { value: new THREE.Vector2(1, 1) }, uTime: { value: 0 }, uK: { value: 1 }, uWaterL: { value: -0.15 }, uCamPos: { value: new THREE.Vector3() }, uSunD: SH.uSunDir,
-        uInvVP: { value: new THREE.Matrix4() }, uW2S: { value: new THREE.Vector4(1, 0, 0, 1) }, uLev: { value: 1 } }, vertexShader: vs, depthTest: false, depthWrite: false, fragmentShader: `
-        varying vec2 vUv; uniform sampler2D tP, tPS, tFogS; uniform vec2 res; uniform float uTime, uK, uWaterL; uniform vec3 uCamPos, uSunD;
-        ${GL.LAND}
-        ${GL.NOISE}
-        ${RAMP}
-        const vec3 HOR = vec3(0.95, 0.88, 0.73);
-        // The horizon's haze, warmest and brightest toward the sun.
-        vec3 haze(vec3 d) { float sd = max(dot(normalize(vec3(d.x, 0.0, d.z)), normalize(vec3(uSunD.x, 0.0, uSunD.z))), 0.0); return mix(vec3(0.82, 0.8, 0.78), HOR * 1.04, pow(sd, 2.0)); }
-        vec3 skyAt(vec3 d) {
-          float e = d.y, sd = max(dot(d, uSunD), 0.0);
-          vec3 c = mix(haze(d), vec3(0.8, 0.81, 0.85), smoothstep(0.0, 0.22, e));
-          c = mix(c, vec3(0.46, 0.58, 0.76), smoothstep(0.2, 0.8, e));
-          c = mix(c, vec3(1.0, 0.94, 0.78), pow(sd, 5.0) * 0.55);
-          c += vec3(1.0, 0.9, 0.68) * (pow(sd, 300.0) * 0.9 + pow(sd, 40.0) * 0.12);
-          // Cumulus on a plane overhead, lit on the side toward the sun and grey beneath, melting into the haze low down.
-          float ee = max(e, 0.015);
-          vec2 cp = d.xz / ee * 0.6 + vec2(uTime * 0.004, 0.0);
-          float n = fbm(cp * 0.5), ns = fbm(cp * 0.5 + normalize(uSunD.xz + 1e-4) * 0.09);
-          float cov = smoothstep(0.48, 0.72, n) * smoothstep(0.012, 0.09, e);
-          vec3 cc = mix(vec3(0.58, 0.57, 0.62), vec3(1.0, 0.96, 0.87), clamp((ns - n) * 7.0 + 0.55, 0.0, 1.0));
-          cc = mix(cc, vec3(1.0, 0.95, 0.82), pow(sd, 6.0) * 0.6);
-          c = mix(c, mix(cc, haze(d), (1.0 - smoothstep(0.0, 0.16, e)) * 0.55), cov);
-          return c;
-        }
-        void main() {
-          vec2 px = vUv * res;
-          vec4 P = texture2D(tP, vUv);
-          vec4 a4 = uInvVP * vec4(vUv * 2.0 - 1.0, -1.0, 1.0), b4 = uInvVP * vec4(vUv * 2.0 - 1.0, 1.0, 1.0);
-          vec3 eye = a4.xyz / a4.w, dir = normalize(b4.xyz / b4.w - eye);
-          vec3 c;
-          // Beyond the map lies dark ground.
-          if (P.a < 0.05) c = vec3(0.13, 0.11, 0.09);
-          else {
-            float fb = texture2D(tFogS, vUv).b, wl = uWaterL - (fb - 20.0);
-            vec2 Wl = landAt(vUv, fb - 20.0);
-            // The level and the step from land to screen are taken here, as the low view foreshortens the land.
-            vec2 jx = dFdx(Wl), jy = dFdy(Wl);
-            float det = jx.x * jy.y - jx.y * jy.x;
-            mat2 S2W = mat2(jx, jy);
-            gW2S = mat2(jy.y, -jx.y, -jy.x, jx.x) / (det + sign(det) * 1e-9) / uK;
-            float lev = clamp(log2(80.0 * uK * sqrt(abs(det))), 0.0, 2.999);
-            gLm = floor(lev); gLf = smoothstep(0.15, 0.85, lev - gLm);
-            bool crisp = P.a > 0.7;
-            c = crisp ? P.rgb : mix(P.rgb, texture2D(tPS, vUv).rgb, 0.3);
-            // Still water mirrors the sky above it, and the banks and woods that stand over it, broken by ripples.
-            if (P.a > 0.2 && P.a < 0.4) {
-              vec3 r = reflect(dir, vec3(0.0, 1.0, 0.0));
-              float wob = (noise(vec2(px.x / (3.0 * uK), px.y / (14.0 * uK))) - 0.5) * 2.0 * uK;
-              vec3 m = skyAt(r) * vec3(0.9, 0.92, 0.95);
-              m = mix(m, vec3(0.3, 0.33, 0.24), (1.0 - smoothstep(0.03, 0.4, wl)) * 0.6);
-              vec4 R = texture2D(tP, vUv + vec2(wob, 10.0 * uK) / res);
-              float rk = R.a > 0.4 && R.a < 0.75 ? 1.0 : R.a > 0.05 && R.a < 0.2 ? 0.45 : 0.0;
-              m = mix(m, R.rgb * 0.6, rk * 0.5);
-              c = mix(c, m, 0.85);
-            }
-            vec2 wg = vec2(dFdx(wl), dFdy(wl));
-            vec2 along = length(wg) > 1e-6 ? normalize(S2W * vec2(-wg.y, wg.x)) : vec2(1.0, 0.0);
-            if (!crisp) {
-              float g0 = 13.0 / 80.0, top = -1.0, sa = 0.0;
-              vec3 sc = c;
-              vec2 c0 = floor(Wl / (g0 * exp2(gLm)));
-              for (int j = 0; j < 9; j++) {
-                float fj = float(j), id, keep;
-                vec2 Q = landPt(c0 + vec2(mod(fj, 3.0) - 1.0, floor(fj / 3.0) - 1.0), 21.0, id, keep) * g0;
-                vec2 d = gW2S * (Wl - Q);
-                if (dot(d, d) > 110.0) continue;
-                vec2 cuv = vUv - d * uK / res;
-                vec4 C = texture2D(tP, cuv);
-                if (C.a > 0.7 || C.a < 0.05) continue;
-                C.rgb = mix(C.rgb, texture2D(tPS, cuv).rgb, 0.25);
-                float kind = C.a > 0.55 ? 2.0 : C.a > 0.2 && C.a < 0.4 ? 1.0 : 0.0;
-                float ang = noise(Q / 7.0) * 6.283 + (id - 0.5) * 0.7;
-                vec2 dl = kind == 1.0 ? along : vec2(cos(ang), sin(ang)), ds = normalize(gW2S * dl);
-                float f = mix(1.0 - gLf, 1.0, keep);
-                float L = (kind == 2.0 ? 4.6 : kind == 1.0 ? 9.0 : 6.5) * f, Wd = (kind == 2.0 ? 4.0 : kind == 1.0 ? 1.4 : 3.0) * f;
-                vec2 q = vec2(dot(d, ds), dot(d, vec2(-ds.y, ds.x)));
-                float u = abs(q.x) / max(L, 0.01), w = abs(q.y) / max(Wd * (1.0 - 0.3 * u * u), 0.01);
-                float al = (1.0 - smoothstep(0.75, 1.0, u)) * (1.0 - smoothstep(0.7, 1.0, w));
-                float key = kind * 2.0 + id;
-                if (al > 0.0 && key > top) {
-                  top = key; sa = al * (kind == 1.0 ? 0.35 : 1.0);
-                  sc = C.rgb * (1.0 + (noise(vec2(q.y * 1.7, q.x * 0.12) + id * 31.0) - 0.5) * 0.12);
-                }
-              }
-              c = mix(c, sc, sa * 0.92);
-            }
-            // The air thickens with true distance into the horizon's haze.
-            vec3 wp = vec3(Wl.x, fb - 20.0, Wl.y);
-            float dist = length(wp - uCamPos), air = 1.0 - exp(-max(dist - 25.0, 0.0) * 0.0075);
-            c = mix(c, haze(dir), air * (crisp ? 0.7 : 0.9));
-          }
-          // Varnish and canvas.
-          c = pow(max(c, 0.0), vec3(1.04)) * vec3(1.03, 1.0, 0.93);
-          vec2 cv = px / (1.3 * uK);
-          c *= 1.0 + 0.035 * sin(cv.x * 3.14159) * sin(cv.y * 3.14159);
-          c += (hash(px + fract(uTime)) - 0.5) * 0.012;
-          gl_FragColor = vec4(c, 1.0);
-        }` });
-      return {
-        render(K) {
-          const C = hudsonColor.uniforms, H = hudson.uniforms, { w, h } = K, fog = K.fog();
-          for (const U of [C, H]) {
-            U.tFogS.value = fog; U.res.value.set(w, h); U.uTime.value = K.time; U.uK.value = h / 1080; U.uWaterL.value = K.waterLevel;
-            K.landUniforms(U);
-          }
-          H.uCamPos.value.copy(K.camera.position);
-          C.t.value = K.ldr.texture; C.tSubj.value = K.mask();
-          const paint = K.target('paint');
-          K.run(hudsonColor, paint);
-          // The coloured picture blurred at a quarter size, for the underpainting.
-          K.blur(paint.texture, K.a1, 1.4 / K.a1.width, 0); K.blur(K.a1.texture, K.a0, 0, 1.4 / K.a0.height);
-          H.tP.value = paint.texture; H.tPS.value = K.a0.texture;
-          K.run(hudson, null);
-        },
-      };
-    },
-  });
-})();
-
-</script>
-<script>
 // Charcoal, kept from an earlier round and out of the menu: the graded picture pressed into toothy paper.
 (() => {
   const GL = Looks.GL;
@@ -5192,6 +5012,8 @@ const World = (() => {
         get time() { return SH.uTime.value; }, get camera() { return camera; }, get cam() { return cam; }, get sky() { return sky; },
         get theme() { return theme; }, get center() { return [CX, CY]; }, get waterLevel() { return (M ? M.water : -0.15) + waterRise.value; },
         get opts() { return { ink: inkStyle, road: roadStyle, ore: oreStyle }; },
+        // Where the low sun's light comes in from, across the screen.
+        get glow() { return grade.uniforms.uGlow.value; },
         mask: () => drawInto(maskRT, 0x000000, 0, 1, markMat),
         norm: () => drawInto(normRT, 0x808080, 0, 1, normMat),
         fog: () => landInto(fogPassMat, fogRT),
@@ -8304,6 +8126,9 @@ const Hud = (() => {
         drawOverlay(dt);
       },
       setCameos(c) { state.cameos = c; buildCams(); },
+      // The control groups as unit ids, for a saved game, and back.
+      groupIds() { const o = {}; for (const n in state.groups) o[n] = state.groups[n].map(e => e.id); return o; },
+      setGroups(g) { state.groups = {}; for (const n in g || {}) state.groups[n] = g[n].map(id => game.S.byId.get(id)).filter(Boolean); },
     };
   }
 
@@ -8451,17 +8276,51 @@ const Game = (() => {
       const S = Rules.newGame({ seed });
       S.ais.push(AI.create(1, G.diff));
       $('title').hidden = true; $('end').hidden = true;
+      clearSave();
       begin(S, G.theme, 0);
       hud.reset();
       G.playing = true; G.paused = false; $('veil').hidden = true;
       document.body.classList.add('in-game');
       home(S, 0);
+      saveT = 0;
       hud.say(`Deployed: ${world.THEMES[G.theme].name}. Enemy to the north. Good hunting, Commander.`);
       fit();
     }
 
+    // A game against the computer is kept in the browser, so a refresh or a closed tab loses nothing. The world, the
+    // commander's mind, the view and the control groups are written every few seconds and as the page goes.
+    const SAVE = 'dg-save';
+    let saveT = 0;
+    function saveGame() {
+      if (!G.playing || G.online || !G.S || G.S.over) return;
+      const c = world.cam;
+      try { localStorage.setItem(SAVE, JSON.stringify({ v: 1, at: Date.now(), theme: G.theme, diff: G.diff, speed: G.speed, cam: { x: c.x, y: c.y, dist: c.dist, yaw: c.yaw }, groups: hud.groupIds(), S: Rules.save(G.S), ais: G.S.ais.map(AI.save) })); } catch (e) { /* no store, or full */ }
+    }
+    function clearSave() { try { localStorage.removeItem(SAVE); } catch (e) { /* no store */ } }
+    function restore() {
+      let o = null;
+      try { o = JSON.parse(localStorage.getItem(SAVE)); } catch (e) { /* no store */ }
+      if (!o || o.v !== 1) return false;
+      let S;
+      try { S = Rules.load(o.S); S.ais = o.ais.map(AI.load); } catch (e) { clearSave(); return false; }
+      G.theme = o.theme; G.diff = o.diff; G.speed = o.speed; $('speed').textContent = G.speed + 'x';
+      for (const [box, key] of [['m-theme', 'theme'], ['m-diff', 'diff']]) $(box).querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.v === G[key]));
+      $('title').hidden = true; $('end').hidden = true;
+      begin(S, G.theme, 0);
+      hud.reset(); hud.setGroups(o.groups);
+      G.playing = true; G.paused = false; $('veil').hidden = true;
+      document.body.classList.add('in-game');
+      Object.assign(world.cam, o.cam);
+      hud.say('Resumed where you left off.');
+      fit();
+      return true;
+    }
+    window.addEventListener('pagehide', saveGame);
+    window.addEventListener('beforeunload', saveGame);
+
     function finish(won) {
       G.playing = false;
+      clearSave();
       const S = G.S, a = Rules.summary(S, 0), b = Rules.summary(S, 1), sec = S.tick / Rules.HZ | 0;
       $('end-title').textContent = won ? 'Mission Accomplished' : 'Mission Failed';
       $('end').className = won ? 'won' : 'lost';
@@ -8540,6 +8399,7 @@ const Game = (() => {
         if (net.queue.length > 600) resync();
       } else if (S && !G.paused) {
         acc += dt * (G.playing ? G.speed : 1);
+        if (G.playing && (saveT -= dt) <= 0) { saveT = 8; saveGame(); }
         let n = 0;
         while (acc >= Rules.DT && n < 8) { Rules.step(S); drain(); acc -= Rules.DT; n++; }
         if (n === 8) acc = 0;
@@ -8566,7 +8426,7 @@ const Game = (() => {
         b.addEventListener('click', () => { G[key] = b.dataset.v; box.querySelectorAll('button').forEach(o => o.classList.toggle('on', o === b)); audio.wake(); audio.ui('click'); try { localStorage.setItem('dg-' + key, b.dataset.v); } catch (e) { /* no store */ } });
       });
     };
-    try { G.theme = localStorage.getItem('dg-theme') || G.theme; G.diff = localStorage.getItem('dg-diff') || G.diff; G.look = localStorage.getItem('dg-look') || G.look; G.look = { film: 'daylight', charcoal: 'ink' }[G.look] || G.look; G.showHints = !localStorage.getItem('dg-played'); } catch (e) { /* no store */ }
+    try { G.theme = localStorage.getItem('dg-theme') || G.theme; G.diff = localStorage.getItem('dg-diff') || G.diff; G.look = localStorage.getItem('dg-look') || G.look; G.look = { film: 'daylight', charcoal: 'ink', hudson: 'hills' }[G.look] || G.look; G.showHints = !localStorage.getItem('dg-played'); } catch (e) { /* no store */ }
     if (params.get('look')) G.look = params.get('look');
     if (!Looks.has(G.look) || Looks.get(G.look).hidden) G.look = 'ink';
     // The look menu lists every look in the registry.
@@ -8577,14 +8437,14 @@ const Game = (() => {
     $('deploy').addEventListener('click', () => { audio.wake(); audio.ui('click'); start(); try { localStorage.setItem('dg-played', '1'); } catch (e) { /* no store */ } });
     $('again').addEventListener('click', () => { audio.ui('click'); if (G.online) { if (net.ws) net.ws.send(JSON.stringify({ t: 'respawn' })); $('end').hidden = true; } else start(); });
     $('menu').addEventListener('click', () => { $('end').hidden = true; leave(); toTitle(); });
-    $('quit').addEventListener('click', () => { G.paused = false; $('veil').hidden = true; G.playing = false; leave(); toTitle(); });
+    $('quit').addEventListener('click', () => { G.paused = false; $('veil').hidden = true; G.playing = false; clearSave(); leave(); toTitle(); });
     $('resume').addEventListener('click', () => G.togglePause());
     $('b-pause').addEventListener('click', () => G.togglePause());
     $('b-mute').addEventListener('click', () => { audio.wake(); audio.toggle(); $('b-mute').classList.toggle('off', audio.muted); });
     $('b-full').addEventListener('click', () => G.fullscreen());
     $('b-speed').addEventListener('click', () => { const i = SPEEDS.indexOf(G.speed); G.speed = SPEEDS[(i + 1) % SPEEDS.length]; $('speed').textContent = G.speed + 'x'; });
     $('b-mute').classList.toggle('off', audio.muted);
-    document.addEventListener('visibilitychange', () => { if (document.hidden && G.playing && !G.paused && !G.online) G.togglePause(); });
+    document.addEventListener('visibilitychange', () => { if (document.hidden) { saveGame(); if (G.playing && !G.paused && !G.online) G.togglePause(); } });
 
     // The shared world. The server sends each step's commands; this copy steps the same world from them, and
     // checks it against the server's every two seconds.
@@ -8722,7 +8582,7 @@ const Game = (() => {
 
     function boot() {
       fit();
-      attract();
+      if (!restore()) attract();
       try { $('callsign').value = localStorage.getItem('dg-name') || ''; } catch (e) { /* no store */ }
       $('join').addEventListener('click', () => { audio.wake(); audio.ui('click'); joinWorld(); });
       probe();
@@ -8733,6 +8593,7 @@ const Game = (() => {
       ];
       hud.setCameos(world.cameos(list, 0));
       document.body.classList.add('ready');
+      G.save = saveGame;
       window.__game = G; window.__hud = hud;
       requestAnimationFrame(loop);
     }

@@ -137,13 +137,16 @@ const Rules = (() => {
   };
 
   // Seeded numbers and value noise.
+  // The dice can tell where they stand and be set there again, so a saved game rolls on as it would have.
   function mulberry(a) {
-    return () => {
+    const r = () => {
       a = (a | 0) + 0x6D2B79F5 | 0;
       let t = Math.imul(a ^ a >>> 15, 1 | a);
       t = t + Math.imul(t ^ t >>> 7, 61 | t) ^ t;
       return ((t ^ t >>> 14) >>> 0) / 4294967296;
     };
+    r.state = () => a; r.seed = v => { a = v | 0; };
+    return r;
   }
   function noiser(rand) {
     const g = new Float32Array(65536);
