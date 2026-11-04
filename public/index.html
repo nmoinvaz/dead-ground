@@ -340,7 +340,7 @@ body[data-look="ink"] #menu, body[data-look="ink"] #quit, body[data-look="ink"] 
       <h1>Dead <span>Ground</span></h1>
       <p class="lede">Build a base, dig ore, take the towns, and flatten the other side before it flattens you.</p>
       <div class="choice"><h2>Theatre</h2><div id="m-theme"><button data-v="desert">Salt Flats</button><button data-v="steppe">Black Steppe</button><button data-v="winter">White Pass</button></div></div>
-      <div class="choice"><h2>Look</h2><div id="m-look"><button data-v="ink">Pen and ink</button><button data-v="film">Daylight</button><button data-v="hudson">Hudson River</button></div></div>
+      <div class="choice"><h2>Look</h2><div id="m-look"></div></div>
       <div class="choice"><h2>Enemy</h2><div id="m-diff"><button data-v="recruit">Recruit</button><button data-v="regular">Regular</button><button data-v="veteran">Veteran</button></div></div>
       <button id="deploy">Deploy</button>
       <div class="choice" id="m-online" hidden><h2>The shared world</h2>
@@ -3932,208 +3932,38 @@ if (typeof module !== 'undefined') module.exports = Models;
 
 </script>
 <script>
-// Dead Ground, the picture. Terrain is baked once. Units are instanced by part. Fog, borders and
-// battle scars live in small textures every material reads. Fire and smoke are GPU particles.
-const World = (() => {
-  const { RES, HZ, UNITS, BUILDINGS, clamp, lerp, smooth, terrainAt, heightAt, mulberry, noiser } = Rules;
-  // The map's size comes with each world loaded: a duel is 128 cells across, the shared world 256.
-  let W = Rules.W, H = Rules.H, VW = Rules.VW, VH = Rules.VH;
-
-  // Every theatre is shot at sunset. The sun sits low off the left of the screen, so shadows run long
-  // across the ground, and the shade is lit by a violet sky and warm bounce from the earth.
-  const SUN = (az, el) => { const x = Math.cos(az), z = Math.sin(az), c = Math.cos(el); return [x * c, Math.sin(el), z * c]; };
-  const THEMES = {
-    desert: {
-      name: 'Salt Flats', tree: 'acacia', sun: SUN(-0.46, 0.3), sunColor: 0xffb36e, sunPower: 3.9,
-      hemi: [0x5e6cb4, 0x7a4c34, 0.9], env: [0x34437e, 0xffa866, 0x3e2a22], haze: 0xf0a878, hazeK: 0.008, shroud: 0x100a0a,
-      ground: [0xd2b08a, 0xbf9670], patch: 0xa69a6a, rock: 0xa86a52, bank: 0x8a7058, road: 0x76604e, stain: 0x9a5a30,
-      water: [0x3f8c96, 0x17404e], leaf: [0x6a7438, 0x8a8440], dust: [0.95, 0.74, 0.55], smoke: [0.17, 0.13, 0.12], ripple: 1,
-    },
-    steppe: {
-      name: 'Black Steppe', tree: 'broad', sun: SUN(-0.5, 0.27), sunColor: 0xffa862, sunPower: 3.8,
-      hemi: [0x5a66ae, 0x6e4a30, 0.88], env: [0x32407a, 0xff9e5c, 0x34241a], haze: 0xe8a07a, hazeK: 0.008, shroud: 0x0f0a09,
-      ground: [0xb59a62, 0x8e744a], patch: 0xcaa860, rock: 0x7e6252, bank: 0x5e4c3c, road: 0x5e4a3a, stain: 0x8a4e28,
-      water: [0x3b7a80, 0x163a46], leaf: [0x56622c, 0x84702c], dust: [0.8, 0.66, 0.5], smoke: [0.15, 0.12, 0.11], ripple: 0,
-    },
-    winter: {
-      name: 'White Pass', tree: 'conifer', sun: SUN(-0.42, 0.25), sunColor: 0xffae80, sunPower: 3.3,
-      hemi: [0x6c74c0, 0x9a7a74, 0.92], env: [0x3e4a8c, 0xffb084, 0x584450], haze: 0xf0b49c, hazeK: 0.008, shroud: 0x0f0b0e,
-      ground: [0xf0e6e2, 0xdcd0cc], patch: 0xc8bcb8, rock: 0x7a6466, bank: 0x8a7a7a, road: 0x6c5e5a, stain: 0x8a5e48,
-      water: [0x4a8494, 0x1c3e50], leaf: [0x2e4436, 0x42583e], dust: [0.96, 0.92, 0.92], smoke: [0.17, 0.15, 0.16], ripple: 0,
-    },
-  };
-
-  let CX = W / 2, CY = H / 2;
-  // A colour for each of the eight slots. A duel uses the first two.
-  const SLOT_COLORS = [0x2f7ef0, 0xe03a24, 0x2fa84a, 0x8a4fd8, 0xf08a1c, 0x1fb3b3, 0xe0459a, 0x7a5230];
-
-  function create(THREE, canvas, opt = {}) {
-    const low = !!opt.low;
-    const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance', preserveDrawingBuffer: !!opt.keep });
-    renderer.setClearColor(0x000000, 1);
-    renderer.toneMapping = THREE.NoToneMapping;
-    renderer.shadowMap.enabled = true;
-    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
-    renderer.info.autoReset = true;
-    const MODELS = Models.make(THREE);
-    const scene = new THREE.Scene();
-    const camera = new THREE.PerspectiveCamera(26, 1, 2, 500);
-    const cam = { x: 40, y: 40, dist: 92, yaw: Math.PI / 4, pitch: 0.98, shake: 0, minD: 30, maxD: 190 };
-
-    const white = new THREE.DataTexture(new Uint8Array([255, 255, 255, 255]), 1, 1); white.needsUpdate = true;
-    const black = new THREE.DataTexture(new Uint8Array([0, 0, 0, 0]), 1, 1); black.needsUpdate = true;
-    const SH = {
-      tFog: { value: white }, tDetail: { value: null }, tTerr: { value: white }, tMarks: { value: white }, uTime: { value: 0 },
-      uTeam0: { value: new THREE.Color(0x3f8cff) }, uTeams: { value: SLOT_COLORS.map(c => new THREE.Color(c).offsetHSL(0, 0, 0.06)) }, uFogOn: { value: 1 }, uBorder: { value: 1 }, uMap: { value: 128 },
-      uHaze: { value: new THREE.Color(0xf29a5e) }, uHazeK: { value: 0.012 }, uHazeFrom: { value: 80 }, uShroud: { value: new THREE.Color(0x120907) }, uSunDir: { value: new THREE.Vector3(1, 0.3, 0) },
-      // The wind on the ground, how far it has carried the clouds, how overcast it is, and lying snow.
-      uWind: { value: new THREE.Vector2(0.3, 0.1) }, uCloud: { value: new THREE.Vector2() }, uCloudK: { value: 0.2 }, uSnowC: { value: 0 },
-      // How hard the track worn into each cell has become, in red.
-      tTrail: { value: black },
-    };
-    // Trees lean with the wind and stir in it, more toward their tops. Shared by every pass that draws them.
-    const SWAY = `
-      vec2 sway(vec2 at, float h) {
-        float s = h * h * 0.05, ph = uTime * 1.7 + at.x * 0.31 + at.y * 0.23;
-        return uWind * s * (0.6 + 0.4 * sin(ph)) + vec2(-uWind.y, uWind.x) * s * 0.2 * sin(ph * 1.9 + 1.3);
-      }`;
-
-    function patch(mat, o = {}) {
-      const key = 'dg' + (o.plain ? 'p' : '') + (o.terrain ? 't' : '') + (o.tint ? 'i' : '') + (o.sway ? 's' : '');
-      mat.customProgramCacheKey = () => key;
-      mat.onBeforeCompile = s => {
-        Object.assign(s.uniforms, SH);
-        let v = s.vertexShader, f = s.fragmentShader;
-        v = v.replace('#include <common>', `#include <common>
-          varying vec3 vW; varying vec3 vL; varying float vGlow; varying vec3 vTint;
-          uniform vec2 uWind; uniform float uTime;
-          ${SWAY}
-          ${o.plain ? '' : 'attribute float aTeam; attribute float aGlow;'}`);
-        if (!o.plain && !o.tint) {
-          v = v.replace('#include <color_vertex>', `
-            vColor = vec3(1.0);
-            #ifdef USE_COLOR
-              vColor *= color;
-            #endif
-            vTint = vec3(0.0);
-            #ifdef USE_INSTANCING_COLOR
-              vColor = mix(vColor, vColor * instanceColor.xyz, aTeam);
-              vTint = instanceColor.xyz * aTeam;
-            #endif`);
-        }
-        v = v.replace('#include <project_vertex>', `#include <project_vertex>
-          vec4 wp = vec4(transformed, 1.0);
-          #ifdef USE_INSTANCING
-            wp = instanceMatrix * wp;
-          #endif
-          wp = modelMatrix * wp; vW = wp.xyz; vL = position;
-          vGlow = ${o.plain ? '0.0' : 'aGlow'};`);
-        if (o.sway) v = v.replace('#include <project_vertex>', `
-          vec4 mvPosition = vec4(transformed, 1.0);
-          #ifdef USE_INSTANCING
-            mvPosition = instanceMatrix * mvPosition;
-          #endif
-          mvPosition.xz += sway(mvPosition.xz, position.y);
-          mvPosition = modelViewMatrix * mvPosition;
-          gl_Position = projectionMatrix * mvPosition;`);
-        f = f.replace('#include <common>', `#include <common>
-          uniform sampler2D tFog, tDetail, tTerr, tMarks, tTrail; uniform float uTime, uFogOn, uBorder, uHazeK, uHazeFrom, uMap, uCloudK, uSnowC; uniform vec3 uTeam0, uTeams[8], uHaze, uShroud, uSunDir; uniform vec2 uCloud;
-          varying vec3 vW; varying vec3 vL; varying float vGlow; varying vec3 vTint;`);
-        if (o.plain || o.tint) v = v.replace('vGlow = ', 'vTint = vec3(0.0); vGlow = ');
-        if (o.terrain) {
-          f = f.replace('#include <map_fragment>', `#include <map_fragment>
-            float d1 = texture2D(tDetail, vW.xz * 0.27).r, d2 = texture2D(tDetail, vW.xz * 1.6).g;
-            diffuseColor.rgb *= 0.82 + 0.26 * d1 + 0.1 * d2;
-            vec4 mk = texture2D(tMarks, vW.xz / uMap);
-            diffuseColor.rgb *= 1.0 - mk.r * 0.86;
-            diffuseColor.rgb *= 1.0 - mk.g * 0.34;
-            // Worn tracks, bare earth.
-            float trk = texture2D(tTrail, vW.xz / uMap).r;
-            diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(0.9, 0.84, 0.74) + vec3(0.05, 0.04, 0.02), smoothstep(0.2, 0.6, trk) * 0.7);`);
-          f = f.replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
-            vec4 dn = texture2D(tDetail, vW.xz * 0.8), dn2 = texture2D(tDetail, vW.xz * 0.19);
-            vec3 wn = vec3((dn.b - 0.5) * 0.35 + (dn2.b - 0.5) * 1.2, 0.0, (dn.a - 0.5) * 0.35 + (dn2.a - 0.5) * 1.2);
-            normal = normalize(normal + mat3(viewMatrix) * wn * 0.45);`);
-        } else {
-          f = f.replace('#include <color_fragment>', `#include <color_fragment>
-            float gr = texture2D(tDetail, vL.xz * 1.1 + vL.yy * vec2(0.7, 1.1)).r;
-            diffuseColor.rgb *= 0.72 + 0.56 * gr;`);
-          f = f.replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
-            totalEmissiveRadiance += diffuseColor.rgb * vGlow * 3.4 + vTint * vTint * 0.0;`);
-        }
-        const border = o.terrain ? `
-            // Red holds the viewer's own reach and green the strongest other side's, each signed so its
-            // border is a zero crossing; blue says which side that other is, read from the nearest cell.
-            vec2 tv = (texture2D(tTerr, vW.xz / uMap).rg - 0.5) * 16.0;
-            float who = floor(texture2D(tTerr, (floor(vW.xz) + 0.5) / uMap).b * 8.0 + 0.5);
-            vec3 other = uTeams[0];
-            for (int i = 1; i < 8; i++) if (float(i) == who) other = uTeams[i];
-            float la = abs(tv.x), lb = abs(tv.y), w = 0.09 + fwidth(tv.x) * 0.8;
-            float ia = (1.0 - smoothstep(0.0, 4.0, tv.x)) * step(0.0, tv.x), ib = (1.0 - smoothstep(0.0, 4.0, tv.y)) * step(0.0, tv.y);
-            vec3 bc = gl_FragColor.rgb;
-            bc = mix(bc, bc * 0.7 + uTeam0 * 0.25, ia * 0.42 * uBorder);
-            bc = mix(bc, bc * 0.7 + other * 0.25, ib * 0.42 * uBorder);
-            bc += uTeam0 * 0.85 * smoothstep(w, 0.0, la) * uBorder;
-            bc += other * 0.85 * smoothstep(w, 0.0, lb) * uBorder;
-            gl_FragColor.rgb = bc;` : '';
-        f = f.replace('#include <opaque_fragment>', `#include <opaque_fragment>
-          // Cloud shadows go by on the wind, darker the more overcast it is. Snow lies on whatever faces up.
-          float cl = texture2D(tDetail, vW.xz * 0.006 + uCloud).r;
-          gl_FragColor.rgb *= mix(0.9 - 0.25 * uCloudK, 1.03, smoothstep(0.3, 0.7, cl));
-          ${o.terrain || o.tint ? `vec3 fN = normalize(cross(dFdx(vW), dFdy(vW)));
-          gl_FragColor.rgb = mix(gl_FragColor.rgb, vec3(0.93, 0.94, 0.97) * (0.55 + 0.5 * max(dot(fN, uSunDir), 0.0)), uSnowC * smoothstep(0.55, 0.85, abs(fN.y)));` : ''}
-          ${border}
-          // Warm air thickens with distance, brightest toward the sun.
-          vec3 vd = normalize(vW - cameraPosition);
-          float hz = 1.0 - exp(-max(length(vW - cameraPosition) - uHazeFrom, 0.0) * uHazeK);
-          vec3 air = uHaze * (0.5 + 0.7 * pow(max(dot(vd, uSunDir), 0.0), 3.0));
-          gl_FragColor.rgb = mix(gl_FragColor.rgb, air, hz * 0.38);
-          vec2 fg = mix(vec2(1.0), texture2D(tFog, vW.xz / uMap).rg, uFogOn);
-          float lum = dot(gl_FragColor.rgb, vec3(0.3, 0.59, 0.11));
-          vec3 dimmed = mix(gl_FragColor.rgb, vec3(lum), 0.45) * vec3(0.46, 0.4, 0.38);
-          gl_FragColor.rgb = mix(uShroud, mix(dimmed, gl_FragColor.rgb, fg.r), fg.g);
-          vec2 ed = abs(vW.xz / uMap - 0.5) * 2.0;
-          gl_FragColor.rgb = mix(uShroud, gl_FragColor.rgb, (1.0 - smoothstep(0.985, 1.002, max(ed.x, ed.y))));`);
-        s.vertexShader = v; s.fragmentShader = f;
-      };
-      return mat;
-    }
-
-    const paint = patch(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.58, metalness: 0.22, envMapIntensity: 1 }));
-    const plainTint = patch(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.92, metalness: 0, envMapIntensity: 0.6 }), { tint: true });
-    const treeTint = patch(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.92, metalness: 0, envMapIntensity: 0.6 }), { tint: true, sway: true });
-
-    // A tiling noise texture, height in red, grain in green, and its slope in blue and alpha.
-    function makeDetail() {
-      const n = 256, rand = mulberry(77), lat = (p) => { const a = new Float32Array(p * p); for (let i = 0; i < a.length; i++) a[i] = rand(); return a; };
-      const octs = [[8, 0.5], [16, 0.26], [32, 0.14], [64, 0.07], [128, 0.03]].map(([p, a]) => ({ p, a, g: lat(p) }));
-      const hgt = new Float32Array(n * n), grain = lat(n);
-      for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) {
-        let s = 0;
-        for (const o of octs) {
-          const fx = x / n * o.p, fy = y / n * o.p, ix = fx | 0, iy = fy | 0, u = fx - ix, v = fy - iy, su = u * u * (3 - 2 * u), sv = v * v * (3 - 2 * v);
-          const q = (a, b) => o.g[((b + o.p) % o.p) * o.p + ((a + o.p) % o.p)];
-          s += o.a * lerp(lerp(q(ix, iy), q(ix + 1, iy), su), lerp(q(ix, iy + 1), q(ix + 1, iy + 1), su), sv);
-        }
-        hgt[y * n + x] = s;
-      }
-      let lo = 9, hi = -9;
-      for (const v of hgt) { lo = Math.min(lo, v); hi = Math.max(hi, v); }
-      const data = new Uint8Array(n * n * 4);
-      for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) {
-        const c = y * n + x, h = (hgt[c] - lo) / (hi - lo);
-        const dx = hgt[y * n + (x + 1) % n] - hgt[y * n + (x + n - 1) % n], dy = hgt[((y + 1) % n) * n + x] - hgt[((y + n - 1) % n) * n + x];
-        data[c * 4] = h * 255; data[c * 4 + 1] = (grain[c] * 0.6 + h * 0.4) * 255;
-        data[c * 4 + 2] = clamp(0.5 - dx * 6, 0, 1) * 255; data[c * 4 + 3] = clamp(0.5 - dy * 6, 0, 1) * 255;
-      }
-      const t = new THREE.DataTexture(data, n, n, THREE.RGBAFormat);
-      t.wrapS = t.wrapT = THREE.RepeatWrapping; t.magFilter = THREE.LinearFilter; t.minFilter = THREE.LinearMipmapLinearFilter; t.generateMipmaps = true; t.anisotropy = 4; t.needsUpdate = true;
-      return t;
-    }
-    SH.tDetail.value = makeDetail();
-
-    // Paper for the charcoal look: fine tooth in red, long streaks in green, broad smudges in blue. It tiles.
-    function makePaper() {
+// Looks: every way Dead Ground can be drawn, each a single definition, so a new style fits in without touching the
+// rest of the game. world.js renders the scene, grades it and hands a look a kit of shared buffers. The HUD, the menu
+// and the L key read the registry.
+//
+// Looks.add takes:
+//   name, title       its key, and its name in the menu
+//   said              what the HUD says when L cycles to it
+//   hidden            true keeps it out of the menu and the cycle
+//   panels            how the page dresses its panels: 'ink' for paper and ink, 'paint' for the default
+//   hud               how the overlay draws: 'ink' for inked effects, ghost plans and the map key, 'paint' otherwise
+//   camera(cam, smooth)  { fov, near, far, D, pitch } for the view, D the eye's distance from the point looked at;
+//                     cam.dist is the zoom. The default is the 26 degree lens of the painted looks.
+//   light(theme, SUN) the light it is lit by: a theatre with its sun, colours, sky and haze replaced. The theatre's
+//                     own when absent.
+//   sun(w)            the sun's direction now, given { cam, day, light, SUN, sunAt }. The light's sun when absent.
+//   vivid             1 grades for clear full colour, 0 for the sunset's haze and bloom
+//   sceneFog          false when the look paints the fog of war itself
+//   ghost3d           false when the overlay draws a placement's plan and the 3D ghost is hidden
+//   create(K)         builds its materials once from the kit K (see world.js) and returns { render(K) }, which draws
+//                     the frame to the screen from K.ldr, the graded picture, and whatever buffers it asks the kit
+//                     for. A look without it shows the graded picture as it is.
+const Looks = (() => {
+  const all = new Map();
+  const base = { panels: 'paint', hud: 'paint', vivid: 0, sceneFog: true, ghost3d: true, hidden: false };
+  return {
+    add(def) { all.set(def.name, Object.assign({}, base, def)); },
+    get(name) { return all.get(name) || all.get('ink'); },
+    has(name) { return all.has(name); },
+    list() { return [...all.values()].filter(l => !l.hidden); },
+    // Paper to draw on: fine tooth in red, long streaks in green, broad smudges in blue. It tiles.
+    paper(THREE) {
+      const mulberry = Rules.mulberry, lerp = (a, b, t) => a + (b - a) * t;
       const n = 512, rand = mulberry(31), lat = p => { const a = new Float32Array(p * p); for (let i = 0; i < a.length; i++) a[i] = rand(); return a; };
       const val = (g, p, x, y) => {
         const fx = x / n * p, fy = y / n * p, ix = Math.floor(fx), iy = Math.floor(fy), u = fx - ix, v = fy - iy, su = u * u * (3 - 2 * u), sv = v * v * (3 - 2 * v);
@@ -4152,189 +3982,62 @@ const World = (() => {
       const t = new THREE.DataTexture(data, n, n, THREE.RGBAFormat);
       t.wrapS = t.wrapT = THREE.RepeatWrapping; t.magFilter = THREE.LinearFilter; t.minFilter = THREE.LinearMipmapLinearFilter; t.generateMipmaps = true; t.needsUpdate = true;
       return t;
-    }
-    let look = 'film', inkStyle = 8, roadStyle = 3, oreStyle = 4;
-    // The kind of thing being drawn into the line passes, shared with the pass's material, and whether it sways.
-    const catU = { value: 1 }, catRef = { mat: null, norm: null }, swayU = { value: 0 };
-    const maskMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
-
-    // The full-screen passes: bloom in two sizes, then the grade.
-    const pp = (() => {
-      const quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2));
-      const qs = new THREE.Scene(); qs.add(quad); quad.frustumCulled = false;
-      const qc = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
-      const vs = 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }';
-      const bright = new THREE.ShaderMaterial({ uniforms: { t: { value: null } }, vertexShader: vs, depthTest: false, depthWrite: false, fragmentShader: `
-        varying vec2 vUv; uniform sampler2D t;
-        void main(){ vec3 c = min(texture2D(t, vUv).rgb, vec3(24.0)); float l = max(c.r, max(c.g, c.b)); gl_FragColor = vec4(c * smoothstep(1.0, 2.2, l), 1.0); }` });
-      const blur = new THREE.ShaderMaterial({ uniforms: { t: { value: null }, d: { value: new THREE.Vector2() } }, vertexShader: vs, depthTest: false, depthWrite: false, fragmentShader: `
-        varying vec2 vUv; uniform sampler2D t; uniform vec2 d;
-        void main(){ vec3 c = texture2D(t, vUv).rgb * 0.227;
-          c += (texture2D(t, vUv + d * 1.385).rgb + texture2D(t, vUv - d * 1.385).rgb) * 0.316;
-          c += (texture2D(t, vUv + d * 3.231).rgb + texture2D(t, vUv - d * 3.231).rgb) * 0.07;
-          gl_FragColor = vec4(c, 1.0); }` });
-      const grade = new THREE.ShaderMaterial({ uniforms: { t: { value: null }, b1: { value: null }, b2: { value: null }, uTime: { value: 0 }, uFlash: { value: 0 }, uBloom: { value: 0.6 }, uGlow: { value: new THREE.Vector2(-0.2, 0.9) }, uGlowC: { value: new THREE.Color(0xff9550) }, uAspect: { value: 1.6 }, uVivid: { value: 0 } }, vertexShader: vs, depthTest: false, depthWrite: false, fragmentShader: `
-        varying vec2 vUv; uniform sampler2D t, b1, b2; uniform float uTime, uFlash, uBloom, uAspect, uVivid; uniform vec2 uGlow; uniform vec3 uGlowC;
-        vec3 aces(vec3 x){ return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0); }
-        void main(){
-          // Daylight (uVivid) keeps only a touch of bloom and of the sun's spill, and none of the haze's lift.
-          vec3 c = texture2D(t, vUv).rgb + (texture2D(b1, vUv).rgb * 0.55 + texture2D(b2, vUv).rgb * 0.45) * uBloom * mix(1.0, 0.3, uVivid);
-          c += vec3(uFlash * 6.0, uFlash * 5.6, uFlash * 5.0);
-          // Light from the low sun spills in from its side of the frame.
-          vec2 gq = (vUv - uGlow) * vec2(uAspect, 1.0);
-          c += uGlowC * (exp(-length(gq) * 1.8) * 0.2 + exp(-length(gq) * 4.5) * 0.18) * (1.0 - uVivid);
-          vec2 q = vUv - 0.5; float vig = 1.0 - dot(q, q) * mix(0.7, 0.45, uVivid);
-          c = aces(c * mix(0.86, 0.8, uVivid) * vig);
-          float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
-          c *= mix(vec3(0.9, 0.9, 1.06), vec3(1.04, 1.0, 0.92), smoothstep(0.05, 0.6, l) * (1.0 - uVivid * 0.6));
-          // Colour held full through the lights, and a firm contrast in the middle values.
-          c = mix(vec3(l), c, mix(1.06, 1.18, uVivid));
-          c = mix(c, c * c * (3.0 - 2.0 * c), 0.22 * uVivid);
-          c += vec3(0.012, 0.008, 0.014) * (1.0 - l) * (1.0 - uVivid);
-          c = pow(max(c, 0.0), vec3(1.0 / 2.2));
-          float n = fract(sin(dot(vUv + fract(uTime), vec2(12.9898, 78.233))) * 43758.5453);
-          gl_FragColor = vec4(c + (n - 0.5) * 0.018, 1.0); }` });
-      // Hudson River School: the graded picture glazed as an oil landscape in a golden light. The far ground melts into
-      // soft glazes and a gold haze, colour settles into umber, olive, ochre and cream, water turns to a mirror of the
-      // sky, and fine strokes, canvas and varnish lie over it all. Units and buildings keep their detail and colour.
-      const hudson = new THREE.ShaderMaterial({ uniforms: { t: { value: null }, tSoft: { value: null }, tSubj: { value: null }, tFogS: { value: null }, res: { value: new THREE.Vector2(1, 1) }, uTime: { value: 0 }, uK: { value: 1 }, uOff: { value: new THREE.Vector2() }, uGlow: { value: new THREE.Vector2(-0.2, 0.9) }, uAspect: { value: 1.6 }, uWaterL: { value: -0.15 } }, vertexShader: vs, depthTest: false, depthWrite: false, fragmentShader: `
-        varying vec2 vUv; uniform sampler2D t, tSoft, tSubj, tFogS; uniform vec2 res, uOff, uGlow; uniform float uTime, uK, uAspect, uWaterL;
+    },
+    // GLSL the passes share.
+    GL: {
+      // Points and ways back to the land, for passes that lay marks on it. The pass sets uInvVP, uW2S and uLev with
+      // K.landUniforms, and gLm, gLf and gW2S itself before calling landPt.
+      LAND: `
+        uniform mat4 uInvVP; uniform vec4 uW2S; uniform float uLev;
+        // The land under a pixel, where the ray from the eye meets the height the land pass left there. The ground's
+        // marks are laid on it, so they keep their place on the land as the view zooms and turns.
+        vec2 landAt(vec2 uv, float y) {
+          vec4 a = uInvVP * vec4(uv * 2.0 - 1.0, -1.0, 1.0), b = uInvVP * vec4(uv * 2.0 - 1.0, 1.0, 1.0);
+          a.xyz /= a.w; b.xyz /= b.w;
+          return mix(a.xz, b.xz, (y - a.y) / (b.y - a.y));
+        }
+        // The zoom as a level. A cell at level m is 2^m base cells wide, and the base cell of g px is g / 80 land
+        // units, which is g px across at the nearest zoom. gLf fades one level into the next.
+        float gLm = 0.0, gLf = 0.0;
+        mat2 gW2S = mat2(1.0);
+        // Hashes of a cell and a seed, true for cells counted in the tens of thousands.
+        vec2 hc2(vec2 c, float s) { vec3 q = fract(vec3(c.xyx + s * vec3(7.13, 3.71, 5.29)) * vec3(0.1031, 0.103, 0.0973)); q += dot(q, q.yzx + 33.33); return fract((q.xx + q.yz) * q.zy); }
+        vec3 hc3(vec2 c, float s) { vec3 q = fract(vec3(c.xyx + s * vec3(7.13, 3.71, 5.29)) * vec3(0.1031, 0.103, 0.0973)); q += dot(q, q.yxz + 33.33); return fract((q.xxy + q.yzz) * q.zyx); }
+        // Points fixed on the land that keep one density on screen at any zoom. A cell's point is the point of the
+        // child it picks, so a point never moves. One its parent passes over fades as the zoom nears the next level.
+        vec2 landPt(vec2 c, float sd, out float id, out float keep) {
+          vec2 pc = floor(c * 0.5);
+          keep = gLf > 0.0 && all(equal(pc * 2.0 + step(0.5, hc2(pc, sd + gLm + 1.0)), c)) ? 1.0 : 0.0;
+          for (int l = 3; l >= 1; l--) if (float(l) <= gLm) c = c * 2.0 + step(0.5, hc2(c, sd + float(l)));
+          vec3 h = hc3(c, sd + 77.0);
+          id = h.x;
+          return c + 0.2 + 0.6 * h.yz;
+        }`,
+      // Value noise, its fractal sum, and luminance.
+      NOISE: `
         float hash(vec2 p) { p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
         float noise(vec2 p) { vec2 i = floor(p), f = fract(p), u = f * f * (3. - 2. * f);
           return mix(mix(hash(i), hash(i + vec2(1, 0)), u.x), mix(hash(i + vec2(0, 1)), hash(i + vec2(1, 1)), u.x), u.y); }
         float luma(vec3 c) { return dot(c, vec3(0.299, 0.587, 0.114)); }
-        vec3 ramp(float v, vec3 a, vec3 b, vec3 c, vec3 d) { return v < 0.35 ? mix(a, b, v / 0.35) : v < 0.7 ? mix(b, c, (v - 0.35) / 0.35) : mix(c, d, (v - 0.7) / 0.3); }
-        const vec3 UMBER = vec3(0.165, 0.141, 0.118), HAZE = vec3(0.72, 0.71, 0.76), BLUE = vec3(0.6, 0.67, 0.78), GOLD = vec3(0.98, 0.92, 0.78);
-        const vec3 FRAME = vec3(0.1, 0.13, 0.08);
-        // The valley floor: near black green in shade, deep green, sunlit olive, and gold where the light is fullest.
-        const vec3 G0 = vec3(0.05, 0.07, 0.04), G1 = vec3(0.15, 0.23, 0.09), G2 = vec3(0.43, 0.49, 0.19), G3 = vec3(0.9, 0.78, 0.42);
-        // Woods: near black green, deep green, and olive gold where the light catches the crowns.
-        const vec3 T0 = vec3(0.03, 0.05, 0.03), T1 = vec3(0.1, 0.17, 0.07), T2 = vec3(0.33, 0.4, 0.14), T3 = vec3(0.72, 0.64, 0.3);
-        void main() {
-          vec2 px = vUv * res, e = 3.0 * uK / res, pq = px - uOff;
-          float a = texture2D(tSubj, vUv).a;
-          // Water where the land lies under the water line, as the ink pass finds it.
-          float fb = texture2D(tFogS, vUv).b, land = step(1.0, fb);
-          float low = 1.0 - smoothstep(0.3, 0.37, a), wl = uWaterL - (fb - 20.0);
-          float isW = low * land * smoothstep(0.0, 0.04, wl), isG = low * land * (1.0 - isW);
-          float isU = smoothstep(0.62, 0.72, a), isT = 1.0 - smoothstep(0.012, 0.025, abs(a - 0.459));
-          vec3 c = texture2D(t, vUv).rgb, s = texture2D(tSoft, vUv).rgb;
-          // The top of the frame lies farthest off, and melts into soft glazes.
-          float far = smoothstep(0.15, 1.0, vUv.y);
-          c = mix(c, s, (0.06 + 0.22 * far) * (1.0 - isU));
-          float l = luma(c), own = 0.2;
-          // The land repainted as the valley, whatever the theatre, in broad warm and cool patches.
-          float v = clamp((l - 0.12) / 0.62, 0.0, 1.0), pn = noise(pq / (260.0 * uK));
-          v = v * v * (3.0 - 2.0 * v);
-          vec3 G = ramp(v, G0, G1, G2, G3) * mix(vec3(0.9, 1.02, 0.92), vec3(1.1, 1.02, 0.84), pn);
-          c = mix(c, mix(G, c / max(l, 0.02) * luma(G), own), isG * 0.92);
-          // Woods massed dark, dabbed with small leaves of light.
-          float dab = smoothstep(0.6, 0.8, noise(pq / (2.6 * uK)));
-          vec3 T = ramp(clamp((l - 0.05) / 0.6, 0.0, 1.0), T0, T1, T2, T3) + vec3(0.08, 0.07, 0.02) * dab * smoothstep(0.25, 0.5, l);
-          c = mix(c, T, isT * 0.9);
-          // Other scenery, ore and the like, settle into the same earth colours.
-          float isS = (1.0 - low) * (1.0 - isU) * (1.0 - isT);
-          c = mix(c, mix(ramp(clamp(l / 0.85, 0.0, 1.0), UMBER, vec3(0.4, 0.36, 0.3), vec3(0.66, 0.6, 0.5), vec3(0.92, 0.88, 0.76)), c, 0.15), isS * 0.85);
-          // Still water mirrors the sky, gold toward the sun and pale blue away from it, with the banks reflected dark
-          // along its edge and thin lines of light across it.
-          vec2 gq = (vUv - uGlow) * vec2(uAspect, 1.0);
-          vec3 sky = mix(vec3(0.26, 0.34, 0.45), vec3(0.96, 0.8, 0.5), clamp(exp(-length(gq) * 1.5) * 1.3, 0.0, 1.0));
-          sky = mix(sky, vec3(0.06, 0.09, 0.06), (1.0 - smoothstep(0.02, 0.35, wl)) * 0.7);
-          // The lines of light follow the banks, a little apart, and break as they run.
-          // They keep off the banks, where the depth changes fastest and the lines would crowd.
-          float wq = wl / 0.12, ww = max(fwidth(wq), 1e-4), wf = fract(wq);
-          float rip = (1.0 - smoothstep(0.4, 1.1, min(wf, 1.0 - wf) / ww)) * step(0.62, noise(pq / (40.0 * uK) + floor(wq) * 3.7));
-          rip *= smoothstep(0.06, 0.25, wl) * (1.0 - smoothstep(1.5, 3.0, ww * 12.0)) * 0.45;
-          vec3 wc = mix(vec3(luma(c)), c, 0.4);
-          c = mix(c, mix(mix(sky, wc, 0.15), vec3(0.98, 0.94, 0.84), rip), isW * 0.92);
-          // Beyond the map's edge lies dark ground.
-          c = mix(c, UMBER * 0.7, (1.0 - land) * low);
-          // Units and buildings keep their colour under a light warm glaze.
-          c = mix(c, c * vec3(1.02, 0.98, 0.9), isU * 0.6);
-          // Air between the eye and the far ground, lavender grey, cream toward the sun, and blue at the very top.
-          c = mix(c, mix(mix(HAZE, GOLD, clamp(exp(-length(gq) * 1.6) * 1.3, 0.0, 1.0)), BLUE, smoothstep(0.8, 1.0, vUv.y) * 0.35), far * far * 0.18 * (1.0 - isU * 0.5));
-          // The near ground lies in shade, as the paintings keep their foregrounds dark.
-          c *= mix(0.8, 1.0, smoothstep(0.0, 0.45, vUv.y)) * mix(1.0, 0.85, isG * (1.0 - smoothstep(0.0, 0.3, vUv.y)));
-          // The light floods in from the sun's side.
-          c += vec3(1.0, 0.82, 0.5) * exp(-length(gq) * 2.4) * 0.2 * (1.0 - isU * 0.5);
-          // Fine strokes laid along the form, and level across flat ground, moving with the map as it pans.
-          vec2 g = vec2(luma(texture2D(tSoft, vUv + vec2(e.x, 0.0)).rgb) - luma(texture2D(tSoft, vUv - vec2(e.x, 0.0)).rgb),
-                        luma(texture2D(tSoft, vUv + vec2(0.0, e.y)).rgb) - luma(texture2D(tSoft, vUv - vec2(0.0, e.y)).rgb));
-          vec2 dir = normalize(mix(vec2(1.0, 0.12), normalize(vec2(-g.y, g.x) + 1e-5), smoothstep(0.01, 0.06, length(g))));
-          vec2 sq = vec2(dot(pq, dir), dot(pq, vec2(-dir.y, dir.x))) / uK;
-          c *= 1.0 + (noise(vec2(sq.x / 6.0, sq.y / 1.3)) - 0.5) * 0.09 * (1.0 - isU * 0.6);
-          // Varnish: warm and deep, the darks sunk and the colour held full.
-          c = pow(max(c, 0.0), vec3(1.12)) * vec3(1.04, 1.0, 0.9);
-          c = mix(vec3(luma(c)), c, 1.15);
-          // Canvas under it all, fixed to the picture.
-          vec2 cv = px / (1.3 * uK);
-          c *= 1.0 + 0.03 * sin(cv.x * 3.14159) * sin(cv.y * 3.14159);
-          // The corners darken to deep green, as dark trees frame the view in the paintings.
-          vec2 vq = (vUv - 0.5) * vec2(uAspect * 0.7, 1.0);
-          c = mix(c, FRAME, smoothstep(0.45, 1.0, length(vq)) * 0.45);
-          c += (hash(px + fract(uTime)) - 0.5) * 0.012;
-          gl_FragColor = vec4(c, 1.0);
-        }` });
-      // Charcoal: the graded picture's darkness pressed into toothy paper as charcoal, with streaked strokes, drawn
-      // outlines that boil, lights lifted to bare paper, and colour kept only for fire, sunset and the sides' marks.
-      const charcoal = new THREE.ShaderMaterial({ uniforms: { t: { value: null }, tSubj: { value: null }, tHeat: { value: null }, tPaper: { value: null }, res: { value: new THREE.Vector2(1, 1) }, uTime: { value: 0 }, uK: { value: 1 } }, vertexShader: vs, depthTest: false, depthWrite: false, fragmentShader: `
-        varying vec2 vUv; uniform sampler2D t, tSubj, tHeat, tPaper; uniform vec2 res; uniform float uTime, uK;
-        float hash(vec2 p) { p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
-        float noise(vec2 p) { vec2 i = floor(p), f = fract(p), u = f * f * (3. - 2. * f);
-          return mix(mix(hash(i), hash(i + vec2(1, 0)), u.x), mix(hash(i + vec2(0, 1)), hash(i + vec2(1, 1)), u.x), u.y); }
-        float L(vec2 uv) { return dot(texture2D(t, uv).rgb, vec3(0.299, 0.587, 0.114)); }
-        float A(vec2 uv) { return texture2D(tSubj, uv).a; }
-        // Tone softened over a few pixels, as charcoal rubbed with a finger.
-        float Ls(vec2 uv, vec2 k) { return (L(uv) * 2.0 + L(uv + k * vec2(3, 0)) + L(uv - k * vec2(3, 0)) + L(uv + k * vec2(0, 3)) + L(uv - k * vec2(0, 3))) / 6.0; }
-        void main() {
-          vec2 px = vUv * res, k = uK / res;
-          // The drawing boils: lines are redrawn with a fresh small wobble eight times a second.
-          float b = floor(uTime * 8.0);
-          vec2 uv = vUv + (vec2(noise(px * 0.035 / uK + b * 7.1), noise(px * 0.035 / uK + b * 3.3 + 11.0)) - 0.5) * 1.6 * k;
-          float l = L(uv), ls = Ls(uv, k);
-          float v = clamp((mix(l, ls, 0.55) - 0.05) / 0.6, 0.0, 1.0);
-          float dens = pow(1.0 - v, 1.15) * 0.9;
-          vec2 g = px / uK;
-          float tooth = texture2D(tPaper, g / 1024.0).r, fine = texture2D(tPaper, g / 380.0 + 0.37).r;
-          vec2 q = mat2(0.86, -0.5, 0.5, 0.86) * g;
-          float streak = texture2D(tPaper, vec2(q.x / 2200.0, q.y / 14.0)).g;
-          float smudge = texture2D(tPaper, g / 2600.0).b;
-          // Paper tooth breaks the tone in the middle values and lets it go solid in the darks and bare in the lights.
-          float mid = smoothstep(0.0, 0.35, dens) * (1.0 - smoothstep(0.6, 1.0, dens));
-          float cover = dens + ((tooth - 0.5) * 0.5 + (fine - 0.5) * 0.3) * mid + (streak - 0.5) * 0.34 * mid + (smudge - 0.5) * 0.1;
-          cover = smoothstep(0.03, 0.97, cover);
-          // Outlines from the softened tone, and a firm one round every unit and building.
-          vec2 e1 = vec2(Ls(uv + k * vec2(2, 0), k) - Ls(uv - k * vec2(2, 0), k), Ls(uv + k * vec2(0, 2), k) - Ls(uv - k * vec2(0, 2), k));
-          float line = smoothstep(0.07, 0.18, length(e1)) * (0.4 + 0.6 * noise(g * 0.3 + b));
-          float s0 = A(uv);
-          vec2 e2 = vec2(A(uv + k * vec2(1.6, 0)) - A(uv - k * vec2(1.6, 0)), A(uv + k * vec2(0, 1.6)) - A(uv - k * vec2(0, 1.6)));
-          float outline = smoothstep(0.1, 0.45, length(e2));
-          // Inside a unit its own detail is drawn sharper, and it keeps a light tone so it never goes blank.
-          vec2 e3 = vec2(L(uv + k * vec2(1, 0)) - L(uv - k * vec2(1, 0)), L(uv + k * vec2(0, 1)) - L(uv - k * vec2(0, 1)));
-          float inner = smoothstep(0.06, 0.16, length(e3)) * s0;
-          cover = mix(cover, max(cover * 0.95, 0.2 + dens * 0.5), s0);
-          cover = max(cover, line * 0.7);
-          cover = max(cover, inner * 0.75);
-          cover = max(cover, outline * 0.95);
-          // The brightest ground is lifted back to bare paper with an eraser.
-          cover *= 1.0 - smoothstep(0.86, 0.98, l) * 0.9 * (1.0 - s0 * 0.7);
-          vec3 paper = vec3(0.87, 0.83, 0.75) * (0.95 + 0.08 * smudge) * (0.97 + 0.05 * tooth);
-          vec3 ink = vec3(0.08, 0.072, 0.066);
-          vec3 col = mix(paper, ink, clamp(cover, 0.0, 1.0));
-          // Pastel only for the sides' markings and for fire and flashes, the drawing's one other medium.
-          vec3 mk = texture2D(tSubj, uv).rgb;
-          float mark = smoothstep(0.08, 0.3, max(mk.r, max(mk.g, mk.b)));
-          // Laid over the charcoal like pastel, so the drawing's shading still shows through.
-          vec3 hue = mk / max(0.001, max(mk.r, max(mk.g, mk.b)));
-          col = mix(col, col * mix(vec3(1.0), hue, 0.8) * 1.15 + hue * 0.06, mark * 0.9);
-          vec3 hz = texture2D(tHeat, vUv).rgb;
-          float hm = max(hz.r, max(hz.g, hz.b)), hot = smoothstep(0.3, 1.2, hm);
-          vec3 chalk = mix(vec3(1.0, 0.55, 0.18), vec3(1.0, 0.88, 0.6), smoothstep(1.0, 3.0, hm));
-          col = mix(col, chalk, hot * 0.85);
-          col *= 0.97 + 0.05 * hash(floor(g * 0.7) + b);
-          vec2 o = vUv - 0.5; col *= 1.0 - dot(o, o) * 0.5;
-          gl_FragColor = vec4(col, 1.0);
-        }` });
+        float fbm(vec2 p) { float s = 0.0, a = 0.5; for (int i = 0; i < 5; i++) { s += a * noise(p); p = p * 2.03 + 17.1; a *= 0.5; } return s; }`,
+    },
+  };
+})();
+if (typeof module !== 'undefined') module.exports = Looks;
+
+</script>
+<script>
+// Pen and ink, after the Lightning film: the default look. A long lens nearly an axonometric, the sun turning with
+// the hour, the fog of war and placement plans drawn by the pass and the overlay, and the ink pass over it all.
+(() => {
+  const GL = Looks.GL;
+  Looks.add({
+    name: 'ink', title: 'Pen and ink', said: 'Pen and ink.', panels: 'ink', hud: 'ink', sceneFog: false, ghost3d: false,
+    // The lens stands back as far again as frames the same ground, so everything sized by cam.dist holds.
+    camera: (c, smooth) => ({ fov: 10, near: 5, far: 1400, D: c.dist * Math.tan(13 * Math.PI / 180) / Math.tan(5 * Math.PI / 180), pitch: c.pitch + (1.4 - c.pitch) * smooth(70, 175, c.dist) }),
+    sun: w => w.sunAt(w.day),
+    create(K) {
+      const { THREE, SH, vs } = K;
       // Pen and ink, after the Lightning film and js/ink.js: tone in seven steps of hatching on cream paper, at
       // 45 and 135 degrees, then flat and upright lines for the darkest, each line a little uneven with small gaps.
       // The ground's hatching is pinned to the map so it pans with it, the units' redraws a few times a second.
@@ -4342,7 +4045,6 @@ const World = (() => {
         uWindS: { value: new THREE.Vector2() }, uRain: { value: 0 }, uStorm: { value: 0 }, uSnowF: { value: 0 }, uSnowC: SH.uSnowC, uFog: { value: 0 }, uMist: { value: 0 }, uNight: { value: 0 }, uWet: { value: 0 },
         uDayMul: { value: new THREE.Vector3(1, 1, 1) }, uDayAdd: { value: new THREE.Vector3() }, uWaterL: { value: -0.15 }, uCloudK: SH.uCloudK,
         uInvVP: { value: new THREE.Matrix4() }, uW2S: { value: new THREE.Vector4(1, 0, 0, 1) }, uLev: { value: 1 } }, vertexShader: vs, depthTest: false, depthWrite: false, fragmentShader: `
-        uniform mat4 uInvVP; uniform vec4 uW2S; uniform float uLev;
         varying vec2 vUv; uniform sampler2D t, tSubj, tHeat, tPaper, tNorm, tFogS, tLand; uniform vec2 res, uOff, uSun2, uWindS; uniform vec3 uUpV, uDayMul, uDayAdd; uniform float uTime, uK, uRain, uStorm, uSnowF, uSnowC, uFog, uMist, uNight, uWet, uWaterL, uCloudK; uniform int uStyle, uRoad, uOre;
         const vec3 PAPER = vec3(0.949, 0.910, 0.824), INK = vec3(0.122, 0.102, 0.086);
         // The soft axonometric's washes, after the atlas: speckled pale green ground, lilac water, pink paths,
@@ -4352,9 +4054,7 @@ const World = (() => {
         const vec3 TREE1 = vec3(0.663, 0.78, 0.498), TREE2 = vec3(0.737, 0.831, 0.592), TREE3 = vec3(0.561, 0.706, 0.408);
         const vec3 ROOF = vec3(0.969, 0.953, 0.918), WALL_L = vec3(0.894, 0.863, 0.796), WALL_R = vec3(0.804, 0.757, 0.671);
         const vec3 WAS = vec3(0.427, 0.51, 0.678);
-        float hash(vec2 p) { p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }
-        float noise(vec2 p) { vec2 i = floor(p), f = fract(p), u = f * f * (3. - 2. * f);
-          return mix(mix(hash(i), hash(i + vec2(1, 0)), u.x), mix(hash(i + vec2(0, 1)), hash(i + vec2(1, 1)), u.x), u.y); }
+        ${GL.NOISE}
         float L(vec2 uv) { return dot(texture2D(t, uv).rgb, vec3(0.299, 0.587, 0.114)); }
         float A(vec2 uv) { return texture2D(tSubj, uv).a; }
         // Scenery, buildings and units only, for outlines that leave the water mesh's edge alone.
@@ -4386,30 +4086,7 @@ const World = (() => {
           if (n >= 7.0) c = 1.0;
           return c;
         }
-        // The land under a pixel, where the ray from the eye meets the height the land pass left there. The ground's
-        // marks are laid on it, so they keep their place on the land as the view zooms and turns.
-        vec2 landAt(vec2 uv, float y) {
-          vec4 a = uInvVP * vec4(uv * 2.0 - 1.0, -1.0, 1.0), b = uInvVP * vec4(uv * 2.0 - 1.0, 1.0, 1.0);
-          a.xyz /= a.w; b.xyz /= b.w;
-          return mix(a.xz, b.xz, (y - a.y) / (b.y - a.y));
-        }
-        // The zoom as a level. A cell at level m is 2^m base cells wide, and the base cell of g px is g / 80 land
-        // units, which is g px across at the nearest zoom. gLf fades one level into the next.
-        float gLm = 0.0, gLf = 0.0;
-        mat2 gW2S = mat2(1.0);
-        // Hashes of a cell and a seed, true for cells counted in the tens of thousands.
-        vec2 hc2(vec2 c, float s) { vec3 q = fract(vec3(c.xyx + s * vec3(7.13, 3.71, 5.29)) * vec3(0.1031, 0.103, 0.0973)); q += dot(q, q.yzx + 33.33); return fract((q.xx + q.yz) * q.zy); }
-        vec3 hc3(vec2 c, float s) { vec3 q = fract(vec3(c.xyx + s * vec3(7.13, 3.71, 5.29)) * vec3(0.1031, 0.103, 0.0973)); q += dot(q, q.yxz + 33.33); return fract((q.xxy + q.yzz) * q.zyx); }
-        // Points fixed on the land that keep one density on screen at any zoom. A cell's point is the point of the
-        // child it picks, so a point never moves. One its parent passes over fades as the zoom nears the next level.
-        vec2 landPt(vec2 c, float sd, out float id, out float keep) {
-          vec2 pc = floor(c * 0.5);
-          keep = gLf > 0.0 && all(equal(pc * 2.0 + step(0.5, hc2(pc, sd + gLm + 1.0)), c)) ? 1.0 : 0.0;
-          for (int l = 3; l >= 1; l--) if (float(l) <= gLm) c = c * 2.0 + step(0.5, hc2(c, sd + float(l)));
-          vec3 h = hc3(c, sd + 77.0);
-          id = h.x;
-          return c + 0.2 + 0.6 * h.yz;
-        }
+        ${GL.LAND}
         // Dots on the land g px apart at 1080p: every one a stipple dot r px across, and a share th of them a speck
         // rs across as well. A fading dot shrinks.
         vec2 landDots(vec2 w, float g, float r, float rs, float th, float sd) {
@@ -4836,6 +4513,565 @@ const World = (() => {
           vec2 o = vUv - 0.5; col *= 1.0 - dot(o, o) * 0.35;
           gl_FragColor = vec4(col, 1.0);
         }` });
+      return {
+        render(K) {
+          const C = ink.uniforms, { w, h, camera, sky } = K, [CX, CY] = K.center;
+          if (!C.tPaper.value) C.tPaper.value = K.paper();
+          C.t.value = K.ldr.texture; C.tSubj.value = K.mask(); C.tNorm.value = K.norm(); C.tHeat.value = K.a0.texture;
+          C.res.value.set(w, h); C.uTime.value = K.time; C.uK.value = h / 1080;
+          C.tFogS.value = K.fog();
+          // Distance to the nearest road, per pixel of the land.
+          C.tLand.value = K.land();
+          const q = new THREE.Vector3(CX, 1, CY).project(camera); C.uOff.value.set((q.x + 1) / 2 * w, (q.y + 1) / 2 * h);
+          C.uStyle.value = K.opts.ink;
+          K.landUniforms(C);
+          // Which way the sun lies across the screen.
+          const s = SH.uSunDir.value, q1 = new THREE.Vector3(CX + s.x * 8 / Math.hypot(s.x, s.z), 1, CY + s.z * 8 / Math.hypot(s.x, s.z)).project(camera);
+          C.uSun2.value.set((q1.x - q.x) * w, (q1.y - q.y) * h).normalize();
+          // The world's up in view space, to tell a building's roof from its walls.
+          C.uUpV.value.set(0, 1, 0).transformDirection(camera.matrixWorldInverse);
+          C.uRoad.value = K.opts.road; C.uOre.value = K.opts.ore;
+          C.uRain.value = sky.rain; C.uStorm.value = sky.storm; C.uSnowF.value = sky.snow; C.uFog.value = sky.fog; C.uMist.value = sky.mist;
+          C.uNight.value = sky.night; C.uWet.value = sky.wet; C.uDayMul.value.set(...sky.mul); C.uDayAdd.value.set(...sky.add);
+          C.uWaterL.value = K.waterLevel; C.uWindS.value.set(sky.windS, 0);
+          K.run(ink, null);
+        },
+      };
+    },
+  });
+})();
+
+</script>
+<script>
+// Daylight: a clear afternoon under a blue sky, in full colour with a firm contrast, and no pass of its own.
+(() => {
+  Looks.add({
+    name: 'daylight', title: 'Daylight', said: 'Daylight.', vivid: 1,
+    light: (th, SUN) => Object.assign({}, th, {
+      name: th.name + ' day', sun: SUN(-0.62, 0.82), sunColor: 0xfff2dc, sunPower: 3.2, hemi: [0x8db4ee, 0x6a5a46, 1.1],
+      env: [0x4f7fb2, 0xc2d6ea, 0x584a3a], haze: 0xc4d8ee, hazeK: 0.0035,
+    }),
+  });
+})();
+
+</script>
+<script>
+// Hudson River School, after Cole, Kensett, Church and Durand, seen from the game's own view.
+(() => {
+  const GL = Looks.GL;
+  // A colour by value through four stops.
+  const RAMP = 'vec3 ramp(float v, vec3 a, vec3 b, vec3 c, vec3 d) { return v < 0.35 ? mix(a, b, v / 0.35) : v < 0.7 ? mix(b, c, (v - 0.35) / 0.35) : mix(c, d, (v - 0.7) / 0.3); }';
+  Looks.add({
+    name: 'hudson', title: 'Hudson River', said: 'Hudson River.', vivid: 1, sceneFog: false,
+    light: (th, SUN) => Object.assign({}, th, {
+      name: th.name + ' hudson', sun: SUN(-0.55, 0.46), sunColor: 0xffe2b4, sunPower: 3.5, hemi: [0x8aa2cc, 0x5e5240, 0.95],
+      env: [0x6c88b4, 0xf2e2bc, 0x4a4030], haze: 0xece0c4, hazeK: 0.0,
+    }),
+    create(K) {
+      const { THREE, SH, vs } = K;
+      // Hudson River School, after Cole, Kensett, Church and Durand, in two passes. The first colours the scene as the valley: fields of gold, yellow green and olive laid on the land, cloud
+      // shadows drifting over them, dark woods, warm shade, and mist over what is unexplored. Its alpha tells the
+      // second pass what each pixel is: 0.1 land, 0.3 water, 0.5 scenery, 0.6 woods, 0.8 buildings, 1 units, 0 sky.
+      const hudsonColor = new THREE.ShaderMaterial({ uniforms: { t: { value: null }, tSubj: { value: null }, tFogS: { value: null }, res: { value: new THREE.Vector2(1, 1) }, uTime: { value: 0 }, uK: { value: 1 }, uWaterL: { value: -0.15 }, uWind: SH.uWind, uFogOn: SH.uFogOn,
+        uInvVP: { value: new THREE.Matrix4() }, uW2S: { value: new THREE.Vector4(1, 0, 0, 1) }, uLev: { value: 1 } }, vertexShader: vs, depthTest: false, depthWrite: false, fragmentShader: `
+        varying vec2 vUv; uniform sampler2D t, tSubj, tFogS; uniform vec2 res, uWind; uniform float uTime, uK, uWaterL, uFogOn;
+        ${GL.LAND}
+        ${GL.NOISE}
+        ${RAMP}
+        // The four crops of the valley, close in hue: ripe wheat, yellow green, pale grass and meadow.
+        vec3 crop(float k) { return k < 0.25 ? vec3(0.84, 0.74, 0.44) : k < 0.5 ? vec3(0.73, 0.71, 0.42) : k < 0.75 ? vec3(0.63, 0.66, 0.4) : vec3(0.54, 0.59, 0.35); }
+        void main() {
+          float a = texture2D(tSubj, vUv).a;
+          vec4 F = texture2D(tFogS, vUv);
+          float fb = F.b, land = step(1.0, fb);
+          float low = 1.0 - smoothstep(0.3, 0.37, a), wl = uWaterL - (fb - 20.0);
+          float isW = low * land * smoothstep(0.0, 0.04, wl), isG = low * land * (1.0 - isW);
+          float isU = step(0.9, a), isB = step(0.7, a) * (1.0 - isU), isT = 1.0 - smoothstep(0.012, 0.025, abs(a - 0.459));
+          float isS = (1.0 - low) * (1.0 - isU) * (1.0 - isB) * (1.0 - isT), isO = 1.0 - smoothstep(0.02, 0.035, abs(a - 0.55));
+          vec3 c = texture2D(t, vUv).rgb;
+          float l = luma(c), v = clamp((l - 0.06) / 0.6, 0.0, 1.0);
+          vec2 Wl = landAt(vUv, fb - 20.0);
+          // Fields: the nearest of points scattered on the land, small and ragged, their colours meeting softly at the
+          // hedges.
+          vec2 fq = Wl / 4.0 + (vec2(noise(Wl / 2.2), noise(Wl / 2.2 + 7.0)) - 0.5) * 0.55, fi = floor(fq), fid = fi;
+          float d1 = 9.0, d2 = 9.0;
+          for (int j = 0; j < 9; j++) {
+            vec2 n = vec2(mod(float(j), 3.0) - 1.0, floor(float(j) / 3.0) - 1.0), o = fi + n + 0.15 + 0.7 * hc2(fi + n, 5.0);
+            float d = length(fq - o);
+            if (d < d1) { d2 = d1; d1 = d; fid = fi + n; } else if (d < d2) d2 = d;
+          }
+          vec3 fh = hc3(fid, 9.0);
+          float hedge = 1.0 - smoothstep(0.0, 0.14, d2 - d1);
+          vec3 sun = mix(crop(fh.x), vec3(0.7, 0.7, 0.44), 0.3 + 0.5 * hedge), shade = sun * vec3(0.4, 0.42, 0.34);
+          vec3 G = mix(shade, sun, v * v * (3.0 - 2.0 * v));
+          float fa = fh.y * 3.14159, row = abs(fract(dot(Wl, vec2(cos(fa), sin(fa))) / 0.32) - 0.5);
+          G *= 1.0 - 0.07 * step(0.55, fh.z) * (1.0 - smoothstep(0.12, 0.2, row));
+          // The shadows of clouds drift over the valley with the wind.
+          float cs = smoothstep(0.42, 0.68, noise(Wl / 30.0 - uWind * uTime * 0.02 + 3.0));
+          G = mix(G, G * vec3(0.6, 0.62, 0.58), cs * 0.55);
+          c = mix(c, G, isG);
+          // Woods dark at their roots and yellow green where the light catches them, in clumps of leaves.
+          float lc = noise(Wl / 0.32) * 0.65 + noise(Wl / 0.14 + 3.0) * 0.35, lt = l * (0.62 + 0.8 * lc * lc);
+          vec3 T = ramp(clamp((lt - 0.04) / 0.6, 0.0, 1.0), vec3(0.08, 0.1, 0.05), vec3(0.2, 0.26, 0.1), vec3(0.43, 0.48, 0.19), vec3(0.7, 0.69, 0.34));
+          c = mix(c, T * mix(1.0, 0.7, cs), isT);
+          // Rock and the like in warm greys. Ore keeps its gold, warmed, as the game needs to read it.
+          c = mix(c, ramp(clamp(l / 0.8, 0.0, 1.0), vec3(0.2, 0.18, 0.14), vec3(0.42, 0.39, 0.32), vec3(0.66, 0.62, 0.52), vec3(0.9, 0.87, 0.76)), isS * (1.0 - isO) * 0.85);
+          c = mix(c, c * vec3(1.02, 0.94, 0.76), isO);
+          // Houses and works keep their colour, softened toward the valley's; units keep theirs.
+          c = mix(c, mix(c, ramp(v, vec3(0.2, 0.17, 0.13), vec3(0.5, 0.42, 0.33), vec3(0.78, 0.7, 0.58), vec3(0.95, 0.92, 0.84)), 0.45), isB);
+          // What is unexplored lies under mist, and what was seen but is out of sight now under a thin haze.
+          vec2 fg = mix(vec2(1.0), F.rg, uFogOn);
+          c = mix(c, mix(vec3(0.82, 0.8, 0.76), c, 0.18), (1.0 - fg.g) * land * (1.0 - isU));
+          c = mix(c, mix(c, vec3(0.78, 0.77, 0.74), 0.32), (1.0 - fg.r) * fg.g * land * (1.0 - isU));
+          float k = land < 0.5 && low > 0.5 ? 0.0 : isU > 0.5 ? 1.0 : isB > 0.5 ? 0.8 : isT > 0.5 ? 0.6 : isW > 0.5 ? 0.3 : low > 0.5 ? 0.1 : 0.5;
+          gl_FragColor = vec4(c, k);
+        }` });
+      // The second pass paints it: a soft underpainting, then strokes, each at a point on the land and carrying the
+      // colour found at its centre. Long strokes lie along each field, dabs on the woods spill over their edges, and
+      // long thin strokes lie on the water, which mirrors the sky overhead with its clouds. The air thickens with
+      // distance, and canvas and varnish lie over all.
+      const hudson = new THREE.ShaderMaterial({ uniforms: { tP: { value: null }, tPS: { value: null }, tFogS: { value: null }, res: { value: new THREE.Vector2(1, 1) }, uTime: { value: 0 }, uK: { value: 1 }, uWaterL: { value: -0.15 }, uCamPos: { value: new THREE.Vector3() }, uSunD: SH.uSunDir,
+        uInvVP: { value: new THREE.Matrix4() }, uW2S: { value: new THREE.Vector4(1, 0, 0, 1) }, uLev: { value: 1 } }, vertexShader: vs, depthTest: false, depthWrite: false, fragmentShader: `
+        varying vec2 vUv; uniform sampler2D tP, tPS, tFogS; uniform vec2 res; uniform float uTime, uK, uWaterL; uniform vec3 uCamPos, uSunD;
+        ${GL.LAND}
+        ${GL.NOISE}
+        ${RAMP}
+        const vec3 HOR = vec3(0.95, 0.88, 0.73);
+        // The horizon's haze, warmest and brightest toward the sun.
+        vec3 haze(vec3 d) { float sd = max(dot(normalize(vec3(d.x, 0.0, d.z)), normalize(vec3(uSunD.x, 0.0, uSunD.z))), 0.0); return mix(vec3(0.82, 0.8, 0.78), HOR * 1.04, pow(sd, 2.0)); }
+        vec3 skyAt(vec3 d) {
+          float e = d.y, sd = max(dot(d, uSunD), 0.0);
+          vec3 c = mix(haze(d), vec3(0.8, 0.81, 0.85), smoothstep(0.0, 0.22, e));
+          c = mix(c, vec3(0.46, 0.58, 0.76), smoothstep(0.2, 0.8, e));
+          c = mix(c, vec3(1.0, 0.94, 0.78), pow(sd, 5.0) * 0.55);
+          c += vec3(1.0, 0.9, 0.68) * (pow(sd, 300.0) * 0.9 + pow(sd, 40.0) * 0.12);
+          // Cumulus on a plane overhead, lit on the side toward the sun and grey beneath, melting into the haze low down.
+          float ee = max(e, 0.015);
+          vec2 cp = d.xz / ee * 0.6 + vec2(uTime * 0.004, 0.0);
+          float n = fbm(cp * 0.5), ns = fbm(cp * 0.5 + normalize(uSunD.xz + 1e-4) * 0.09);
+          float cov = smoothstep(0.48, 0.72, n) * smoothstep(0.012, 0.09, e);
+          vec3 cc = mix(vec3(0.58, 0.57, 0.62), vec3(1.0, 0.96, 0.87), clamp((ns - n) * 7.0 + 0.55, 0.0, 1.0));
+          cc = mix(cc, vec3(1.0, 0.95, 0.82), pow(sd, 6.0) * 0.6);
+          c = mix(c, mix(cc, haze(d), (1.0 - smoothstep(0.0, 0.16, e)) * 0.55), cov);
+          return c;
+        }
+        void main() {
+          vec2 px = vUv * res;
+          vec4 P = texture2D(tP, vUv);
+          vec4 a4 = uInvVP * vec4(vUv * 2.0 - 1.0, -1.0, 1.0), b4 = uInvVP * vec4(vUv * 2.0 - 1.0, 1.0, 1.0);
+          vec3 eye = a4.xyz / a4.w, dir = normalize(b4.xyz / b4.w - eye);
+          vec3 c;
+          // Beyond the map lies dark ground.
+          if (P.a < 0.05) c = vec3(0.13, 0.11, 0.09);
+          else {
+            float fb = texture2D(tFogS, vUv).b, wl = uWaterL - (fb - 20.0);
+            vec2 Wl = landAt(vUv, fb - 20.0);
+            // The level and the step from land to screen are taken here, as the low view foreshortens the land.
+            vec2 jx = dFdx(Wl), jy = dFdy(Wl);
+            float det = jx.x * jy.y - jx.y * jy.x;
+            mat2 S2W = mat2(jx, jy);
+            gW2S = mat2(jy.y, -jx.y, -jy.x, jx.x) / (det + sign(det) * 1e-9) / uK;
+            float lev = clamp(log2(80.0 * uK * sqrt(abs(det))), 0.0, 2.999);
+            gLm = floor(lev); gLf = smoothstep(0.15, 0.85, lev - gLm);
+            bool crisp = P.a > 0.7;
+            c = crisp ? P.rgb : mix(P.rgb, texture2D(tPS, vUv).rgb, 0.3);
+            // Still water mirrors the sky above it, and the banks and woods that stand over it, broken by ripples.
+            if (P.a > 0.2 && P.a < 0.4) {
+              vec3 r = reflect(dir, vec3(0.0, 1.0, 0.0));
+              float wob = (noise(vec2(px.x / (3.0 * uK), px.y / (14.0 * uK))) - 0.5) * 2.0 * uK;
+              vec3 m = skyAt(r) * vec3(0.9, 0.92, 0.95);
+              m = mix(m, vec3(0.3, 0.33, 0.24), (1.0 - smoothstep(0.03, 0.4, wl)) * 0.6);
+              vec4 R = texture2D(tP, vUv + vec2(wob, 10.0 * uK) / res);
+              float rk = R.a > 0.4 && R.a < 0.75 ? 1.0 : R.a > 0.05 && R.a < 0.2 ? 0.45 : 0.0;
+              m = mix(m, R.rgb * 0.6, rk * 0.5);
+              c = mix(c, m, 0.85);
+            }
+            vec2 wg = vec2(dFdx(wl), dFdy(wl));
+            vec2 along = length(wg) > 1e-6 ? normalize(S2W * vec2(-wg.y, wg.x)) : vec2(1.0, 0.0);
+            if (!crisp) {
+              float g0 = 13.0 / 80.0, top = -1.0, sa = 0.0;
+              vec3 sc = c;
+              vec2 c0 = floor(Wl / (g0 * exp2(gLm)));
+              for (int j = 0; j < 9; j++) {
+                float fj = float(j), id, keep;
+                vec2 Q = landPt(c0 + vec2(mod(fj, 3.0) - 1.0, floor(fj / 3.0) - 1.0), 21.0, id, keep) * g0;
+                vec2 d = gW2S * (Wl - Q);
+                if (dot(d, d) > 110.0) continue;
+                vec2 cuv = vUv - d * uK / res;
+                vec4 C = texture2D(tP, cuv);
+                if (C.a > 0.7 || C.a < 0.05) continue;
+                C.rgb = mix(C.rgb, texture2D(tPS, cuv).rgb, 0.25);
+                float kind = C.a > 0.55 ? 2.0 : C.a > 0.2 && C.a < 0.4 ? 1.0 : 0.0;
+                float ang = noise(Q / 7.0) * 6.283 + (id - 0.5) * 0.7;
+                vec2 dl = kind == 1.0 ? along : vec2(cos(ang), sin(ang)), ds = normalize(gW2S * dl);
+                float f = mix(1.0 - gLf, 1.0, keep);
+                float L = (kind == 2.0 ? 4.6 : kind == 1.0 ? 9.0 : 6.5) * f, Wd = (kind == 2.0 ? 4.0 : kind == 1.0 ? 1.4 : 3.0) * f;
+                vec2 q = vec2(dot(d, ds), dot(d, vec2(-ds.y, ds.x)));
+                float u = abs(q.x) / max(L, 0.01), w = abs(q.y) / max(Wd * (1.0 - 0.3 * u * u), 0.01);
+                float al = (1.0 - smoothstep(0.75, 1.0, u)) * (1.0 - smoothstep(0.7, 1.0, w));
+                float key = kind * 2.0 + id;
+                if (al > 0.0 && key > top) {
+                  top = key; sa = al * (kind == 1.0 ? 0.35 : 1.0);
+                  sc = C.rgb * (1.0 + (noise(vec2(q.y * 1.7, q.x * 0.12) + id * 31.0) - 0.5) * 0.12);
+                }
+              }
+              c = mix(c, sc, sa * 0.92);
+            }
+            // The air thickens with true distance into the horizon's haze.
+            vec3 wp = vec3(Wl.x, fb - 20.0, Wl.y);
+            float dist = length(wp - uCamPos), air = 1.0 - exp(-max(dist - 25.0, 0.0) * 0.0075);
+            c = mix(c, haze(dir), air * (crisp ? 0.7 : 0.9));
+          }
+          // Varnish and canvas.
+          c = pow(max(c, 0.0), vec3(1.04)) * vec3(1.03, 1.0, 0.93);
+          vec2 cv = px / (1.3 * uK);
+          c *= 1.0 + 0.035 * sin(cv.x * 3.14159) * sin(cv.y * 3.14159);
+          c += (hash(px + fract(uTime)) - 0.5) * 0.012;
+          gl_FragColor = vec4(c, 1.0);
+        }` });
+      return {
+        render(K) {
+          const C = hudsonColor.uniforms, H = hudson.uniforms, { w, h } = K, fog = K.fog();
+          for (const U of [C, H]) {
+            U.tFogS.value = fog; U.res.value.set(w, h); U.uTime.value = K.time; U.uK.value = h / 1080; U.uWaterL.value = K.waterLevel;
+            K.landUniforms(U);
+          }
+          H.uCamPos.value.copy(K.camera.position);
+          C.t.value = K.ldr.texture; C.tSubj.value = K.mask();
+          const paint = K.target('paint');
+          K.run(hudsonColor, paint);
+          // The coloured picture blurred at a quarter size, for the underpainting.
+          K.blur(paint.texture, K.a1, 1.4 / K.a1.width, 0); K.blur(K.a1.texture, K.a0, 0, 1.4 / K.a0.height);
+          H.tP.value = paint.texture; H.tPS.value = K.a0.texture;
+          K.run(hudson, null);
+        },
+      };
+    },
+  });
+})();
+
+</script>
+<script>
+// Charcoal, kept from an earlier round and out of the menu: the graded picture pressed into toothy paper.
+(() => {
+  const GL = Looks.GL;
+  Looks.add({
+    name: 'charcoal', title: 'Charcoal', said: 'Charcoal.', hidden: true, sceneFog: false,
+    create(K) {
+      const { THREE, vs } = K;
+      // Charcoal: the graded picture's darkness pressed into toothy paper as charcoal, with streaked strokes, drawn
+      // outlines that boil, lights lifted to bare paper, and colour kept only for fire, sunset and the sides' marks.
+      const charcoal = new THREE.ShaderMaterial({ uniforms: { t: { value: null }, tSubj: { value: null }, tHeat: { value: null }, tPaper: { value: null }, res: { value: new THREE.Vector2(1, 1) }, uTime: { value: 0 }, uK: { value: 1 } }, vertexShader: vs, depthTest: false, depthWrite: false, fragmentShader: `
+        varying vec2 vUv; uniform sampler2D t, tSubj, tHeat, tPaper; uniform vec2 res; uniform float uTime, uK;
+        ${GL.NOISE}
+        float L(vec2 uv) { return dot(texture2D(t, uv).rgb, vec3(0.299, 0.587, 0.114)); }
+        float A(vec2 uv) { return texture2D(tSubj, uv).a; }
+        // Tone softened over a few pixels, as charcoal rubbed with a finger.
+        float Ls(vec2 uv, vec2 k) { return (L(uv) * 2.0 + L(uv + k * vec2(3, 0)) + L(uv - k * vec2(3, 0)) + L(uv + k * vec2(0, 3)) + L(uv - k * vec2(0, 3))) / 6.0; }
+        void main() {
+          vec2 px = vUv * res, k = uK / res;
+          // The drawing boils: lines are redrawn with a fresh small wobble eight times a second.
+          float b = floor(uTime * 8.0);
+          vec2 uv = vUv + (vec2(noise(px * 0.035 / uK + b * 7.1), noise(px * 0.035 / uK + b * 3.3 + 11.0)) - 0.5) * 1.6 * k;
+          float l = L(uv), ls = Ls(uv, k);
+          float v = clamp((mix(l, ls, 0.55) - 0.05) / 0.6, 0.0, 1.0);
+          float dens = pow(1.0 - v, 1.15) * 0.9;
+          vec2 g = px / uK;
+          float tooth = texture2D(tPaper, g / 1024.0).r, fine = texture2D(tPaper, g / 380.0 + 0.37).r;
+          vec2 q = mat2(0.86, -0.5, 0.5, 0.86) * g;
+          float streak = texture2D(tPaper, vec2(q.x / 2200.0, q.y / 14.0)).g;
+          float smudge = texture2D(tPaper, g / 2600.0).b;
+          // Paper tooth breaks the tone in the middle values and lets it go solid in the darks and bare in the lights.
+          float mid = smoothstep(0.0, 0.35, dens) * (1.0 - smoothstep(0.6, 1.0, dens));
+          float cover = dens + ((tooth - 0.5) * 0.5 + (fine - 0.5) * 0.3) * mid + (streak - 0.5) * 0.34 * mid + (smudge - 0.5) * 0.1;
+          cover = smoothstep(0.03, 0.97, cover);
+          // Outlines from the softened tone, and a firm one round every unit and building.
+          vec2 e1 = vec2(Ls(uv + k * vec2(2, 0), k) - Ls(uv - k * vec2(2, 0), k), Ls(uv + k * vec2(0, 2), k) - Ls(uv - k * vec2(0, 2), k));
+          float line = smoothstep(0.07, 0.18, length(e1)) * (0.4 + 0.6 * noise(g * 0.3 + b));
+          float s0 = A(uv);
+          vec2 e2 = vec2(A(uv + k * vec2(1.6, 0)) - A(uv - k * vec2(1.6, 0)), A(uv + k * vec2(0, 1.6)) - A(uv - k * vec2(0, 1.6)));
+          float outline = smoothstep(0.1, 0.45, length(e2));
+          // Inside a unit its own detail is drawn sharper, and it keeps a light tone so it never goes blank.
+          vec2 e3 = vec2(L(uv + k * vec2(1, 0)) - L(uv - k * vec2(1, 0)), L(uv + k * vec2(0, 1)) - L(uv - k * vec2(0, 1)));
+          float inner = smoothstep(0.06, 0.16, length(e3)) * s0;
+          cover = mix(cover, max(cover * 0.95, 0.2 + dens * 0.5), s0);
+          cover = max(cover, line * 0.7);
+          cover = max(cover, inner * 0.75);
+          cover = max(cover, outline * 0.95);
+          // The brightest ground is lifted back to bare paper with an eraser.
+          cover *= 1.0 - smoothstep(0.86, 0.98, l) * 0.9 * (1.0 - s0 * 0.7);
+          vec3 paper = vec3(0.87, 0.83, 0.75) * (0.95 + 0.08 * smudge) * (0.97 + 0.05 * tooth);
+          vec3 ink = vec3(0.08, 0.072, 0.066);
+          vec3 col = mix(paper, ink, clamp(cover, 0.0, 1.0));
+          // Pastel only for the sides' markings and for fire and flashes, the drawing's one other medium.
+          vec3 mk = texture2D(tSubj, uv).rgb;
+          float mark = smoothstep(0.08, 0.3, max(mk.r, max(mk.g, mk.b)));
+          // Laid over the charcoal like pastel, so the drawing's shading still shows through.
+          vec3 hue = mk / max(0.001, max(mk.r, max(mk.g, mk.b)));
+          col = mix(col, col * mix(vec3(1.0), hue, 0.8) * 1.15 + hue * 0.06, mark * 0.9);
+          vec3 hz = texture2D(tHeat, vUv).rgb;
+          float hm = max(hz.r, max(hz.g, hz.b)), hot = smoothstep(0.3, 1.2, hm);
+          vec3 chalk = mix(vec3(1.0, 0.55, 0.18), vec3(1.0, 0.88, 0.6), smoothstep(1.0, 3.0, hm));
+          col = mix(col, chalk, hot * 0.85);
+          col *= 0.97 + 0.05 * hash(floor(g * 0.7) + b);
+          vec2 o = vUv - 0.5; col *= 1.0 - dot(o, o) * 0.5;
+          gl_FragColor = vec4(col, 1.0);
+        }` });
+      return {
+        render(K) {
+          const C = charcoal.uniforms;
+          if (!C.tPaper.value) C.tPaper.value = K.paper();
+          C.t.value = K.ldr.texture; C.tSubj.value = K.mask(); C.tHeat.value = K.a0.texture; C.res.value.set(K.w, K.h); C.uTime.value = K.time; C.uK.value = K.h / 1080;
+          K.run(charcoal, null);
+        },
+      };
+    },
+  });
+})();
+
+</script>
+<script>
+// Dead Ground, the picture. Terrain is baked once. Units are instanced by part. Fog, borders and
+// battle scars live in small textures every material reads. Fire and smoke are GPU particles.
+const World = (() => {
+  const { RES, HZ, UNITS, BUILDINGS, clamp, lerp, smooth, terrainAt, heightAt, mulberry, noiser } = Rules;
+  // The map's size comes with each world loaded: a duel is 128 cells across, the shared world 256.
+  let W = Rules.W, H = Rules.H, VW = Rules.VW, VH = Rules.VH;
+
+  // Every theatre is shot at sunset. The sun sits low off the left of the screen, so shadows run long
+  // across the ground, and the shade is lit by a violet sky and warm bounce from the earth.
+  const SUN = (az, el) => { const x = Math.cos(az), z = Math.sin(az), c = Math.cos(el); return [x * c, Math.sin(el), z * c]; };
+  const THEMES = {
+    desert: {
+      name: 'Salt Flats', tree: 'acacia', sun: SUN(-0.46, 0.3), sunColor: 0xffb36e, sunPower: 3.9,
+      hemi: [0x5e6cb4, 0x7a4c34, 0.9], env: [0x34437e, 0xffa866, 0x3e2a22], haze: 0xf0a878, hazeK: 0.008, shroud: 0x100a0a,
+      ground: [0xd2b08a, 0xbf9670], patch: 0xa69a6a, rock: 0xa86a52, bank: 0x8a7058, road: 0x76604e, stain: 0x9a5a30,
+      water: [0x3f8c96, 0x17404e], leaf: [0x6a7438, 0x8a8440], dust: [0.95, 0.74, 0.55], smoke: [0.17, 0.13, 0.12], ripple: 1,
+    },
+    steppe: {
+      name: 'Black Steppe', tree: 'broad', sun: SUN(-0.5, 0.27), sunColor: 0xffa862, sunPower: 3.8,
+      hemi: [0x5a66ae, 0x6e4a30, 0.88], env: [0x32407a, 0xff9e5c, 0x34241a], haze: 0xe8a07a, hazeK: 0.008, shroud: 0x0f0a09,
+      ground: [0xb59a62, 0x8e744a], patch: 0xcaa860, rock: 0x7e6252, bank: 0x5e4c3c, road: 0x5e4a3a, stain: 0x8a4e28,
+      water: [0x3b7a80, 0x163a46], leaf: [0x56622c, 0x84702c], dust: [0.8, 0.66, 0.5], smoke: [0.15, 0.12, 0.11], ripple: 0,
+    },
+    winter: {
+      name: 'White Pass', tree: 'conifer', sun: SUN(-0.42, 0.25), sunColor: 0xffae80, sunPower: 3.3,
+      hemi: [0x6c74c0, 0x9a7a74, 0.92], env: [0x3e4a8c, 0xffb084, 0x584450], haze: 0xf0b49c, hazeK: 0.008, shroud: 0x0f0b0e,
+      ground: [0xf0e6e2, 0xdcd0cc], patch: 0xc8bcb8, rock: 0x7a6466, bank: 0x8a7a7a, road: 0x6c5e5a, stain: 0x8a5e48,
+      water: [0x4a8494, 0x1c3e50], leaf: [0x2e4436, 0x42583e], dust: [0.96, 0.92, 0.92], smoke: [0.17, 0.15, 0.16], ripple: 0,
+    },
+  };
+
+  let CX = W / 2, CY = H / 2;
+  // A colour for each of the eight slots. A duel uses the first two.
+  const SLOT_COLORS = [0x2f7ef0, 0xe03a24, 0x2fa84a, 0x8a4fd8, 0xf08a1c, 0x1fb3b3, 0xe0459a, 0x7a5230];
+
+  function create(THREE, canvas, opt = {}) {
+    const low = !!opt.low;
+    const renderer = new THREE.WebGLRenderer({ canvas, antialias: false, powerPreference: 'high-performance', preserveDrawingBuffer: !!opt.keep });
+    renderer.setClearColor(0x000000, 1);
+    renderer.toneMapping = THREE.NoToneMapping;
+    renderer.shadowMap.enabled = true;
+    renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+    renderer.info.autoReset = true;
+    const MODELS = Models.make(THREE);
+    const scene = new THREE.Scene();
+    const camera = new THREE.PerspectiveCamera(26, 1, 2, 500);
+    const cam = { x: 40, y: 40, dist: 92, yaw: Math.PI / 4, pitch: 0.98, shake: 0, minD: 30, maxD: 190 };
+
+    const white = new THREE.DataTexture(new Uint8Array([255, 255, 255, 255]), 1, 1); white.needsUpdate = true;
+    const black = new THREE.DataTexture(new Uint8Array([0, 0, 0, 0]), 1, 1); black.needsUpdate = true;
+    const SH = {
+      tFog: { value: white }, tDetail: { value: null }, tTerr: { value: white }, tMarks: { value: white }, uTime: { value: 0 },
+      uTeam0: { value: new THREE.Color(0x3f8cff) }, uTeams: { value: SLOT_COLORS.map(c => new THREE.Color(c).offsetHSL(0, 0, 0.06)) }, uFogOn: { value: 1 }, uBorder: { value: 1 }, uMap: { value: 128 },
+      uHaze: { value: new THREE.Color(0xf29a5e) }, uHazeK: { value: 0.012 }, uHazeFrom: { value: 80 }, uShroud: { value: new THREE.Color(0x120907) }, uSunDir: { value: new THREE.Vector3(1, 0.3, 0) },
+      // The wind on the ground, how far it has carried the clouds, how overcast it is, and lying snow.
+      uWind: { value: new THREE.Vector2(0.3, 0.1) }, uCloud: { value: new THREE.Vector2() }, uCloudK: { value: 0.2 }, uSnowC: { value: 0 },
+      // How hard the track worn into each cell has become, in red.
+      tTrail: { value: black },
+    };
+    // Trees lean with the wind and stir in it, more toward their tops. Shared by every pass that draws them.
+    const SWAY = `
+      vec2 sway(vec2 at, float h) {
+        float s = h * h * 0.05, ph = uTime * 1.7 + at.x * 0.31 + at.y * 0.23;
+        return uWind * s * (0.6 + 0.4 * sin(ph)) + vec2(-uWind.y, uWind.x) * s * 0.2 * sin(ph * 1.9 + 1.3);
+      }`;
+
+    function patch(mat, o = {}) {
+      const key = 'dg' + (o.plain ? 'p' : '') + (o.terrain ? 't' : '') + (o.tint ? 'i' : '') + (o.sway ? 's' : '');
+      mat.customProgramCacheKey = () => key;
+      mat.onBeforeCompile = s => {
+        Object.assign(s.uniforms, SH);
+        let v = s.vertexShader, f = s.fragmentShader;
+        v = v.replace('#include <common>', `#include <common>
+          varying vec3 vW; varying vec3 vL; varying float vGlow; varying vec3 vTint;
+          uniform vec2 uWind; uniform float uTime;
+          ${SWAY}
+          ${o.plain ? '' : 'attribute float aTeam; attribute float aGlow;'}`);
+        if (!o.plain && !o.tint) {
+          v = v.replace('#include <color_vertex>', `
+            vColor = vec3(1.0);
+            #ifdef USE_COLOR
+              vColor *= color;
+            #endif
+            vTint = vec3(0.0);
+            #ifdef USE_INSTANCING_COLOR
+              vColor = mix(vColor, vColor * instanceColor.xyz, aTeam);
+              vTint = instanceColor.xyz * aTeam;
+            #endif`);
+        }
+        v = v.replace('#include <project_vertex>', `#include <project_vertex>
+          vec4 wp = vec4(transformed, 1.0);
+          #ifdef USE_INSTANCING
+            wp = instanceMatrix * wp;
+          #endif
+          wp = modelMatrix * wp; vW = wp.xyz; vL = position;
+          vGlow = ${o.plain ? '0.0' : 'aGlow'};`);
+        if (o.sway) v = v.replace('#include <project_vertex>', `
+          vec4 mvPosition = vec4(transformed, 1.0);
+          #ifdef USE_INSTANCING
+            mvPosition = instanceMatrix * mvPosition;
+          #endif
+          mvPosition.xz += sway(mvPosition.xz, position.y);
+          mvPosition = modelViewMatrix * mvPosition;
+          gl_Position = projectionMatrix * mvPosition;`);
+        f = f.replace('#include <common>', `#include <common>
+          uniform sampler2D tFog, tDetail, tTerr, tMarks, tTrail; uniform float uTime, uFogOn, uBorder, uHazeK, uHazeFrom, uMap, uCloudK, uSnowC; uniform vec3 uTeam0, uTeams[8], uHaze, uShroud, uSunDir; uniform vec2 uCloud;
+          varying vec3 vW; varying vec3 vL; varying float vGlow; varying vec3 vTint;`);
+        if (o.plain || o.tint) v = v.replace('vGlow = ', 'vTint = vec3(0.0); vGlow = ');
+        if (o.terrain) {
+          f = f.replace('#include <map_fragment>', `#include <map_fragment>
+            float d1 = texture2D(tDetail, vW.xz * 0.27).r, d2 = texture2D(tDetail, vW.xz * 1.6).g;
+            diffuseColor.rgb *= 0.82 + 0.26 * d1 + 0.1 * d2;
+            vec4 mk = texture2D(tMarks, vW.xz / uMap);
+            diffuseColor.rgb *= 1.0 - mk.r * 0.86;
+            diffuseColor.rgb *= 1.0 - mk.g * 0.34;
+            // Worn tracks, bare earth.
+            float trk = texture2D(tTrail, vW.xz / uMap).r;
+            diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(0.9, 0.84, 0.74) + vec3(0.05, 0.04, 0.02), smoothstep(0.2, 0.6, trk) * 0.7);`);
+          f = f.replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
+            vec4 dn = texture2D(tDetail, vW.xz * 0.8), dn2 = texture2D(tDetail, vW.xz * 0.19);
+            vec3 wn = vec3((dn.b - 0.5) * 0.35 + (dn2.b - 0.5) * 1.2, 0.0, (dn.a - 0.5) * 0.35 + (dn2.a - 0.5) * 1.2);
+            normal = normalize(normal + mat3(viewMatrix) * wn * 0.45);`);
+        } else {
+          f = f.replace('#include <color_fragment>', `#include <color_fragment>
+            float gr = texture2D(tDetail, vL.xz * 1.1 + vL.yy * vec2(0.7, 1.1)).r;
+            diffuseColor.rgb *= 0.72 + 0.56 * gr;`);
+          f = f.replace('#include <emissivemap_fragment>', `#include <emissivemap_fragment>
+            totalEmissiveRadiance += diffuseColor.rgb * vGlow * 3.4 + vTint * vTint * 0.0;`);
+        }
+        const border = o.terrain ? `
+            // Red holds the viewer's own reach and green the strongest other side's, each signed so its
+            // border is a zero crossing; blue says which side that other is, read from the nearest cell.
+            vec2 tv = (texture2D(tTerr, vW.xz / uMap).rg - 0.5) * 16.0;
+            float who = floor(texture2D(tTerr, (floor(vW.xz) + 0.5) / uMap).b * 8.0 + 0.5);
+            vec3 other = uTeams[0];
+            for (int i = 1; i < 8; i++) if (float(i) == who) other = uTeams[i];
+            float la = abs(tv.x), lb = abs(tv.y), w = 0.09 + fwidth(tv.x) * 0.8;
+            float ia = (1.0 - smoothstep(0.0, 4.0, tv.x)) * step(0.0, tv.x), ib = (1.0 - smoothstep(0.0, 4.0, tv.y)) * step(0.0, tv.y);
+            vec3 bc = gl_FragColor.rgb;
+            bc = mix(bc, bc * 0.7 + uTeam0 * 0.25, ia * 0.42 * uBorder);
+            bc = mix(bc, bc * 0.7 + other * 0.25, ib * 0.42 * uBorder);
+            bc += uTeam0 * 0.85 * smoothstep(w, 0.0, la) * uBorder;
+            bc += other * 0.85 * smoothstep(w, 0.0, lb) * uBorder;
+            gl_FragColor.rgb = bc;` : '';
+        f = f.replace('#include <opaque_fragment>', `#include <opaque_fragment>
+          // Cloud shadows go by on the wind, darker the more overcast it is. Snow lies on whatever faces up.
+          float cl = texture2D(tDetail, vW.xz * 0.006 + uCloud).r;
+          gl_FragColor.rgb *= mix(0.9 - 0.25 * uCloudK, 1.03, smoothstep(0.3, 0.7, cl));
+          ${o.terrain || o.tint ? `vec3 fN = normalize(cross(dFdx(vW), dFdy(vW)));
+          gl_FragColor.rgb = mix(gl_FragColor.rgb, vec3(0.93, 0.94, 0.97) * (0.55 + 0.5 * max(dot(fN, uSunDir), 0.0)), uSnowC * smoothstep(0.55, 0.85, abs(fN.y)));` : ''}
+          ${border}
+          // Warm air thickens with distance, brightest toward the sun.
+          vec3 vd = normalize(vW - cameraPosition);
+          float hz = 1.0 - exp(-max(length(vW - cameraPosition) - uHazeFrom, 0.0) * uHazeK);
+          vec3 air = uHaze * (0.5 + 0.7 * pow(max(dot(vd, uSunDir), 0.0), 3.0));
+          gl_FragColor.rgb = mix(gl_FragColor.rgb, air, hz * 0.38);
+          vec2 fg = mix(vec2(1.0), texture2D(tFog, vW.xz / uMap).rg, uFogOn);
+          float lum = dot(gl_FragColor.rgb, vec3(0.3, 0.59, 0.11));
+          vec3 dimmed = mix(gl_FragColor.rgb, vec3(lum), 0.45) * vec3(0.46, 0.4, 0.38);
+          gl_FragColor.rgb = mix(uShroud, mix(dimmed, gl_FragColor.rgb, fg.r), fg.g);
+          vec2 ed = abs(vW.xz / uMap - 0.5) * 2.0;
+          gl_FragColor.rgb = mix(uShroud, gl_FragColor.rgb, (1.0 - smoothstep(0.985, 1.002, max(ed.x, ed.y))));`);
+        s.vertexShader = v; s.fragmentShader = f;
+      };
+      return mat;
+    }
+
+    const paint = patch(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.58, metalness: 0.22, envMapIntensity: 1 }));
+    const plainTint = patch(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.92, metalness: 0, envMapIntensity: 0.6 }), { tint: true });
+    const treeTint = patch(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.92, metalness: 0, envMapIntensity: 0.6 }), { tint: true, sway: true });
+
+    // A tiling noise texture, height in red, grain in green, and its slope in blue and alpha.
+    function makeDetail() {
+      const n = 256, rand = mulberry(77), lat = (p) => { const a = new Float32Array(p * p); for (let i = 0; i < a.length; i++) a[i] = rand(); return a; };
+      const octs = [[8, 0.5], [16, 0.26], [32, 0.14], [64, 0.07], [128, 0.03]].map(([p, a]) => ({ p, a, g: lat(p) }));
+      const hgt = new Float32Array(n * n), grain = lat(n);
+      for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) {
+        let s = 0;
+        for (const o of octs) {
+          const fx = x / n * o.p, fy = y / n * o.p, ix = fx | 0, iy = fy | 0, u = fx - ix, v = fy - iy, su = u * u * (3 - 2 * u), sv = v * v * (3 - 2 * v);
+          const q = (a, b) => o.g[((b + o.p) % o.p) * o.p + ((a + o.p) % o.p)];
+          s += o.a * lerp(lerp(q(ix, iy), q(ix + 1, iy), su), lerp(q(ix, iy + 1), q(ix + 1, iy + 1), su), sv);
+        }
+        hgt[y * n + x] = s;
+      }
+      let lo = 9, hi = -9;
+      for (const v of hgt) { lo = Math.min(lo, v); hi = Math.max(hi, v); }
+      const data = new Uint8Array(n * n * 4);
+      for (let y = 0; y < n; y++) for (let x = 0; x < n; x++) {
+        const c = y * n + x, h = (hgt[c] - lo) / (hi - lo);
+        const dx = hgt[y * n + (x + 1) % n] - hgt[y * n + (x + n - 1) % n], dy = hgt[((y + 1) % n) * n + x] - hgt[((y + n - 1) % n) * n + x];
+        data[c * 4] = h * 255; data[c * 4 + 1] = (grain[c] * 0.6 + h * 0.4) * 255;
+        data[c * 4 + 2] = clamp(0.5 - dx * 6, 0, 1) * 255; data[c * 4 + 3] = clamp(0.5 - dy * 6, 0, 1) * 255;
+      }
+      const t = new THREE.DataTexture(data, n, n, THREE.RGBAFormat);
+      t.wrapS = t.wrapT = THREE.RepeatWrapping; t.magFilter = THREE.LinearFilter; t.minFilter = THREE.LinearMipmapLinearFilter; t.generateMipmaps = true; t.anisotropy = 4; t.needsUpdate = true;
+      return t;
+    }
+    SH.tDetail.value = makeDetail();
+
+    let style = Looks.get('daylight'), inkStyle = 8, roadStyle = 3, oreStyle = 4;
+    // The kind of thing being drawn into the line passes, shared with the pass's material, and whether it sways.
+    const catU = { value: 1 }, catRef = { mat: null, norm: null }, swayU = { value: 0 };
+    const maskMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
+
+    // The full-screen passes: bloom in two sizes, then the grade.
+    const pp = (() => {
+      const quad = new THREE.Mesh(new THREE.PlaneGeometry(2, 2));
+      const qs = new THREE.Scene(); qs.add(quad); quad.frustumCulled = false;
+      const qc = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+      const vs = 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }';
+      const bright = new THREE.ShaderMaterial({ uniforms: { t: { value: null } }, vertexShader: vs, depthTest: false, depthWrite: false, fragmentShader: `
+        varying vec2 vUv; uniform sampler2D t;
+        void main(){ vec3 c = min(texture2D(t, vUv).rgb, vec3(24.0)); float l = max(c.r, max(c.g, c.b)); gl_FragColor = vec4(c * smoothstep(1.0, 2.2, l), 1.0); }` });
+      const blur = new THREE.ShaderMaterial({ uniforms: { t: { value: null }, d: { value: new THREE.Vector2() } }, vertexShader: vs, depthTest: false, depthWrite: false, fragmentShader: `
+        varying vec2 vUv; uniform sampler2D t; uniform vec2 d;
+        void main(){ vec3 c = texture2D(t, vUv).rgb * 0.227;
+          c += (texture2D(t, vUv + d * 1.385).rgb + texture2D(t, vUv - d * 1.385).rgb) * 0.316;
+          c += (texture2D(t, vUv + d * 3.231).rgb + texture2D(t, vUv - d * 3.231).rgb) * 0.07;
+          gl_FragColor = vec4(c, 1.0); }` });
+      const grade = new THREE.ShaderMaterial({ uniforms: { t: { value: null }, b1: { value: null }, b2: { value: null }, uTime: { value: 0 }, uFlash: { value: 0 }, uBloom: { value: 0.6 }, uGlow: { value: new THREE.Vector2(-0.2, 0.9) }, uGlowC: { value: new THREE.Color(0xff9550) }, uAspect: { value: 1.6 }, uVivid: { value: 0 } }, vertexShader: vs, depthTest: false, depthWrite: false, fragmentShader: `
+        varying vec2 vUv; uniform sampler2D t, b1, b2; uniform float uTime, uFlash, uBloom, uAspect, uVivid; uniform vec2 uGlow; uniform vec3 uGlowC;
+        vec3 aces(vec3 x){ return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0); }
+        void main(){
+          // Daylight (uVivid) keeps only a touch of bloom and of the sun's spill, and none of the haze's lift.
+          vec3 c = texture2D(t, vUv).rgb + (texture2D(b1, vUv).rgb * 0.55 + texture2D(b2, vUv).rgb * 0.45) * uBloom * mix(1.0, 0.3, uVivid);
+          c += vec3(uFlash * 6.0, uFlash * 5.6, uFlash * 5.0);
+          // Light from the low sun spills in from its side of the frame.
+          vec2 gq = (vUv - uGlow) * vec2(uAspect, 1.0);
+          c += uGlowC * (exp(-length(gq) * 1.8) * 0.2 + exp(-length(gq) * 4.5) * 0.18) * (1.0 - uVivid);
+          vec2 q = vUv - 0.5; float vig = 1.0 - dot(q, q) * mix(0.7, 0.45, uVivid);
+          c = aces(c * mix(0.86, 0.8, uVivid) * vig);
+          float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
+          c *= mix(vec3(0.9, 0.9, 1.06), vec3(1.04, 1.0, 0.92), smoothstep(0.05, 0.6, l) * (1.0 - uVivid * 0.6));
+          // Colour held full through the lights, and a firm contrast in the middle values.
+          c = mix(vec3(l), c, mix(1.06, 1.18, uVivid));
+          c = mix(c, c * c * (3.0 - 2.0 * c), 0.22 * uVivid);
+          c += vec3(0.012, 0.008, 0.014) * (1.0 - l) * (1.0 - uVivid);
+          c = pow(max(c, 0.0), vec3(1.0 / 2.2));
+          float n = fract(sin(dot(vUv + fract(uTime), vec2(12.9898, 78.233))) * 43758.5453);
+          gl_FragColor = vec4(c + (n - 0.5) * 0.018, 1.0); }` });
       // The units and buildings for the outlines: white where they stand, their side's colour on their markings.
       const markMat = catRef.mat = new THREE.ShaderMaterial({ uniforms: { uCat: catU, uSwayOn: swayU, uTime: SH.uTime, uWind: SH.uWind }, vertexShader: `
         attribute float aTeam; varying vec3 vC; varying float vT; uniform float uSwayOn, uTime; uniform vec2 uWind;
@@ -4868,7 +5104,7 @@ const World = (() => {
           vN = normalize(normalMatrix * n); vD = -mv.z;
           gl_Position = projectionMatrix * mv;
         }`, fragmentShader: `varying vec3 vN; varying float vD; void main() { gl_FragColor = vec4(normalize(vN) * 0.5 + 0.5, vD); }` });
-      // The land alone, for the ink pass: visible, seen, height, and scars with a flag for tread marks.
+      // The land alone, for passes that need it: visible, seen, height, and scars with a flag for tread marks.
       const fogPassMat = new THREE.ShaderMaterial({ uniforms: { tFog: SH.tFog, tMarks: SH.tMarks, uFogOn: SH.uFogOn, uMap: SH.uMap }, vertexShader: `
         varying vec3 vW; void main() { vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }`, fragmentShader: `
         uniform sampler2D tFog, tMarks; uniform float uFogOn, uMap; varying vec3 vW;
@@ -4889,31 +5125,92 @@ const World = (() => {
           float fb = texture2D(tDetail, vW.xz * 0.013 + uCloud * 0.7 + 0.37).g;
           gl_FragColor = vec4(min(vR, 20.0), cl, fb, texture2D(tTrail, vW.xz / uMap).r);
         }` });
-      let ldr = null, mask = null, norm = null, fogRT = null, landRT = null;
+      let ldr = null, maskRT = null, normRT = null, fogRT = null, landRT = null;
       let rt, a0, a1, b0, b1, w = 1, h = 1;
+      // Screen-sized targets a look keeps for itself, by name.
+      const targets = new Map();
       function size(wp, hp) {
         w = wp; h = hp;
-        for (const r of [rt, a0, a1, b0, b1, ldr, mask, norm, fogRT, landRT]) if (r) r.dispose();
+        for (const r of [rt, a0, a1, b0, b1, ldr, maskRT, normRT, fogRT, landRT, ...targets.values()]) if (r) r.dispose();
+        targets.clear();
         fogRT = new THREE.WebGLRenderTarget(w >> 1, h >> 1, { type: THREE.HalfFloatType, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter });
         landRT = new THREE.WebGLRenderTarget(w >> 1, h >> 1, { type: THREE.HalfFloatType, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter });
-        norm = new THREE.WebGLRenderTarget(w, h, { type: THREE.HalfFloatType, minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter });
+        normRT = new THREE.WebGLRenderTarget(w, h, { type: THREE.HalfFloatType, minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter });
         ldr = new THREE.WebGLRenderTarget(w, h, { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, depthBuffer: false });
-        mask = new THREE.WebGLRenderTarget(w, h, { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter });
+        maskRT = new THREE.WebGLRenderTarget(w, h, { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter });
         const opts = { type: THREE.HalfFloatType, depthBuffer: false, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter };
         rt = new THREE.WebGLRenderTarget(w, h, { type: THREE.HalfFloatType, samples: low ? 0 : 4, depthBuffer: true, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter });
         const qw = Math.max(2, w >> 2), qh = Math.max(2, h >> 2);
         a0 = new THREE.WebGLRenderTarget(qw, qh, opts); a1 = new THREE.WebGLRenderTarget(qw, qh, opts);
         b0 = new THREE.WebGLRenderTarget(qw >> 1, qh >> 1, opts); b1 = new THREE.WebGLRenderTarget(qw >> 1, qh >> 1, opts);
       }
+      // Marks laid on the land need the way back from a pixel to the land, how a step on the land shows on screen,
+      // and the zoom as a level, at 80 px at 1080p to a land unit for level 0.
+      function landUniforms(C) {
+        C.uInvVP.value.multiplyMatrices(camera.matrixWorld, camera.projectionMatrixInverse);
+        const ty = cam.ty || 1, o = new THREE.Vector3(cam.x, ty, cam.y).project(camera);
+        const ex = new THREE.Vector3(cam.x + 1, ty, cam.y).project(camera), ez = new THREE.Vector3(cam.x, ty, cam.y + 1).project(camera);
+        const ax = (ex.x - o.x) / 2 * w, ay = (ex.y - o.y) / 2 * h, bx = (ez.x - o.x) / 2 * w, by = (ez.y - o.y) / 2 * h;
+        C.uW2S.value.set(ax, ay, bx, by);
+        C.uLev.value = Math.log2(80 * (h / 1080) / Math.sqrt(Math.abs(ax * by - ay * bx)));
+      }
       const run = (mat, target) => { quad.material = mat; renderer.setRenderTarget(target); renderer.render(qs, qc); };
       const pass = (src, dst, dx, dy) => { blur.uniforms.t.value = src; blur.uniforms.d.value.set(dx, dy); run(blur, dst); };
+      // The scene drawn again into a buffer of its own, with an override material or a camera layer.
+      function drawInto(target, clear, alpha, layer, material) {
+        const was = camera.layers.mask;
+        if (layer !== undefined) camera.layers.set(layer);
+        scene.overrideMaterial = material;
+        renderer.shadowMap.autoUpdate = false;
+        renderer.setRenderTarget(target); renderer.setClearColor(clear, alpha); renderer.clear(); renderer.render(scene, camera);
+        renderer.shadowMap.autoUpdate = true;
+        scene.overrideMaterial = null; camera.layers.mask = was;
+        renderer.setClearColor(theme ? theme.shroud : 0, 1);
+        return target.texture;
+      }
+      // The land alone, drawn with a material of a pass's own.
+      function landInto(material, target) {
+        if (!terrainMesh) return target.texture;
+        const keep = terrainMesh.material;
+        terrainMesh.material = material;
+        renderer.setRenderTarget(target); renderer.setClearColor(0x000000, 0); renderer.clear();
+        renderer.render(terrainMesh, camera);
+        terrainMesh.material = keep;
+        renderer.setClearColor(theme ? theme.shroud : 0, 1);
+        return target.texture;
+      }
+      let paperTex = null;
+      // The kit a look draws with. Buffers are drawn when asked for:
+      //   mask()   units, buildings and scenery in their line categories (alpha), white with the sides' markings
+      //   norm()   surface direction and view distance of everything drawn in line
+      //   fog()    the land alone: visible, seen, height + 20, scars and tread marks
+      //   land()   the land alone: road distance, cloud shadow, fog banks, track hardness
+      // and ldr is the graded picture, a0 and a1 quarter-size buffers free once the grade has run.
+      const K = {
+        THREE, SH, vs, renderer, run, blur: pass,
+        get w() { return w; }, get h() { return h; }, get ldr() { return ldr; }, get a0() { return a0; }, get a1() { return a1; },
+        get time() { return SH.uTime.value; }, get camera() { return camera; }, get cam() { return cam; }, get sky() { return sky; },
+        get theme() { return theme; }, get center() { return [CX, CY]; }, get waterLevel() { return (M ? M.water : -0.15) + waterRise.value; },
+        get opts() { return { ink: inkStyle, road: roadStyle, ore: oreStyle }; },
+        mask: () => drawInto(maskRT, 0x000000, 0, 1, markMat),
+        norm: () => drawInto(normRT, 0x808080, 0, 1, normMat),
+        fog: () => landInto(fogPassMat, fogRT),
+        land: () => landInto(landMat, landRT),
+        landUniforms,
+        paper: () => paperTex || (paperTex = Looks.paper(THREE)),
+        target(name) {
+          if (!targets.has(name)) targets.set(name, new THREE.WebGLRenderTarget(w, h, { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, depthBuffer: false }));
+          return targets.get(name);
+        },
+      };
+      const painters = new Map();
       function render() {
-        // In ink the fog is drawn by the ink pass, so the scene renders without it.
-        const inkFog = look === 'ink' && viewTeam >= 0;
-        if (inkFog) SH.uFogOn.value = 0;
+        // A look that paints the fog of war itself has the scene drawn without it.
+        const own = style.sceneFog === false && viewTeam >= 0;
+        if (own) SH.uFogOn.value = 0;
         renderer.setRenderTarget(rt);
         renderer.render(scene, camera);
-        if (inkFog) SH.uFogOn.value = 1;
+        if (own) SH.uFogOn.value = 1;
         bright.uniforms.t.value = rt.texture;
         run(bright, a0);
         pass(a0.texture, a1, 1 / a0.width, 0); pass(a1.texture, a0, 0, 1 / a0.height);
@@ -4921,91 +5218,10 @@ const World = (() => {
         pass(b1.texture, b0, 1 / b0.width * 2, 0); pass(b0.texture, b1, 0, 1 / b0.height * 2);
         const u = grade.uniforms;
         u.t.value = rt.texture; u.b1.value = a0.texture; u.b2.value = b1.texture; u.uTime.value = SH.uTime.value;
-        if (look === 'film') { run(grade, null); return; }
+        if (!style.create) { run(grade, null); return; }
         run(grade, ldr);
-        // The units and buildings alone, white, for their outlines.
-        const was = camera.layers.mask;
-        camera.layers.set(1);
-        scene.overrideMaterial = markMat;
-        renderer.shadowMap.autoUpdate = false;
-        renderer.setRenderTarget(mask); renderer.setClearColor(0x000000, 0); renderer.clear(); renderer.render(scene, camera);
-        if (look === 'ink') {
-          scene.overrideMaterial = normMat;
-          renderer.setRenderTarget(norm); renderer.setClearColor(0x808080, 0); renderer.clear(); renderer.render(scene, camera);
-        }
-        renderer.shadowMap.autoUpdate = true;
-        scene.overrideMaterial = null; camera.layers.mask = was;
-        renderer.setClearColor(theme ? theme.shroud : 0, 1);
-        if (look === 'hudson') {
-          // The picture blurred at a quarter size for the glazes, then painted.
-          pass(ldr.texture, a1, 1.6 / a1.width, 0); pass(a1.texture, a0, 0, 1.6 / a0.height);
-          const H = hudson.uniforms, q = new THREE.Vector3(CX, 1, CY).project(camera);
-          H.t.value = ldr.texture; H.tSoft.value = a0.texture; H.tSubj.value = mask.texture; H.res.value.set(w, h);
-          H.uTime.value = SH.uTime.value; H.uK.value = h / 1080; H.uOff.value.set((q.x + 1) / 2 * w, (q.y + 1) / 2 * h);
-          H.uGlow.value.copy(grade.uniforms.uGlow.value); H.uAspect.value = w / h;
-          H.uWaterL.value = (M ? M.water : -0.15) + waterRise.value;
-          if (terrainMesh) {
-            // The land's height, to find the true water line.
-            const keep = terrainMesh.material;
-            terrainMesh.material = fogPassMat;
-            renderer.setRenderTarget(fogRT); renderer.setClearColor(0x000000, 0); renderer.clear();
-            renderer.render(terrainMesh, camera);
-            terrainMesh.material = keep;
-            renderer.setClearColor(theme ? theme.shroud : 0, 1);
-            H.tFogS.value = fogRT.texture;
-          }
-          run(hudson, null);
-          return;
-        }
-        const pass2 = look === 'ink' ? ink : charcoal, C = pass2.uniforms;
-        if (C.tPaper && !C.tPaper.value) C.tPaper.value = makePaper();
-        C.t.value = ldr.texture; C.tSubj.value = mask.texture; C.tHeat.value = a0.texture; C.res.value.set(w, h); C.uTime.value = SH.uTime.value; C.uK.value = h / 1080;
-        if (C.tNorm) C.tNorm.value = norm.texture;
-        if (C.tFogS && terrainMesh) {
-          const keep = terrainMesh.material;
-          terrainMesh.material = fogPassMat;
-          renderer.setRenderTarget(fogRT); renderer.setClearColor(0x000000, 0); renderer.clear();
-          renderer.render(terrainMesh, camera);
-          terrainMesh.material = keep;
-          renderer.setClearColor(theme ? theme.shroud : 0, 1);
-          C.tFogS.value = fogRT.texture;
-        }
-        if (C.tLand && terrainMesh) {
-          // Distance to the nearest road, per pixel of the land.
-          const keep = terrainMesh.material;
-          terrainMesh.material = landMat;
-          renderer.setRenderTarget(landRT); renderer.setClearColor(0x000000, 0); renderer.clear();
-          renderer.render(terrainMesh, camera);
-          terrainMesh.material = keep;
-          renderer.setClearColor(theme ? theme.shroud : 0, 1);
-          C.tLand.value = landRT.texture;
-        }
-        if (C.uOff) {
-          const q = new THREE.Vector3(CX, 1, CY).project(camera); C.uOff.value.set((q.x + 1) / 2 * w, (q.y + 1) / 2 * h);
-          if (C.uStyle) C.uStyle.value = inkStyle;
-          if (C.uInvVP) {
-            // The ground's marks are laid on the land. The pass needs the way back from a pixel to the land, how a step
-            // on the land shows on screen, and the zoom as a level, at 80 px at 1080p to a land unit for level 0.
-            C.uInvVP.value.multiplyMatrices(camera.matrixWorld, camera.projectionMatrixInverse);
-            const ty = cam.ty || 1, o = new THREE.Vector3(cam.x, ty, cam.y).project(camera);
-            const ex = new THREE.Vector3(cam.x + 1, ty, cam.y).project(camera), ez = new THREE.Vector3(cam.x, ty, cam.y + 1).project(camera);
-            const ax = (ex.x - o.x) / 2 * w, ay = (ex.y - o.y) / 2 * h, bx = (ez.x - o.x) / 2 * w, by = (ez.y - o.y) / 2 * h;
-            C.uW2S.value.set(ax, ay, bx, by);
-            C.uLev.value = Math.log2(80 * (h / 1080) / Math.sqrt(Math.abs(ax * by - ay * bx)));
-          }
-          // Which way the sun lies across the screen.
-          const s = SH.uSunDir.value, q1 = new THREE.Vector3(CX + s.x * 8 / Math.hypot(s.x, s.z), 1, CY + s.z * 8 / Math.hypot(s.x, s.z)).project(camera);
-          if (C.uSun2) C.uSun2.value.set((q1.x - q.x) * w, (q1.y - q.y) * h).normalize();
-          // The world's up in view space, to tell a building's roof from its walls.
-          if (C.uUpV) C.uUpV.value.set(0, 1, 0).transformDirection(camera.matrixWorldInverse);
-          if (C.uRoad) { C.uRoad.value = roadStyle; C.uOre.value = oreStyle; }
-          if (C.uRain) {
-            C.uRain.value = sky.rain; C.uStorm.value = sky.storm; C.uSnowF.value = sky.snow; C.uFog.value = sky.fog; C.uMist.value = sky.mist;
-            C.uNight.value = sky.night; C.uWet.value = sky.wet; C.uDayMul.value.set(...sky.mul); C.uDayAdd.value.set(...sky.add);
-            C.uWaterL.value = (M ? M.water : -0.15) + waterRise.value; C.uWindS.value.set(sky.windS, 0);
-          }
-        }
-        run(pass2, null);
+        if (!painters.has(style.name)) painters.set(style.name, style.create(K));
+        painters.get(style.name).render(K);
       }
       return { size, render, grade };
     })();
@@ -5902,7 +6118,7 @@ const World = (() => {
       waterRise.value = Math.min(1.25, sky.flood) * 0.26;
       right3.setFromMatrixColumn(camera.matrixWorld, 0);
       sky.windS = right3.x * U.x + right3.z * U.y;
-      // The hour, in pen and ink only. The painted looks keep their own light.
+      // The hour. Pen and ink follows it; the painted looks keep their own light.
       const d = sky.day = studySky && studySky.day !== undefined ? studySky.day : Rules.dayAt(S.tick);
       let i = 0;
       while (i < DAY.length - 2 && DAY[i + 1][0] <= d) i++;
@@ -5911,7 +6127,8 @@ const World = (() => {
       sky.night = lerp(a[3], b[3], f);
       // Mist in the low ground at first light, burnt off by mid morning, and gone in rain or a strong wind.
       sky.mist = Math.max(1 - smooth(0.05, 0.17, d), smooth(0.9, 1.0, d) * 0.6) * (1 - 0.7 * sky.rain) * (1 - 0.4 * Math.min(1, Math.hypot(U.x, U.y)));
-      sky.sun = look === 'ink' || !light ? sunAt(d) : light.sun;
+      // The look's own sun, or its light's, or the hour's.
+      sky.sun = style.sun ? style.sun({ cam, day: d, light, SUN, sunAt }) : light ? light.sun : sunAt(d);
     }
 
     function buildSets() {
@@ -5932,25 +6149,17 @@ const World = (() => {
       put('rubble', [{ id: 'r', geo: MODELS.scenery.rubble }], 60);
     }
 
-    // Each painted look has its own light. Pen and ink keeps the theatre's sunset, as it was drawn for it, and turns
-    // with the hour. Daylight is a clear afternoon under a blue sky, and Hudson River a golden late light.
+    // Each look may bring its own light, in place of the theatre's.
     let light = null;
-    const lightOf = th => look === 'film' ? Object.assign({}, th, {
-      name: th.name + ' day', sun: SUN(-0.62, 0.82), sunColor: 0xfff2dc, sunPower: 3.2, hemi: [0x8db4ee, 0x6a5a46, 1.1],
-      env: [0x4f7fb2, 0xc2d6ea, 0x584a3a], haze: 0xc4d8ee, hazeK: 0.0035,
-    }) : look === 'hudson' ? Object.assign({}, th, {
-      name: th.name + ' hudson', sun: SUN(-0.55, 0.46), sunColor: 0xffe2b4, sunPower: 3.5, hemi: [0x8aa2cc, 0x5e5240, 0.95],
-      env: [0x5c7aa8, 0xf0dcb0, 0x4a4030], haze: 0xe4dac4, hazeK: 0.006,
-    }) : th;
     function applyLight() {
       if (!theme) return;
-      const L = light = lightOf(theme);
+      const L = light = style.light ? style.light(theme, SUN) : theme;
       sun.color.set(L.sunColor); sun.intensity = L.sunPower;
       sun.position.set(...L.sun);
       hemi.color.set(L.hemi[0]); hemi.groundColor.set(L.hemi[1]); hemi.intensity = L.hemi[2];
       scene.environment = skyEnv(L);
       SH.uHaze.value.set(L.haze); SH.uHazeK.value = L.hazeK; SH.uSunDir.value.set(...L.sun).normalize();
-      pp.grade.uniforms.uGlowC.value.set(L.sunColor); pp.grade.uniforms.uVivid.value = look === 'film' || look === 'hudson' ? 1 : 0;
+      pp.grade.uniforms.uGlowC.value.set(L.sunColor); pp.grade.uniforms.uVivid.value = style.vivid;
       if (waterMesh) {
         const u = waterMesh.material.uniforms;
         u.uSun.value.set(...L.sun).normalize(); u.uSunC.value.set(L.sunColor); u.uSky.value.set(L.env[1]); u.uZen.value.set(L.env[0]);
@@ -6603,13 +6812,14 @@ const World = (() => {
       const c = new THREE.Color((light || theme).sunColor);
       glow.tint([c.r * 1.6, c.g * 1.4, c.b * 1.1, 0.5]);
     }
-    // Pen and ink looks down a long lens, nearly an axonometric, standing back as far again as frames the same
-    // ground. cam.dist stays the distance the 26° lens would stand at, so everything sized by it holds.
+    // The view as the look frames it, by default the painted looks' 26 degree lens. cam.dist stays the distance that
+    // lens would stand at, so everything sized by it holds whatever lens a look uses.
+    const paintCam = (c, smooth) => ({ fov: 26, near: 2, far: 500, D: c.dist, pitch: c.pitch + (1.4 - c.pitch) * smooth(70, 175, c.dist) });
     function placeCamera() {
-      const c = cam, fov = look === 'ink' ? 10 : 26;
-      if (camera.fov !== fov) { camera.fov = fov; camera.near = fov < 20 ? 5 : 2; camera.far = fov < 20 ? 1400 : 500; camera.updateProjectionMatrix(); }
-      const D = c.D = c.dist * Math.tan(13 * Math.PI / 180) / Math.tan(fov * Math.PI / 360);
-      c.pitchNow = c.pitch + (1.4 - c.pitch) * smooth(70, 175, c.dist);
+      const c = cam, v = (style.camera || paintCam)(c, smooth);
+      if (camera.fov !== v.fov || camera.near !== v.near || camera.far !== v.far) { camera.fov = v.fov; camera.near = v.near; camera.far = v.far; camera.updateProjectionMatrix(); }
+      const D = c.D = v.D;
+      c.pitchNow = v.pitch;
       const cp = Math.cos(c.pitchNow), sp = Math.sin(c.pitchNow);
       const h = c.ty = M ? Math.max(terrainAt(M, clamp(c.x, 0, W), clamp(c.y, 0, H)), 0.5) * 0.4 + 0.6 : 1;
       const sx = c.shake ? (Math.random() - 0.5) * c.shake : 0, sy = c.shake ? (Math.random() - 0.5) * c.shake : 0;
@@ -6702,8 +6912,8 @@ const World = (() => {
       }
       if (!ghostState) { ghostCells.count = 0; if (ghost) ghost.visible = false; SH.uBorder.value = 1; return; }
       SH.uBorder.value = 1.8;
-      // In pen and ink the overlay draws it as the ghost plan's dotted wireframe instead.
-      if (look === 'ink') { ghostCells.count = 0; if (ghost) ghost.visible = false; return; }
+      // A look that draws placement in its overlay, as pen and ink's ghost plan does, hides it.
+      if (style.ghost3d === false) { ghostCells.count = 0; if (ghost) ghost.visible = false; return; }
       const g = ghostState, d = BUILDINGS[g.kind];
       let n = 0;
       for (let y = g.y; y < g.y + d.h; y++) for (let x = g.x; x < g.x + d.w; x++) {
@@ -6827,16 +7037,17 @@ const World = (() => {
       // Screen pixels to a world unit at a point, for sizing drawn marks.
       ppu(x, y, z) { p1.set(x, y, z); return world.vh / (2 * Math.tan(camera.fov * Math.PI / 360) * camera.position.distanceTo(p1)); },
       setLook(name) {
-        look = name === 'film' || name === 'hudson' || name === 'charcoal' ? name : 'ink';
+        style = Looks.get(name);
         applyLight();
         // The page dresses its panels to match.
-        if (typeof document !== 'undefined') document.body.dataset.look = look;
+        if (typeof document !== 'undefined') document.body.dataset.look = style.panels;
       },
       setInk(n) { inkStyle = n; },
       setRoad(n) { roadStyle = n; },
       setOre(n) { oreStyle = n; },
       study(o) { studySky = o; },
-      get look() { return look; },
+      get look() { return style.name; },
+      get style() { return style; },
       cam, vw: 1, vh: 1, onScreen: [], load, frame, event, resize, pick, project, setGhost, cameos, renderer, camera, scene, place: placeCamera,
       teamCol, THEMES,
       get baseImage() { return baseImage; },
@@ -6946,6 +7157,8 @@ const Hud = (() => {
   const SHORT = { hq: 'HQ', power: 'PWR', refinery: 'ORE', barracks: 'BAR', factory: 'FAC', radar: 'RAD', airfield: 'AIR', fob: 'FOB', derrick: 'OIL', silo: 'SILO', bunker: 'MG', atgun: 'AT', sam: 'SAM', rail: 'RAIL' };
 
   function create(world, game) {
+    // Whether the look draws the overlay in ink: inked effects, ghost plans and the map key.
+    const inked = () => world.style.hud === 'ink';
     const view = $('view'), gl = $('gl'), ov = $('ov'), og = ov.getContext('2d');
     const mini = $('map'), mg = mini.getContext('2d');
     const state = {
@@ -7474,10 +7687,10 @@ const Hud = (() => {
         return;
       }
       if (k === 'KeyL') {
-        const order = ['ink', 'film', 'hudson'], said = { ink: 'Pen and ink.', film: 'Daylight.', hudson: 'Hudson River.' };
-        game.look = order[(order.indexOf(world.look) + 1) % order.length]; world.setLook(game.look);
+        const order = Looks.list(), next = order[(order.findIndex(l => l.name === world.look) + 1) % order.length];
+        game.look = next.name; world.setLook(game.look);
         try { localStorage.setItem('dg-look', game.look); } catch (e) { /* no store */ }
-        say(said[game.look]); return;
+        say(next.said); return;
       }
       if (k === 'Equal' || k === 'NumpadAdd') { game.setSpeed(1); return; }
       if (k === 'Minus' || k === 'NumpadSubtract') { game.setSpeed(-1); return; }
@@ -7618,7 +7831,7 @@ const Hud = (() => {
     // Lamps at night: warm light round lived-in houses and every building in sight, and cars' headlights.
     function drawLamps(s) {
       const sk = world.sky, L = world.life, k = sk.night;
-      if (world.look !== 'ink' || k < 0.15) return;
+      if (!inked() || k < 0.15) return;
       og.save();
       const pool = (x, y, z, r, a) => {
         const [px, py] = world.project(x, y, z);
@@ -7643,7 +7856,7 @@ const Hud = (() => {
     // Trees on fire, in pen and ink: tongues of flat red, orange and yellow ink in a flickering black outline.
     function drawFires() {
       const F = world.fireSpots;
-      if (!F || !F.length || world.look !== 'ink') return;
+      if (!F || !F.length || !inked()) return;
       const now = performance.now() / 1000;
       og.save(); og.setLineDash([]); og.lineJoin = 'round'; og.strokeStyle = '#1a1512';
       for (const f of F) {
@@ -7710,7 +7923,7 @@ const Hud = (() => {
     const SKY_NOTE = { rain: 'Wheels bog down off the roads', storm: 'Aircraft grounded', fog: 'Sight cut short', snow: 'Everyone slowed' };
     const hourName = d => d < 0.05 || d >= 0.95 ? 'Dawn' : d < 0.3 ? 'Morning' : d < 0.5 ? 'Midday' : d < 0.7 ? 'Afternoon' : d < 0.8 ? 'Dusk' : 'Night';
     function drawSkyNote(s) {
-      const w = Rules.sky(s), ink = world.look === 'ink';
+      const w = Rules.sky(s), ink = inked();
       let note = SKY_NOTE[w.kind] || '';
       if (s.flooded) note = note ? note + '. Fords flooded' : 'Fords flooded';
       if (w.next !== w.kind && w.left < 40 * HZ) note = (SKY_NAME[w.next] || w.next) + ' coming';
@@ -7731,7 +7944,7 @@ const Hud = (() => {
     }
     // A fallen bridge: its outline as what was, dotted orange while it is being rebuilt, and C4 counting down.
     function drawBridges(s, t) {
-      const P0 = t >= 0 ? s.P[t] : null, ink = world.look === 'ink';
+      const P0 = t >= 0 ? s.P[t] : null, ink = inked();
       s.map.bridges.forEach((m, i) => {
         const st = s.bridges[i], mx = (m.x0 + m.x1) / 2, my = (m.y0 + m.y1) / 2;
         if ((st.hp > 0 && !st.c4) || (P0 && !P0.seen[Rules.cellOf(mx, my)])) return;
@@ -7842,7 +8055,7 @@ const Hud = (() => {
         }
         if (e.b && on && e.rally && mine) {
           const [rx, ry] = world.project(e.rally[0], terrainAt(s.map, e.rally[0], e.rally[1]) + 0.1, e.rally[1]);
-          if (world.look === 'ink') { og.strokeStyle = PLAN; dotted(); } else { og.strokeStyle = '#7fe0a0'; og.setLineDash([5, 4]); og.lineWidth = 1; }
+          if (inked()) { og.strokeStyle = PLAN; dotted(); } else { og.strokeStyle = '#7fe0a0'; og.setLineDash([5, 4]); og.lineWidth = 1; }
           og.beginPath(); og.moveTo(o.x, o.y); og.lineTo(rx, ry); og.stroke(); og.setLineDash([]); og.lineCap = 'butt';
         }
         if (e.b && e.c4) { og.fillStyle = '#ff5040'; og.font = '700 12px "Share Tech Mono", monospace'; og.textAlign = 'center'; og.fillText(Math.ceil((e.c4 - s.tick) / HZ) + '', o.x, o.y - 18); }
@@ -7864,7 +8077,7 @@ const Hud = (() => {
         for (const o of world.onScreen) if (o.e.team !== t && (o.e === hv || Rules.gap(hv.x, hv.y, o.e) <= STRIKE_R) && Rules.seenBy(s, t, o.e)) brackets(o.x, o.y, Math.max(9, o.e.b ? Math.max(o.e.w, o.e.h) * o.scale * 0.5 : o.r * 1.3), o.e === hv, o.e === hv ? '#ff5a40' : 'rgba(255,110,80,0.85)');
       }
 
-      if (world.look === 'ink') { drawGhostPlan(s, t, selected); drawKey(); drawInk(s, t); }
+      if (inked()) { drawGhostPlan(s, t, selected); drawKey(); drawInk(s, t); }
       drawBridges(s, t); drawFires(); drawBirds(); drawLightning(dt);
       if (game.playing) { drawSkyNote(s); drawGroundTip(s, dt); }
 
@@ -7884,7 +8097,7 @@ const Hud = (() => {
         const g = world.pick(state.mouse.x, state.mouse.y);
         if (g) {
           const r = m.type === 'launch' ? 10 : POWERS[m.name].r, [x, y] = [state.mouse.x, state.mouse.y], sc = world.vh / (2 * Math.tan(13 * Math.PI / 180) * world.cam.dist);
-          if (world.look === 'ink') { og.strokeStyle = PLAN; dotted(); } else { og.strokeStyle = '#ffa040'; og.lineWidth = 1.5; og.setLineDash([8, 5]); }
+          if (inked()) { og.strokeStyle = PLAN; dotted(); } else { og.strokeStyle = '#ffa040'; og.lineWidth = 1.5; og.setLineDash([8, 5]); }
           og.beginPath(); og.ellipse(x, y, r * sc, r * sc * 0.82, 0, 0, 6.3); og.stroke(); og.setLineDash([]); og.lineCap = 'butt';
         }
       }
@@ -7906,7 +8119,7 @@ const Hud = (() => {
       state.miniT = 0.2;
       const P0 = t >= 0 ? s.P[t] : null, g = mg;
       // In pen and ink the map is printed on the paper: the land in sepia, the unknown left blank.
-      const ink = world.look === 'ink', blank = ink ? [242, 232, 210] : [0, 0, 0];
+      const ink = inked(), blank = ink ? [242, 232, 210] : [0, 0, 0];
       g.setTransform(1, 0, 0, 1, 0, 0);
       g.fillStyle = ink ? '#f2e8d2' : '#10130f'; g.fillRect(0, 0, size, size);
       // The map stands on its corner, your base at the foot, as the camera sees it.
@@ -8353,9 +8566,11 @@ const Game = (() => {
         b.addEventListener('click', () => { G[key] = b.dataset.v; box.querySelectorAll('button').forEach(o => o.classList.toggle('on', o === b)); audio.wake(); audio.ui('click'); try { localStorage.setItem('dg-' + key, b.dataset.v); } catch (e) { /* no store */ } });
       });
     };
-    try { G.theme = localStorage.getItem('dg-theme') || G.theme; G.diff = localStorage.getItem('dg-diff') || G.diff; G.look = localStorage.getItem('dg-look') || G.look; if (G.look === 'charcoal') G.look = 'ink'; G.showHints = !localStorage.getItem('dg-played'); } catch (e) { /* no store */ }
+    try { G.theme = localStorage.getItem('dg-theme') || G.theme; G.diff = localStorage.getItem('dg-diff') || G.diff; G.look = localStorage.getItem('dg-look') || G.look; G.look = { film: 'daylight', charcoal: 'ink' }[G.look] || G.look; G.showHints = !localStorage.getItem('dg-played'); } catch (e) { /* no store */ }
     if (params.get('look')) G.look = params.get('look');
-    if (G.look !== 'film') G.look = 'ink';
+    if (!Looks.has(G.look) || Looks.get(G.look).hidden) G.look = 'ink';
+    // The look menu lists every look in the registry.
+    $('m-look').innerHTML = Looks.list().map(l => `<button data-v="${l.name}">${l.title}</button>`).join('');
     world.setLook(G.look);
     pick($('m-theme'), 'theme'); pick($('m-diff'), 'diff'); pick($('m-look'), 'look');
     $('m-look').addEventListener('click', () => world.setLook(G.look));
