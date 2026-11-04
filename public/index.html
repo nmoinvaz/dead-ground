@@ -893,6 +893,93 @@ const Rules = (() => {
     return d > 0 ? Math.max(d, t) : t;
   }
 
+  // Cover. Fixed points on the land a squad is sent to hold, after Rainbow Six's team orders: the kind of place
+  // says what the team does there. Found once from the map and kept on it, each with the way it faces. A squad
+  // stopped within COVER_R of one is in cover, and a shot from within COVER_ARC of its facing is softened.
+  const COVER_R = 1.2, COVER_ARC = 1.2217304763960306, COVER_HC = 8;
+  function coverPoints(M) {
+    if (M.cover) return M.cover;
+    const MW = M.W, MH = M.H, pts = [];
+    const put = (x, y, kind, dir) => {
+      if (!(x > 1 && y > 1 && x < MW - 1 && y < MH - 1)) return;
+      // Never where a man cannot stand, such as inside the house or in the river.
+      if (M.ground[(y | 0) * MW + (x | 0)] & 2) return;
+      pts.push({ x, y, kind, dir });
+    };
+    // The corners of each house's yard, where a wall or fence gives cover on two sides.
+    for (const h of M.houses) for (const [cx, cy, dx, dy] of [[h.x, h.y, -1, -1], [h.x + h.w, h.y, 1, -1], [h.x + h.w, h.y + h.h, 1, 1], [h.x, h.y + h.h, -1, 1]]) put(cx + dx * 1.6, cy + dy * 1.6, 'wall', matan2(dy, dx));
+    // Both ends of every bridge, facing along it.
+    for (const b of M.bridges) { put(b.x0 - b.ux * 2.2, b.y0 - b.uy * 2.2, 'bridge', matan2(b.uy, b.ux)); put(b.x1 + b.ux * 2.2, b.y1 + b.uy * 2.2, 'bridge', matan2(-b.uy, -b.ux)); }
+    // Both banks of every ford, facing the water. The ford runs along the river, so its banks lie across it, and
+    // a bank is pushed out until it is dry ground.
+    for (const [fx, fy, dx, dy] of M.fords) for (const s of [1, -1]) {
+      const nx = -dy * s, ny = dx * s;
+      for (let d = 3.6; d <= 9; d += 0.5) {
+        const x = fx + nx * d, y = fy + ny * d;
+        if (M.ground[clamp(y | 0, 0, MH - 1) * MW + clamp(x | 0, 0, MW - 1)] & 18) continue;
+        put(x, y, 'ford', matan2(-ny, -nx));
+        break;
+      }
+    }
+    // The edge of a wood: a tree with few neighbours, all to one side, kept a stride from the last, with the man
+    // pushed clear of the trees and facing the open.
+    const trees = M.scatter.filter(o => o.k === 'tree'), edge = [];
+    for (const t of trees) {
+      let n = 0, sx = 0, sy = 0;
+      for (const u of trees) if (u !== t && mhypot(u.x - t.x, u.y - t.y) < 3.4) { n++; sx += u.x - t.x; sy += u.y - t.y; }
+      if (n < 1 || n > 4 || edge.some(e => mhypot(e.x - t.x, e.y - t.y) < 3.5)) continue;
+      const a = matan2(-sy, -sx);
+      edge.push(t); put(t.x + mcos(a) * 1.4, t.y + msin(a) * 1.4, 'wood', a);
+    }
+    // Large rocks, with the man crouched on the far side and firing over the rock.
+    for (const r of M.scatter) if (r.k === 'rock' && r.s > 0.9) put(r.x + 1.2, r.y + 1.0, 'rock', matan2(-1.0, -1.2));
+    // Crests: a spot higher than all the ground within six strides by more than a man's height, and above the
+    // water. It faces the steepest fall, where an attacker climbs from, and is cover from every side.
+    for (let y = 4; y < MH - 4; y += 3) for (let x = 4; x < MW - 4; x += 3) {
+      const h0 = terrainAt(M, x, y);
+      let top = true, low = h0, lx = 1, ly = 0;
+      for (let dy = -6; dy <= 6 && top; dy += 2) for (let dx = -6; dx <= 6; dx += 2) {
+        if (!dx && !dy) continue;
+        const h = terrainAt(M, x + dx, y + dy);
+        if (h > h0) { top = false; break; }
+        if (h < low) { low = h; lx = dx; ly = dy; }
+      }
+      if (top && h0 - low > 0.9 && h0 > M.water + 0.5) put(x, y, 'crest', matan2(ly, lx));
+    }
+    // Buckets of eight cells, as the units' own hash, so the point by a man is found without a scan.
+    const HWc = Math.ceil(MW / COVER_HC), grid = new Array(HWc * HWc);
+    pts.forEach((p, i) => { const k = clamp(p.y / COVER_HC | 0, 0, HWc - 1) * HWc + clamp(p.x / COVER_HC | 0, 0, HWc - 1); (grid[k] || (grid[k] = [])).push(i); });
+    M.cover = pts; M.coverGrid = grid; M.coverHW = HWc;
+    return pts;
+  }
+  // The nearest cover point within r of a spot, or -1. `skip` holds points already given out.
+  function coverNear(M, x, y, r, skip) {
+    const pts = coverPoints(M), grid = M.coverGrid, HWc = M.coverHW;
+    const x0 = clamp((x - r) / COVER_HC | 0, 0, HWc - 1), x1 = clamp((x + r) / COVER_HC | 0, 0, HWc - 1);
+    const y0 = clamp((y - r) / COVER_HC | 0, 0, HWc - 1), y1 = clamp((y + r) / COVER_HC | 0, 0, HWc - 1);
+    let best = -1, bd = r;
+    for (let j = y0; j <= y1; j++) for (let i = x0; i <= x1; i++) {
+      const b = grid[j * HWc + i];
+      if (!b) continue;
+      for (const k of b) {
+        if (skip && skip.has(k)) continue;
+        const p = pts[k], d = mhypot(p.x - x, p.y - y);
+        if (d < bd) { bd = d; best = k; }
+      }
+    }
+    return best;
+  }
+  // What is left of a shot at a squad in cover: three fifths from the side the point faces, four fifths on a
+  // crest from anywhere, and all of it otherwise. Vehicles never hold cover.
+  function coverScale(S, t, by) {
+    if (!(t.cov >= 0) || !by) return 1;
+    const p = coverPoints(S.map)[t.cov];
+    if (p.kind === 'crest') return 0.8;
+    const s = S.byId.get(by);
+    if (!s) return 1;
+    return Math.abs(angleTo(p.dir, matan2(s.y - p.y, s.x - p.x))) <= COVER_ARC ? 0.6 : 1;
+  }
+
   // The world's own random numbers, kept as one number in S so a saved world goes on the same way.
   function rngOf(S) {
     return () => {
@@ -961,6 +1048,7 @@ const Rules = (() => {
     const kind = o.layout || 'duel';
     let seed = o.seed || 1, M = makeMap(seed, kind);
     for (let tries = 0; tries < 12 && !goodMap(M); tries++) { if (o.debug) console.log('map', seed, M.why); seed += 1000; M = makeMap(seed, kind); }
+    coverPoints(M);
     const n = M.bases.length;
     const S = {
       HZ, tick: 0, seed, layout: kind, map: M, rs: seed ^ 0x51ed, ents: [], next: 1, byId: new Map(), cmds: [], log: [], keepLog: !!o.log, ev: [], shots: [], fields: new Map(),
@@ -1117,7 +1205,7 @@ const Rules = (() => {
     const u = {
       id: S.next++, kind, team, d, b: false, x, y, px: x, py: y, a: S.faces[team] || 0, pa: 0, ta: S.faces[team] || 0, pta: 0, v: 0, hp: d.hp, max: d.hp,
       ord: null, tgt: 0, cd: d.weapons.map(() => 0), z: d.alt || 0, xp: 0, vet: 0, wx: x, wy: y, wpT: 0, stuck: 0, lx: x, ly: y, flash: 0, fired: 0, anim: 0, home: null, born: S.tick,
-      cargo: 0, state: 0, aimT: 0, under: 0, slot: null, life: d.life || 0, salvo: 0, salvoT: 0, ammo: d.bombs ? d.bombs.n : 0, drop: 0,
+      cargo: 0, state: 0, aimT: 0, under: 0, slot: null, life: d.life || 0, salvo: 0, salvoT: 0, ammo: d.bombs ? d.bombs.n : 0, drop: 0, cov: -1,
     };
     u.pa = u.a; u.pta = u.ta;
     S.ents.push(u); S.byId.set(u.id, u);
@@ -1264,7 +1352,7 @@ const Rules = (() => {
       const P = S.P[e.team];
       if (e.b) light(P, e.x, e.y, (e.d.sight + Math.max(e.w, e.h) / 2) * fk, 3, false);
       else if (e.d.move === 'air' || e.d.move === 'jet') light(P, e.x, e.y, e.d.sight * fa, 0, true);
-      else light(P, e.x, e.y, e.d.sight * fk, 1.1, false);
+      else light(P, e.x, e.y, e.d.sight * fk * (e.cov >= 0 ? 1.2 : 1), 1.1, false);
     }
     for (const t of S.towns) if (t.owner >= 0) light(S.P[t.owner], t.x, t.y, 9 * fk, 2, false);
     for (const s of S.sweeps) if (s.until > S.tick) light(S.P[s.team], s.x, s.y, s.r, 0, true);
@@ -1515,8 +1603,9 @@ const Rules = (() => {
     if (w.indirect || isAir(s) || isAir(t)) return true;
     return los(S.map, s.x, s.y, groundZ(S, s) + (s.b ? 1 : 0.3), t.x, t.y, groundZ(S, t));
   }
-  // Picks what a unit should shoot, threats first, then whatever else is near.
-  function acquire(S, u, radius) {
+  // Picks what a unit should shoot, threats first, then whatever else is near. A unit holding cover takes only
+  // what it can hit from where it stands.
+  function acquire(S, u, radius, held) {
     let best = null, score = Infinity;
     const list = u.d.weapons || [];
     near(S, u.x, u.y, radius, t => {
@@ -1524,7 +1613,7 @@ const Rules = (() => {
       const d = gap(u.x, u.y, t);
       if (d > radius) return;
       let usable = false;
-      for (const wn of list) if (canHit(wn, t)) usable = true;
+      for (const wn of list) if (canHit(wn, t) && (!held || inRange(S, u, wn, t))) usable = true;
       if (!usable || !seenBy(S, u.team, t)) return;
       let s = d;
       if (t.b) s += armed(t) ? 6 : 14;
@@ -1566,6 +1655,7 @@ const Rules = (() => {
   function hurt(S, t, dmg, team, by) {
     if (t.hp <= 0) return;
     if (team >= 0 && atPeace(S, team, t.team)) return;
+    dmg *= coverScale(S, t, by);
     t.hp -= dmg;
     t.under = S.tick;
     const P = S.P[t.team];
@@ -2086,6 +2176,8 @@ const Rules = (() => {
     stepSalvo(S, u);
     if (d.move === 'jet') return jetTick(S, u);
     if (d.move === 'air') return airTick(S, u);
+    // A squad that has stopped by a cover point holds it. On the move it has none.
+    if (d.men) u.cov = u.v === 0 ? coverNear(S.map, u.x, u.y, COVER_R) : -1;
 
     // Veterans mend slowly, and a Support Truck mends anyone close.
     if (u.vet >= 2 && u.hp < u.max) u.hp = Math.min(u.max, u.hp + u.max * 0.002);
@@ -2123,7 +2215,7 @@ const Rules = (() => {
 
     const free = !o || o.t === 'amove' || o.t === 'capture';
     if (armed(u) && free && !t && S.tick % 10 === u.id % 10) {
-      const f = acquire(S, u, d.sight);
+      const f = acquire(S, u, d.sight, !o && u.cov >= 0);
       if (f) { t = f; u.tgt = f.id; if (!o && !u.home) u.home = [u.x, u.y]; }
     }
     // Vehicles with a turret shoot on the move at what they pass.
@@ -2159,9 +2251,10 @@ const Rules = (() => {
     if (!o) {
       if (t && !armed(u)) { u.tgt = 0; u.v = 0; }
       else if (t && !shoot) {
-        // Chase a little, then go back to where it stood.
+        // A squad in cover holds it. Anyone else chases a little, then goes back to where it stood.
         const h = u.home || [u.x, u.y];
-        if (mhypot(u.x - h[0], u.y - h[1]) < 9) drive(S, u, t.x, t.y, Math.max(WEAPONS[d.weapons[0]].r * 0.85, 1));
+        if (u.cov >= 0) { u.tgt = 0; t = null; u.v = 0; }
+        else if (mhypot(u.x - h[0], u.y - h[1]) < 9) drive(S, u, t.x, t.y, Math.max(WEAPONS[d.weapons[0]].r * 0.85, 1));
         else { u.tgt = 0; t = null; }
       } else if (!t && u.home) {
         if (drive(S, u, u.home[0], u.home[1], 0.6)) u.home = null;
@@ -2193,7 +2286,11 @@ const Rules = (() => {
     }
 
     const sx = o.sx ?? o.x, sy = o.sy ?? o.y;
-    if (drive(S, u, sx, sy, o.stop ?? 0.4)) { u.ord = null; u.tgt = 0; u.home = null; }
+    if (drive(S, u, sx, sy, o.stop ?? 0.4)) {
+      // A squad sent to a cover point settles on it and faces out.
+      if (o.cov >= 0 && mhypot(u.x - sx, u.y - sy) < 0.5) { u.x = sx; u.y = sy; u.a = coverPoints(S.map)[o.cov].dir; u.cov = o.cov; }
+      u.ord = null; u.tgt = 0; u.home = null;
+    }
   }
 
   function engineerGo(S, u, t) {
@@ -2415,17 +2512,22 @@ const Rules = (() => {
     const air = units.filter(isAir), land = units.filter(u => !isAir(u));
     const spacing = Math.max(1.5, ...land.map(u => u.d.r * 2 + 0.5)), per = Math.ceil(Math.sqrt(land.length * 1.4));
     land.sort((p, q) => ((p.x - cx) * sx + (p.y - cy) * sy) - ((q.x - cx) * sx + (q.y - cy) * sy));
-    const rows = Math.ceil(land.length / per);
+    const rows = Math.ceil(land.length / per), cover = coverPoints(S.map), given = new Set();
     land.forEach((u, i) => {
       const row = i % rows, col = i / rows | 0;
       const ox = (col - (Math.ceil(land.length / rows) - 1) / 2) * spacing, oy = -(row - (rows - 1) / 2) * spacing;
       let px = x + sx * ox + fx * oy, py = y + sy * ox + fy * oy;
       const cls = clsOf(u);
-      if (blocked(S, cls, cellOf(px, py))) {
+      // A squad whose place falls by a cover point is sent to the point itself, so an order to a point is enough.
+      let ci = u.d.men ? coverNear(S.map, px, py, 1.5, given) : -1;
+      if (ci >= 0 && blocked(S, cls, cellOf(cover[ci].x, cover[ci].y))) ci = -1;
+      if (ci >= 0) { given.add(ci); px = cover[ci].x; py = cover[ci].y; }
+      else if (blocked(S, cls, cellOf(px, py))) {
         const c = goalCells(S, cls, clamp(px | 0, 0, W - 1), clamp(py | 0, 0, H - 1))[0];
         px = c % W + 0.5; py = (c / W | 0) + 0.5;
       }
       u.ord = { t: attack ? 'amove' : 'move', x: px, y: py };
+      if (ci >= 0) { u.ord.cov = ci; u.ord.stop = 0.15; }
       u.home = null; u.stuck = 0; u.wpT = 0;
       if (!attack) u.tgt = 0;
     });
@@ -2777,6 +2879,7 @@ const Rules = (() => {
     mulberry, noiser, clamp, lerp, smooth, angleTo, toXY, toUV, gap, setSize, save, load, hashOf, restartSlot, razeSlot, makeMap, layoutFor,
     msin, mcos, matan2, mhypot,
     BRIDGE_HP, SPELL, weatherAt, sky, dayAt, spellOf, bridgeAt, clsOf, houseHp, hurtBridge, ignite, shielded,
+    coverPoints, coverNear, COVER_R, COVER_ARC,
   };
 })();
 if (typeof module !== 'undefined') module.exports = Rules;
@@ -2933,6 +3036,88 @@ const AI = (() => {
     return army.filter(u => !busy.has(u.id));
   }
 
+  // Cover. Infantry sent to hold a place take its free cover points, nearest the place first, among those that
+  // face the threat. Each squad gets its own order, which the rules settle on the point. Says who was placed.
+  const COVER_FACE = 1.4;
+  function toCover(S, me, squads, x, y, tx, ty, r, most) {
+    if (!squads.length || most <= 0) return [];
+    const pts = R.coverPoints(S.map), taken = new Set();
+    for (const e of S.ents) if (e.team === me.team && !e.b && e.hp > 0 && e.d.men) { if (e.cov >= 0) taken.add(e.cov); if (e.ord && e.ord.cov >= 0) taken.add(e.ord.cov); }
+    const open = [];
+    pts.forEach((p, i) => {
+      if (taken.has(i)) return;
+      const d = Math.hypot(p.x - x, p.y - y);
+      if (d > r || (p.kind !== 'crest' && Math.abs(R.angleTo(p.dir, Math.atan2(ty - p.y, tx - p.x))) > COVER_FACE)) return;
+      open.push([d, i]);
+    });
+    open.sort((p, q) => p[0] - q[0]);
+    const left = squads.slice(), placed = [];
+    for (const [, i] of open) {
+      if (!left.length || placed.length >= most) break;
+      const p = pts[i];
+      let bi = 0, bd = Infinity;
+      left.forEach((u, k) => { const d = Math.hypot(u.x - p.x, u.y - p.y); if (d < bd) { bd = d; bi = k; } });
+      const u = left.splice(bi, 1)[0];
+      R.push(S, me.team, { c: 'move', ids: [u.id], x: p.x, y: p.y });
+      placed.push(u);
+    }
+    return placed;
+  }
+  // Where the threat to a place is: the middle of the enemies seen near it, else the foe's base.
+  function threatAt(S, me, x, y) {
+    let n = 0, sx = 0, sy = 0;
+    for (const e of S.ents) if (e.team !== me.team && !e.b && e.hp > 0 && Math.hypot(e.x - x, e.y - y) < 18 && R.seenBy(S, me.team, e) && !R.shielded(S, e.team)) { n++; sx += e.x; sy += e.y; }
+    if (n) return [sx / n, sy / n];
+    const foe = foeOf(S, me);
+    return foe >= 0 ? S.bases[foe] : [S.map.W / 2, S.map.H / 2];
+  }
+  // A town on the commander's own side of the field, nearer its base than the foe's.
+  function homeTown(S, me, t) {
+    const b = S.bases[me.team], foe = foeOf(S, me), fb = foe >= 0 ? S.bases[foe] : [S.map.W / 2, S.map.H / 2];
+    return Math.hypot(t.x - b[0], t.y - b[1]) < Math.hypot(t.x - fb[0], t.y - fb[1]);
+  }
+  // After a capture a rifle squad stays at a home town, in cover facing the enemy, and is left out of the army.
+  // Towns on the enemy's side are not held, since a squad left there is only lost to the next wave.
+  const GARRISON = 1;
+  function garrison(S, me, army) {
+    const foe = foeOf(S, me), fb = foe >= 0 ? S.bases[foe] : [S.map.W / 2, S.map.H / 2], keep = new Set();
+    for (const t of S.towns) {
+      if (t.owner !== me.team || !homeTown(S, me, t)) continue;
+      const here = army.filter(u => u.d.capture && Math.hypot(u.x - t.x, u.y - t.y) < 12);
+      const held = here.filter(u => u.cov >= 0 || (u.ord && u.ord.cov >= 0)).slice(0, GARRISON);
+      for (const u of held) keep.add(u.id);
+      const idle = here.filter(u => !keep.has(u.id) && !u.ord && !u.tgt);
+      for (const u of toCover(S, me, idle, t.x, t.y, fb[0], fb[1], 9, GARRISON - held.length)) keep.add(u.id);
+    }
+    me.garrisoned = keep.size;
+    return keep.size ? army.filter(u => !keep.has(u.id)) : army;
+  }
+  // A home town of its own being taken draws the idle infantry near it into cover facing the attackers.
+  function defendTowns(S, me, fight) {
+    for (const t of S.towns) {
+      if (t.owner !== me.team || t.capTeam < 0 || t.capTeam === me.team || !(t.cap > 0) || !homeTown(S, me, t)) continue;
+      const dt = u => Math.hypot(u.x - t.x, u.y - t.y);
+      const idle = fight.filter(u => u.d.men && !u.ord && !u.tgt && dt(u) < 40 && !(u.cov >= 0 && dt(u) < 12));
+      const [tx, ty] = threatAt(S, me, t.x, t.y);
+      toCover(S, me, idle, t.x, t.y, tx, ty, 10, 3);
+    }
+  }
+  // Enemies seen at a bridge near home draw a squad to the bridge's end on its own side.
+  function defendBridges(S, me, fight) {
+    const b = S.bases[me.team];
+    S.map.bridges.forEach((m, i) => {
+      if (S.bridges[i].hp <= 0) return;
+      const mx = (m.x0 + m.x1) / 2, my = (m.y0 + m.y1) / 2;
+      if (Math.hypot(mx - b[0], my - b[1]) > 60) return;
+      if (!S.ents.some(e => e.team !== me.team && !e.b && e.hp > 0 && !R.isAir(e) && Math.hypot(e.x - mx, e.y - my) < 14 && R.seenBy(S, me.team, e) && !R.shielded(S, e.team))) return;
+      const home = Math.hypot(m.x0 - b[0], m.y0 - b[1]) < Math.hypot(m.x1 - b[0], m.y1 - b[1]);
+      const end = home ? [m.x0 - m.ux * 2.2, m.y0 - m.uy * 2.2] : [m.x1 + m.ux * 2.2, m.y1 + m.uy * 2.2];
+      const de = u => Math.hypot(u.x - end[0], u.y - end[1]);
+      const idle = fight.filter(u => u.d.men && !u.ord && !u.tgt && de(u) < 40 && !(u.cov >= 0 && de(u) < 3));
+      toCover(S, me, idle, end[0], end[1], mx, my, 3, 1);
+    });
+  }
+
   // The nearest thing of the enemy's worth going to. Its base if nothing is closer.
   function pickTarget(S, me) {
     const foe = foeOf(S, me);
@@ -3023,18 +3208,26 @@ const AI = (() => {
     powers(S, me, P);
 
     let army = S.ents.filter(e => e.team === team && !e.b && !e.d.cargo && !e.d.repair && !e.d.engineer && e.drop <= 0);
+    army = garrison(S, me, army);
     army = towns(S, me, army);
     const fight = army.filter(u => !(u.ord && u.ord.t === 'capture') && u.d.move !== 'jet');
     const strength = fight.reduce((a, u) => a + value(u), 0);
     const foeTeam = foeOf(S, me), b = S.bases[team], foe = foeTeam >= 0 ? S.bases[foeTeam] : [S.map.W / 2, S.map.H / 2], m = (S.tick - me.startTick) / HZ;
 
-    // Trouble at home calls everyone back.
+    // Trouble at home calls everyone back. Infantry go to cover round the building, facing the attackers, and
+    // the rest straight at them.
     let trouble = null;
     for (const e of S.ents) if (e.team === team && e.b && S.tick - e.under < 3 * HZ && e.under) { trouble = e; break; }
     if (trouble) {
-      const ids = fight.filter(u => !u.tgt && Math.hypot(u.x - trouble.x, u.y - trouble.y) > 10).slice(0, 10 * me.D.apm).map(u => u.id);
+      const far = u => Math.hypot(u.x - trouble.x, u.y - trouble.y) > 10;
+      const called = fight.filter(u => !u.tgt && !(u.ord && u.ord.cov >= 0) && (far(u) || (u.d.men && !u.ord && u.cov < 0))).slice(0, 10 * me.D.apm);
+      const [tx, ty] = threatAt(S, me, trouble.x, trouble.y);
+      const held = new Set(toCover(S, me, called.filter(u => u.d.men), trouble.x, trouble.y, tx, ty, 10, 10 * me.D.apm).map(u => u.id));
+      const ids = called.filter(u => !held.has(u.id) && far(u)).map(u => u.id);
       if (ids.length) R.push(S, team, { c: 'move', ids, x: trouble.x, y: trouble.y, a: true });
     }
+    defendTowns(S, me, fight);
+    defendBridges(S, me, fight);
 
     if (me.state === 'attack') {
       if (strength < me.startStrength * 0.3 || !fight.length) {
@@ -3052,7 +3245,11 @@ const AI = (() => {
     }
     me.gather = [R.lerp(b[0], foe[0], 0.22), R.lerp(b[1], foe[1], 0.22)];
     if (S.tick % (8 * HZ) < me.D.think * HZ) {
-      const ids = fight.filter(u => !u.ord && !u.tgt && Math.hypot(u.x - me.gather[0], u.y - me.gather[1]) > 8).map(u => u.id);
+      // Infantry wait in cover round the gathering place, facing the enemy, and the rest in the open.
+      const dg = u => Math.hypot(u.x - me.gather[0], u.y - me.gather[1]);
+      const idle = fight.filter(u => !u.ord && !u.tgt && (dg(u) > 8 || (u.d.men && u.cov < 0)) && !(u.cov >= 0 && dg(u) < 16));
+      const held = new Set(toCover(S, me, idle.filter(u => u.d.men), me.gather[0], me.gather[1], foe[0], foe[1], 12, 10 * me.D.apm).map(u => u.id));
+      const ids = idle.filter(u => !held.has(u.id) && dg(u) > 8).map(u => u.id);
       if (ids.length) R.push(S, team, { c: 'move', ids, x: me.gather[0], y: me.gather[1], a: true });
     }
     const need = me.D.wave + me.D.grow * me.waves;
@@ -7687,35 +7884,8 @@ const Hud = (() => {
       // 24 Fragments: small asterisks flung outward, the pieces of what went up.
       24(R, k, grow, fade, seed, mz) { const rr = i => rnd(seed, i), n = mz ? 4 : 14; og.strokeStyle = INK_C; og.lineCap = 'round'; og.lineWidth = Math.max(0.8, R * 0.012); for (let i = 0; i < n; i++) { const a = rr(i) * 6.283, d = R * (0.5 + 0.9 * rr(i + 9)) * grow, s2 = R * (0.06 + 0.06 * rr(i + 19)), cx = Math.cos(a) * d, cy = Math.sin(a) * d * 0.8 - R * 0.3 * k; og.beginPath(); for (let j = 0; j < 3; j++) { const b = j * 1.047 + rr(i + 29); og.moveTo(cx - Math.cos(b) * s2, cy - Math.sin(b) * s2); og.lineTo(cx + Math.cos(b) * s2, cy + Math.sin(b) * s2); } og.stroke(); } },
     };
-    // A study of fixed points for orders, after Rainbow Six: the places on the land a squad would be sent to hold,
-    // found once from the map. Each has a kind, and a way it faces.
-    let tacCache = null;
-    function tacPoints(s) {
-      const M = s.map;
-      if (tacCache && tacCache.seed === M.seed) return tacCache.pts;
-      const pts = [], put = (x, y, kind, dir) => { if (x > 1 && y > 1 && x < W - 1 && y < H - 1) pts.push({ x, y, kind, dir }); };
-      // The corners of each house's yard, where a wall or fence gives cover on two sides.
-      for (const h of M.houses) for (const [cx, cy, dx, dy] of [[h.x, h.y, -1, -1], [h.x + h.w, h.y, 1, -1], [h.x + h.w, h.y + h.h, 1, 1], [h.x, h.y + h.h, -1, 1]]) put(cx + dx * 1.6, cy + dy * 1.6, 'wall', Math.atan2(dy, dx));
-      // Both ends of every bridge, and both banks of every ford.
-      for (const b of M.bridges) { put(b.x0 - b.ux * 2.2, b.y0 - b.uy * 2.2, 'bridge', Math.atan2(b.uy, b.ux)); put(b.x1 + b.ux * 2.2, b.y1 + b.uy * 2.2, 'bridge', Math.atan2(-b.uy, -b.ux)); }
-      for (const [fx, fy, dx, dy] of M.fords) { put(fx + dx * 3.6, fy + dy * 3.6, 'ford', Math.atan2(-dy, -dx)); put(fx - dx * 3.6, fy - dy * 3.6, 'ford', Math.atan2(dy, dx)); }
-      // The edge of a wood: a tree with few neighbours on one side, kept a stride apart from the next.
-      const trees = M.scatter.filter(o => o.k === 'tree'), edge = [];
-      for (const t of trees) {
-        let n = 0, sx = 0, sy = 0;
-        for (const u of trees) if (u !== t && Math.hypot(u.x - t.x, u.y - t.y) < 3.4) { n++; sx += u.x - t.x; sy += u.y - t.y; }
-        if (n >= 1 && n <= 4 && !edge.some(e => Math.hypot(e.x - t.x, e.y - t.y) < 3.5)) { const a = Math.atan2(-sy, -sx); edge.push(t); put(t.x + Math.cos(a) * 1.4, t.y + Math.sin(a) * 1.4, 'wood', a); }
-      }
-      for (const r of M.scatter) if (r.k === 'rock' && r.s > 0.9) put(r.x + 1.2, r.y + 1.0, 'rock', 0.8);
-      // Crests: a spot higher than all the ground within six strides, by more than a man's height.
-      for (let y = 4; y < H - 4; y += 3) for (let x = 4; x < W - 4; x += 3) {
-        const h0 = terrainAt(M, x, y); let top = true, low = h0;
-        for (let dy = -6; dy <= 6 && top; dy += 2) for (let dx = -6; dx <= 6; dx += 2) { if (!dx && !dy) continue; const h = terrainAt(M, clamp(x + dx, 0, W), clamp(y + dy, 0, H)); if (h > h0) { top = false; break; } low = Math.min(low, h); }
-        if (top && h0 - low > 0.9 && h0 > s.map.water + 0.5) put(x, y, 'crest', 0);
-      }
-      tacCache = { seed: M.seed, pts };
-      return pts;
-    }
+    // The cover points the rules hold, one list a map, with a kind and the way each faces.
+    const tacPoints = s => Rules.coverPoints(s.map);
     const TAC_NAMES = { wall: 'hold the yard corner', bridge: 'hold the bridge end', ford: 'cover the ford', wood: 'lie in the tree line', rock: 'take cover at the rock', crest: 'overwatch from the crest' };
     function tacSymbol(kind, px, py, r, dir) {
       og.beginPath();

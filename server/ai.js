@@ -148,6 +148,88 @@ const AI = (() => {
     return army.filter(u => !busy.has(u.id));
   }
 
+  // Cover. Infantry sent to hold a place take its free cover points, nearest the place first, among those that
+  // face the threat. Each squad gets its own order, which the rules settle on the point. Says who was placed.
+  const COVER_FACE = 1.4;
+  function toCover(S, me, squads, x, y, tx, ty, r, most) {
+    if (!squads.length || most <= 0) return [];
+    const pts = R.coverPoints(S.map), taken = new Set();
+    for (const e of S.ents) if (e.team === me.team && !e.b && e.hp > 0 && e.d.men) { if (e.cov >= 0) taken.add(e.cov); if (e.ord && e.ord.cov >= 0) taken.add(e.ord.cov); }
+    const open = [];
+    pts.forEach((p, i) => {
+      if (taken.has(i)) return;
+      const d = Math.hypot(p.x - x, p.y - y);
+      if (d > r || (p.kind !== 'crest' && Math.abs(R.angleTo(p.dir, Math.atan2(ty - p.y, tx - p.x))) > COVER_FACE)) return;
+      open.push([d, i]);
+    });
+    open.sort((p, q) => p[0] - q[0]);
+    const left = squads.slice(), placed = [];
+    for (const [, i] of open) {
+      if (!left.length || placed.length >= most) break;
+      const p = pts[i];
+      let bi = 0, bd = Infinity;
+      left.forEach((u, k) => { const d = Math.hypot(u.x - p.x, u.y - p.y); if (d < bd) { bd = d; bi = k; } });
+      const u = left.splice(bi, 1)[0];
+      R.push(S, me.team, { c: 'move', ids: [u.id], x: p.x, y: p.y });
+      placed.push(u);
+    }
+    return placed;
+  }
+  // Where the threat to a place is: the middle of the enemies seen near it, else the foe's base.
+  function threatAt(S, me, x, y) {
+    let n = 0, sx = 0, sy = 0;
+    for (const e of S.ents) if (e.team !== me.team && !e.b && e.hp > 0 && Math.hypot(e.x - x, e.y - y) < 18 && R.seenBy(S, me.team, e) && !R.shielded(S, e.team)) { n++; sx += e.x; sy += e.y; }
+    if (n) return [sx / n, sy / n];
+    const foe = foeOf(S, me);
+    return foe >= 0 ? S.bases[foe] : [S.map.W / 2, S.map.H / 2];
+  }
+  // A town on the commander's own side of the field, nearer its base than the foe's.
+  function homeTown(S, me, t) {
+    const b = S.bases[me.team], foe = foeOf(S, me), fb = foe >= 0 ? S.bases[foe] : [S.map.W / 2, S.map.H / 2];
+    return Math.hypot(t.x - b[0], t.y - b[1]) < Math.hypot(t.x - fb[0], t.y - fb[1]);
+  }
+  // After a capture a rifle squad stays at a home town, in cover facing the enemy, and is left out of the army.
+  // Towns on the enemy's side are not held, since a squad left there is only lost to the next wave.
+  const GARRISON = 1;
+  function garrison(S, me, army) {
+    const foe = foeOf(S, me), fb = foe >= 0 ? S.bases[foe] : [S.map.W / 2, S.map.H / 2], keep = new Set();
+    for (const t of S.towns) {
+      if (t.owner !== me.team || !homeTown(S, me, t)) continue;
+      const here = army.filter(u => u.d.capture && Math.hypot(u.x - t.x, u.y - t.y) < 12);
+      const held = here.filter(u => u.cov >= 0 || (u.ord && u.ord.cov >= 0)).slice(0, GARRISON);
+      for (const u of held) keep.add(u.id);
+      const idle = here.filter(u => !keep.has(u.id) && !u.ord && !u.tgt);
+      for (const u of toCover(S, me, idle, t.x, t.y, fb[0], fb[1], 9, GARRISON - held.length)) keep.add(u.id);
+    }
+    me.garrisoned = keep.size;
+    return keep.size ? army.filter(u => !keep.has(u.id)) : army;
+  }
+  // A home town of its own being taken draws the idle infantry near it into cover facing the attackers.
+  function defendTowns(S, me, fight) {
+    for (const t of S.towns) {
+      if (t.owner !== me.team || t.capTeam < 0 || t.capTeam === me.team || !(t.cap > 0) || !homeTown(S, me, t)) continue;
+      const dt = u => Math.hypot(u.x - t.x, u.y - t.y);
+      const idle = fight.filter(u => u.d.men && !u.ord && !u.tgt && dt(u) < 40 && !(u.cov >= 0 && dt(u) < 12));
+      const [tx, ty] = threatAt(S, me, t.x, t.y);
+      toCover(S, me, idle, t.x, t.y, tx, ty, 10, 3);
+    }
+  }
+  // Enemies seen at a bridge near home draw a squad to the bridge's end on its own side.
+  function defendBridges(S, me, fight) {
+    const b = S.bases[me.team];
+    S.map.bridges.forEach((m, i) => {
+      if (S.bridges[i].hp <= 0) return;
+      const mx = (m.x0 + m.x1) / 2, my = (m.y0 + m.y1) / 2;
+      if (Math.hypot(mx - b[0], my - b[1]) > 60) return;
+      if (!S.ents.some(e => e.team !== me.team && !e.b && e.hp > 0 && !R.isAir(e) && Math.hypot(e.x - mx, e.y - my) < 14 && R.seenBy(S, me.team, e) && !R.shielded(S, e.team))) return;
+      const home = Math.hypot(m.x0 - b[0], m.y0 - b[1]) < Math.hypot(m.x1 - b[0], m.y1 - b[1]);
+      const end = home ? [m.x0 - m.ux * 2.2, m.y0 - m.uy * 2.2] : [m.x1 + m.ux * 2.2, m.y1 + m.uy * 2.2];
+      const de = u => Math.hypot(u.x - end[0], u.y - end[1]);
+      const idle = fight.filter(u => u.d.men && !u.ord && !u.tgt && de(u) < 40 && !(u.cov >= 0 && de(u) < 3));
+      toCover(S, me, idle, end[0], end[1], mx, my, 3, 1);
+    });
+  }
+
   // The nearest thing of the enemy's worth going to. Its base if nothing is closer.
   function pickTarget(S, me) {
     const foe = foeOf(S, me);
@@ -238,18 +320,26 @@ const AI = (() => {
     powers(S, me, P);
 
     let army = S.ents.filter(e => e.team === team && !e.b && !e.d.cargo && !e.d.repair && !e.d.engineer && e.drop <= 0);
+    army = garrison(S, me, army);
     army = towns(S, me, army);
     const fight = army.filter(u => !(u.ord && u.ord.t === 'capture') && u.d.move !== 'jet');
     const strength = fight.reduce((a, u) => a + value(u), 0);
     const foeTeam = foeOf(S, me), b = S.bases[team], foe = foeTeam >= 0 ? S.bases[foeTeam] : [S.map.W / 2, S.map.H / 2], m = (S.tick - me.startTick) / HZ;
 
-    // Trouble at home calls everyone back.
+    // Trouble at home calls everyone back. Infantry go to cover round the building, facing the attackers, and
+    // the rest straight at them.
     let trouble = null;
     for (const e of S.ents) if (e.team === team && e.b && S.tick - e.under < 3 * HZ && e.under) { trouble = e; break; }
     if (trouble) {
-      const ids = fight.filter(u => !u.tgt && Math.hypot(u.x - trouble.x, u.y - trouble.y) > 10).slice(0, 10 * me.D.apm).map(u => u.id);
+      const far = u => Math.hypot(u.x - trouble.x, u.y - trouble.y) > 10;
+      const called = fight.filter(u => !u.tgt && !(u.ord && u.ord.cov >= 0) && (far(u) || (u.d.men && !u.ord && u.cov < 0))).slice(0, 10 * me.D.apm);
+      const [tx, ty] = threatAt(S, me, trouble.x, trouble.y);
+      const held = new Set(toCover(S, me, called.filter(u => u.d.men), trouble.x, trouble.y, tx, ty, 10, 10 * me.D.apm).map(u => u.id));
+      const ids = called.filter(u => !held.has(u.id) && far(u)).map(u => u.id);
       if (ids.length) R.push(S, team, { c: 'move', ids, x: trouble.x, y: trouble.y, a: true });
     }
+    defendTowns(S, me, fight);
+    defendBridges(S, me, fight);
 
     if (me.state === 'attack') {
       if (strength < me.startStrength * 0.3 || !fight.length) {
@@ -267,7 +357,11 @@ const AI = (() => {
     }
     me.gather = [R.lerp(b[0], foe[0], 0.22), R.lerp(b[1], foe[1], 0.22)];
     if (S.tick % (8 * HZ) < me.D.think * HZ) {
-      const ids = fight.filter(u => !u.ord && !u.tgt && Math.hypot(u.x - me.gather[0], u.y - me.gather[1]) > 8).map(u => u.id);
+      // Infantry wait in cover round the gathering place, facing the enemy, and the rest in the open.
+      const dg = u => Math.hypot(u.x - me.gather[0], u.y - me.gather[1]);
+      const idle = fight.filter(u => !u.ord && !u.tgt && (dg(u) > 8 || (u.d.men && u.cov < 0)) && !(u.cov >= 0 && dg(u) < 16));
+      const held = new Set(toCover(S, me, idle.filter(u => u.d.men), me.gather[0], me.gather[1], foe[0], foe[1], 12, 10 * me.D.apm).map(u => u.id));
+      const ids = idle.filter(u => !held.has(u.id) && dg(u) > 8).map(u => u.id);
       if (ids.length) R.push(S, team, { c: 'move', ids, x: me.gather[0], y: me.gather[1], a: true });
     }
     const need = me.D.wave + me.D.grow * me.waves;
