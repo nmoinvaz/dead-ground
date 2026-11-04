@@ -5710,9 +5710,19 @@ const World = (() => {
       life = { herds: [], cars: [], folk: [], boats: [], flocks: [], birds: [], alarm: [], danger: [], scanT: 0, deerM: mk(sc.deer, 60), carM: mk(sc.car, 32), folkM: mk(sc.folk, 200), boatM: mk(sc.boat, 12) };
       for (let i = 0; i < Math.round(4 * scale); i++) { const p = meadow(); if (p) life.herds.push(newHerd(p)); }
       for (let i = 0; i < Math.round(3 * scale); i++) { const p = meadow(true); if (p) life.flocks.push(newFlock(p)); }
-      life.roads = M.roads.map(r => { const L = [0]; for (let k = 1; k < r.length; k++) L.push(L[k - 1] + Math.hypot(r[k][0] - r[k - 1][0], r[k][1] - r[k - 1][1])); return { pts: r, L, len: L[L.length - 1] }; }).filter(r => r.len > 14);
-      const CARS = [0xb8402e, 0x2f5a8a, 0xe8e0cc, 0x5d7a46, 0x3a3a3a, 0xe0b040];
-      for (let i = 0; i < Math.min(life.roads.length, Math.round(8 * scale)); i++) { const r = life.roads[(i * 7) % life.roads.length]; life.cars.push({ r, s: R() * r.len, dir: R() < 0.5 ? 1 : -1, v: 0, wait: R() * 3, col: CARS[i % CARS.length], x: r.pts[0][0], y: r.pts[0][1], a: 0, turn: false }); }
+      // The roads come in pieces that meet at junctions and at the ends of bridges. Each piece knows which others
+      // begin or end within a stride of each of its ends, so a car can drive on from one to the next.
+      life.roads = M.roads.map(r => { const L = [0]; for (let k = 1; k < r.length; k++) L.push(L[k - 1] + Math.hypot(r[k][0] - r[k - 1][0], r[k][1] - r[k - 1][1])); return { pts: r, L, len: L[L.length - 1], on: [[], []] }; }).filter(r => r.len > 1);
+      for (const r of life.roads) for (let e = 0; e < 2; e++) {
+        const p = e ? r.pts[r.pts.length - 1] : r.pts[0];
+        for (const q of life.roads) if (q !== r) {
+          if (Math.hypot(q.pts[0][0] - p[0], q.pts[0][1] - p[1]) < 1.5) r.on[e].push({ r: q, s: 0, dir: 1 });
+          const z = q.pts[q.pts.length - 1];
+          if (Math.hypot(z[0] - p[0], z[1] - p[1]) < 1.5) r.on[e].push({ r: q, s: q.len, dir: -1 });
+        }
+      }
+      const CARS = [0xb8402e, 0x2f5a8a, 0xe8e0cc, 0x5d7a46, 0x3a3a3a, 0xe0b040], long = life.roads.filter(r => r.len > 14);
+      for (let i = 0; i < Math.min(long.length, Math.round(8 * scale)); i++) { const r = long[(i * 7) % long.length]; life.cars.push({ r, s: R() * r.len, dir: R() < 0.5 ? 1 : -1, v: 0, wait: R() * 3, col: CARS[i % CARS.length], x: r.pts[0][0], y: r.pts[0][1], a: 0, turn: false }); }
       const SHIRTS = [0xf4f0e4, 0xc84a3a, 0x5a7ab0, 0xe0c060, 0x7a9a5a, 0xd8a0a0];
       M.towns.forEach((t, ti) => { for (let k = 0; k < 5; k++) life.folk.push({ town: ti, x: t.x + (R() - 0.5) * 5, y: t.y + (R() - 0.5) * 5, tx: t.x, ty: t.y, v: 0, wait: R() * 4, hide: 0, col: SHIRTS[(ti * 5 + k) % SHIRTS.length], a: R() * 6.28, ph: R() * 6 }); });
       for (let tries = 0; life.boats.length < Math.round(2 * scale) && tries < 4000; tries++) {
@@ -5792,18 +5802,33 @@ const World = (() => {
         }
       }
       // Cars run up and down the roads, stop for what is in the way, and turn back from fighting and broken bridges.
+      // On a bridge a car drives on to the end rather than turning, and one blocked for long turns back.
       for (const c of L.cars) {
         if (c.wait > 0) { c.wait -= dt; c.v = 0; continue; }
         const [x, y, a] = roadAt(c.r, c.s), ah = c.dir > 0 ? a : a + Math.PI;
         c.x = x + Math.sin(ah) * 0.55; c.y = y - Math.cos(ah) * 0.55; c.a = ah;
-        const [nx, ny] = roadAt(c.r, c.s + c.dir * 1.6);
-        if (c.turn || heightAt(M, nx, ny) < M.water + 0.3) { c.turn = false; c.dir *= -1; c.wait = 1 + Math.random() * 2; continue; }
+        const [nx, ny] = roadAt(c.r, c.s + c.dir * 1.6), onBridge = Rules.bridgeAt(S, x, y) >= 0;
+        // A car on a bridge that falls goes with it, and comes back on another road later.
+        if (onBridge && heightAt(M, x, y) < M.water + 0.3) {
+          const rs = L.roads.filter(q => q.len > 14), r = rs[Math.floor(Math.random() * rs.length)], s2 = Math.random() * r.len, [rx, ry] = roadAt(r, s2);
+          Object.assign(c, { r, s: s2, x: rx, y: ry, dir: Math.random() < 0.5 ? 1 : -1, v: 0, wait: 20 + Math.random() * 20, turn: false, held: 0 });
+          continue;
+        }
+        if (!onBridge && (c.turn || heightAt(M, nx, ny) < M.water + 0.3)) { c.turn = false; c.dir *= -1; c.wait = 1 + Math.random() * 2; continue; }
+        c.turn = false;
         let block = false;
         const bx = c.x + Math.cos(ah) * 2, by = c.y + Math.sin(ah) * 2;
         Rules.near(S, bx, by, 2.6, u => { if (u.hp > 0 && !u.b && !Rules.isAir(u) && Math.hypot(u.x - bx, u.y - by) < 2.2) block = true; });
+        c.held = block ? (c.held || 0) + dt : 0;
+        if (c.held > 6 && !onBridge) { c.held = 0; c.dir *= -1; c.wait = 1 + Math.random() * 2; continue; }
         c.v += ((block ? 0 : 3.4) - c.v) * Math.min(1, dt * (block ? 6 : 1.4));
         c.s += c.dir * c.v * dt;
-        if (c.s <= 0 || c.s >= c.r.len) { c.s = clamp(c.s, 0, c.r.len); c.dir *= -1; c.wait = 2 + Math.random() * 4; }
+        if (c.s <= 0 || c.s >= c.r.len) {
+          // At the end of a piece a car drives on along one that joins it, and only turns back at a dead end.
+          const on = c.r.on[c.s <= 0 ? 0 : 1], over = Math.max(0, c.s <= 0 ? -c.s : c.s - c.r.len);
+          if (on.length) { const j = on[Math.floor(Math.random() * on.length)]; c.r = j.r; c.dir = j.dir; c.s = clamp(j.s + j.dir * over, 0, j.r.len); }
+          else { c.s = clamp(c.s, 0, c.r.len); c.dir *= -1; c.wait = 2 + Math.random() * 4; }
+        }
       }
       // Townsfolk stroll between the houses and go indoors when soldiers come, at night and in a storm.
       for (const f of L.folk) {
