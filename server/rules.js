@@ -981,6 +981,13 @@ const Rules = (() => {
     for (const s of S.sweeps) if (s.until > S.tick) light(S.P[s.team], s.x, s.y, s.r, 0, true);
     // A unit or building that has fired lately is seen by the side it fired on, wherever it stands, by its flash.
     for (const e of S.ents) if (e.hp > 0 && e.firedUntil > S.tick && S.P[e.firedOn]) light(S.P[e.firedOn], e.x, e.y, e.b ? Math.max(e.w, e.h) / 2 + 0.5 : 0.8, 0, true);
+    // The rays leave a lone cell dark here and there between them. A cell whose four neighbours are seen is seen.
+    for (const P of S.P) {
+      const vis = P.vis, seen = P.seen;
+      for (let y = 1; y < H - 1; y++) for (let x = 1, c = y * W + 1; x < W - 1; x++, c++) {
+        if (!vis[c] && vis[c - 1] && vis[c + 1] && vis[c - W] && vis[c + W]) { vis[c] = 1; seen[c] = 1; }
+      }
+    }
   }
 
   // Three ways of getting about: on foot, on wheels, and on tracks, which go through woods by flattening them.

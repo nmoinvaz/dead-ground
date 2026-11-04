@@ -1393,6 +1393,13 @@ const Rules = (() => {
     for (const s of S.sweeps) if (s.until > S.tick) light(S.P[s.team], s.x, s.y, s.r, 0, true);
     // A unit or building that has fired lately is seen by the side it fired on, wherever it stands, by its flash.
     for (const e of S.ents) if (e.hp > 0 && e.firedUntil > S.tick && S.P[e.firedOn]) light(S.P[e.firedOn], e.x, e.y, e.b ? Math.max(e.w, e.h) / 2 + 0.5 : 0.8, 0, true);
+    // The rays leave a lone cell dark here and there between them. A cell whose four neighbours are seen is seen.
+    for (const P of S.P) {
+      const vis = P.vis, seen = P.seen;
+      for (let y = 1; y < H - 1; y++) for (let x = 1, c = y * W + 1; x < W - 1; x++, c++) {
+        if (!vis[c] && vis[c - 1] && vis[c + 1] && vis[c - W] && vis[c + W]) { vis[c] = 1; seen[c] = 1; }
+      }
+    }
   }
 
   // Three ways of getting about: on foot, on wheels, and on tracks, which go through woods by flattening them.
@@ -4602,24 +4609,28 @@ if (typeof module !== 'undefined') module.exports = Looks;
             lineK = max(max(heavy, swell * (1.0 - step(0.6, a))), max(detail, max(edge * 0.55 * (1.0 - bankZone) * isG, max(rEdge * 0.9 * isG, bankL * step(0.001, dep + 0.05) * (isG + isW)))));
             // The washes: the land green, roads and bridge decks pink, water lilac with white ripples, canopies in
             // three greens, roofs cream and walls warm grey by which way they face.
-            vec3 base = mix(paperC, dk ? vec3(0.145, 0.155, 0.13) : SOFT_G, isG);
+            vec3 base = mix(paperC, dk ? vec3(0.2, 0.2, 0.195) : SOFT_G, isG);
             // Layer tints by height, pale green lowland to cream to tan upland, the slopes away from the light shaded
             // in a cool sepia and the slopes toward it lifted a little, and the contours in sepia. On dark paper the
-            // tints run from a green-grey lowland to a lighter warm upland, near grey so the paper stays clean.
+            // tints are greys, near black in the lowland to a mid grey upland, mottled in broad patches.
             vec3 tint = hyps < 0.5 ? mix(vec3(0.84, 0.90, 0.80), vec3(0.94, 0.93, 0.82), hyps * 2.0) : mix(vec3(0.94, 0.93, 0.82), vec3(0.88, 0.80, 0.64), hyps * 2.0 - 1.0);
-            if (dk) tint = hyps < 0.5 ? mix(vec3(0.13, 0.145, 0.125), vec3(0.155, 0.148, 0.128), hyps * 2.0) : mix(vec3(0.155, 0.148, 0.128), vec3(0.215, 0.19, 0.155), hyps * 2.0 - 1.0);
-            vec3 CONT = dk ? vec3(0.5, 0.43, 0.34) : vec3(0.42, 0.33, 0.24);
+            if (dk) {
+              tint = hyps < 0.5 ? mix(vec3(0.15, 0.155, 0.15), vec3(0.225, 0.225, 0.215), hyps * 2.0) : mix(vec3(0.225, 0.225, 0.215), vec3(0.34, 0.33, 0.31), hyps * 2.0 - 1.0);
+              tint *= 0.86 + 0.28 * (noise(Wl * 0.055) * 0.65 + noise(Wl * 0.16 + 5.0) * 0.35);
+            }
+            vec3 CONT = dk ? vec3(0.52, 0.5, 0.47) : vec3(0.42, 0.33, 0.24);
             // A road takes a third of the tint and the contours cross it faint, so it climbs and falls with the land
             // rather than lying flat over it.
             base = mix(base, tint, isG * (1.0 - onRoad * 0.65));
-            base = mix(base, base * vec3(0.72, 0.70, 0.68), rfDark * 0.65 * isG);
-            base = mix(base, dk ? base * 1.3 + 0.015 : min(base * 1.05 + 0.03, vec3(1.0)), rfLight * 0.6 * isG);
+            // On dark paper a shaded slope sinks toward black and a lit one rises toward mid grey.
+            base = mix(base, base * (dk ? vec3(0.42) : vec3(0.72, 0.70, 0.68)), rfDark * (dk ? 0.8 : 0.65) * isG);
+            base = mix(base, dk ? base + vec3(0.2, 0.2, 0.19) : min(base * 1.05 + 0.03, vec3(1.0)), rfLight * 0.6 * isG);
             base = mix(base, CONT, contour * isG * (1.0 - onRoad * 0.55) * (1.0 - wet));
             base = mix(base, base * vec3(0.9, 0.93, 0.97), uWet * isG * 0.7);
             // Tracks worn by traffic: beaten earth, and a hardened track drawn as a site plan draws a path, its edges
             // in dashed sepia.
             float trk = texture2D(tLand, vUv).a, onTrk = smoothstep(0.18, 0.4, trk) * (1.0 - onRoad) * isG;
-            base = mix(base, mix(base, dk ? vec3(0.2, 0.18, 0.15) : vec3(0.87, 0.83, 0.72), 0.8), onTrk);
+            base = mix(base, mix(base, dk ? vec3(0.3, 0.29, 0.275) : vec3(0.87, 0.83, 0.72), 0.8), onTrk);
             vec2 tg = vec2(dFdx(trk), dFdy(trk));
             float tgl = max(length(tg), 1e-4);
             // The dashes run along the edge on the land, measured from a corner near by so a slight turn of the edge
@@ -4627,10 +4638,10 @@ if (typeof module !== 'undefined') module.exports = Looks;
             vec2 tw = normalize(S2W * vec2(-tg.y, tg.x));
             float tPh = dot(Wl - floor(Wl / 3.0) * 3.0, tw) / (6.0 / 80.0 * exp2(gLm));
             float tEdge = (1.0 - smoothstep(0.35 * uK, 1.0 * uK, abs(trk - 0.8) / tgl)) * mix(step(0.45, fract(tPh)), step(0.45, fract(tPh * 0.5)), gLf);
-            base = mix(base, dk ? vec3(0.5, 0.44, 0.35) : vec3(0.42, 0.36, 0.28), tEdge * 0.8 * isG * (1.0 - onRoad));
+            base = mix(base, dk ? vec3(0.52, 0.5, 0.47) : vec3(0.42, 0.36, 0.28), tEdge * 0.8 * isG * (1.0 - onRoad));
             // Grass in tufts of three short strokes, leaning and stirring with the wind, thicker in the meadows.
             // Lying snow whitens the land, and the roads less.
-            base = mix(base, dk ? vec3(0.34, 0.35, 0.37) : vec3(0.975, 0.975, 0.965), uSnowC * isG * (1.0 - onRoad * 0.5));
+            base = mix(base, dk ? vec3(0.48, 0.49, 0.52) : vec3(0.975, 0.975, 0.965), uSnowC * isG * (1.0 - onRoad * 0.5));
             float rH = hatch(p, 60.0, 4.0, 0.8, 53.0, 0.1);
             // Roads in one of six colours: pink, sand, pale stone, bare paper, khaki or white.
             vec3 RC = uRoad == 0 ? PINK : uRoad == 1 ? vec3(0.886, 0.824, 0.675) : uRoad == 2 ? vec3(0.847, 0.835, 0.804) : uRoad == 3 ? paperC : uRoad == 4 ? vec3(0.812, 0.765, 0.573) : vec3(0.969, 0.961, 0.933);
@@ -4638,7 +4649,7 @@ if (typeof module !== 'undefined') module.exports = Looks;
             if (dk && uRoad != 3) RC *= 0.25;
             base = mix(base, mix(RC, RD, rH * 0.35), max(onRoad * isG, isBr) * 0.9);
             // On dark paper a bridge deck stands a little lighter than the land, as a roof does, not as a hole.
-            if (dk) base = mix(base, vec3(0.215, 0.2, 0.18), isBr * 0.9);
+            if (dk) base = mix(base, vec3(0.36, 0.35, 0.33), isBr * 0.9);
             // The road climbs and falls with the land: its relief shading and the contours carry across it.
             float onR = onRoad * isG * (1.0 - wet);
             base = mix(base, base * vec3(0.8, 0.78, 0.76), rfDark * 0.55 * onR);
@@ -4707,6 +4718,9 @@ if (typeof module !== 'undefined') module.exports = Looks;
               float tN = 1.0 - smoothstep(0.012, 0.025, abs(aN - 0.459));
               inkC = aN > 0.9 ? sideInk : aN > 0.62 ? bldI : tN > 0.5 ? treeI : isW > 0.5 ? waterI : landI;
             }
+            // On dark paper hatching is laid in a light grey, and only the outlines keep the inks. Units keep their
+            // side's ink throughout.
+            if (dk) inkC = mix(mix(vec3(0.6, 0.6, 0.585), inkC, isU), inkC, clamp(lineK / max(cover, 1e-3), 0.0, 1.0));
           } else {
             // Crow quill sketch: two loose passes of each line and quick scribbled hatching that turns from patch to patch.
             vec2 cell = floor(p / (26.0 * uK));
@@ -4728,8 +4742,8 @@ if (typeof module !== 'undefined') module.exports = Looks;
           else { cover *= 1.0 - lit; cover = max(cover, rim); }
           if (uFxs > 0.5 && uFxs < 1.5) cover *= 1.0 - fxSmk * 0.9;
           vec3 col = mix(uStyle == 8 ? baseC : paperC, inkC, clamp(cover, 0.0, 1.0));
-          // A flash is bare paper on light paper, and bright on dark as it heats, so a faint glint stays paper.
-          vec3 flashC = dk ? mix(paperC, vec3(0.98, 0.95, 0.86), smoothstep(0.45, 1.0, hn)) : paperC;
+          // A flash is bare paper on light paper, and bright on dark as it heats, so a faint glint keeps the wash under it.
+          vec3 flashC = dk ? mix(baseC, vec3(0.98, 0.95, 0.86), smoothstep(0.45, 1.0, hn)) : paperC;
           // Smoke as a grey wash and fire as a warm wash round a bare-paper core, for the washed effects.
           if (uFxs > 0.5 && uFxs < 1.5) {
             col = mix(col, vec3(0.56, 0.53, 0.49), fxSmk * 0.5);
@@ -4812,7 +4826,8 @@ if (typeof module !== 'undefined') module.exports = Looks;
             vec2 gd = vec2(A(vUv + k * vec2(2.5, 0)) - A(vUv - k * vec2(2.5, 0)), A(vUv + k * vec2(0, 2.5)) - A(vUv - k * vec2(0, 2.5)));
             if (length(gd) < 0.04) gd = e1;
             float dash = length(gd) > 0.02 ? step(0.42, fract(dot(p, normalize(vec2(-gd.y, gd.x))) / (6.5 * uK))) : step(0.35, hash(floor(p / (5.0 * uK)) + 17.0));
-            vec3 past = mix(paperC, baseC, 0.4);
+            // On dark paper what was keeps its grey a little dimmed, so it does not sink to black.
+            vec3 past = dk ? mix(vec3(dot(baseC, vec3(0.3, 0.59, 0.11))), baseC, 0.3) * 0.85 : mix(paperC, baseC, 0.4);
             past = mix(past, hue * 0.8, mark * 0.3);
             past = mix(past, dk ? vec3(0.5, 0.58, 0.74) : WAS, clamp(lineK, 0.0, 1.0) * dash * 0.75);
             col = mix(past, col, visE);
