@@ -6412,14 +6412,18 @@ const World = (() => {
       for (let i = 0; i < 8; i++) { const a = i / 8 * 6.28 + R() * 0.4; smoke.add(x, y + 0.1, z, Math.cos(a) * 3.4 * size, 0.25, Math.sin(a) * 3.4 * size, 1.6, size * 0.7, size * 2.6, [d[0], d[1], d[2], 0.42], [d[0], d[1], d[2], 0], i % 4, { drag: 2.6 }); }
       if (size >= 0.9) rings.add(x, y, z, size * 2.6, 0.5, new THREE.Color(...dustC()).multiplyScalar(0.9).getHex());
       flash(x, y, z, size * 30);
-      if (size > 1.5) cam.shake = Math.max(cam.shake, Math.min(0.8, size * 0.12));
+      if (size > 1.5) cam.shake = Math.max(cam.shake, Math.min(0.8, size * 0.12) * nearView(x, z));
     }
+    // How near a spot lies to the view, 1 within it and 0 beyond a view's width and a half from its middle, for
+    // the shakes and white-outs that should not reach a player looking elsewhere.
+    const nearView = (x, z) => clamp(1.5 - Math.hypot(x - cam.x, z - cam.y) / (cam.dist * 0.72), 0, 1);
     function bigBlast(x, y, z, size) {
-      // The thermobaric fireball, stem and cap.
+      // The thermobaric fireball, stem and cap. The white-out and the shake reach only a view near the blast.
+      const near = nearView(x, z);
       explosion(x, y, z, size * 0.5);
       flash(x, y, z, 900);
-      pp.grade.uniforms.uFlash.value = 0.5;
-      cam.shake = 1.4;
+      pp.grade.uniforms.uFlash.value = Math.max(pp.grade.uniforms.uFlash.value, 0.5 * near);
+      cam.shake = Math.max(cam.shake, 1.4 * near);
       const s = theme.smoke;
       for (let i = 0; i < 120; i++) {
         const a = Math.random() * 6.28, r = Math.random() * size * 0.6, up = 2 + Math.random() * size * 0.9;
