@@ -1,5 +1,6 @@
 #!/usr/bin/env python3
-"""Dead Ground's sounds, synthesized. Writes sfx/*.mp3 through ffmpeg. .venv/bin/python sfx.py"""
+"""Dead Ground's synthesized sounds, into sfx/*.mp3 through ffmpeg. .venv/bin/python sfx.py. The weapons, blasts and
+blades are recordings instead, cut by sfxrec.py."""
 import numpy as np, subprocess, os, wave
 from scipy.signal import butter, sosfilt
 
@@ -39,12 +40,6 @@ def write(name, x, peak=0.92):
     os.remove(tmp)
 
 shot = lambda d, lo, hi, k, f0, f1, tk, w=0.7: mix(band(noise(d), lo, hi) * env(d, 0.001, k), thump(d, f0, f1, tk) * w)
-write('rifle', tail(shot(0.12, 900, 6000, 38, 260, 90, 40, 0.5), 0.4, 0.2))
-write('hmg', tail(shot(0.16, 500, 4200, 28, 180, 60, 30, 0.9), 0.4, 0.22))
-write('auto', tail(shot(0.22, 300, 3200, 20, 140, 50, 22, 1.2), 0.5, 0.25))
-write('sniper', tail(shot(0.2, 1200, 7000, 30, 320, 90, 30, 0.6), 1.0, 0.35, 0.16))
-write('flak', tail(mix(shot(0.12, 600, 4000, 30, 200, 70, 30, 1), np.concatenate([np.zeros(int(SR * 0.07)), shot(0.12, 600, 4000, 30, 200, 70, 30, 1)])), 0.4, 0.2))
-write('cannon', tail(mix(band(noise(0.9), 120, 2500) * env(0.9, 0.001, 9), thump(0.9, 160, 38, 5) * 1.6, high(noise(0.05), 2000) * env(0.05, 0.0005, 60) * 0.6), 0.9, 0.3, 0.12))
 def whoosh(d, lo, hi, k):
     t = t_(d); x = noise(d); out = np.zeros_like(x)
     # A band that slides up as the motor lights, then fades away.
@@ -52,14 +47,8 @@ def whoosh(d, lo, hi, k):
         seg = band(x, a, b) * np.exp(-((t - d * i / 8) ** 2) / (2 * (d / 6) ** 2)); out += seg
     return out * np.minimum(1, t * 40) * np.exp(-t * k)
 write('missile', mix(whoosh(0.9, 400, 3500, 2.5), shot(0.1, 800, 5000, 40, 200, 80, 40, 0.5)))
-write('rocket', mix(whoosh(0.7, 300, 2600, 3), band(noise(0.7), 2000, 6000) * env(0.7, 0.005, 6) * 0.3 * (rng.random(int(SR * 0.7)) > 0.6)))
-t = t_(0.7); zap = np.sin(2 * np.pi * np.cumsum(2600 * np.exp(-t * 7) + 120) / SR)
-write('rail', mix(np.sign(zap) * env(0.7, 0.001, 5) * 0.5, band(noise(0.7), 1500, 9000) * env(0.7, 0.001, 9), thump(0.7, 200, 40, 6)))
 def boom(d, k, rumble, crack=0.5, f0=120, f1=30):
     return tail(mix(low(noise(d), 1400 if d < 1 else 900, 3) * env(d, 0.003, k), thump(d, f0, f1, k * 0.7) * rumble, high(noise(0.06), 1800) * env(0.06, 0.0005, 50) * crack, low(noise(d), 160, 2) * env(d, 0.01, k * 0.6) * rumble * 2), d * 0.6, 0.28, 0.14)
-write('boom_s', boom(0.5, 9, 0.6, 0.6))
-write('boom_m', boom(0.9, 5.5, 1.0, 0.5, 100, 28))
-write('boom_l', boom(1.6, 3, 1.4, 0.4, 80, 24))
 write('boom_x', boom(4.5, 0.9, 2.2, 0.3, 60, 18))
 write('scream', low(noise(0.18), 500) * env(0.18, 0.004, 26))
 write('click', band(noise(0.03), 2000, 6000) * env(0.03, 0.0005, 160) + np.sin(2 * np.pi * 1800 * t_(0.03)) * env(0.03, 0.0005, 120) * 0.5)
@@ -108,18 +97,6 @@ d = 5; t = t_(d)
 crack = band(noise(0.25), 400, 4000) * env(0.25, 0.001, 18) * 0.8
 roll = low(noise(d), 160, 2) * (np.minimum(1, t / 0.4) * np.exp(-t * 0.7)) * (0.7 + 0.3 * np.sin(2 * np.pi * t * 1.3))
 write('thunder', mix(pad(crack, d), roll * 2.2), 0.9)
-# The other ages' weapons. A bowstring's twang and the arrow's hiss.
-t = t_(0.35)
-write('bow', mix(np.sin(2 * np.pi * 190 * t) * np.exp(-t * 30) * 0.9, band(noise(0.35), 1200, 5000) * env(0.35, 0.02, 9) * 0.35))
-# Blade on blade: a few bright, unrelated tones that ring and die, over a hard click.
-t = t_(0.4)
-ring = sum(np.sin(2 * np.pi * f * t) * np.exp(-t * k) * a for f, k, a in [(2150, 14, 0.5), (3420, 18, 0.35), (5230, 24, 0.25), (1310, 10, 0.3)])
-write('clash', mix(ring, high(noise(0.03), 2500) * env(0.03, 0.0005, 120) * 0.8))
-# A musket: a deep, loose report with a long tail.
-write('musket', tail(shot(0.3, 300, 3500, 14, 140, 45, 14, 1.4), 0.7, 0.3, 0.12))
 # A catapult or trebuchet: the arm's wooden thump and the rope's rush.
 write('catapult', mix(thump(0.5, 130, 50, 10) * 1.2, low(noise(0.5), 600) * env(0.5, 0.003, 12) * 0.6, whoosh(0.5, 300, 1600, 5) * 0.5))
-# A pulse of light: a quick falling zap.
-t = t_(0.18)
-write('pulse', mix(np.sign(np.sin(2 * np.pi * np.cumsum(1800 * np.exp(-t * 14) + 380) / SR)) * env(0.18, 0.001, 18) * 0.4, band(noise(0.18), 2000, 8000) * env(0.18, 0.001, 30) * 0.3))
 print('wrote', len(os.listdir('sfx')), 'sounds')

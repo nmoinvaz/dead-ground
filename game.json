@@ -41,6 +41,7 @@
     "flak": "sfx/flak.mp3",
     "hmg": "sfx/hmg.mp3",
     "launch": "sfx/launch.mp3",
+    "longbow": "sfx/longbow.mp3",
     "lost": "sfx/lost.mp3",
     "missile": "sfx/missile.mp3",
     "music": "sfx/music.mp3",
@@ -55,7 +56,8 @@
     "sniper": "sfx/sniper.mp3",
     "thunder": "sfx/thunder.mp3",
     "wind": "sfx/wind.mp3",
-    "won": "sfx/won.mp3"
+    "won": "sfx/won.mp3",
+    "xbow": "sfx/xbow.mp3"
   },
   "out": "dist/index.html"
 }

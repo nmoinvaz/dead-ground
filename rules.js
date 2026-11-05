@@ -80,10 +80,10 @@ const Rules = (() => {
     bow: { r: 9, dmg: 8, cd: 1.1, fx: 'arrow', snd: 'bow', speed: 18, air: true, vs: { inf: 1, light: 0.55, heavy: 0.15, bld: 0.08, air: 0.5 } },
     horsebow: { r: 8, dmg: 7, cd: 0.9, fx: 'arrow', snd: 'bow', speed: 18, air: true, vs: { inf: 1, light: 0.5, heavy: 0.12, bld: 0.06, air: 0.4 } },
     javelin: { r: 6, dmg: 13, cd: 1.2, fx: 'arrow', snd: 'bow', speed: 15, vs: { inf: 1, light: 0.7, heavy: 0.25, bld: 0.1, air: 0 } },
-    xbow: { r: 9, dmg: 22, cd: 2, fx: 'arrow', snd: 'bow', speed: 26, air: true, vs: { inf: 0.8, light: 1, heavy: 0.6, bld: 0.15, air: 0.6 } },
-    longbow: { r: 13, dmg: 26, cd: 1.8, fx: 'arrow', snd: 'bow', speed: 22, vs: { inf: 1, light: 0.4, heavy: 0.1, bld: 0.05, air: 0.3 } },
+    xbow: { r: 9, dmg: 22, cd: 2, fx: 'arrow', snd: 'xbow', speed: 26, air: true, vs: { inf: 0.8, light: 1, heavy: 0.6, bld: 0.15, air: 0.6 } },
+    longbow: { r: 13, dmg: 26, cd: 1.8, fx: 'arrow', snd: 'longbow', speed: 22, vs: { inf: 1, light: 0.4, heavy: 0.1, bld: 0.05, air: 0.3 } },
     towerbow: { r: 11, dmg: 12, cd: 1, fx: 'arrow', snd: 'bow', speed: 20, air: true, vs: { inf: 1, light: 0.5, heavy: 0.15, bld: 0.1, air: 0.4 } },
-    ballista: { r: 13, dmg: 60, cd: 3.2, fx: 'arrow', snd: 'bow', speed: 26, vs: { inf: 0.5, light: 1, heavy: 0.8, bld: 0.5, air: 0 } },
+    ballista: { r: 13, dmg: 60, cd: 3.2, fx: 'arrow', snd: 'xbow', speed: 26, vs: { inf: 0.5, light: 1, heavy: 0.8, bld: 0.5, air: 0 } },
     // Black powder: shot that hits at once in a puff of white smoke.
     musket: { r: 7.5, dmg: 13, cd: 1.7, fx: 'bullet', snd: 'musket', smoke: true, air: true, vs: { inf: 1, light: 0.45, heavy: 0.12, bld: 0.12, air: 0.4 } },
     musketv: { r: 9, dmg: 22, cd: 1.6, fx: 'bullet', snd: 'musket', smoke: true, air: true, vs: { inf: 1, light: 0.45, heavy: 0.12, bld: 0.12, air: 0.4 } },

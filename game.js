@@ -255,7 +255,7 @@ const Game = (() => {
     }
 
     // Hands what the rules did to the picture, the sound and the reports.
-    const WSND = { rifle: ['rifle', 0.34, 0.04], hmg: ['hmg', 0.4, 0.06], auto: ['auto', 0.5, 0.08], cannon: ['cannon', 0.8, 0.06], flak: ['flak', 0.45, 0.08], missile: ['missile', 0.6, 0.1], rocket: ['rocket', 0.5, 0.05], rail: ['rail', 0.9, 0.1], sniper: ['sniper', 0.7, 0.1], bow: ['bow', 0.4, 0.05], clash: ['clash', 0.3, 0.06], musket: ['musket', 0.55, 0.05], catapult: ['catapult', 0.7, 0.1], pulse: ['pulse', 0.35, 0.04] };
+    const WSND = { rifle: ['rifle', 0.34, 0.04], hmg: ['hmg', 0.4, 0.06], auto: ['auto', 0.5, 0.08], cannon: ['cannon', 0.8, 0.06], flak: ['flak', 0.45, 0.08], missile: ['missile', 0.6, 0.1], rocket: ['rocket', 0.5, 0.05], rail: ['rail', 0.9, 0.1], sniper: ['sniper', 0.7, 0.1], bow: ['bow', 0.45, 0.05], xbow: ['xbow', 0.45, 0.06], longbow: ['longbow', 0.45, 0.06], clash: ['clash', 0.35, 0.06], musket: ['musket', 0.55, 0.05], catapult: ['catapult', 0.7, 0.1], pulse: ['pulse', 0.35, 0.04] };
     function drain() {
       const S = G.S, ev = S.ev;
       for (const e of ev) {
