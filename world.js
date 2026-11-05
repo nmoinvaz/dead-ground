@@ -909,13 +909,16 @@ const World = (() => {
         // The whole deck, and a second piece kept for when it lies broken in two.
         dk.push({ x: mx, y: b.z - 0.1, z: my, sx: len, sy: 1, sz: b.w + 0.3, a, c: 0x5e5d59 }, { x: mx, y: b.z - 0.1, z: my, sx: len, sy: 1, sz: b.w + 0.3, a, c: 0x5e5d59 });
         for (let k = 0; k < 4; k++) brub.push({ x: mx + dx / len * (k - 1.5) * 2.2 + (k % 2 - 0.5) * 1.2, y: M.water - 0.25, z: my + dy / len * (k - 1.5) * 2.2, s: 1.3, a: k * 1.7, c: 0x6a675f });
-        for (let i = -2; i <= 2; i++) {
-          const t = i * 3.4, px = mx + dx / len * t, py = my + dy / len * t;
-          for (const s of [-1, 1]) pier.push({ x: px + dy / len * s * 1.8, y: b.z - 0.15, z: py - dx / len * s * 1.8, a, sx: 0.9, sy: 0.6, sz: 0.8, c: 0x6a675f });
+        // Piers stand in the river, across the deck and out past both its sides, pointed up and down stream, so
+        // from far off the bridge reads by its piers on the water as an old map draws one.
+        for (let i = -3; i <= 3; i++) {
+          const t = i * 2.6, px = mx + dx / len * t, py = my + dy / len * t;
+          if (terrainAt(M, px, py) > M.water - 0.05) continue;
+          pier.push({ x: px, y: b.z - 0.1, z: py, a, sx: 0.7, sy: b.z - M.water + 1.2, sz: b.w + 1.7, c: 0x77746c });
         }
       }
       const dm = lineCat(instanced(sc.deck, plainTint, dk), 0.42);
-      lineCat(instanced(sc.pier, paint, pier), 0.42);
+      if (pier.length) lineCat(instanced(sc.cutwater, plainTint, pier), 0.42);
       const lane = [];
       M.bridges.forEach((b, bi) => {
         const dx = b.x1 - b.x0, dy = b.y1 - b.y0, len = Math.hypot(dx, dy), a = -Math.atan2(dy, dx), n = Math.floor(len / 2);
@@ -1220,6 +1223,8 @@ const World = (() => {
         dirty(B.dm); dirty(B.lm); dirty(B.bm);
       });
       // The fords' stones go under when the river is up.
+      // A bridge's lane marks are a modern road's, from the Industrial Age.
+      B.lm.visible = worldAge() >= MOTOR_AGE;
       const Fd = scen.fords, under = S.flooded || waterRise.value > 0.12;
       if (Fd.mesh && under !== Fd.under) { Fd.under = under; Fd.list.forEach((o, i) => setInst(Fd.mesh, i, o, under)); dirty(Fd.mesh); }
       // Fences under whatever drives over them.
@@ -1528,14 +1533,20 @@ const World = (() => {
     }
 
     function buildSets() {
+      // A part another model shares, as legs of one make and wooden wheels are, draws into one mesh for all of them,
+      // through a stand-in that keeps the model's own description of the part.
+      const shared = {};
       const put = (key, parts, cap) => {
         sets[key] = parts.map(p => {
-          const n = cap * (p.mult || 1), mesh = new THREE.InstancedMesh(p.geo, paint, n);
+          if (p.share && shared[p.share]) { const o = shared[p.share]; return { def: p, get mesh() { return o.mesh; }, get n() { return o.n; }, set n(v) { o.n = v; }, get cap() { return o.cap; } }; }
+          const n = p.share ? 3000 : cap * (p.mult || 1), mesh = new THREE.InstancedMesh(p.geo, paint, n);
           mesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage); mesh.frustumCulled = false; mesh.castShadow = true; mesh.receiveShadow = true; mesh.count = 0;
           mesh.setColorAt(0, neutral); mesh.instanceColor.setUsage(THREE.DynamicDrawUsage);
           scene.add(mesh);
           lineCat(mesh, MODELS.buildings[key] || key === 'rubble' ? 0.75 : 1);
-          return { def: p, mesh, n: 0, cap: n };
+          const o = { def: p, mesh, n: 0, cap: n };
+          if (p.share) shared[p.share] = o;
+          return o;
         });
       };
       for (const k in MODELS.units) put(k, MODELS.units[k], k === 'plane' ? 4 : 72);
@@ -1699,6 +1710,8 @@ const World = (() => {
 
     const VIS = (x, y) => viewTeam < 0 || S.P[viewTeam].vis[Rules.cellOf(x, y)] === 1;
 
+    // Writes every part but legs, for a beast lying down.
+    const putNoLegs = (p, m, c) => p.def.rig === 'leg' || p.def.rig === 'shin' ? false : put(p, m, c);
     // Writes one instance, returning false when its set is full.
     function put(p, matrix, color) {
       if (p.n >= p.cap) return false;
@@ -1715,10 +1728,130 @@ const World = (() => {
       return m;
     }
 
-    function drawParts(parts, base, color, ent, r, now) {
-      for (const p of parts) {
-        const d = p.def;
-        if (d.id === 'hull' || d.id === 'body') { put(p, base, color); continue; }
+    // How a unit moves this frame: its gait's phase and strength, how far its wheels have turned, and how long since its
+    // weapon last struck and how long that weapon takes. Kept on the unit's picture state r.
+    const REST = { gp: 0, amp: 0, roll: 0, since: 99, cd: 1, eng: 0, kick: 0, speed: 0 };
+    function poseOf(e, r, parts, dt, alpha) {
+      const P = r.pose || (r.pose = { gp: 0, amp: 0, roll: 0, prev: null, since: 99, cd: 1, eng: 0, kick: 0, speed: 0, g: null });
+      const at = e.anim - e.v / HZ * (1 - alpha), step = P.prev === null ? 0 : clamp(at - P.prev, 0, 1);
+      P.prev = at; P.roll += step / US; P.speed = e.v;
+      P.amp += ((e.v > 0.1 ? 1 : 0) - P.amp) * Math.min(1, dt * 7);
+      const G = parts && parts.gait;
+      if (G) { P.g = G.run && e.v > G.runAt ? G.run : G.trot && e.v > G.trotAt ? G.trot : G.walk; P.gp += step / P.g.cycle; }
+      const w = e.d.weapons && e.d.weapons[0] && Rules.WEAPONS[e.d.weapons[0]];
+      P.cd = w ? w.cd : 1;
+      P.since = e.fired ? (S.tick - e.fired + alpha) / HZ : 99;
+      P.eng = P.since < P.cd * 1.6 ? 1 : 0;
+      return P;
+    }
+    // A leg's swing at the hip and fold at the knee at phase p of gait g: back along the ground while its foot is down,
+    // then lifted, folded and carried forward.
+    function legPose(p, g, out) {
+      p -= Math.floor(p);
+      if (p < g.duty) { const s = p / g.duty; out[0] = g.fwd - (g.fwd + g.back) * s; out[1] = -0.08 * Math.sin(Math.PI * s); }
+      else { const s = (p - g.duty) / (1 - g.duty), e = s * s * (3 - 2 * s); out[0] = -g.back + (g.fwd + g.back) * e; out[1] = -g.knee * Math.sin(Math.PI * s); }
+      return out;
+    }
+    const lp = [0, 0];
+    // A blow's moment: k from 0 to 1 and back over a lunge, sharp out and slower home.
+    const lunge = t => t < 0 ? 0 : t < 0.08 ? t / 0.08 : Math.max(0, 1 - (t - 0.08) / 0.3);
+    // A throwing engine's arm: the swing at a moment since it threw, and whether it holds a stone.
+    const THROWS = { catapult: { fire: -1.78, snap: 0.15, hold: 0.35, wind: 3 }, trebuchet: { fire: -2.4, snap: 0.5, hold: 0.6, wind: 4.2 } };
+    function throwAt(T, t) {
+      const s0 = T.snap, s1 = s0 + T.hold, s2 = s1 + T.wind;
+      if (t < s0) { const k = t / s0; return [T.fire * k * k, false]; }
+      if (t < s1) return [T.fire * (1 + 0.04 * Math.sin((t - s0) * 30) * (1 - (t - s0) / T.hold)), false];
+      if (t < s2) { const k = (t - s1) / T.wind; return [T.fire * (1 - k), false]; }
+      return [0, t > s2 + 0.25];
+    }
+    // A weapon held in a fight, as a turn about the shoulder (z) and a push forward (x): a thrust of a spear or lance,
+    // a sabre's chop, a bow raised and drawn, a gun's kick, or a grenade thrown overarm. P is the unit's pose and o an
+    // offset in seconds, so the men of a squad are not all in step.
+    function heldPose(kind, P, o, out) {
+      out[0] = 0; out[1] = 0;
+      if (!P.eng) return out;
+      const t = P.since - o, left = P.cd - t;
+      if (kind === 'thrust') { const k = lunge(t), w = left < 0.25 && left > 0 ? 1 - left / 0.25 : 0; out[0] = -0.22 * k + 0.12 * w; out[1] = 0.07 * k - 0.04 * w; }
+      else if (kind === 'chop') { const k = lunge(t), w = left < 0.3 && left > 0 ? 1 - left / 0.3 : 0; out[0] = -1.1 * k + 0.7 * w; }
+      else if (kind === 'draw') { const up = left < 0.5 ? clamp(1 - left / 0.5, 0, 1) : t < 0.25 ? 1 - t / 0.25 : 0; out[0] = 0.42 * up; out[1] = -0.03 * up; }
+      else if (kind === 'throw') {
+        // The arm goes back over the shoulder, whips forward and down as the grenade leaves, and comes home.
+        if (left > 0 && left < 0.45) out[0] = 1.6 * (1 - left / 0.45);
+        else if (t >= 0 && t < 0.3) out[0] = t < 0.06 ? 1.6 - 2.1 * t / 0.06 : -0.5 * (1 - (t - 0.06) / 0.24);
+      } else {
+        // A gun kicks up and back. One slow to load is lowered while it is loaded and brought up to present.
+        const k = t >= 0 && t < 0.25 ? (1 - t / 0.25) ** 2 : 0;
+        out[0] = 0.14 * k; out[1] = -0.035 * k;
+        if (P.cd >= 1.2) { const low = clamp((t - 0.25) / 0.2, 0, 1) * clamp((left - 0.3) / 0.25, 0, 1); out[0] -= 0.4 * low; }
+      }
+      return out;
+    }
+    const hp2 = [0, 0];
+
+    // Draws a model's parts on its base matrix. emit takes each part's instance, put by default.
+    function drawParts(parts, base, color, ent, r, now, emit = put) {
+      const P = r.pose || REST;
+      for (let i = 0; i < parts.length; i++) {
+        const p = parts[i], d = p.def;
+        if (d.id === 'hull' || d.id === 'body') { emit(p, base, color); continue; }
+        if (d.rig) {
+          if (d.rig === 'leg') {
+            // Each hip in turn: swing at the hip, lean out by its splay, then the lower leg from the knee, which the
+            // next part draws.
+            const lower = parts[i + 1], g = P.g || (parts.gait && parts.gait.walk), rest = g && g.rest, un = g && g.unsplay || 0;
+            for (const h of d.hips) {
+              const ph = g === (parts.gait && parts.gait.run) ? h[5] : g === (parts.gait && parts.gait.trot) ? h[4] : h[3];
+              if (g && P.amp > 0.01) legPose(P.gp + ph, g, lp); else { lp[0] = 0; lp[1] = 0; }
+              const hipA = lp[0] * P.amp + (rest ? rest[0] : 0), kneeA = lp[1] * P.amp + (rest ? rest[1] : 0);
+              m2.makeTranslation(h[0], h[1], h[2]);
+              m3.makeRotationZ(hipA + (h[6] || 0)); m2.multiply(m3);
+              if (h[7]) { m3.makeRotationX(h[7]); m2.multiply(m3); }
+              mOut.multiplyMatrices(base, m2); emit(p, mOut, color);
+              m3.makeTranslation(0, -d.L1, 0); m2.multiply(m3);
+              if (un) { if (h[7]) { m3.makeRotationX(-h[7] * un); m2.multiply(m3); } m3.makeRotationZ(-(h[6] || 0) * un); m2.multiply(m3); }
+              m3.makeRotationZ(kneeA); m2.multiply(m3);
+              mOut.multiplyMatrices(base, m2); if (lower) emit(lower, mOut, color);
+            }
+            i++;
+          } else if (d.rig === 'wheel') {
+            // Wheels roll with the ground covered, and run back with a gun's recoil.
+            for (const w of d.wheels) {
+              m2.makeTranslation(w[0], w[1], w[2]);
+              m3.makeRotationZ(-(P.roll - P.kick) / w[1]); m2.multiply(m3);
+              m3.makeScale(w[1], w[1], w[3]); m2.multiply(m3);
+              mOut.multiplyMatrices(base, m2); emit(p, mOut, color);
+            }
+          } else if (d.rig === 'held') {
+            d.at.forEach((a, j) => {
+              heldPose(d.blow, P, j * 0.05, hp2);
+              m2.makeTranslation(a[0] + hp2[1], a[1], a[2]);
+              m3.makeRotationZ(hp2[0]); m2.multiply(m3);
+              mOut.multiplyMatrices(base, m2); emit(p, mOut, color);
+            });
+          } else if (d.rig === 'head') {
+            // A beast's head nods as it walks and swings down and up to gore.
+            const k = P.eng ? lunge(P.since) : 0, nod = Math.sin(P.gp * 6.283 * 2) * 0.05 * P.amp;
+            m2.makeTranslation(d.pivot[0], d.pivot[1], d.pivot[2]);
+            m3.makeRotationZ(nod - 0.4 * k); m2.multiply(m3);
+            mOut.multiplyMatrices(base, m2); emit(p, mOut, color);
+          } else if (d.rig === 'throw') {
+            // An engine's arm, and what hangs from it or lies in its cup, which the parts after it draw.
+            const T = THROWS[d.throw], [ang, loaded] = P.since < 90 ? throwAt(T, P.since) : [0, true];
+            m2.makeTranslation(d.pivot[0], d.pivot[1], d.pivot[2]);
+            m3.makeRotationZ(ang); m2.multiply(m3);
+            mOut.multiplyMatrices(base, m2); emit(p, mOut, color);
+            r.armM = r.armM || new THREE.Matrix4(); r.armM.copy(mOut); r.armA = ang; r.loaded = loaded;
+          } else if (d.rig === 'loaded') {
+            if (r.loaded !== false && r.armM) emit(p, r.armM, color);
+          } else if (d.rig === 'hang') {
+            if (d.loaded && r.loaded === false) continue;
+            m2.copy(r.armM || base);
+            m3.makeTranslation(d.at[0], d.at[1], d.at[2]); m2.multiply(m3);
+            m3.makeRotationZ(-(r.armA || 0)); m2.multiply(m3);
+            emit(p, m2, color);
+          }
+          continue;
+        }
         const pv = d.pivot || [0, 0, 0];
         m2.makeTranslation(pv[0], pv[1], pv[2]);
         if (d.aim) {
@@ -1726,34 +1859,34 @@ const World = (() => {
           m3.makeRotationY(rel); m2.multiply(m3);
           mOut.multiplyMatrices(base, m2);
           r.tm = r.tm || new THREE.Matrix4(); r.tm.copy(mOut);
-          put(p, mOut, color);
+          emit(p, mOut, color);
         } else if (d.parent) {
           m2.copy(r.tm || base);
           m3.makeTranslation(pv[0], pv[1], pv[2]); m2.multiply(m3);
           if (d.tilt) { m3.makeRotationZ(d.tilt); m2.multiply(m3); }
           const since = (S.tick - (ent.fired || -99)) / HZ, kick = since < 0.5 ? (d.recoil || 0) * (1 - since / 0.5) ** 2 : 0;
           if (kick) { m3.makeTranslation(-kick, 0, 0); m2.multiply(m3); }
-          put(p, m2, color);
+          emit(p, m2, color);
         } else if (d.spin) {
           const a = now * d.rate;
           m3.makeRotationAxis(d.spin === 'y' ? axisY : d.spin === 'x' ? axisX : axisZ, a); m2.multiply(m3);
-          mOut.multiplyMatrices(base, m2); put(p, mOut, color);
+          mOut.multiplyMatrices(base, m2); emit(p, mOut, color);
         } else if (d.nod) {
           m3.makeRotationZ(Math.sin(now * 1.8) * 0.26); m2.multiply(m3);
-          mOut.multiplyMatrices(base, m2); put(p, mOut, color);
+          mOut.multiplyMatrices(base, m2); emit(p, mOut, color);
         } else if (d.door) {
           const open = ent.d.charge ? clamp((ent.charge / ent.d.charge - 0.9) * 10, 0, 1) : 0;
           m3.makeTranslation(d.door * open * 1.1, 0, 0); m2.multiply(m3);
-          mOut.multiplyMatrices(base, m2); put(p, mOut, color);
+          mOut.multiplyMatrices(base, m2); emit(p, mOut, color);
         } else if (d.load) {
           const k = (ent.cargo || 0) / (ent.d.cargo || 1);
           if (k < 0.06) continue;
           m3.makeTranslation(0, 0.86 * (1 - k * 0.0), 0); m2.multiply(m3);
           m3.makeScale(1, 0.4 + 0.8 * k, 1); m2.multiply(m3);
           m3.makeTranslation(0, -0.9, 0); m2.multiply(m3);
-          mOut.multiplyMatrices(base, m2); put(p, mOut, color);
+          mOut.multiplyMatrices(base, m2); emit(p, mOut, color);
         } else {
-          mOut.multiplyMatrices(base, m2); put(p, mOut, color);
+          mOut.multiplyMatrices(base, m2); emit(p, mOut, color);
         }
       }
     }
@@ -1771,10 +1904,14 @@ const World = (() => {
 
     // Units are drawn a quarter larger than the rules' cells, so each reads by its shape.
     const US = 1.25;
-    function drawMan(set, x, y, z, yaw, phase, moving, color, fallen = 0) {
-      const body = set[0], leg = set[1];
+    // A man: body, two legs that swing as he walks, and for the soldiers of the older ages and the future, arms that
+    // swing from the shoulders as he fights, by P, his squad's pose, and i, his place in it. A thrust leans him into it.
+    function drawMan(set, x, y, z, yaw, phase, moving, color, fallen = 0, P = null, i = 0) {
+      const body = set[0], leg = set[1], arms = set[2];
       const bob = moving ? Math.abs(Math.sin(phase)) * 0.018 : 0;
-      compose(m1, x, y + bob, z, yaw, -fallen * 1.5, 0, US);
+      if (arms && P && !fallen) heldPose(arms.def.blow, P, i * 0.04, hp2); else { hp2[0] = 0; hp2[1] = 0; }
+      const lean = arms && arms.def.blow === 'thrust' ? Math.max(0, -hp2[0]) * 1.1 : 0;
+      compose(m1, x, y + bob, z, yaw, -fallen * 1.5 - lean, 0, US);
       put(body, m1, color);
       const sw = moving ? Math.sin(phase) * 0.62 : 0;
       for (const s of [-1, 1]) {
@@ -1782,6 +1919,14 @@ const World = (() => {
         m3.makeRotationZ(s * sw); m2.multiply(m3);
         mOut.multiplyMatrices(m1, m2);
         put(leg, mOut, color);
+      }
+      if (arms) {
+        const pv = arms.def.pivot;
+        m2.makeTranslation(pv[0] + hp2[1], pv[1], pv[2]);
+        m3.makeRotationZ(hp2[0]); m2.multiply(m3);
+        m3.makeTranslation(-pv[0], -pv[1], -pv[2]); m2.multiply(m3);
+        mOut.multiplyMatrices(m1, m2);
+        put(arms, mOut, color);
       }
     }
 
@@ -1854,10 +1999,14 @@ const World = (() => {
             pushScreen(onScreen, e, x, z + 0.3, y, 0.5);
             continue;
           }
-          const moving = e.v > 0.1, ph = e.anim * 7;
+          const moving = e.v > 0.1, ph = e.anim * 7, Pz = poseOf(e, r, null, dt, alpha);
+          // In a melee the ranks press forward into the enemy and jostle, so a fight reads as a scrum.
+          const w0 = e.d.weapons[0] && Rules.WEAPONS[e.d.weapons[0]], scrum = Pz.eng && w0 && w0.fx === 'melee' ? 1 : 0;
+          const fx = Math.cos(-yaw), fz = Math.sin(-yaw);
           for (let i = 0; i < r.alive; i++) {
-            const [px, pz] = manAt(e.d.men, i, x, y, yaw);
-            drawMan(set, px, heightAt(M, px, pz), pz, yaw, ph + i * 1.9, moving, color);
+            let [px, pz] = manAt(e.d.men, i, x, y, yaw, scrum ? 1.05 : 1.2);
+            if (scrum) { const j = Math.sin(now * 5.3 + i * 2.1) * 0.05, f = 0.12 + Math.sin(now * 3.7 + i * 1.3) * 0.04; px += fx * f - fz * j; pz += fz * f + fx * j; }
+            drawMan(set, px, heightAt(M, px, pz), pz, yaw, ph + i * 1.9, moving, color, 0, Pz, i);
           }
           // A squad on the move leaves a faint trodden line.
           if (moving) trackMark(r, x, y, yaw, 0.08, 0.16);
@@ -1872,11 +2021,23 @@ const World = (() => {
           const tp = Math.atan2(hf - hb, L * 2), tr = Math.atan2(hl - hr, L * 1.4), k = 1 - Math.exp(-dt * 10);
           r.pitch += (tp - r.pitch) * k; r.roll += (tr - r.roll) * k;
           compose(m1, x, z, y, yaw, r.pitch, -r.roll, US);
+          // A beast or walker rides up and down on its stride, and a gallop rocks it fore and aft. A gun runs back as
+          // it fires, and its wheels with it.
+          const meta = MODELS.units[e.kind], Pz = poseOf(e, r, meta, dt, alpha);
+          if (Pz.g && Pz.amp > 0.01) {
+            const g = Pz.g, ph = Pz.gp * 6.283;
+            m3.makeTranslation(0, g.bob * Pz.amp * (0.5 - 0.5 * Math.cos(ph * 2)), 0); m1.multiply(m3);
+            if (g.rock) { m3.makeRotationZ(g.rock * Pz.amp * Math.sin(ph)); m1.multiply(m3); }
+          }
+          Pz.kick = meta && meta.kick && Pz.since < 0.6 ? meta.kick * (1 - Pz.since / 0.6) ** 2 : 0;
+          if (Pz.kick) { m3.makeTranslation(-Pz.kick, 0, 0); m1.multiply(m3); m3.makeRotationZ(Pz.kick * 0.5); m1.multiply(m3); }
         } else {
           const bank = clamp(Rules.angleTo(e.pa, e.a) * 8, -0.5, 0.5), nose = e.d.move === 'air' ? -clamp(e.v / e.d.speed, 0, 1) * 0.2 : 0;
           r.pitch += (nose - r.pitch) * 0.1; r.roll += (bank - r.roll) * 0.1;
           compose(m1, x, z, y, yaw, r.pitch, r.roll, US);
         }
+        // Just changed to its new age's form, it rises into it out of its dust.
+        if (r.morph !== undefined && r.morph < 0.45) { r.morph += dt; const k = Math.min(1, r.morph / 0.45); m3.makeScale(1, 0.55 + 0.45 * (1 - (1 - k) ** 3), 1); m1.multiply(m3); }
         drawParts(sets[e.kind], m1, color, e, r, now);
         if (!air) {
           // Dust behind what moves, and tracks in the ground.
@@ -1937,9 +2098,16 @@ const World = (() => {
           compose(m1, w.x, w.y - sink, w.z, w.yaw, 0, 0, w.s);
           put(sets.rubble[0], m1, colA.setRGB(0.5, 0.48, 0.44));
         } else {
-          compose(m1, w.x, w.y - sink, w.z, w.yaw, w.pitch, 0);
-          put(set[0], m1, burnt);
-          if (set[1] && set[1].def.pivot) { m2.makeTranslation(...set[1].def.pivot); m3.makeRotationZ(0.3); m2.multiply(m3); mOut.multiplyMatrices(m1, m2); put(set[1], mOut, burnt); }
+          compose(m1, w.x, w.y - sink, w.z, w.yaw, w.pitch, 0, US);
+          if (set.some(p => p.def.rig)) {
+            // A model with moving parts lies at rest. A fallen beast sinks down on its folded legs.
+            const beast = OLD(w.kind) && MODELS.units[w.kind].gait;
+            if (beast) { m3.makeTranslation(0, -0.2, 0); m1.multiply(m3); }
+            drawParts(set, m1, burnt, w.e || (w.e = { pta: 0, ta: 0, fired: 0, d: UNITS[w.kind], cargo: 0, charge: 0 }), w.r || (w.r = { alpha: 1, yaw: 0 }), now, beast ? putNoLegs : put);
+          } else {
+            put(set[0], m1, burnt);
+            if (set[1] && set[1].def.pivot) { m2.makeTranslation(...set[1].def.pivot); m3.makeRotationZ(0.3); m2.multiply(m3); mOut.multiplyMatrices(m1, m2); put(set[1], mOut, burnt); }
+          }
         }
         w.smoke -= dt;
         if (w.smoke <= 0 && w.t < 26 && VIS(w.x, w.z)) { w.smoke = 0.14 + w.t * 0.012; burn(w.x, w.y + 0.5, w.z, 0.9 + (w.rubble ? 0.4 : 0), w.t < 10); }
@@ -2167,7 +2335,9 @@ const World = (() => {
       let x0 = mx, y0 = up, z0 = my;
       if (thrown && rel && r) { const c = Math.cos(-r.yaw), sn = Math.sin(-r.yaw); x0 = src.x + c * rel[0] * US; z0 = src.y + sn * rel[0] * US; y0 = heightAt(M, src.x, src.y) + rel[1] * US; }
       else if (thrown) y0 = up + 0.55;
-      flyers.push({ w: e.w, fx: w.fx, x0, y0, z0, x1: e.tx, y1: e.tz, z1: e.ty, t: 0, dur: e.dur, arc, tgt: e.tgt, trail: 0, px: x0, py: y0, pz: z0, k: BALLS[e.w] || 1, spin: Math.random() * 6 });
+      // An engine's stone leaves as its arm comes up, and lands when the rules say it does.
+      const T = rel && THROWS[src.kind], delay = T ? T.snap * 0.85 : 0;
+      flyers.push({ w: e.w, fx: w.fx, x0, y0, z0, x1: e.tx, y1: e.tz, z1: e.ty, t: -delay, dur: Math.max(0.2, e.dur - delay), arc, tgt: e.tgt, trail: 0, px: x0, py: y0, pz: z0, k: BALLS[e.w] || 1, spin: Math.random() * 6 });
       if (thrown) { if (rel) dustPuff(src.x, heightAt(M, src.x, src.y) + 0.1, src.y, 0.9); return; }
       muzzle(mx, up, my, w.fx === 'stone' ? 0.3 : 0.5);
       inkAdd({ k: 'star', x: mx, y: up, z: my, life: 0.1, s: w.fx === 'stone' ? 0.4 : 0.55 });
@@ -2228,6 +2398,7 @@ const World = (() => {
       for (let i = flyers.length - 1; i >= 0; i--) {
         const f = flyers[i];
         f.t += dt;
+        if (f.t < 0) continue;
         const k = Math.min(1, f.t / f.dur);
         if (f.tgt) { const t = S.byId.get(f.tgt); if (t) { f.x1 = t.x; f.z1 = t.y; f.y1 = t.b ? f.y1 : heightAt(M, t.x, t.y) + (Rules.isAir(t) ? t.z : 0.5); } }
         const x = lerp(f.x0, f.x1, k), z = lerp(f.z0, f.z1, k), y = lerp(f.y0, f.y1, k) + f.arc * 4 * k * (1 - k);
@@ -2235,7 +2406,6 @@ const World = (() => {
         // An arrow is a shaft along its flight, inked as the units are, a little thicker as the view draws back so a
         // volley still reads. One that misses stays stuck in the ground.
         else if (f.fx === 'arrow') {
-          if (f.t < 0) continue;
           const vx = f.x1 - f.x0, vz = f.z1 - f.z0, vy = f.y1 - f.y0 + f.arc * 4 * (1 - 2 * k), wk = clamp(cam.dist / 92, 1, 2.2);
           if (VIS(x, z)) alongAt(sets.arrow[0], x, y, z, vx, vy, vz, f.k, wk, inkBlack);
           if (f.t >= f.dur && f.stick) { const n = Math.hypot(vx, vy, vz) || 1; if (stuckArrows.length < 240) stuckArrows.push({ x, y, z, dx: vx / n, dy: vy / n, dz: vz / n, k: f.k, w: wk, roll: Math.random() * 3, t: 0 }); }
@@ -2299,9 +2469,14 @@ const World = (() => {
         case 'upgrade': {
           // A squad that takes a new form keeps the men it has, so none fall when the count of its form differs.
           const r = rs.get(e.id), u = S.byId.get(e.id);
-          if (r && u) { r.alive = u.d.men ? Math.ceil(u.hp / u.max * u.d.men) : 0; r.tm = null; }
+          if (r && u) { r.alive = u.d.men ? Math.ceil(u.hp / u.max * u.d.men) : 0; r.tm = null; r.armM = null; r.pose = null; r.morph = 0; }
+          if (u && VIS(u.x, u.y)) ageMark(u.x, u.y, u.d.men ? 1 : Math.max(0.95, u.d.r * 1.45), u.team, null);
           break;
         }
+        case 'tech':
+          // Every building of the side takes its new age's form, each marked where it stands.
+          for (const b of S.ents) if (b.b && b.team === e.team && b.hp > 0) { const r = rs.get(b.id); if (r && r.seen && VIS(b.x, b.y)) ageMark(b.x, b.y, 0, e.team, b); }
+          break;
         case 'bridge': if (e.down) {
           // The span breaks along its middle and drops into the river.
           const m = M.bridges[e.i];
@@ -2319,6 +2494,33 @@ const World = (() => {
         }
         case 'uav': if (VIS(e.x, e.y)) rings.add(e.x, heightAt(M, e.x, e.y), e.y, 14, 1.2, 0x8fd0ff); break;
         case 'incoming': if (VIS(e.x, e.y)) rings.add(e.x, heightAt(M, e.x, e.y), e.y, 1.4, 1.2, 0xff8050); break;
+      }
+    }
+
+    // A thing that has just taken its new age's form: dust thrown up round its foot and, in ink, a quick loop of the
+    // pen in its side's colour drawn round it and lifted, or round a building's plot a sketched frame. Daylight shows
+    // a pale ring on the ground in the side's colour instead.
+    function ageMark(x, y, R, team, b) {
+      const g = heightAt(M, x, y), d = dustC(), n = b ? 14 : 7, rr = b ? Math.max(b.w, b.h) * 0.55 : R;
+      for (let i = 0; i < n; i++) { const a = i / n * 6.283 + Math.random() * 0.5, q = rr * (0.8 + Math.random() * 0.3); smoke.add(x + Math.cos(a) * q, g + 0.08, y + Math.sin(a) * q, Math.cos(a) * 0.5, 0.35, Math.sin(a) * 0.5, 1.1 + Math.random() * 0.5, 0.35 + rr * 0.2, 1 + rr * 0.6, [d[0], d[1], d[2], 0.32], [d[0], d[1], d[2], 0], i % 4, { drag: 1.6, delay: Math.random() * 0.15 }); }
+      if (style.hud !== 'ink') { rings.add(x, g, y, rr * 1.5, 0.7, teamCol[team].getHex()); return; }
+      const wk = 0.05 * clamp(cam.dist / 92, 0.8, 2.2), lift = 0.06, life = 1.25;
+      const seg = (ax, az, bx, bz, wait) => addStroke({ ax, ay: heightAt(M, ax, az) + lift, az, bx, by: heightAt(M, bx, bz) + lift, bz, w: wk, wait, grow: 0.025, life, fade: 0.4, team });
+      if (b) {
+        // The plot's frame, each side run a little past its corner as a draughtsman's quick lines are.
+        const hx = b.w / 2 + 0.35, hz = b.h / 2 + 0.35, o = 0.3;
+        const c = [[x - hx, y - hz], [x + hx, y - hz], [x + hx, y + hz], [x - hx, y + hz]];
+        for (let k = 0; k < 4; k++) {
+          const [ax, az] = c[k], [bx, bz] = c[(k + 1) % 4], L = Math.hypot(bx - ax, bz - az), ux = (bx - ax) / L, uz = (bz - az) / L, m = Math.ceil(L / 0.7);
+          for (let j = 0; j < m; j++) { const t0 = j / m * (L + o * 2) - o, t1 = (j + 1) / m * (L + o * 2) - o; seg(ax + ux * t0, az + uz * t0, ax + ux * t1, az + uz * t1, k * 0.08 + j * 0.012); }
+        }
+        return;
+      }
+      // Two turns of the loop, the second a little wider and unclosed, as a pen goes round twice.
+      const a0 = Math.random() * 6.283, m = 22;
+      for (let j = 0; j < m * 1.75; j++) {
+        const t0 = j / m, t1 = (j + 1) / m, r0 = R * (1 + 0.1 * t0), r1 = R * (1 + 0.1 * t1);
+        seg(x + Math.cos(a0 + t0 * 6.283) * r0, y + Math.sin(a0 + t0 * 6.283) * r0, x + Math.cos(a0 + t1 * 6.283) * r1, y + Math.sin(a0 + t1 * 6.283) * r1, j * 0.011);
       }
     }
 
@@ -2535,6 +2737,11 @@ const World = (() => {
         if (it.man) {
           addMesh(parts[0].geo, new THREE.Matrix4());
           for (const s of [-1, 1]) addMesh(parts[1].geo, new THREE.Matrix4().makeTranslation(0, 0.31, s * 0.042));
+          if (parts[2]) addMesh(parts[2].geo, new THREE.Matrix4());
+        } else if (parts.some(p => p.rig)) {
+          // A model with moving parts is drawn at rest, as the field draws it standing.
+          const ps = parts.map(def => ({ def })); ps.gait = parts.gait;
+          drawParts(ps, new THREE.Matrix4(), null, { pta: 0, ta: 0, fired: 0, d: UNITS[it.kind] || {}, cargo: 0, charge: 0 }, { alpha: 1, yaw: 0 }, 0, (p, m) => addMesh(p.def.geo, m.clone()));
         } else for (const p of parts) {
           const pv = p.pivot || [0, 0, 0], m = new THREE.Matrix4();
           if (p.parent) { const pp2 = parts.find(q => q.id === p.parent); m.makeTranslation(pp2.pivot[0] + pv[0], pp2.pivot[1] + pv[1], pp2.pivot[2] + pv[2]); if (p.tilt) m.multiply(new THREE.Matrix4().makeRotationZ(p.tilt)); }

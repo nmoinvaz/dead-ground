@@ -12,6 +12,9 @@
 - Arrows fly as inked shafts, one from each man of a squad as a volley, and those that miss stick in the ground for
   a few seconds. Thrown stones tumble as stones with a short trail of the pen behind them in ink. Strokes of the pen
   (`addStroke`) are a general instanced mark for trails and sketches.
+- Bridges read as bridges from far out: cutwater piers stand out on the water past both sides of the deck, the deck's
+  rails and seams are inked firmly, its shadow is hatched on the water away from the sun, and its lane marks show only
+  from the Industrial Age.
 - A squad that changes form at an age-up keeps its men, where it used to drop corpses when its count differed.
 
 ## Next

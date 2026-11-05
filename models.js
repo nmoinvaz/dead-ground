@@ -452,7 +452,14 @@ const Models = (() => {
       else if (o.helmet !== false) g.sph(head * 0.62, -0.002, hy + 0.008, 0, o.helmetC ?? c, { seg: 8, rings: 5, top: true, sy: 0.95, t: 0.15 });
       if (o.cap) { g.box(0.05, 0.008, 0.07, 0.04, hy + 0.024, 0, o.cap); }
       if (o.glasses) { g.box(0.006, 0.012, 0.062, head * 0.5 + 0.004, hy + 0.004, 0, 0x101010); }
-      // Upper arms hang from the shoulders, forearms come forward to the weapon.
+      if (!o.noArms) armsInto(g, o);
+      if (o.tool) { g.box(0.05, 0.1, 0.09, 0.02, hip - 0.02, 0.095, P.yellow); }
+      return g;
+    }
+    // Upper arms hang from the shoulders, forearms come forward to the weapon. A soldier of the older ages and the
+    // future carries these as a part of their own, which swings from the shoulders as he fights.
+    function armsInto(g, o) {
+      const c = o.cloth || P.olive, shoulder = MAN_H * 0.8;
       for (const s of [-1, 1]) {
         const z = s * 0.08;
         g.cyl(0.021, 0.018, 0.1, 0.01, shoulder - 0.055, z, o.sleeve ?? c, { seg: 6, rx: s * 0.1, rz: 0.25 });
@@ -468,7 +475,6 @@ const Models = (() => {
         g.box(0.03, 0.04, 0.012, 0.11, ry - 0.03, -0.01, P.steelDk);
         g.box(0.06, 0.03, 0.014, 0.0, ry - 0.015, -0.01, P.steelDk);
       }
-      if (o.tool) { g.box(0.05, 0.1, 0.09, 0.02, hip - 0.02, 0.095, P.yellow); }
       return g;
     }
     const figure = (o, cloth) => [part('body', body(o)), part('leg', legs(cloth ?? o.cloth))];
@@ -857,11 +863,15 @@ const Models = (() => {
       w.box(1, 0.18, 0.05, 0, 0.2, 0.47, 0xdddddd);
       w.box(1, 0.18, 0.05, 0, 0.2, -0.47, 0xdddddd);
       // Seams across the deck between its parapets, so a long bridge reads as one and not as a blank slab.
-      for (let i = 1; i < 18; i++) w.box(0.006, 0.014, 0.88, -0.5 + i / 18, 0.2, 0, 0xd4d4d4);
+      for (let i = 1; i < 18; i++) w.box(0.008, 0.016, 0.88, -0.5 + i / 18, 0.2, 0, 0x4a4844);
       scenery.deck = w.finish();
       const pier = G();
       pier.box(0.4, 2.4, 1.2, 0, -2.2, 0, P.concDk);
       scenery.pier = pier.finish();
+      // A river pier across a bridge, one long, its ends pointed upstream and down as cutwaters, its top at y = 0.
+      const cut = G();
+      cut.prism([[0.5, -0.42], [0, -0.5], [-0.5, -0.42], [-0.5, 0.42], [0, 0.5], [0.5, 0.42]], 1, 0, -0.5, 0, P.concDk, { rx: Math.PI / 2 });
+      scenery.cutwater = cut.finish();
       const rub = G();
       for (const [x, z, s] of [[0, 0, 0.42], [0.5, 0.2, 0.3], [-0.4, 0.3, 0.34], [0.2, -0.46, 0.26], [-0.34, -0.34, 0.3]]) rub.add(new THREE.BoxGeometry(s * 1.4, s, s), x, s * 0.34, z, P.concDk, { ry: x * 5, rz: z * 0.7 });
       scenery.rubble = rub.finish();
@@ -972,7 +982,17 @@ const Models = (() => {
       if (o.sash) b.box(0.02, 0.2, 0.16, 0.06, MAN_H * 0.5, 0, o.sash, { rx: 0.6 });
       return [b, legs(o.legs ?? o.cloth)];
     };
-    const soldier = (o) => { const [b, l] = soldierGeo(o); return [part('body', b), part('leg', l)]; };
+    // A soldier for the field: body and legs, and his arms with what he carries as a third part, its pivot at the
+    // shoulders, and how it moves when he fights: a thrust, a draw of the bow, a shot or a throw.
+    const BLOWS = { spear: 'thrust', pike: 'thrust', sword: 'thrust', bow: 'draw', longbow: 'draw', grenade: 'throw' };
+    const soldier = (o) => {
+      const b = body(Object.assign({ helmet: false, rifle: 0, noArms: true }, o));
+      hat(b, o.hat, o.crest);
+      if (o.shield) SHIELD(b, o.shield);
+      if (o.sash) b.box(0.02, 0.2, 0.16, 0.06, MAN_H * 0.5, 0, o.sash, { rx: 0.6 });
+      const a = G(); armsInto(a, Object.assign({ rifle: 0 }, o)); arms(a, o.arms);
+      return [part('body', b), part('leg', legs(o.legs ?? o.cloth)), part('arms', a, { pivot: [0, MAN_H * 0.8, 0], blow: BLOWS[o.arms] || 'shot' })];
+    };
     Object.assign(man, {
       spear: soldier({ cloth: A.tunic, vest: A.bronze, vestT: 0.4, hat: 'crest', arms: 'spear', shield: A.coatR }),
       pike: soldier({ cloth: A.tunic2, vest: A.mail, vestT: 0.3, hat: 'kettle', arms: 'pike' }),
@@ -990,18 +1010,64 @@ const Models = (() => {
       ghost: soldier({ cloth: 0x3a3e42, vest: 0x2a2e32, vestT: 0, hat: 'hood', arms: 'rail', legs: 0x2a2e32 }),
     });
 
-    // A horse along x, standing on the ground at (x, z). A lean saddle-cloth carries the side's colour.
+    // Legs that walk: an upper part from the hip and a lower from the knee, each one mesh shared by every model whose
+    // legs are of the same make, and placed once per hip. A hip is [x, y, z, walk, trot, run, splay x, splay z], its
+    // place, its phase in each gait, and how far the leg leans out from under the body.
+    const legMakes = {};
+    function legRig(make, hips, gait, L1, L2, r1, r2, coat, foot, coat2) {
+      if (!legMakes[make]) {
+        const u = G(); u.cyl(r1, r1 * 0.85, L1 + r1, 0, -L1 / 2 + r1 / 2, 0, coat, { seg: 6 });
+        const l = G(); l.cyl(r2, r2 * 0.85, L2 + r2 * 0.5, 0, -L2 / 2 + r2 * 0.25, 0, coat2 ?? coat, { seg: 6 });
+        if (foot) foot(l, L2);
+        legMakes[make] = [u.finish(), l.finish()];
+      }
+      const [gu, gl] = legMakes[make];
+      return [part('legU', gu, { rig: 'leg', share: 'legU:' + make, hips, gait, L1 }), part('legL', gl, { rig: 'shin', share: 'legL:' + make })];
+    }
+    // Gaits: a cycle is how far a step of every leg carries it, in cells, duty the share of it a foot is down, fwd and
+    // back how far a leg reaches each way, knee how far the lower leg folds as it swings, bob and rock how the body
+    // rides, and rest the legs' angles standing. Horses walk, trot and gallop by speed.
+    const GAIT = {
+      horse: { walk: { cycle: 0.8, duty: 0.62, fwd: 0.3, back: 0.26, knee: 0.8, bob: 0.008 }, trot: { cycle: 1.15, duty: 0.46, fwd: 0.42, back: 0.36, knee: 1.15, bob: 0.016 }, run: { cycle: 1.7, duty: 0.36, fwd: 0.62, back: 0.55, knee: 1.4, bob: 0.02, rock: 0.05 }, trotAt: 1.4, runAt: 3 },
+      ox: { walk: { cycle: 0.7, duty: 0.64, fwd: 0.26, back: 0.24, knee: 0.7, bob: 0.008 } },
+      elephant: { walk: { cycle: 1.25, duty: 0.66, fwd: 0.24, back: 0.22, knee: 0.45, bob: 0.014 } },
+      mech: { walk: { cycle: 1.2, duty: 0.6, fwd: 0.42, back: 0.36, knee: 0.95, bob: 0.03, rest: [0.2, -0.4] } },
+      titan: { walk: { cycle: 1.5, duty: 0.74, fwd: 0.3, back: 0.28, knee: 0.7, bob: 0.025, unsplay: 1.5 } },
+    };
+    // A four-legged beast's hips about (x, z), front and hind dx out and dz across, each animal off by off in phase:
+    // a walk sets its feet down hind, fore, hind, fore round the body, a trot by diagonal pairs, a gallop hind pair
+    // then fore pair.
+    const quad = (x, z, dx, dz, y, off = 0, sx = 0, sz = 0) => [
+      [x + dx, y, z + dz, 0.25 + off, 0 + off, 0.42 + off, sx, -sz], [x + dx, y, z - dz, 0.75 + off, 0.5 + off, 0.52 + off, sx, sz],
+      [x - dx, y, z + dz, 0 + off, 0.5 + off, 0 + off, -sx, -sz], [x - dx, y, z - dz, 0.5 + off, 0 + off, 0.1 + off, -sx, sz],
+    ];
+    const hoof = (l, L2) => l.box(0.044, 0.022, 0.04, 0.008, -L2 - 0.022, 0, 0x2a2018);
+    // A horse along x, standing on the ground at (x, z). A lean saddle-cloth carries the side's colour. With o.rig its
+    // legs are left out and its hips are added to that list, for legs that move.
     function horse(g, x, z, coat, o = {}) {
       g.box(0.44, 0.16, 0.15, x, 0.3, z, coat);
       g.sph(0.09, x + 0.19, 0.39, z, coat, { seg: 8, rings: 6 }); g.sph(0.09, x - 0.19, 0.39, z, coat, { seg: 8, rings: 6 });
       g.box(0.08, 0.22, 0.08, x + 0.27, 0.38, z, coat, { rz: -0.55 });
       g.box(0.16, 0.07, 0.07, x + 0.38, 0.55, z, coat, { rz: -0.45 });
-      for (const [dx, dz] of [[0.17, 0.05], [0.17, -0.05], [-0.17, 0.05], [-0.17, -0.05]]) g.cyl(0.022, 0.018, 0.32, x + dx, 0.16, z + dz, coat, { seg: 5 });
+      if (o.rig) o.rig.push(...quad(x, z, 0.17, 0.05, 0.34, o.off || 0));
+      else for (const [dx, dz] of [[0.17, 0.05], [0.17, -0.05], [-0.17, 0.05], [-0.17, -0.05]]) g.cyl(0.022, 0.018, 0.32, x + dx, 0.16, z + dz, coat, { seg: 5 });
       g.box(0.03, 0.18, 0.03, x - 0.26, 0.26, z, 0x2a2018, { rz: 0.45 });
       g.box(0.05, 0.12, 0.02, x + 0.24, 0.47, z, 0x2a2018, { rz: -0.55 });
       if (o.cloth !== false) g.box(0.24, 0.12, 0.17, x - 0.02, 0.36, z, o.cloth || A.coatR, o.armour ? { t: 0.6 } : TB);
     }
-    // A rider seated on a horse at (x, z): body, head and hat, and what he carries.
+    // The legs of horses of one coat, from the hips gathered for them.
+    const horseLegs = (coat, hips) => legRig('horse' + coat.toString(16), hips, GAIT.horse, 0.17, 0.15, 0.024, 0.019, coat, hoof);
+    // What a rider carries, its grip at his shoulder (x, y, z): a couched lance, a sabre raised, a bow or a carbine.
+    function weaponAt(g, k, x, y, z) {
+      if (k === 'lance') g.cyl(0.008, 0.012, 0.9, x + 0.22, y, z, A.woodDk, { axis: 'x', seg: 5 });
+      if (k === 'sword' || k === 'sabre') g.box(0.014, 0.24, 0.03, x + 0.08, y + 0.06, z, A.mail, { rz: -0.5 });
+      if (k === 'bow') for (let i = -2; i <= 2; i++) g.box(0.01, 0.07, 0.01, x + 0.1 - Math.abs(i) * 0.012, y - 0.04 + i * 0.07, z - 0.01, A.woodDk, { rz: i * 0.25 });
+      if (k === 'carbine') g.box(0.3, 0.016, 0.012, x + 0.1, y - 0.1, z - 0.01, A.wood);
+    }
+    // How each rider's weapon moves in a fight.
+    const RBLOW = { lance: 'thrust', sword: 'chop', sabre: 'chop', bow: 'draw', carbine: 'shot' };
+    // A rider seated on a horse at (x, z): body, head and hat, and what he carries, unless o.held takes the weapon
+    // to a part of its own, adding his shoulder to that list.
     function rider(g, x, z, o) {
       const y = 0.46, c = o.cloth || A.tunic;
       g.cyl(0.055, 0.05, 0.2, x - 0.02, y + 0.12, z, c, { seg: 7 });
@@ -1014,91 +1080,106 @@ const Models = (() => {
       if (o.hat === 'knight') g.box(0.06, 0.06, 0.012, x - 0.02, hy2 + 0.07, z, o.plume || A.plume, TB);
       if (o.hat === 'tricorne') { g.cyl(0.08, 0.08, 0.016, x - 0.01, hy2 + 0.035, z, 0x1e1c1a, { seg: 3, ry: 0.5 }); }
       if (o.hat === 'helm') g.sph(head * 0.66, x - 0.01, hy2 + 0.01, z, A.mail, { seg: 8, rings: 5, top: true, sy: 1.2 });
-      if (o.arms === 'lance') g.cyl(0.008, 0.012, 0.9, x + 0.22, y + 0.2, z - 0.06, A.woodDk, { axis: 'x', seg: 5 });
-      if (o.arms === 'sword' || o.arms === 'sabre') g.box(0.014, 0.24, 0.03, x + 0.08, y + 0.26, z - 0.06, A.mail, { rz: -0.5 });
-      if (o.arms === 'bow') for (let i = -2; i <= 2; i++) g.box(0.01, 0.07, 0.01, x + 0.1 - Math.abs(i) * 0.012, y + 0.16 + i * 0.07, z - 0.07, A.woodDk, { rz: i * 0.25 });
-      if (o.arms === 'carbine') g.box(0.3, 0.016, 0.012, x + 0.1, y + 0.1, z - 0.07, A.wood);
+      if (o.held && o.arms) o.held.push([x, y + 0.2, z - 0.06]);
+      else weaponAt(g, o.arms, x, y + 0.2, z - 0.06);
       if (o.shield) g.cyl(0.08, 0.08, 0.014, x, y + 0.14, z + 0.09, o.shield, { axis: 'z', seg: 12, t: 0.5 });
     }
-    // Riders three abreast in a wedge, the leader ahead.
+    // A rider's weapon as a part of its own, one for each shoulder in the list.
+    const heldPart = (k, at) => { const g = G(); weaponAt(g, k, 0, 0, 0); return part('held', g, { rig: 'held', at, blow: RBLOW[k] || 'shot' }); };
+    // Riders three abreast in a wedge, the leader ahead, on horses whose legs move and with weapons that strike.
     function troop(o, coat) {
-      const g = G();
-      for (const [x, z] of [[0.2, 0], [-0.25, 0.3], [-0.25, -0.3]]) { horse(g, x, z, coat, o); rider(g, x - 0.02, z, o); }
-      return g;
+      const g = G(), hips = [], held = [];
+      [[0.2, 0], [-0.25, 0.3], [-0.25, -0.3]].forEach(([x, z], i) => { horse(g, x, z, coat, Object.assign({}, o, { rig: hips, off: i * 0.37 })); rider(g, x - 0.02, z, Object.assign({}, o, { held })); });
+      const parts = [part('hull', g), ...horseLegs(coat, hips)];
+      if (held.length) parts.push(heldPart(o.arms, held));
+      parts.gait = GAIT.horse;
+      return parts;
     }
-    units.outrider = [part('hull', troop({ cloth: A.tunic, arms: 'bow', hat: 'crest', cloth2: false }, 0x8a6a4a))];
-    units.knight = [part('hull', troop({ cloth: A.mail, vest: A.coatR, hat: 'knight', arms: 'lance', shield: A.white, armour: true }, 0x5a4a3a))];
-    units.cuirassier = [part('hull', troop({ cloth: A.coatB, vest: A.mail, hat: 'helm', arms: 'sabre', legs: A.white }, 0x3a2a20))];
-    units.dragoon = [part('hull', troop({ cloth: A.coatG, hat: 'tricorne', arms: 'carbine', legs: A.white }, 0x6b4a32))];
+    units.outrider = troop({ cloth: A.tunic, arms: 'bow', hat: 'crest', cloth2: false }, 0x8a6a4a);
+    units.knight = troop({ cloth: A.mail, vest: A.coatR, hat: 'knight', arms: 'lance', shield: A.white, armour: true }, 0x5a4a3a);
+    units.cuirassier = troop({ cloth: A.coatB, vest: A.mail, hat: 'helm', arms: 'sabre', legs: A.white }, 0x3a2a20);
+    units.dragoon = troop({ cloth: A.coatG, hat: 'tricorne', arms: 'carbine', legs: A.white }, 0x6b4a32);
 
-    // Wheels of wood, spoked.
-    function cartWheel(g, x, z, r = 0.2, w = 0.04) {
+    // Wheels of wood, spoked. With a list the wheel is left out and added to it as [x, r, z, w], for wheels that roll.
+    function cartWheel(g, x, z, r = 0.2, w = 0.04, list) {
+      if (list) { list.push([x, r, z, w]); return; }
       g.cyl(r, r, w, x, r, z, A.woodDk, { axis: 'z', seg: 14 });
       g.cyl(r * 0.25, r * 0.25, w + 0.03, x, r, z, A.iron, { axis: 'z', seg: 8 });
       for (let i = 0; i < 4; i++) g.box(0.012, r * 1.8, w + 0.01, x, r - r * 0.9, z, A.wood, { rz: i * 0.785 });
     }
-    // An ox, stockier than a horse, with horns.
-    function ox(g, x, z) {
+    // One wooden wheel of radius and width one, about its hub, shared by everything that rolls on them.
+    const wheelGeo = (() => {
+      const g = G();
+      g.cyl(1, 1, 1, 0, 0, 0, A.woodDk, { axis: 'z', seg: 14 });
+      g.cyl(0.25, 0.25, 1.75, 0, 0, 0, A.iron, { axis: 'z', seg: 8 });
+      for (let i = 0; i < 4; i++) g.box(0.06, 1.8, 1.25, 0, -0.9, 0, A.wood, { rz: i * 0.785 });
+      return g.finish();
+    })();
+    const wheelPart = list => part('wheels', wheelGeo, { rig: 'wheel', share: 'wheel', wheels: list });
+    // An ox, stockier than a horse, with horns. With o.rig its legs are left out and its hips added to that list.
+    function ox(g, x, z, o = {}) {
       g.box(0.46, 0.2, 0.2, x, 0.24, z, A.ox); g.sph(0.11, x + 0.2, 0.36, z, A.ox, { seg: 8, rings: 6 });
       g.box(0.14, 0.1, 0.1, x + 0.32, 0.32, z, A.ox, { rz: -0.3 });
       for (const s of [-1, 1]) g.cyl(0.008, 0.012, 0.1, x + 0.3, 0.42, z + s * 0.07, A.ivory, { rx: s * 1.1, seg: 4 });
-      for (const [dx, dz] of [[0.17, 0.07], [0.17, -0.07], [-0.17, 0.07], [-0.17, -0.07]]) g.cyl(0.03, 0.025, 0.26, x + dx, 0.13, z + dz, A.ox, { seg: 5 });
+      if (o.rig) o.rig.push(...quad(x, z, 0.17, 0.07, 0.3));
+      else for (const [dx, dz] of [[0.17, 0.07], [0.17, -0.07], [-0.17, 0.07], [-0.17, -0.07]]) g.cyl(0.03, 0.025, 0.26, x + dx, 0.13, z + dz, A.ox, { seg: 5 });
     }
     // A load of ore that shows while it is carried.
     const oreLoad = (pts, y) => { const l = G(); for (const r of pts) l.add(new THREE.DodecahedronGeometry(r[2], 0), r[0], y, r[1], P.ore, { ry: r[0] * 7, g: 0.12 }); return l; };
 
     // Ox cart: an ox before a two-wheeled cart.
     {
-      const b = G();
-      ox(b, 0.32, 0);
-      cartWheel(b, -0.3, 0.28, 0.2); cartWheel(b, -0.3, -0.28, 0.2);
+      const b = G(), hips = [], wh = [];
+      ox(b, 0.32, 0, { rig: hips });
+      cartWheel(b, -0.3, 0.28, 0.2, 0.04, wh); cartWheel(b, -0.3, -0.28, 0.2, 0.04, wh);
       b.box(0.62, 0.05, 0.48, -0.3, 0.28, 0, A.wood, T);
       for (const s of [-1, 1]) b.box(0.62, 0.12, 0.03, -0.3, 0.33, s * 0.24, A.woodDk, T);
       for (const s of [-1, 1]) b.box(0.5, 0.025, 0.025, 0.12, 0.3, s * 0.12, A.woodDk);
       mark(b, 0.2, 0.3, -0.5, 0.45, 0);
-      units.oxcart = [part('hull', b), part('load', oreLoad([[-0.42, 0.1, 0.1], [-0.2, -0.08, 0.12], [-0.3, 0.12, 0.09]], 0.4), { pivot: [0, 0, 0], load: true })];
+      units.oxcart = [part('hull', b), ...legRig('ox', hips, GAIT.ox, 0.15, 0.13, 0.03, 0.025, A.ox, hoof), wheelPart(wh), part('load', oreLoad([[-0.42, 0.1, 0.1], [-0.2, -0.08, 0.12], [-0.3, 0.12, 0.09]], 0.4), { pivot: [0, 0, 0], load: true })];
+      units.oxcart.gait = GAIT.ox;
     }
     // Ore wagon: two horses before a four-wheeled wagon.
     {
-      const b = G();
-      horse(b, 0.62, 0.12, 0x6b4a32, { cloth: false }); horse(b, 0.62, -0.12, 0x3a2a20, { cloth: false });
-      for (const x of [-0.08, -0.62]) for (const s of [-1, 1]) cartWheel(b, x, s * 0.3, 0.17);
+      const b = G(), h1 = [], h2 = [], wh = [];
+      horse(b, 0.62, 0.12, 0x6b4a32, { cloth: false, rig: h1 }); horse(b, 0.62, -0.12, 0x3a2a20, { cloth: false, rig: h2, off: 0.5 });
+      for (const x of [-0.08, -0.62]) for (const s of [-1, 1]) cartWheel(b, x, s * 0.3, 0.17, 0.04, wh);
       b.box(0.8, 0.06, 0.5, -0.35, 0.3, 0, A.wood, T);
       for (const s of [-1, 1]) b.box(0.8, 0.16, 0.03, -0.35, 0.36, s * 0.25, A.woodDk, T);
       b.box(0.03, 0.16, 0.5, 0.05, 0.36, 0, A.woodDk, T);
       mark(b, 0.2, 0.3, -0.75, 0.52, 0);
-      units.wagon = [part('hull', b), part('load', oreLoad([[-0.55, 0.1, 0.12], [-0.3, -0.1, 0.13], [-0.12, 0.08, 0.11], [-0.42, -0.02, 0.1]], 0.45), { pivot: [0, 0, 0], load: true })];
+      units.wagon = [part('hull', b), ...horseLegs(0x6b4a32, h1), ...horseLegs(0x3a2a20, h2), wheelPart(wh), part('load', oreLoad([[-0.55, 0.1, 0.12], [-0.3, -0.1, 0.13], [-0.12, 0.08, 0.11], [-0.42, -0.02, 0.1]], 0.45), { pivot: [0, 0, 0], load: true })];
+      units.wagon.gait = GAIT.horse;
     }
     // Supply cart: a covered wagon with the side's cross on its canvas.
     {
-      const b = G();
-      horse(b, 0.55, 0, 0x8a6a4a, { cloth: false });
-      for (const s of [-1, 1]) cartWheel(b, -0.3, s * 0.27, 0.2);
+      const b = G(), hips = [], wh = [];
+      horse(b, 0.55, 0, 0x8a6a4a, { cloth: false, rig: hips });
+      for (const s of [-1, 1]) cartWheel(b, -0.3, s * 0.27, 0.2, 0.04, wh);
       b.box(0.66, 0.06, 0.46, -0.3, 0.28, 0, A.wood);
       b.cyl(0.23, 0.23, 0.62, -0.3, 0.36, 0, A.canvas, { axis: 'x', seg: 12, sy: 1.15 });
       for (const s of [-1, 1]) { b.box(0.04, 0.14, 0.012, -0.3, 0.42, s * 0.235, P.red, TB); b.box(0.14, 0.04, 0.012, -0.3, 0.47, s * 0.235, P.red, TB); }
-      units.supcart = [part('hull', b)];
+      units.supcart = [part('hull', b), ...horseLegs(0x8a6a4a, hips), wheelPart(wh)];
+      units.supcart.gait = GAIT.horse;
     }
     // Chariot: two horses and a light car with a driver and an archer.
     {
-      const b = G();
-      horse(b, 0.42, 0.13, 0x6b4a32); horse(b, 0.42, -0.13, 0x8a6a4a);
-      for (const s of [-1, 1]) cartWheel(b, -0.22, s * 0.24, 0.17, 0.03);
+      const b = G(), h1 = [], h2 = [], wh = [], held = [];
+      horse(b, 0.42, 0.13, 0x6b4a32, { rig: h1 }); horse(b, 0.42, -0.13, 0x8a6a4a, { rig: h2, off: 0.06 });
+      for (const s of [-1, 1]) cartWheel(b, -0.22, s * 0.24, 0.17, 0.03, wh);
       b.box(0.26, 0.05, 0.4, -0.2, 0.26, 0, A.wood, T);
       b.prism([[-0.34, 0], [-0.34, 0.16], [-0.06, 0.2], [-0.04, 0]], 0.4, 0, 0.3, 0, A.bronze, T);
       b.box(0.5, 0.02, 0.02, 0.1, 0.3, 0, A.woodDk);
-      rider(b, -0.22, 0.08, { cloth: A.linen, hat: 'crest' }); rider(b, -0.22, -0.08, { cloth: A.tunic, hat: 'crest', arms: 'bow' });
-      units.chariot = [part('hull', b)];
+      rider(b, -0.22, 0.08, { cloth: A.linen, hat: 'crest' }); rider(b, -0.22, -0.08, { cloth: A.tunic, hat: 'crest', arms: 'bow', held });
+      units.chariot = [part('hull', b), ...horseLegs(0x6b4a32, h1), ...horseLegs(0x8a6a4a, h2), wheelPart(wh), heldPart('bow', held)];
+      units.chariot.gait = GAIT.horse;
     }
-    // War elephant: a great beast with tusks and a howdah of archers, its cloth in the side's colour.
+    // War elephant: a great beast with tusks and a howdah of archers, its cloth in the side's colour. Its legs walk
+    // and its head, with trunk and tusks, swings down and up to gore.
     {
-      const b = G();
+      const b = G(), hips = [];
       b.sph(0.42, 0, 0.72, 0, A.hide, { seg: 12, rings: 8, sx: 1.35, sz: 0.8 });
-      for (const [dx, dz] of [[0.32, 0.18], [0.32, -0.18], [-0.32, 0.18], [-0.32, -0.18]]) b.cyl(0.09, 0.085, 0.5, dx, 0.25, dz, A.hide, { seg: 8 });
-      b.sph(0.22, 0.58, 0.86, 0, A.hide, { seg: 10, rings: 8 });
-      for (const s of [-1, 1]) b.cyl(0.16, 0.16, 0.02, 0.5, 0.88, s * 0.2, A.hide, { axis: 'z', seg: 10, sx: 0.8 });
-      b.cyl(0.05, 0.03, 0.5, 0.78, 0.62, 0, A.hide, { seg: 7, rz: 0.25 });
-      for (const s of [-1, 1]) b.cyl(0.012, 0.02, 0.3, 0.76, 0.66, s * 0.08, A.ivory, { seg: 5, rz: -1.1 });
+      hips.push(...quad(0, 0, 0.32, 0.18, 0.56));
       b.box(0.7, 0.3, 0.7, -0.05, 0.92, 0, A.coatR, TB);
       b.box(0.5, 0.2, 0.5, -0.05, 1.1, 0, A.wood, T);
       for (const [dx, dz] of [[0.2, 0.2], [0.2, -0.2], [-0.25, 0.2], [-0.25, -0.2]]) b.box(0.025, 0.24, 0.025, dx, 1.3, dz, A.woodDk);
@@ -1106,47 +1187,64 @@ const Models = (() => {
       b.cyl(0.04, 0.035, 0.14, -0.05, 1.37, 0.08, A.tunic, { seg: 6 }); b.sph(0.035, -0.05, 1.47, 0.08, P.skin, { seg: 6, rings: 4 });
       b.cyl(0.04, 0.035, 0.14, -0.05, 1.37, -0.1, A.linen, { seg: 6 }); b.sph(0.035, -0.05, 1.47, -0.1, P.skin, { seg: 6, rings: 4 });
       b.box(0.03, 0.18, 0.03, -0.54, 0.62, 0, 0x3a3634, { rz: 0.4 });
-      units.elephant = [part('hull', b)];
+      // The head about its neck at (0.42, 0.84).
+      const h = G(), hx = -0.42, hy0 = -0.84;
+      h.sph(0.22, 0.58 + hx, 0.86 + hy0, 0, A.hide, { seg: 10, rings: 8 });
+      for (const s of [-1, 1]) h.cyl(0.16, 0.16, 0.02, 0.5 + hx, 0.88 + hy0, s * 0.2, A.hide, { axis: 'z', seg: 10, sx: 0.8 });
+      h.cyl(0.05, 0.03, 0.5, 0.78 + hx, 0.62 + hy0, 0, A.hide, { seg: 7, rz: 0.25 });
+      for (const s of [-1, 1]) h.cyl(0.012, 0.02, 0.3, 0.76 + hx, 0.66 + hy0, s * 0.08, A.ivory, { seg: 5, rz: -1.1 });
+      units.elephant = [part('hull', b), ...legRig('elephant', hips, GAIT.elephant, 0.28, 0.26, 0.09, 0.085, A.hide, (l, L2) => l.cyl(0.1, 0.1, 0.03, 0, -L2 - 0.015, 0, 0x5a5652, { seg: 8 })), part('head', h, { rig: 'head', pivot: [0.42, 0.84, 0] })];
+      units.elephant.gait = GAIT.elephant;
     }
-    // Catapult: a wheeled frame and a throwing arm cocked back, a stone in its cup.
+    // Catapult: a wheeled frame and a throwing arm that lies back on the frame, its cup and stone behind, and that
+    // swings up against the crossbar to throw, then is winched down again and loaded.
     {
-      const b = G();
-      for (const x of [0.28, -0.3]) for (const s of [-1, 1]) cartWheel(b, x, s * 0.3, 0.14, 0.04);
+      const b = G(), wh = [];
+      for (const x of [0.28, -0.3]) for (const s of [-1, 1]) cartWheel(b, x, s * 0.3, 0.14, 0.04, wh);
       for (const s of [-1, 1]) b.box(0.9, 0.06, 0.06, 0, 0.22, s * 0.24, A.wood, T);
       for (const x of [-0.36, 0.34]) b.box(0.06, 0.05, 0.54, x, 0.24, 0, A.wood);
-      for (const s of [-1, 1]) b.box(0.06, 0.34, 0.05, 0.12, 0.26, s * 0.2, A.woodDk, { rz: -0.15 });
-      b.box(0.06, 0.06, 0.44, 0.14, 0.58, 0, A.woodDk);
-      b.box(0.72, 0.045, 0.045, -0.12, 0.34, 0, A.wood, { rz: -0.42 });
-      b.cyl(0.07, 0.05, 0.06, -0.42, 0.24, 0, A.woodDk, { seg: 8 }); b.sph(0.06, -0.42, 0.3, 0, 0x9a9488, { seg: 6, rings: 4 });
+      for (const s of [-1, 1]) b.box(0.06, 0.38, 0.05, 0.14, 0.26, s * 0.2, A.woodDk, { rz: -0.15 });
+      b.box(0.06, 0.06, 0.44, 0.1, 0.62, 0, A.woodDk);
       b.cyl(0.05, 0.05, 0.44, 0.0, 0.3, 0, A.rope, { axis: 'z', seg: 8 });
       mark(b, 0.16, 0.16, 0.38, 0.29, 0);
-      units.catapult = [part('hull', b)];
+      // The arm about the skein at (0, 0.3), lying back toward its cup.
+      const a = G();
+      a.box(0.54, 0.045, 0.045, -0.21, -0.0225, 0, A.wood, { rz: 0.08 });
+      a.cyl(0.07, 0.05, 0.06, -0.46, -0.03, 0, A.woodDk, { seg: 8, rz: 0.08 });
+      const st = G(); st.sph(0.06, -0.46, 0.03, 0, 0x9a9488, { seg: 6, rings: 4 });
+      units.catapult = [part('hull', b), wheelPart(wh), part('arm', a, { rig: 'throw', pivot: [0, 0.3, 0], throw: 'catapult' }), part('stone', st, { rig: 'loaded' })];
+      units.catapult.release = [0.12, 0.76];
     }
-    // Trebuchet: a tall A-frame, a long arm and a box of counterweight.
+    // Trebuchet: a tall A-frame, a long arm with its sling at the back and a box of counterweight hung at the front.
+    // The weight drops, the arm whips up and over to throw, and is hauled down again.
     {
-      const b = G();
-      for (const x of [0.4, -0.4]) for (const s of [-1, 1]) cartWheel(b, x, s * 0.34, 0.13, 0.04);
+      const b = G(), wh = [];
+      for (const x of [0.4, -0.4]) for (const s of [-1, 1]) cartWheel(b, x, s * 0.34, 0.13, 0.04, wh);
       for (const s of [-1, 1]) { b.box(1.0, 0.07, 0.07, 0, 0.2, s * 0.28, A.wood, T); b.box(0.07, 0.95, 0.07, 0.14, 0.24, s * 0.26, A.woodDk, { rz: -0.32 }); b.box(0.07, 0.95, 0.07, -0.14, 0.24, s * 0.26, A.woodDk, { rz: 0.32 }); }
       b.cyl(0.035, 0.035, 0.6, 0, 1.08, 0, A.iron, { axis: 'z', seg: 6 });
-      b.box(1.5, 0.06, 0.06, -0.1, 1.04, 0, A.wood, { rz: 0.42 });
-      b.box(0.3, 0.28, 0.3, 0.42, 1.04, 0, A.woodDk, T);
-      b.box(0.02, 0.5, 0.02, -0.74, 0.62, 0, A.rope, { rz: 0.1 });
-      mark(b, 0.2, 0.2, 0.42, 1.33, 0);
-      units.trebuchet = [part('hull', b)];
+      // The arm about the axle at (0, 1.08), its long end down at the back.
+      const a = G(), th = 0.42, cs = Math.cos(th), sn = Math.sin(th);
+      a.box(1.5, 0.06, 0.06, -0.25 * cs, -0.25 * sn - 0.03, 0, A.wood, { rz: th });
+      const cw = G(); cw.box(0.3, 0.28, 0.3, 0, -0.33, 0, A.woodDk, T); cw.box(0.02, 0.06, 0.02, 0, -0.06, 0, A.iron); mark(cw, 0.2, 0.2, 0, -0.04, 0);
+      const sl = G(); sl.box(0.02, 0.36, 0.02, 0, -0.36, 0, A.rope);
+      const st = G(); st.sph(0.07, 0, -0.4, 0, 0x9a9488, { seg: 6, rings: 4 });
+      units.trebuchet = [part('hull', b), wheelPart(wh), part('arm', a, { rig: 'throw', pivot: [0, 1.08, 0], throw: 'trebuchet' }),
+        part('weight', cw, { rig: 'hang', at: [0.5 * cs, 0.5 * sn, 0] }), part('sling', sl, { rig: 'hang', at: [-1.0 * cs, -1.0 * sn, 0] }), part('stone', st, { rig: 'hang', at: [-1.0 * cs, -1.0 * sn, 0], loaded: true })];
+      units.trebuchet.release = [0.4, 1.95];
     }
-    // Cannon: a black barrel on a two-wheeled carriage with its trail on the ground.
+    // Cannon: a black barrel on a two-wheeled carriage with its trail on the ground. It runs back as it fires.
     {
-      const b = G();
-      for (const s of [-1, 1]) cartWheel(b, 0, s * 0.24, 0.22, 0.05);
+      const b = G(), wh = [];
+      for (const s of [-1, 1]) cartWheel(b, 0, s * 0.24, 0.22, 0.05, wh);
       b.box(0.8, 0.07, 0.24, -0.25, 0.14, 0, A.wood, Object.assign({ rz: 0.18 }, T));
       b.cyl(0.07, 0.085, 0.72, 0.22, 0.34, 0, 0x2a2826, { axis: 'x', seg: 12 });
       b.cyl(0.095, 0.095, 0.04, 0.58, 0.34, 0, 0x2a2826, { axis: 'x', seg: 12 });
       b.sph(0.08, -0.15, 0.34, 0, 0x2a2826, { seg: 8, rings: 6 });
       for (const [x, z] of [[-0.5, 0.18], [-0.56, 0.08]]) b.sph(0.05, x, 0.06, z, 0x2a2826, { seg: 6, rings: 4 });
       mark(b, 0.16, 0.16, -0.36, 0.26, 0, { rz: 0.18 });
-      units.cannonart = [part('hull', b)];
+      units.cannonart = [part('hull', b), wheelPart(wh)];
+      units.cannonart.kick = 0.16;
     }
-
     // Howitzer: a short heavy barrel behind a shield on two wheels, its split trail spread on the ground.
     {
       const b = G();
@@ -1282,28 +1380,33 @@ const Models = (() => {
     // Mech walker: two legs under a body that turns, a rail cannon on each arm.
     {
       const b = G();
-      for (const s of [-1, 1]) {
-        b.box(0.34, 0.06, 0.2, 0.04, 0, s * 0.26, A.exoDk);
-        b.box(0.1, 0.4, 0.12, -0.02, 0.06, s * 0.26, A.exo, Object.assign({ rz: 0.18 }, T));
-        b.box(0.12, 0.36, 0.14, 0.02, 0.42, s * 0.26, A.exo, Object.assign({ rz: -0.22 }, T));
-        b.sph(0.08, 0.06, 0.44, s * 0.26, A.exoDk, { seg: 8, rings: 6 });
-      }
       b.box(0.3, 0.12, 0.5, 0, 0.74, 0, A.exoDk);
+      // Legs that step: a thigh from the hip, and a shin from the knee with its foot laid flat at rest.
+      if (!legMakes.mech) {
+        const u = G(); u.box(0.12, 0.4, 0.14, 0, -0.38, 0, A.exo, T);
+        const l = G(); l.sph(0.08, 0, 0, 0, A.exoDk, { seg: 8, rings: 6 }); l.box(0.1, 0.4, 0.12, 0, -0.38, 0, A.exo, T); l.box(0.34, 0.06, 0.2, 0.04, -0.47, 0, A.exoDk, { rz: 0.2 });
+        legMakes.mech = [u.finish(), l.finish()];
+      }
+      const legsM = legRig('mech', [[0, 0.8, 0.26, 0, 0, 0, 0, 0], [0, 0.8, -0.26, 0.5, 0.5, 0.5, 0, 0]], GAIT.mech, 0.36, 0.38);
       const t = G();
       t.box(0.6, 0.32, 0.56, -0.02, 0, 0, A.exo, T);
       t.box(0.02, 0.08, 0.36, 0.29, 0.18, 0, A.glow, GLOW);
       mark(t, 0.3, 0.3, -0.1, 0.32, 0);
       for (const s of [-1, 1]) { t.box(0.2, 0.18, 0.12, 0.04, 0.06, s * 0.36, A.exoDk); t.box(0.56, 0.05, 0.05, 0.36, 0.14, s * 0.36, A.exoDk); t.box(0.3, 0.014, 0.054, 0.4, 0.17, s * 0.36, A.glow, GLOW); }
-      units.mech = [part('hull', b), part('turret', t, { pivot: [0, 0.82, 0], aim: true })];
+      units.mech = [part('hull', b), ...legsM, part('turret', t, { pivot: [0, 0.82, 0], aim: true })];
+      units.mech.gait = GAIT.mech;
     }
     // Titan: a four-legged walking fortress with twin rails and a pulse gun.
     {
       const b = G();
-      for (const [x, z] of [[0.6, 0.55], [0.6, -0.55], [-0.6, 0.55], [-0.6, -0.55]]) {
-        b.box(0.3, 0.08, 0.3, x * 1.15, 0, z * 1.15, A.exoDk);
-        b.box(0.14, 0.62, 0.14, x * 1.05, 0.06, z * 1.05, A.exo, Object.assign({ rz: x * 0.25, rx: -z * 0.25 }, T));
-        b.box(0.18, 0.5, 0.18, x * 0.8, 0.6, z * 0.8, A.exo, Object.assign({ rz: -x * 0.3, rx: z * 0.3 }, T));
+      // Four legs that step one at a time, each splayed out from under the body and its foot brought back in.
+      if (!legMakes.titan) {
+        const u = G(); u.box(0.18, 0.56, 0.18, 0, -0.5, 0, A.exo, T);
+        const l = G(); l.box(0.14, 0.62, 0.14, 0, -0.58, 0, A.exo, T); l.box(0.3, 0.08, 0.3, 0, -0.66, 0, A.exoDk);
+        legMakes.titan = [u.finish(), l.finish()];
       }
+      const hipsT = quad(0, 0, 0.5, 0.46, 1.12, 0, 0.3, 0.3).map((h, i) => { h[3] = [0, 0.5, 0.75, 0.25][i]; return h; });
+      const legsT = legRig('titan', hipsT, GAIT.titan, 0.5, 0.58);
       b.box(1.6, 0.42, 1.2, 0, 0.9, 0, A.exoDk);
       b.box(1.5, 0.08, 1.1, 0, 1.32, 0, A.exo, T);
       for (const s of [-1, 1]) b.box(1.4, 0.04, 0.02, 0, 1.1, s * 0.61, A.glow, GLOW);
@@ -1312,7 +1415,8 @@ const Models = (() => {
       t.cyl(0.42, 0.46, 0.22, 0, 0, 0, A.exo, T); t.box(0.7, 0.26, 0.6, 0.08, 0.1, 0, A.exoDk);
       t.box(0.02, 0.08, 0.4, 0.43, 0.22, 0, A.glow, GLOW);
       const gn = G(); for (const s of [-1, 1]) { gn.box(1.2, 0.08, 0.08, 0.6, 0, s * 0.16, A.exoDk); gn.box(0.8, 0.02, 0.09, 0.66, 0.05, s * 0.16, A.glow, GLOW); }
-      units.titan = [part('hull', b), part('turret', t, { pivot: [0, 1.38, 0], aim: true }), part('gun', gn, { parent: 'turret', pivot: [0.3, 0.18, 0], recoil: 0.08 })];
+      units.titan = [part('hull', b), ...legsT, part('turret', t, { pivot: [0, 1.38, 0], aim: true }), part('gun', gn, { parent: 'turret', pivot: [0.3, 0.18, 0], recoil: 0.08 })];
+      units.titan.gait = GAIT.titan;
     }
     // Repair drone: a hovering pod with two arms and the side's cross.
     {

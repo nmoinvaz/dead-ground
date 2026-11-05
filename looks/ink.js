@@ -255,7 +255,7 @@
             }
             float detail = max(smoothstep(0.08, 0.3, nE), smoothstep(0.006, 0.02, dE)) * step(0.3, a);
             // Inner lines thin out in the light.
-            detail *= mix(0.55, 1.0, smoothstep(0.25, 0.6, dens));
+            detail *= mix(0.55, 1.0, max(smoothstep(0.25, 0.6, dens), isBr));
             // Ground: a pale green wash speckled in olive, thicker in the middle values, with black ink only for
             // crosshatch in the deepest shade.
             float gC = dens > 0.74 ? tone(p, n - 2.0, 0.0) : 0.0;
@@ -297,8 +297,15 @@
             float wq = pow(dep / 1.15, 0.6) * 7.0, wqw = max(fwidth(wq), 1e-4), wf = fract(wq);
             float wLine = (1.0 - smoothstep(mix(0.55, 0.25, wq / 7.0) * uK, mix(1.2, 0.8, wq / 7.0) * uK, min(wf, 1.0 - wf) / wqw)) * step(0.5, wq);
             if (wLine > 0.0) wLine *= step(wq / 14.0, landNoise(Wl, 12.0, vec2(floor(wq) * 3.1)));
-            // The water lines are laid in the lilac wash below, not in black.
-            float wC = 0.0;
+            // The water lines are laid in the lilac wash below, not in black. A bridge's shadow falls on the water
+            // away from the sun, about its deck's height off, and is hatched there.
+            float wC = 0.0, shB = 0.0;
+            if (isW > 0.01) {
+              float pxU = sqrt(abs(uW2S.x * uW2S.w - uW2S.y * uW2S.z));
+              for (int i = 1; i <= 4; i++) shB = max(shB, 1.0 - smoothstep(0.02, 0.035, abs(A(vUv + uSun2 * pxU * 0.24 * float(i) / res) - 0.42)));
+              shB *= 1.0 - isBr;
+              wC = dk ? 0.0 : hatch(p, 45.0, 3.4, 0.9, 63.0, 0.06) * shB * 0.75;
+            }
             // Bridges: a pink deck with one light hatch in its shade, solid in its deepest.
             float brC = max(hatch(p, 45.0, 4.6, 0.8, 41.0, 0.1) * step(0.62, dens), smoothstep(0.9, 0.94, dens));
             // Ore: outlined gold pebbles, hatched only on their shaded side. The other styles draw it in its wash,
@@ -420,6 +427,7 @@
             // Water on dark paper is a deep blue, its lines and ripples lighter than it.
             vec3 WTR = dk ? vec3(0.115, 0.15, 0.235) : LILAC, WTR_D = dk ? vec3(0.32, 0.4, 0.6) : LILAC_D, RIP = dk ? vec3(0.4, 0.5, 0.7) : vec3(1.0);
             base = mix(base, mix(mix(WTR, WTR_D, wLine * 0.6), RIP, rip * 0.55 * (1.0 - wLine)), isW);
+            base = mix(base, base * (dk ? 0.5 : 0.8), shB * isW);
             float tn = noise(p / (60.0 * uK));
             vec3 TR = tn < 0.4 ? TREE3 : tn < 0.62 ? TREE1 : TREE2;
             if (dk) TR = tn < 0.4 ? vec3(0.13, 0.2, 0.12) : tn < 0.62 ? vec3(0.16, 0.235, 0.14) : vec3(0.19, 0.26, 0.165);
