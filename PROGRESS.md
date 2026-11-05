@@ -25,6 +25,20 @@
   round each unit and a sketched frame round each building, gone in about a second. Daylight shows a pale ring.
 - A squad that changes form at an age-up keeps its men, where it used to drop corpses when its count differed.
 
-## Next
+- Wrecks are drawn at the units' own scale (they used to shrink by a fifth on death), models with moving parts lie
+  at rest, and a fallen beast sinks on folded legs.
 
-- Check the zoomed-out pass at 92, 150 and 200 in light and dark ink, then buildings, effects and battles far out.
+## Checked
+
+Headless at 1440x900, device scale 2, pictures in `review-field/` (git-ignored): zoomed out at 92, 150 and 200 in
+light and dark (`final-gp-*`, `v3-steppe-*`, `v1-gp-*` against `base-gp-*`), bridges (`br2-*`), arrows (`v4-*`),
+rest poses (`m1-*`, `m2-*`), gallop, fight and men strips (`m4`, `m5`, `m7`, `m8`), the age-up (`m6-*`) and Daylight
+(`m9-*`). A frame takes about the same as on the starting commit (26.0 against 25.0 ms median, headless).
+
+## Still open
+
+- On dark paper the material washes are faint, so a base's age reads less there than on light paper.
+- Ore fields are lighter but still the busiest texture at 150 to 200; one nugget a cell when far out would calm them.
+- From about 130 out the HUD's pictograms cover the units, so the 3D units carry the read only nearer than that.
+- Not seen moving in a picture: the trebuchet's throw, the elephant's gore, the mech's and titan's steps. They share
+  the code the catapult, the horses and the probes were checked with.
