@@ -868,7 +868,7 @@ const World = (() => {
       tl.forEach((t, i) => { if (!byCell.has(t.cell)) byCell.set(t.cell, []); byCell.get(t.cell).push(i); });
       scen.trees = { mesh: tm, list: tl, state: new Uint8Array(tl.length), seen: -1, byCell };
       const rc = new THREE.Color(th.rock);
-      instanced(sc.rock, plainTint, rocks.map(t => ({ x: t.x, y: terrainAt(M, t.x, t.y) - 0.08, z: t.y, s: t.s * 1.4, a: t.a, c: colA.copy(rc).multiplyScalar(0.8 + rand() * 0.5).getHex() })));
+      instanced(sc.rock, plainTint, rocks.map(t => ({ x: t.x, y: terrainAt(M, t.x, t.y) - 0.06, z: t.y, s: t.s * 1.2, a: t.a, c: colA.copy(rc).multiplyScalar(0.62 + rand() * 0.3).getHex() })));
 
       // Houses, plaster walls under pitched roofs.
       const wall = [0xcfc4ae, 0xb9ad96, 0xd8d0be, 0xa89a82], roofC = [0x8a4a34, 0x6e4032, 0x5c5a58, 0x7a5a42];
@@ -923,7 +923,7 @@ const World = (() => {
         const k = j * 1.1, o = j % 2 ? 0.25 : -0.25, x = f[0] - f[3] * k + f[2] * o, y = f[1] + f[2] * k + f[3] * o;
         if (terrainAt(M, x, y) < M.water - 0.05) stones.push({ x, y: terrainAt(M, x, y) + 0.12, z: y, sx: 0.55, sy: 0.35, sz: 0.5, a: k, c: 0xa8a090 });
       }
-      scen.fords = { mesh: stones.length ? instanced(sc.rock, plainTint, stones) : null, list: stones, under: false };
+      scen.fords = { mesh: stones.length ? instanced(sc.stone, plainTint, stones) : null, list: stones, under: false };
 
       // Ore lies on its cells as nuggets, scaled by what is left.
       const cells = [];
@@ -1744,8 +1744,15 @@ const World = (() => {
     }
     const lerpAngle = (a, b, t) => a + Rules.angleTo(a, b) * t;
 
-    const squad = n => { const o = []; if (n === 1) return [[0, 0]]; for (let i = 0; i < n; i++) { const a = i / n * 6.283 + 0.4, r = 0.28 + (i % 2) * 0.1; o.push([Math.cos(a) * r, Math.sin(a) * r]); } return o; };
-    const SQUADS = { 1: squad(1), 3: squad(3), 5: squad(5) };
+    // A squad stands in ranks, forward along x and across along y: five as three in front and two behind, three
+    // abreast. Each place is a little off the line, as men stand. The last place is the first to fall.
+    const SQUADS = {
+      1: [[0, 0]],
+      3: [[0.05, -0.35], [0.11, 0.01], [0.03, 0.36]],
+      5: [[0.21, -0.39], [0.24, 0.0], [0.19, 0.4], [-0.17, -0.2], [-0.15, 0.21]],
+    };
+    // Where a squad's man i stands on the land, its middle at (x, y) and facing yaw.
+    const manAt = (men, i, x, y, yaw, k = 1.2) => { const o = SQUADS[men][i] || [0, 0], c = Math.cos(yaw), s = Math.sin(yaw); return [x + (c * o[0] + s * o[1]) * k, y + (-s * o[0] + c * o[1]) * k]; };
 
     // Units are drawn a quarter larger than the rules' cells, so each reads by its shape.
     const US = 1.25;
@@ -1814,8 +1821,8 @@ const World = (() => {
         if (e.d.men) {
           const alive = Math.ceil(e.hp / e.max * e.d.men);
           if (alive < r.alive && vis) {
-            const off = SQUADS[e.d.men][alive] || [0, 0];
-            corpses.push({ kind: e.kind, x: x + off[0], y: gh, z: y + off[1], yaw, t: 0, color });
+            const [cx, cz] = manAt(e.d.men, alive, x, y, yaw);
+            corpses.push({ kind: e.kind, x: cx, y: heightAt(M, cx, cz), z: cz, yaw, t: 0, color });
           }
           r.alive = alive;
         }
@@ -1832,10 +1839,9 @@ const World = (() => {
             pushScreen(onScreen, e, x, z + 0.3, y, 0.5);
             continue;
           }
-          const c = Math.cos(yaw), s = Math.sin(yaw), offs = SQUADS[e.d.men];
           const moving = e.v > 0.1, ph = e.anim * 7;
           for (let i = 0; i < r.alive; i++) {
-            const o = offs[i] || [0, 0], px = x + (c * o[0] + s * o[1]) * 1.2, pz = y + (-s * o[0] + c * o[1]) * 1.2;
+            const [px, pz] = manAt(e.d.men, i, x, y, yaw);
             drawMan(set, px, heightAt(M, px, pz), pz, yaw, ph + i * 1.9, moving, color);
           }
           // A squad on the move leaves a faint trodden line.
@@ -2189,6 +2195,12 @@ const World = (() => {
         case 'crater': if (!e.b) scorch(e.x, e.y, e.r); break;
         case 'launch': flyers.push({ w: 'nuke', x0: e.x, y0: terrainAt(M, e.x, e.y) + 1, z0: e.y, x1: e.tx, y1: terrainAt(M, e.tx, e.ty), z1: e.ty, t: 0, dur: e.dur, arc: 46, trail: 0 }); break;
         case 'die': onDeath(e); startle(e.x, e.y, 6); break;
+        case 'upgrade': {
+          // A squad that takes a new form keeps the men it has, so none fall when the count of its form differs.
+          const r = rs.get(e.id), u = S.byId.get(e.id);
+          if (r && u) { r.alive = u.d.men ? Math.ceil(u.hp / u.max * u.d.men) : 0; r.tm = null; }
+          break;
+        }
         case 'bridge': if (e.down) {
           // The span breaks along its middle and drops into the river.
           const m = M.bridges[e.i];
@@ -2232,8 +2244,7 @@ const World = (() => {
         explosion(e.x, y + e.z, e.y, UNITS[e.kind].hp > 200 ? 1.2 : 0.4, BLAST_OF[e.kind]);
       } else if (UNITS[e.kind].men) {
         const kept = r ? r.alive : 0;
-        const list = (SQUADS[UNITS[e.kind].men] || [[0, 0]]).slice(0, kept || 1);
-        for (const o of list) corpses.push({ kind: e.kind, x: e.x + o[0], y, z: e.y + o[1], yaw: -e.a, t: 0, color: teamCol[e.team] });
+        for (let i = 0; i < (kept || 1); i++) { const [cx, cz] = manAt(UNITS[e.kind].men, i, e.x, e.y, -e.a); corpses.push({ kind: e.kind, x: cx, y: heightAt(M, cx, cz), z: cz, yaw: -e.a, t: 0, color: teamCol[e.team] }); }
       } else if (OLD(e.kind)) {
         dustBurst(e.x, y, e.y, UNITS[e.kind].hp > 500 ? 1.4 : 1);
         wrecks.push({ kind: e.kind, x: e.x, y, z: e.y, yaw: -e.a, pitch: 0, t: 0, smoke: 0 });

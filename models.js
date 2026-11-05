@@ -790,10 +790,26 @@ const Models = (() => {
       for (let i = 0; i < 4; i++) { const an = i * 1.57 + 0.4; k.cyl(0.015, 0.04, 0.6, Math.cos(an) * 0.18, 0.95, Math.sin(an) * 0.18, 0x5b4632, { seg: 4, rz: -Math.cos(an) * 0.7, rx: Math.sin(an) * 0.7 }); }
       k.add(new THREE.IcosahedronGeometry(0.62, 1), 0, 1.3, 0, 0xffffff, { sy: 0.28 });
       scenery.acacia = k.finish();
+      // An outcrop of a few weathered stones of unequal size, each a solid knocked out of true, so it reads as stone
+      // and not as a cut solid, and keeps a broken outline when it is small.
+      const stone = (rad, seed) => {
+        const g = new THREE.IcosahedronGeometry(rad, 0).toNonIndexed(), p = g.attributes.position;
+        for (let i = 0; i < p.count; i++) {
+          const x = p.getX(i), y = p.getY(i), z = p.getZ(i), h = Math.sin(x * 91.7 + y * 47.3 + z * 13.1 + seed * 7.7) * 43758.5;
+          const k = 0.78 + 0.4 * (h - Math.floor(h));
+          p.setXYZ(i, x * k, y * k * (y < 0 ? 0.5 : 1), z * k);
+        }
+        g.computeVertexNormals();
+        return g;
+      };
       const r = G();
-      r.add(new THREE.DodecahedronGeometry(0.5, 0), 0, 0.26, 0, 0xffffff, { sy: 0.7 });
-      r.add(new THREE.DodecahedronGeometry(0.3, 0), 0.34, 0.14, 0.14, 0xe0e0e0, { sy: 0.7, ry: 1 });
+      r.add(stone(0.46, 1), 0, 0.2, 0, 0xffffff, { sy: 0.62, ry: 0.3 });
+      r.add(stone(0.28, 2), 0.42, 0.1, 0.18, 0xe4e2dc, { sy: 0.7, ry: 1 });
+      r.add(stone(0.2, 3), -0.3, 0.07, 0.36, 0xd6d4ce, { sy: 0.66, ry: 2 });
+      r.add(stone(0.13, 4), 0.12, 0.05, -0.42, 0xe0ded8, { sy: 0.8 });
       scenery.rock = r.finish();
+      // A single flat stone, for a ford's stepping stones.
+      scenery.stone = G().add(stone(0.5, 5), 0, 0.2, 0, 0xffffff, { sy: 0.7 }).finish();
       const n = G();
       n.add(new THREE.DodecahedronGeometry(0.2, 0), 0, 0.1, 0, 0xffffff, { sy: 0.8 });
       n.add(new THREE.OctahedronGeometry(0.15, 0), 0.14, 0.18, 0.04, 0xffffff, { sy: 1.5, rx: 0.3 });
