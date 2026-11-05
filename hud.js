@@ -1515,7 +1515,7 @@ const Hud = (() => {
         lineLists(p.tech);
         if (was > 0 && p.tech > was) freshen(was, p.tech);
         if (picStale) game.pictures(); else buildCams();
-        if (was > 0 && p.tech > was) ageCard(p.tech);
+        if (was > 0 && p.tech > was && game.team >= 0) ageCard(p.tech);
       }
       $('pwr').parentElement.classList.toggle('off', p.tech < Rules.POWER_AGE);
       if (p.tech < Rules.POWER_AGE) $('pwr').textContent = '—';
