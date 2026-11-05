@@ -1833,7 +1833,8 @@ const World = (() => {
           } else if (d.rig === 'head') {
             // A beast's head nods as it walks and swings down and up to gore.
             const k = P.eng ? lunge(P.since) : 0, nod = Math.sin(P.gp * 6.283 * 2) * 0.05 * P.amp;
-            m2.makeTranslation(d.pivot[0], d.pivot[1], d.pivot[2]);
+            // The gore also thrusts the head forward, as a dip alone barely shows from the camera's height.
+            m2.makeTranslation(d.pivot[0] + 0.16 * k, d.pivot[1], d.pivot[2]);
             m3.makeRotationZ(nod - 0.4 * k); m2.multiply(m3);
             mOut.multiplyMatrices(base, m2); emit(p, mOut, color);
           } else if (d.rig === 'throw') {
