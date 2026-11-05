@@ -212,6 +212,9 @@
             vec2 Wl = landAt(vUv, lh);
             float lev = clamp(uLev, 0.0, 2.999);
             gLm = floor(lev); gLf = smoothstep(0.15, 0.85, lev - gLm); gW2S = mat2(uW2S.xy, uW2S.zw) / uK;
+            // How far the view is drawn back, 0 at the usual view and 1 at a wide one, and for units from closer
+            // in, since a unit is small on screen already at the usual view.
+            float zo = smoothstep(1.9, 2.7, uLev), zU = smoothstep(1.2, 1.9, uLev);
             mat2 S2W = mat2(gW2S[1][1], -gW2S[0][1], -gW2S[1][0], gW2S[0][0]) / (gW2S[0][0] * gW2S[1][1] - gW2S[1][0] * gW2S[0][1]);
             // The ground's form as relief maps draw it: the land's height read smoothly from the map, its slopes lit
             // from the upper left of the page, and contours every third of a unit, every fifth one heavier.
@@ -228,8 +231,13 @@
               vec3 nrm = normalize(vec3(-gh.x * 2.2, 1.0, -gh.y * 2.2)), lit = normalize(vec3(ul.x, 1.0, ul.y));
               float sh = dot(nrm, lit) - lit.y;
               rfDark = clamp(-sh * 2.6, 0.0, 1.0); rfLight = clamp(sh * 2.6, 0.0, 1.0);
-              float ci = lhS / 0.33, cw = max(fwidth(ci), 1e-4), idx = step(abs(mod(floor(ci + 0.5), 5.0)), 0.5);
+              // Line k lies at ci = k + 0.5, so floor(ci) names it on both of its sides.
+              float ci = lhS / 0.33, cw = max(fwidth(ci), 1e-4), ck = floor(ci), idx = step(mod(ck, 5.0), 0.5);
               contour = (1.0 - smoothstep(0.45 * cw * uK, 1.3 * cw * uK, abs(fract(ci) - 0.5))) * mix(0.45, 0.85, idx);
+              // Contours generalise as a smaller scale map's do. Where lines crowd on a steep slope the odd ones
+              // go first, then the even, and the index lines hold until they nearly touch. Spacing is in px at 1080p.
+              float cSp = 1.0 / (cw * uK);
+              contour *= idx > 0.5 ? smoothstep(1.6, 2.8, cSp) : mod(ck, 2.0) < 0.5 ? smoothstep(4.0, 6.5, cSp) : smoothstep(7.0, 11.0, cSp);
               // Contours stop short of the water's edge, where the bank is drawn as a line of its own.
               contour *= smoothstep(0.15, 0.4, abs(wl));
             }
@@ -247,7 +255,7 @@
             }
             float detail = max(smoothstep(0.08, 0.3, nE), smoothstep(0.006, 0.02, dE)) * step(0.3, a);
             // Inner lines thin out in the light.
-            detail *= mix(0.55, 1.0, smoothstep(0.25, 0.6, dens));
+            detail *= mix(0.55, 1.0, max(smoothstep(0.25, 0.6, dens), isBr));
             // Ground: a pale green wash speckled in olive, thicker in the middle values, with black ink only for
             // crosshatch in the deepest shade.
             float gC = dens > 0.74 ? tone(p, n - 2.0, 0.0) : 0.0;
@@ -272,7 +280,9 @@
             // embankment. Either bank is hachured, wider the steeper the fall, a cutting's beyond a ditch.
             float bank = smoothstep(0.04, 0.14, abs(rXs)), cut = step(0.0, rXs);
             float bW = mix(0.8, 2.4, smoothstep(0.05, 0.45, abs(rXs))), bu = (rd - mix(1.4, 1.85, cut)) / bW;
-            float hach = bank > 0.0 && bu > 0.0 && bu < 1.0 ? hachure(Wl, vec2(-rN.y, rN.x), mix(1.0 - bu, bu, cut), 10.0, uK) * bank : 0.0;
+            float hach = bank > 0.0 && bu > 0.0 && bu < 1.0 ? hachure(Wl, vec2(-rN.y, rN.x), mix(1.0 - bu, bu, cut), 13.0, uK * 0.85) * bank : 0.0;
+            // Drawn back, the hachures pale to a light tone, so a cutting reads as a bank and not a dark band.
+            hach *= mix(0.62, 0.4, zo);
             // The bank is drawn in its hachures alone, so the shade's stipple is cleared from it.
             float bankIn = bank * smoothstep(-0.08, 0.04, bu) * (1.0 - smoothstep(0.96, 1.08, bu));
             // A ditch runs beside the road wherever it is not up on an embankment, a fine broken line that holds
@@ -287,8 +297,15 @@
             float wq = pow(dep / 1.15, 0.6) * 7.0, wqw = max(fwidth(wq), 1e-4), wf = fract(wq);
             float wLine = (1.0 - smoothstep(mix(0.55, 0.25, wq / 7.0) * uK, mix(1.2, 0.8, wq / 7.0) * uK, min(wf, 1.0 - wf) / wqw)) * step(0.5, wq);
             if (wLine > 0.0) wLine *= step(wq / 14.0, landNoise(Wl, 12.0, vec2(floor(wq) * 3.1)));
-            // The water lines are laid in the lilac wash below, not in black.
-            float wC = 0.0;
+            // The water lines are laid in the lilac wash below, not in black. A bridge's shadow falls on the water
+            // away from the sun, about its deck's height off, and is hatched there.
+            float wC = 0.0, shB = 0.0;
+            if (isW > 0.01) {
+              float pxU = sqrt(abs(uW2S.x * uW2S.w - uW2S.y * uW2S.z));
+              for (int i = 1; i <= 4; i++) shB = max(shB, 1.0 - smoothstep(0.02, 0.035, abs(A(vUv + uSun2 * pxU * 0.24 * float(i) / res) - 0.42)));
+              shB *= 1.0 - isBr;
+              wC = dk ? 0.0 : hatch(p, 45.0, 3.4, 0.9, 63.0, 0.06) * shB * 0.75;
+            }
             // Bridges: a pink deck with one light hatch in its shade, solid in its deepest.
             float brC = max(hatch(p, 45.0, 4.6, 0.8, 41.0, 0.1) * step(0.62, dens), smoothstep(0.9, 0.94, dens));
             // Ore: outlined gold pebbles, hatched only on their shaded side. The other styles draw it in its wash,
@@ -315,7 +332,9 @@
             else if (uUnits == 3) uC = 0.0;
             else if (uUnits == 4) uC = max(hatch(p, uAng, mix(5.0, 2.6, smoothstep(0.15, 0.8, dens)), 0.9, seedU, 0.04) * smoothstep(0.12, 0.22, dens), smoothstep(0.84, 0.88, dens));
             else if (uUnits == 5) { vec2 uq = p / (2.2 * uK); float ud = length(fract(uq) - 0.5 - (vec2(hash(floor(uq) + seedU), hash(floor(uq) + seedU + 7.0)) - 0.5) * 0.3), ur = smoothstep(0.1, 0.85, dens) * 0.58; uC = max((1.0 - smoothstep(ur - 0.08, ur + 0.08, ud)) * step(0.06, ur), smoothstep(0.88, 0.92, dens)); }
-            else uC = max(hatch(p, 45.0, 3.2, 1.0, seedU, 0.04) * smoothstep(0.42, 0.46, dens), smoothstep(0.8, 0.84, dens));
+            // Small on screen, a unit's shade is a flat tint of its side's ink rather than hatching, which at that size
+            // only scribbles over the shape.
+            else uC = max(mix(hatch(p, 45.0, 3.2, 1.0, seedU, 0.04) * smoothstep(0.42, 0.46, dens), smoothstep(0.4, 0.72, dens) * 0.4, zU), smoothstep(0.8, 0.84, dens));
             cover = isG * gC + isW * wC + isS * sC + isT * tC + isB * bC + isU * uC + isBr * brC + isO * oC + isL * smoothstep(0.88, 0.92, dens);
             // The bank drawn once, heavy, on whichever side of it the pixel lies.
             float bankL = 1.0 - smoothstep(0.7 * uK, 1.6 * uK, abs(dep - 0.03) / max(fwidth(dep), 1e-4));
@@ -337,16 +356,18 @@
             // The outline swells on the side away from the sun: a pixel just outside a unit or building, with the
             // shape lying sunward of it, is inked.
             float swell = 0.0;
-            if (a < 0.6) for (int i = 1; i <= 9; i++) { if (i > 3 && uUnits != 3) break; float sa = A(uv + uSun2 * k * (float(i) * 1.15)); swell = max(swell, step(i > 3 ? 0.95 : 0.6, sa) * (i > 1 && sa > 0.9 && uUnits != 3 ? 0.0 : 1.0)); }
+            if (a < 0.6) for (int i = 1; i <= 9; i++) { if (i > 3 && uUnits != 3) break; if (i > 2 && zU > 0.5 && uUnits != 3) break; float sa = A(uv + uSun2 * k * (float(i) * 1.15)); swell = max(swell, step(i > 3 ? 0.95 : 0.6, sa) * (i > 1 && sa > 0.9 && uUnits != 3 ? 0.0 : 1.0)); }
             cover = max(cover, max(heavy, swell * (1.0 -step(0.6, a))));
-            cover = max(cover, detail * mix(0.75, 1.0, isU));
+            // A small unit keeps its outline whole and its inner lines light, so it reads as a shape.
+            cover = max(cover, detail * mix(0.75, mix(1.0, 0.5, zU), isU));
             // Scratchboard units: a solid body with the inner edges cut out white.
             if (uUnits == 2) cover = mix(cover, 1.0 - smoothstep(0.3, 0.7, detail), isU);
             // Ore in the soft, stippled, engraved and faceted styles is outlined thin in brown, not black.
             if (uOre >= 1 && uOre <= 4) {
               float nearO = max(max(oA(uv + k * vec2(1.6, 0)), oA(uv - k * vec2(1.6, 0))), max(max(oA(uv + k * vec2(0, 1.6)), oA(uv - k * vec2(0, 1.6))), isO));
               cover *= 1.0 - nearO;
-              oreL = outline * nearO;
+              // A field of nuggets each ringed in brown is the busiest thing on the land, so the rings are light.
+              oreL = outline * nearO * mix(0.85, 0.5, zU);
             }
             paperC = dk ? DPAPER : vec3(0.96, 0.93, 0.86);
             lineK = max(max(heavy, swell * (1.0 - step(0.6, a))), max(detail, max(edge * 0.55 * (1.0 - bankZone) * isG, max(rEdge * 0.9 * isG, bankL * step(0.001, dep + 0.05) * (isG + isW)))));
@@ -406,6 +427,7 @@
             // Water on dark paper is a deep blue, its lines and ripples lighter than it.
             vec3 WTR = dk ? vec3(0.115, 0.15, 0.235) : LILAC, WTR_D = dk ? vec3(0.32, 0.4, 0.6) : LILAC_D, RIP = dk ? vec3(0.4, 0.5, 0.7) : vec3(1.0);
             base = mix(base, mix(mix(WTR, WTR_D, wLine * 0.6), RIP, rip * 0.55 * (1.0 - wLine)), isW);
+            base = mix(base, base * (dk ? 0.5 : 0.8), shB * isW);
             float tn = noise(p / (60.0 * uK));
             vec3 TR = tn < 0.4 ? TREE3 : tn < 0.62 ? TREE1 : TREE2;
             if (dk) TR = tn < 0.4 ? vec3(0.13, 0.2, 0.12) : tn < 0.62 ? vec3(0.16, 0.235, 0.14) : vec3(0.19, 0.26, 0.165);
@@ -417,6 +439,10 @@
             // Roofs palest, then the walls by which way they face, on either paper.
             vec3 face = dot(nV, uUpV) > 0.6 ? ROOF : nV.x < 0.0 ? WALL_L : WALL_R;
             if (dk) face = dot(nV, uUpV) > 0.6 ? vec3(0.3, 0.28, 0.25) : nV.x < 0.0 ? vec3(0.23, 0.21, 0.19) : vec3(0.17, 0.155, 0.14);
+            // Over the faces, a light wash of what the building is made of, so from far off a base reads its age
+            // by its stuff: straw thatch and mud brick, grey stone and red tile, slate and brick.
+            vec3 bMat = clamp(texture2D(tSubj, vUv).rgb * 2.0, 0.0, 1.0);
+            face = mix(face, min(face * (0.5 + 0.62 * bMat), vec3(1.0)), dk ? 0.75 : 0.6);
             base = mix(base, face, isB);
             base = mix(base, dk ? vec3(0.45, 0.46, 0.48) : vec3(0.99), uSnowC * isB * step(0.6, dot(nV, uUpV)));
             // Deer, cars, townsfolk and boats keep their own colours, as a light wash.
@@ -579,8 +605,12 @@
             float dash = length(gd) > 0.02 ? step(0.42, fract(dot(p, normalize(vec2(-gd.y, gd.x))) / (6.5 * uK))) : step(0.35, hash(floor(p / (5.0 * uK)) + 17.0));
             // On dark paper what was keeps its grey a little dimmed, so it does not sink to black.
             vec3 past = dk ? mix(vec3(dot(baseC, vec3(0.3, 0.59, 0.11))), baseC, 0.3) * 0.85 : mix(paperC, baseC, 0.4);
+            // Remembered ore is the brightest thing on dark paper, so it is sunk toward the paper there, and its many
+            // small rings are dashed lightly on either paper.
+            float oreP = max(max(oA(vUv + k * vec2(1.6, 0)), oA(vUv - k * vec2(1.6, 0))), max(max(oA(vUv + k * vec2(0, 1.6)), oA(vUv - k * vec2(0, 1.6))), oA(vUv)));
+            if (dk) past = mix(past, paperC * 1.5, oreP * 0.55);
             past = mix(past, hue * 0.8, mark * 0.3);
-            past = mix(past, dk ? vec3(0.5, 0.58, 0.74) : WAS, clamp(lineK, 0.0, 1.0) * dash * 0.75);
+            past = mix(past, dk ? vec3(0.5, 0.58, 0.74) : WAS, clamp(lineK, 0.0, 1.0) * dash * 0.75 * (1.0 - 0.6 * oreP));
             col = mix(past, col, visE);
           } else {
             vec3 faded = mix(paperC, col, 0.55);
