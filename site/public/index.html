@@ -6685,7 +6685,7 @@ if (typeof module !== 'undefined') module.exports = Looks;
               float nearO = max(max(oA(uv + k * vec2(1.6, 0)), oA(uv - k * vec2(1.6, 0))), max(max(oA(uv + k * vec2(0, 1.6)), oA(uv - k * vec2(0, 1.6))), isO));
               cover *= 1.0 - nearO;
               // A field of nuggets each ringed in brown is the busiest thing on the land, so the rings are light.
-              oreL = outline * nearO * mix(0.85, 0.5, zU);
+              oreL = outline * nearO * mix(0.85, 0.5, zU) * (1.0 - 0.75 * zo);
             }
             paperC = dk ? DPAPER : vec3(0.96, 0.93, 0.86);
             lineK = max(max(heavy, swell * (1.0 - step(0.6, a))), max(detail, max(edge * 0.55 * (1.0 - bankZone) * isG, max(rEdge * 0.9 * isG, bankL * step(0.001, dep + 0.05) * (isG + isW)))));
@@ -6734,9 +6734,11 @@ if (typeof module !== 'undefined') module.exports = Looks;
             vec3 RC = uRoad == 0 ? PINK : uRoad == 1 ? vec3(0.886, 0.824, 0.675) : uRoad == 2 ? vec3(0.847, 0.835, 0.804) : uRoad == 3 ? paperC : uRoad == 4 ? vec3(0.812, 0.765, 0.573) : vec3(0.969, 0.961, 0.933);
             vec3 RD = uRoad == 0 ? PINK_D : uRoad == 1 ? vec3(0.62, 0.52, 0.34) : uRoad == 2 ? vec3(0.5, 0.49, 0.46) : uRoad == 3 ? paperC : uRoad == 4 ? vec3(0.5, 0.47, 0.3) : vec3(0.72, 0.7, 0.66);
             if (dk && uRoad != 3) RC *= 0.25;
-            base = mix(base, mix(RC, RD, rH * 0.35), max(onRoad * isG, isBr) * 0.9);
-            // On dark paper a bridge deck stands a little lighter than the land, as a roof does, not as a hole.
-            if (dk) base = mix(base, vec3(0.36, 0.35, 0.33), isBr * 0.9);
+            base = mix(base, mix(RC, RD, rH * 0.35), onRoad * isG * 0.9);
+            // A bridge deck is toned and ruled, a structure over the water and not a blank gap in the map. On dark
+            // paper it stands a little lighter than the land, as a roof does.
+            vec3 DECK = dk ? vec3(0.36, 0.35, 0.33) : vec3(0.8, 0.765, 0.7);
+            base = mix(base, mix(DECK, DECK * 0.8, rH * 0.6), isBr * 0.95);
             // The road climbs and falls with the land: its relief shading and the contours carry across it.
             float onR = onRoad * isG * (1.0 - wet);
             base = mix(base, base * vec3(0.8, 0.78, 0.76), rfDark * 0.55 * onR);
@@ -6760,7 +6762,11 @@ if (typeof module !== 'undefined') module.exports = Looks;
             // Over the faces, a light wash of what the building is made of, so from far off a base reads its age
             // by its stuff: straw thatch and mud brick, grey stone and red tile, slate and brick.
             vec3 bMat = clamp(texture2D(tSubj, vUv).rgb * 2.0, 0.0, 1.0);
-            face = mix(face, min(face * (0.5 + 0.62 * bMat), vec3(1.0)), dk ? 0.75 : 0.6);
+            // On dark paper a product of dark faces keeps no hue, so the material lifts the face by its lightness
+            // and adds its chroma.
+            float bLum = dot(bMat, vec3(0.3, 0.59, 0.11));
+            vec3 bWash = dk ? clamp(face * (0.7 + 0.75 * bLum) + (bMat - bLum) * 0.42, 0.0, 1.0) : min(face * (0.5 + 0.62 * bMat), vec3(1.0));
+            face = mix(face, bWash, dk ? 0.9 : 0.6);
             base = mix(base, face, isB);
             base = mix(base, dk ? vec3(0.45, 0.46, 0.48) : vec3(0.99), uSnowC * isB * step(0.6, dot(nV, uUpV)));
             // Deer, cars, townsfolk and boats keep their own colours, as a light wash.
@@ -6776,7 +6782,8 @@ if (typeof module !== 'undefined') module.exports = Looks;
               oreC = mix(GOLD_P, BRN, dt);
             }
             else if (uOre == 3) oreC = mix(GOLD_P, BRN, hatch(p, 0.0, 2.6, mix(0.5, 1.6, dens), 73.0, 0.02));
-            else if (uOre == 4) oreC = up > 0.7 ? vec3(0.99, 0.86, 0.45) : nV.x < 0.0 ? vec3(0.9, 0.67, 0.27) : vec3(0.72, 0.5, 0.2);
+            // Far out the facets merge into one even gold, so a field reads as a patch, not a scatter.
+            else if (uOre == 4) oreC = mix(up > 0.7 ? vec3(0.99, 0.86, 0.45) : nV.x < 0.0 ? vec3(0.9, 0.67, 0.27) : vec3(0.72, 0.5, 0.2), vec3(0.9, 0.74, 0.4), zo * 0.85);
             else if (uOre == 5) {
               oreC = up > 0.75 ? vec3(1.0, 0.95, 0.72) : nV.x < 0.0 ? vec3(0.98, 0.78, 0.22) : vec3(0.8, 0.56, 0.1);
               oreC = mix(oreC, vec3(1.0), step(0.985, hash(floor(p / (3.0 * uK)) + 91.0)) * step(0.5, up));
@@ -6789,6 +6796,12 @@ if (typeof module !== 'undefined') module.exports = Looks;
               vec2 hq = p / (2.6 * uK);
               float hd = (1.0 - smoothstep(0.15, 0.28, length(fract(hq) - 0.5))) * step(hash(floor(hq) + 83.0), 0.5);
               base = mix(base, OCH * 0.6, hd * halo * isG * (1.0 - isO));
+            }
+            // Far out, the ground between faceted nuggets takes a light ochre, so a field reads as one patch.
+            if (uOre == 4 && zo > 0.01 && isG > 0.01) {
+              float pat = 0.0;
+              for (int i = 0; i < 4; i++) { float an = float(i) * 1.571 + 0.785; pat = max(pat, oA(vUv + vec2(cos(an), sin(an)) * k * 5.0)); }
+              base = mix(base, mix(base, OCH, dk ? 0.3 : 0.4), pat * zo * isG * (1.0 - isO));
             }
             baseC = base;
             // Inks by what is drawn: 0 black throughout; 1 survey inks, sepia land and roads, Prussian blue water,
@@ -8958,7 +8971,8 @@ const World = (() => {
           } else if (d.rig === 'head') {
             // A beast's head nods as it walks and swings down and up to gore.
             const k = P.eng ? lunge(P.since) : 0, nod = Math.sin(P.gp * 6.283 * 2) * 0.05 * P.amp;
-            m2.makeTranslation(d.pivot[0], d.pivot[1], d.pivot[2]);
+            // The gore also thrusts the head forward, as a dip alone barely shows from the camera's height.
+            m2.makeTranslation(d.pivot[0] + 0.16 * k, d.pivot[1], d.pivot[2]);
             m3.makeRotationZ(nod - 0.4 * k); m2.multiply(m3);
             mOut.multiplyMatrices(base, m2); emit(p, mOut, color);
           } else if (d.rig === 'throw') {
@@ -11411,13 +11425,22 @@ const Hud = (() => {
         g.fillStyle = n.owner < 0 ? (ink ? '#6b6052' : '#e8e0c8') : ink ? SLOT_PLATE[n.owner] : SLOT_CSS[n.owner];
         g.fillRect(n.x - 2, n.y - 2, 4, 4);
       }
+      // Units are dots of a fixed size on the panel, whatever the map's size, each ringed in ink so it stands off
+      // the land. Each side is one path, filled then stroked.
+      const ur = size * 0.0085 / k, ring = ink ? '#2a221b' : 'rgba(0,0,0,0.8)', dots = new Map();
+      g.lineWidth = size * 0.0032 / k; g.strokeStyle = ring;
       for (const e of s.ents) {
         const mine = e.team === t || (t < 0 && e.team === 0);
         if (!mine && P0) { if (e.b ? !P0.seen[Rules.cellOf(e.x, e.y)] : !P0.vis[Rules.cellOf(e.x, e.y)]) continue; }
-        g.fillStyle = ink ? SLOT_PLATE[e.team] : SLOT_CSS[e.team];
-        if (e.b) g.fillRect(e.cx, e.cy, e.w, e.h);
-        else g.fillRect(e.x - 0.9, e.y - 0.9, 1.8, 1.8);
+        if (e.b) {
+          g.fillStyle = ink ? SLOT_PLATE[e.team] : SLOT_CSS[e.team];
+          g.fillRect(e.cx, e.cy, e.w, e.h); g.strokeRect(e.cx, e.cy, e.w, e.h);
+          continue;
+        }
+        let p = dots.get(e.team); if (!p) dots.set(e.team, p = new Path2D());
+        p.moveTo(e.x + ur, e.y); p.arc(e.x, e.y, ur, 0, 6.2832);
       }
+      for (const [tm, p] of dots) { g.fillStyle = ink ? SLOT_PLATE[tm] : SLOT_CSS[tm]; g.fill(p); g.stroke(p); }
       // The view as a shape on the ground.
       const corners = [[0, 0], [world.vw, 0], [world.vw, world.vh], [0, world.vh]].map(([x, y]) => groundUnder(x, y));
       if (corners.every(Boolean)) {
