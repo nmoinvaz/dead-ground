@@ -70,6 +70,41 @@ const Rules = (() => {
     atgun: { r: 13, dmg: 110, cd: 3, fx: 'shell', snd: 'cannon', speed: 46, vs: { inf: 0.3, light: 1, heavy: 1, bld: 0.7, air: 0 } },
     sam: { r: 17, dmg: 130, cd: 2.2, fx: 'missile', snd: 'missile', speed: 24, air: true, onlyAir: true, vs: { air: 1 } },
     rail: { r: 16, dmg: 700, cd: 5, fx: 'beam', snd: 'rail', vs: { inf: 1, light: 1, heavy: 1, bld: 0.8, air: 0 } },
+    // Hand to hand: a blow that lands at once, from spear's reach or less.
+    spear: { r: 1.6, dmg: 13, cd: 0.9, fx: 'melee', snd: 'clash', vs: { inf: 1, light: 1.3, heavy: 0.45, bld: 0.25, air: 0 } },
+    pike: { r: 2, dmg: 16, cd: 0.9, fx: 'melee', snd: 'clash', vs: { inf: 1, light: 1.5, heavy: 0.6, bld: 0.25, air: 0 } },
+    sword: { r: 1.8, dmg: 24, cd: 0.8, fx: 'melee', snd: 'clash', vs: { inf: 1.3, light: 0.8, heavy: 0.35, bld: 0.3, air: 0 } },
+    sabre: { r: 1.8, dmg: 28, cd: 0.8, fx: 'melee', snd: 'clash', vs: { inf: 1.3, light: 0.9, heavy: 0.35, bld: 0.3, air: 0 } },
+    tusk: { r: 2.2, dmg: 40, cd: 1.4, fx: 'melee', snd: 'clash', vs: { inf: 1.2, light: 1, heavy: 0.7, bld: 0.9, air: 0 } },
+    // Arrows and bolts fly, a little high.
+    bow: { r: 9, dmg: 8, cd: 1.1, fx: 'arrow', snd: 'bow', speed: 18, air: true, vs: { inf: 1, light: 0.55, heavy: 0.15, bld: 0.08, air: 0.5 } },
+    horsebow: { r: 8, dmg: 7, cd: 0.9, fx: 'arrow', snd: 'bow', speed: 18, air: true, vs: { inf: 1, light: 0.5, heavy: 0.12, bld: 0.06, air: 0.4 } },
+    javelin: { r: 6, dmg: 13, cd: 1.2, fx: 'arrow', snd: 'bow', speed: 15, vs: { inf: 1, light: 0.7, heavy: 0.25, bld: 0.1, air: 0 } },
+    xbow: { r: 9, dmg: 22, cd: 2, fx: 'arrow', snd: 'bow', speed: 26, air: true, vs: { inf: 0.8, light: 1, heavy: 0.6, bld: 0.15, air: 0.6 } },
+    longbow: { r: 13, dmg: 26, cd: 1.8, fx: 'arrow', snd: 'bow', speed: 22, vs: { inf: 1, light: 0.4, heavy: 0.1, bld: 0.05, air: 0.3 } },
+    towerbow: { r: 11, dmg: 12, cd: 1, fx: 'arrow', snd: 'bow', speed: 20, air: true, vs: { inf: 1, light: 0.5, heavy: 0.15, bld: 0.1, air: 0.4 } },
+    ballista: { r: 13, dmg: 60, cd: 3.2, fx: 'arrow', snd: 'bow', speed: 26, vs: { inf: 0.5, light: 1, heavy: 0.8, bld: 0.5, air: 0 } },
+    // Black powder: shot that hits at once in a puff of white smoke.
+    musket: { r: 7.5, dmg: 13, cd: 1.7, fx: 'bullet', snd: 'musket', smoke: true, air: true, vs: { inf: 1, light: 0.45, heavy: 0.12, bld: 0.12, air: 0.4 } },
+    musketv: { r: 9, dmg: 22, cd: 1.6, fx: 'bullet', snd: 'musket', smoke: true, air: true, vs: { inf: 1, light: 0.45, heavy: 0.12, bld: 0.12, air: 0.4 } },
+    carbine: { r: 7, dmg: 12, cd: 1.2, fx: 'bullet', snd: 'musket', smoke: true, vs: { inf: 1, light: 0.5, heavy: 0.12, bld: 0.1, air: 0.3 } },
+    jaeger: { r: 12, dmg: 60, cd: 3, fx: 'bullet', snd: 'musket', smoke: true, vs: { inf: 1, light: 0.15, heavy: 0.03, bld: 0.03, air: 0 } },
+    atr: { r: 8.5, dmg: 45, cd: 2.4, fx: 'bullet', snd: 'sniper', vs: { inf: 0.3, light: 1, heavy: 0.75, bld: 0.3, air: 0.2 } },
+    // Stones, grenades and shells thrown high over what is in the way.
+    grenade: { r: 6, dmg: 34, cd: 2.6, fx: 'stone', snd: 'bow', speed: 9, splash: 0.9, vs: { inf: 1, light: 1, heavy: 0.55, bld: 0.4, air: 0 } },
+    stone: { r: 18, min: 5, dmg: 70, cd: 6, fx: 'stone', snd: 'catapult', speed: 13, indirect: true, splash: 1.4, vs: { inf: 0.7, light: 0.7, heavy: 0.6, bld: 1.5, air: 0 } },
+    trebstone: { r: 22, min: 6, dmg: 120, cd: 8, fx: 'stone', snd: 'catapult', speed: 13, indirect: true, splash: 1.6, vs: { inf: 0.6, light: 0.7, heavy: 0.7, bld: 1.7, air: 0 } },
+    ball: { r: 15, dmg: 75, cd: 4.5, fx: 'shell', snd: 'cannon', speed: 30, splash: 1, vs: { inf: 0.7, light: 1, heavy: 0.8, bld: 1.2, air: 0 } },
+    howitz: { r: 22, min: 6, dmg: 75, cd: 6, fx: 'stone', snd: 'cannon', speed: 20, indirect: true, splash: 1.8, vs: { inf: 1, light: 0.8, heavy: 0.5, bld: 1, air: 0 } },
+    // The future's weapons: pulses of light, plasma, and rails.
+    pulse: { r: 9, dmg: 12, cd: 0.45, fx: 'pulse', snd: 'pulse', air: true, vs: { inf: 1, light: 0.55, heavy: 0.2, bld: 0.2, air: 0.6 } },
+    plasma: { r: 10, dmg: 70, cd: 2.4, fx: 'pulse', snd: 'pulse', air: true, vs: { inf: 0.3, light: 1, heavy: 1.1, bld: 0.6, air: 0.7 } },
+    laser: { r: 18, dmg: 60, cd: 0.8, fx: 'pulse', snd: 'pulse', air: true, onlyAir: true, vs: { air: 1.2 } },
+    railrifle: { r: 16, dmg: 120, cd: 3, fx: 'beam', snd: 'rail', vs: { inf: 1, light: 0.3, heavy: 0.1, bld: 0.05, air: 0 } },
+    railcannon: { r: 12, dmg: 120, cd: 2.6, fx: 'beam', snd: 'rail', vs: { inf: 0.45, light: 1, heavy: 1, bld: 0.8, air: 0 } },
+    twinrail: { r: 13, dmg: 170, cd: 2.8, fx: 'beam', snd: 'rail', vs: { inf: 0.45, light: 1, heavy: 1, bld: 0.8, air: 0 } },
+    coil: { r: 14, dmg: 140, cd: 2.8, fx: 'beam', snd: 'rail', vs: { inf: 0.3, light: 1, heavy: 1, bld: 0.7, air: 0 } },
+    railart: { r: 28, min: 7, dmg: 110, cd: 8, salvo: 3, gap: 0.3, fx: 'rocket', snd: 'rail', speed: 30, indirect: true, splash: 2, spread: 1.6, vs: { inf: 1, light: 0.8, heavy: 0.6, bld: 0.9, air: 0 } },
   };
 
   // Units. `cat` names the sidebar queue, `tech` the level that opens it, `need` the building it needs.
@@ -92,6 +127,88 @@ const Rules = (() => {
     jet: { name: 'Strike Jet', cat: 'air', sym: 'jet', cost: 1500, oil: 60, time: 18, hp: 300, armor: 'air', speed: 16, sight: 10, r: 0.9, weapons: [], move: 'jet', alt: 6, need: 'airfield', tech: 3, bombs: { n: 4, dmg: 320, splash: 2.6 }, note: 'Flies a bombing run, then rearms on its airfield.' },
   };
 
+  // The other ages' units. Each belongs to a line, and a side builds the form of each line its age has reached.
+  const foot = (o) => Object.assign({ cat: 'inf', sym: 'inf', time: 5, armor: 'inf', speed: 1.8, sight: 10, men: 5, r: 0.6, move: 'foot', need: 'barracks' }, o);
+  const ride = (o) => Object.assign({ cat: 'veh', time: 7, armor: 'light', sight: 10, r: 0.8, move: 'wheel', need: 'factory', weapons: [] }, o);
+  Object.assign(UNITS, {
+    spear: foot({ name: 'Spearmen', cost: 70, time: 4, hp: 100, sight: 9, weapons: ['spear'], capture: true, note: 'Take towns, and hold the line against horse.' }),
+    pike: foot({ name: 'Pikemen', cost: 85, hp: 115, speed: 1.7, weapons: ['pike'], capture: true, note: 'Long pikes that break knights. Take towns.' }),
+    musket: foot({ name: 'Musketeers', cost: 100, hp: 105, weapons: ['musket'], capture: true, note: 'Volleys of shot. Take towns.' }),
+    rifleman: foot({ name: 'Riflemen', cost: 110, hp: 115, speed: 1.9, weapons: ['rifle'], capture: true, note: 'Bolt-action rifles. Take towns.' }),
+    exo: foot({ name: 'Exo Troopers', cost: 160, hp: 170, speed: 2.2, sight: 11, weapons: ['pulse'], capture: true, note: 'Powered armour and pulse rifles. Take towns.' }),
+    archer: foot({ name: 'Archers', sym: 'at', cost: 90, hp: 70, men: 3, r: 0.55, weapons: ['bow'], note: 'Arrows from range, against men and horse.' }),
+    crossbow: foot({ name: 'Crossbowmen', sym: 'at', cost: 110, hp: 85, speed: 1.7, men: 3, r: 0.55, weapons: ['xbow'], note: 'Bolts that punch through armour.' }),
+    grenadier: foot({ name: 'Grenadiers', sym: 'at', cost: 150, time: 6, hp: 90, speed: 1.7, men: 3, r: 0.55, weapons: ['grenade'], note: 'Lobbed grenades, against horse and guns.' }),
+    atrifle: foot({ name: 'AT Riflemen', sym: 'at', cost: 180, time: 6, hp: 90, speed: 1.7, men: 3, r: 0.55, weapons: ['atr'], note: 'Heavy rifles that pierce armour.' }),
+    lancer: foot({ name: 'Plasma Lancers', sym: 'at', cost: 280, time: 7, hp: 120, speed: 2, men: 3, r: 0.55, weapons: ['plasma'], note: 'Plasma that melts armour and aircraft.' }),
+    longbow: foot({ name: 'Longbowmen', sym: 'snp', cost: 260, time: 7, hp: 75, men: 3, r: 0.55, sight: 14, weapons: ['longbow'], note: 'Very long range. Thin out infantry.' }),
+    jaeger: foot({ name: 'Jägers', sym: 'snp', cost: 330, time: 8, hp: 65, men: 1, r: 0.4, sight: 14, speed: 2.1, weapons: ['jaeger'], note: 'Rifled muskets from far off. Kill infantry.' }),
+    marksman: foot({ name: 'Marksman', sym: 'snp', cost: 380, time: 8, hp: 70, men: 1, r: 0.4, sight: 15, speed: 2.2, weapons: ['sniper'], note: 'Very long range. Kills infantry, little else.' }),
+    ghost: foot({ name: 'Ghost', sym: 'snp', cost: 550, time: 9, hp: 90, men: 1, r: 0.4, sight: 17, speed: 2.4, weapons: ['railrifle'], note: 'A rail rifle that kills men at any range it sees.' }),
+    oxcart: ride({ name: 'Ox Cart', sym: 'sup', cost: 350, hp: 300, speed: 1.9, sight: 6, r: 0.9, cargo: 300, note: 'Hauls ore to the smelter.' }),
+    wagon: ride({ name: 'Ore Wagon', sym: 'sup', cost: 420, time: 8, hp: 380, speed: 2.2, sight: 6, r: 0.9, cargo: 350, note: 'Hauls ore to the smelter.' }),
+    lorry: ride({ name: 'Steam Lorry', sym: 'sup', cost: 550, time: 9, hp: 500, armor: 'heavy', speed: 2.4, sight: 7, r: 0.95, cargo: 420, note: 'Mines ore and hauls it to a refinery.' }),
+    hauler: ride({ name: 'Hauler', sym: 'sup', cost: 800, time: 10, hp: 760, armor: 'heavy', speed: 3, sight: 8, r: 0.95, cargo: 600, note: 'Hover hauler. Mines ore fast.' }),
+    outrider: ride({ name: 'Outriders', sym: 'rec', cost: 140, time: 5, hp: 110, speed: 4.6, sight: 13, r: 0.6, move: 'foot', weapons: ['horsebow'], note: 'Horse archers. Fast, and see far.' }),
+    dragoon: ride({ name: 'Dragoons', sym: 'rec', cost: 180, time: 5, hp: 140, speed: 4.6, sight: 13, r: 0.6, move: 'foot', weapons: ['carbine'], note: 'Mounted carbines. Fast, and see far.' }),
+    motorbike: ride({ name: 'Motorcycle Scouts', sym: 'rec', cost: 200, time: 5, hp: 150, speed: 5.6, sight: 14, r: 0.55, weapons: ['hmg'], note: 'Fast, see far, and gun down infantry.' }),
+    hoverscout: ride({ name: 'Hover Scout', sym: 'rec', cost: 320, time: 6, hp: 230, speed: 6.4, sight: 15, r: 0.7, weapons: ['pulse'], turret: 5, note: 'Skims the ground. Sees far.' }),
+    chariot: ride({ name: 'Chariots', sym: 'arm', cost: 200, time: 6, hp: 220, speed: 4, r: 0.85, weapons: ['javelin'], note: 'Fast and hard-hitting on open ground.' }),
+    knight: ride({ name: 'Knights', sym: 'arm', cost: 260, hp: 300, speed: 3.6, r: 0.7, move: 'foot', weapons: ['sword'], note: 'Heavy horse that rides down infantry. Fears pikes.' }),
+    cuirassier: ride({ name: 'Cuirassiers', sym: 'arm', cost: 300, hp: 320, speed: 3.8, r: 0.7, move: 'foot', weapons: ['sabre'], note: 'Armoured horse with sabres. Fear grenades.' }),
+    armcar: ride({ name: 'Armoured Car', sym: 'arm', cost: 420, oil: 10, time: 9, hp: 380, speed: 4.2, r: 0.8, weapons: ['auto'], turret: 3, note: 'Fast armour with a quick-firing gun.' }),
+    mech: ride({ name: 'Mech Walker', sym: 'arm', cost: 950, oil: 40, time: 13, hp: 820, armor: 'heavy', speed: 2.8, sight: 11, r: 1, move: 'track', weapons: ['railcannon'], turret: 2.4, note: 'Walks through anything. Rail cannon.' }),
+    halftrack: ride({ name: 'Halftrack', sym: 'ifv', cost: 380, oil: 5, time: 8, hp: 300, speed: 3.8, sight: 11, weapons: ['hmg'], turret: 4, note: 'Carries a machine gun anywhere.' }),
+    hoverapc: ride({ name: 'Hover APC', sym: 'ifv', cost: 520, oil: 20, time: 10, hp: 420, speed: 5, sight: 12, r: 0.85, weapons: ['pulse'], turret: 4, note: 'A fast hover carrier with a pulse turret.' }),
+    elephant: ride({ name: 'War Elephants', sym: 'hvy', cost: 600, time: 12, hp: 760, armor: 'heavy', speed: 2.2, r: 1.1, move: 'foot', weapons: ['tusk'], note: 'Trample infantry and walls. Fear pikes and arrows in numbers.' }),
+    landship: ride({ name: 'Landship', sym: 'hvy', cost: 900, oil: 30, time: 14, hp: 1000, armor: 'heavy', speed: 1.6, r: 1.15, move: 'track', weapons: ['cannon', 'hmg'], turret: 1, note: 'The first tank. Slow, and almost unstoppable.' }),
+    titan: ride({ name: 'Titan', sym: 'hvy', cost: 1900, oil: 80, time: 24, hp: 1900, armor: 'heavy', speed: 2, sight: 12, r: 1.35, move: 'track', weapons: ['twinrail', 'pulse'], turret: 1.6, note: 'A walking fortress with twin rails.' }),
+    supcart: ride({ name: 'Supply Cart', sym: 'sup2', cost: 250, time: 6, hp: 200, speed: 2.4, sight: 8, repair: true, note: 'Mends nearby troops and stops attrition abroad.' }),
+    ambulance: ride({ name: 'Field Ambulance', sym: 'sup2', cost: 330, hp: 240, speed: 3.2, sight: 9, repair: true, note: 'Mends nearby troops and stops attrition abroad.' }),
+    repairbot: ride({ name: 'Repair Drone', sym: 'sup2', cost: 450, oil: 15, time: 8, hp: 280, speed: 4, sight: 10, repair: true, note: 'Mends nearby troops and stops attrition abroad.' }),
+    catapult: ride({ name: 'Catapult', sym: 'art', cost: 350, time: 9, hp: 180, speed: 1.5, sight: 8, r: 0.9, weapons: ['stone'], note: 'Hurls stones over walls. Breaks buildings.' }),
+    trebuchet: ride({ name: 'Trebuchet', sym: 'art', cost: 450, time: 11, hp: 240, speed: 1.2, sight: 8, r: 1, weapons: ['trebstone'], note: 'Throws far and breaks buildings. Needs a spotter.' }),
+    cannonart: ride({ name: 'Cannon', sym: 'art', cost: 450, time: 9, hp: 220, speed: 1.8, sight: 9, r: 0.85, weapons: ['ball'], note: 'Round shot against walls and armour.' }),
+    howitzer: ride({ name: 'Howitzer', sym: 'art', cost: 600, oil: 15, time: 11, hp: 240, speed: 2.2, sight: 9, r: 0.9, weapons: ['howitz'], turret: 1.6, note: 'Shells from far behind the line. Needs a spotter.' }),
+    railart: ride({ name: 'Rail Artillery', sym: 'art', cost: 1000, oil: 40, time: 14, hp: 300, speed: 2.8, sight: 9, r: 0.9, weapons: ['railart'], turret: 1.6, note: 'Rail-launched salvos from very far. Needs a spotter.' }),
+    aalorry: ride({ name: 'AA Lorry', sym: 'aa', cost: 420, oil: 10, time: 9, hp: 260, speed: 3, sight: 11, r: 0.85, weapons: ['flak'], turret: 4, note: 'Flak against aircraft.' }),
+    laseraa: ride({ name: 'Laser AA', sym: 'aa', cost: 620, oil: 20, time: 11, hp: 320, speed: 3.6, sight: 13, r: 0.85, weapons: ['laser'], turret: 5, note: 'Burns aircraft out of the sky.' }),
+    biplane: { name: 'Biplane', cat: 'air', sym: 'jet', cost: 700, oil: 20, time: 12, hp: 160, armor: 'air', speed: 9, sight: 9, r: 0.9, weapons: [], move: 'jet', alt: 5, need: 'airfield', bombs: { n: 2, dmg: 220, splash: 2 }, note: 'Bombs from the air, then back to the airfield to rearm.' },
+    stealth: { name: 'Stealth Bomber', cat: 'air', sym: 'jet', cost: 1800, oil: 80, time: 20, hp: 420, armor: 'air', speed: 18, sight: 10, r: 1, weapons: [], move: 'jet', alt: 7, need: 'airfield', bombs: { n: 6, dmg: 360, splash: 2.8 }, note: 'A long bombing run, then home to rearm.' },
+    gunship: { name: 'Gunship', cat: 'air', sym: 'hel', cost: 1300, oil: 50, time: 16, hp: 520, armor: 'air', speed: 6.5, sight: 13, r: 1, weapons: ['plasma', 'pulse'], move: 'air', alt: 3.6, need: 'airfield', turret: 3, note: 'Hunts armour. Fears laser AA.' },
+    swarm: { name: 'Swarm Drone', cat: 'air', sym: 'uav', cost: 200, oil: 6, time: 3.5, hp: 16, armor: 'air', speed: 11, sight: 8, r: 0.3, weapons: [], move: 'air', alt: 1.5, need: 'airfield', kamikaze: { dmg: 420, splash: 2.2 }, life: 45, note: 'One-way attack drone. Fast, and dies to anything.' },
+  });
+
+  // Each line's form in each age, Ancient to Future. A line with no form of its own in an age keeps its last one.
+  const LINES = {
+    inf: ['spear', 'pike', 'musket', 'rifleman', 'rifle', 'exo'],
+    at: ['archer', 'crossbow', 'grenadier', 'atrifle', 'rocket', 'lancer'],
+    snp: [null, 'longbow', 'jaeger', 'marksman', 'sniper', 'ghost'],
+    eng: ['engineer'],
+    hero: [null, 'hero'],
+    truck: ['oxcart', 'wagon', null, 'lorry', 'truck', 'hauler'],
+    rec: ['outrider', null, 'dragoon', 'motorbike', 'humvee', 'hoverscout'],
+    mount: ['chariot', 'knight', 'cuirassier', 'armcar', 'tank', 'mech'],
+    ifv: [null, null, null, 'halftrack', 'ifv', 'hoverapc'],
+    heavy: ['elephant', null, null, 'landship', 'heavy', 'titan'],
+    sup: ['supcart', null, null, 'ambulance', 'support', 'repairbot'],
+    siege: ['catapult', 'trebuchet', 'cannonart', 'howitzer', 'mlrs', 'railart'],
+    aa: [null, null, null, 'aalorry', 'flak', 'laseraa'],
+    fpv: [null, null, null, null, 'fpv', 'swarm'],
+    heli: [null, null, null, null, 'heli', 'gunship'],
+    jet: [null, null, null, 'biplane', 'jet', 'stealth'],
+  };
+  // The sidebar's lines, by the building that trains them.
+  const LINE_ORDER = { inf: ['inf', 'at', 'eng', 'snp', 'hero'], veh: ['truck', 'rec', 'mount', 'ifv', 'aa', 'sup', 'siege', 'heavy'], air: ['fpv', 'heli', 'jet'] };
+  function formOf(line, age) {
+    const L = LINES[line];
+    if (!L) return null;
+    for (let a = Math.min(age, L.length) - 1; a >= 0; a--) if (L[a]) return L[a];
+    return null;
+  }
+  for (const [line, L] of Object.entries(LINES)) L.forEach((k, i) => { if (k && UNITS[k] && !UNITS[k].line) { UNITS[k].line = line; UNITS[k].age = i + 1; } });
+  const lineCount = (P, line) => (LINES[line] || []).reduce((n, k, i, L) => n + (k && L.indexOf(k) === i ? P.counts[k] || 0 : 0), 0);
+
   // Buildings. `terr` is how far the building pushes your border, `power` what it gives or draws.
   const BUILDINGS = {
     hq: { name: 'Headquarters', sym: 'hq', w: 5, h: 5, hp: 2400, cost: 2500, time: 30, power: 20, terr: 24, sight: 22, armor: 'bld', cat: 'bld' },
@@ -110,16 +227,47 @@ const Rules = (() => {
     rail: { name: 'Railgun Tower', sym: 'rlg', w: 2, h: 2, hp: 700, cost: 1600, time: 12, power: -50, terr: 6, sight: 16, armor: 'bld', cat: 'def', tech: 3, need: 'radar', weapons: ['rail'], turret: 2, needsPower: true, note: 'One shot wrecks almost anything. Needs a lot of power.' },
   };
 
-  const TECH = {
-    2: { name: 'Tech Level II', cost: 1000, oil: 150, time: 20, note: 'Tanks, aircraft, Forward Bases.' },
-    3: { name: 'Tech Level III', cost: 1800, oil: 400, time: 30, note: 'Artillery, Goliaths, jets, railguns, the Silo.' },
+  // The ages a side passes through, Ancient to Future, and what reaching each costs. Power and oil come with the
+  // Industrial Age.
+  const AGES = [null,
+    { name: 'Ancient', note: 'Spears, bows, chariots, elephants and catapults.' },
+    { name: 'Medieval', cost: 600, oil: 0, time: 20, note: 'Pikes, crossbows, longbows, knights and trebuchets.' },
+    { name: 'Gunpowder', cost: 1000, oil: 0, time: 25, note: 'Muskets, grenadiers, dragoons, cuirassiers and cannon.' },
+    { name: 'Industrial', cost: 1500, oil: 0, time: 30, note: 'Rifles, armoured cars, landships, biplanes. Power and oil.' },
+    { name: 'Modern', cost: 2000, oil: 150, time: 35, note: 'Tanks, helicopters, jets, drones and the missile silo.' },
+    { name: 'Future', cost: 2800, oil: 400, time: 45, note: 'Exo troopers, mechs, hover craft, railguns and the titan.' },
+  ];
+  const MAX_AGE = AGES.length - 1, POWER_AGE = 4, START_SUPPLY = [0, 2000, 2400, 2800, 3200, 3500, 4000];
+  const TECH = {};
+  for (let a = 2; a <= MAX_AGE; a++) TECH[a] = { name: AGES[a].name + ' Age', cost: AGES[a].cost, oil: AGES[a].oil, time: AGES[a].time, note: AGES[a].note };
+  // Each building's name in each age, the age it first stands in, and a defence's weapon in each age.
+  const AGE_B = {
+    hq: { names: ['Citadel', 'Castle', 'Fort', 'Headquarters', 'Headquarters', 'Command Nexus'] },
+    power: { age: 4, names: [0, 0, 0, 'Power Station', 'Power Plant', 'Fusion Plant'] },
+    refinery: { names: ['Smelter', 'Smelter', 'Smelter', 'Ore Refinery', 'Ore Refinery', 'Ore Refinery'] },
+    factory: { names: ['Stables', 'Stables', 'Foundry', 'Factory', 'War Factory', 'Fabricator'] },
+    radar: { names: ['Watchtower', 'Watchtower', 'Signal Tower', 'Radio Station', 'Radar Station', 'Sensor Array'] },
+    airfield: { age: 4, names: [0, 0, 0, 'Airfield', 'Airfield', 'Skyport'] },
+    fob: { age: 2, names: [0, 'Outpost', 'Redoubt', 'Forward Base', 'Forward Base', 'Forward Base'] },
+    derrick: { age: 4 },
+    silo: { age: 5, names: [0, 0, 0, 0, 'Missile Silo', 'Orbital Lance'] },
+    bunker: { names: ['Archer Tower', 'Archer Tower', 'Musket Redoubt', 'MG Nest', 'MG Bunker', 'Pulse Turret'], arms: ['towerbow', 'towerbow', 'musketv', 'mg', 'mg', 'pulse'] },
+    atgun: { names: ['Ballista', 'Springald', 'Cannon Battery', 'Field Gun', 'AT Gun', 'Coil Gun'], arms: ['ballista', 'ballista', 'ball', 'atgun', 'atgun', 'coil'] },
+    sam: { age: 4, names: [0, 0, 0, 'AA Battery', 'SAM Site', 'Laser AA'], arms: [0, 0, 0, 'flak', 'sam', 'laser'] },
+    rail: { age: 6 },
   };
+  for (const [k, o] of Object.entries(AGE_B)) { const d = BUILDINGS[k]; d.tech = o.age || 1; if (o.names) d.names = o.names; if (o.arms) d.arms = o.arms; }
+  // Barracks stand before there is power to need.
+  BUILDINGS.barracks.need = null;
+  // A thing's name in an age, and a defence's weapon in its side's age.
+  const nameOf = (kind, age) => { const d = BUILDINGS[kind] || UNITS[kind] || POWERS[kind]; return (d && d.names && d.names[Math.max(1, age) - 1]) || (d ? d.name : kind); };
+  const armOf = (S, e) => (e.d.arms && e.d.arms[S.P[e.team].tech - 1]) || e.d.weapons[0];
 
   // Support calls, made from a radar station.
   const POWERS = {
-    uav: { name: 'UAV Sweep', sym: 'uav', cost: 150, cd: 60, tech: 1, r: 14, life: 15, note: 'Lights up a patch of the map for a while.' },
-    barrage: { name: 'Artillery Barrage', sym: 'art', cost: 500, cd: 120, tech: 2, r: 6, note: 'Twelve heavy shells on one spot.' },
-    para: { name: 'Paradrop', sym: 'par', cost: 600, cd: 150, tech: 2, r: 4, note: 'Three rifle squads, anywhere you can see.' },
+    uav: { name: 'UAV Sweep', sym: 'uav', cost: 150, cd: 60, tech: 4, r: 14, life: 15, names: [0, 0, 0, 'Recon Flight', 'UAV Sweep', 'UAV Sweep'], note: 'Lights up a patch of the map for a while.' },
+    barrage: { name: 'Artillery Barrage', sym: 'art', cost: 500, cd: 120, tech: 3, r: 6, names: [0, 0, 'Cannon Barrage', 'Artillery Barrage', 'Artillery Barrage', 'Orbital Barrage'], note: 'Twelve heavy shells on one spot.' },
+    para: { name: 'Paradrop', sym: 'par', cost: 600, cd: 150, tech: 5, r: 4, note: 'Three squads of infantry, anywhere you can see.' },
   };
 
   // Tracks. Ground units wear the cells they move into, tracks most and feet least. Worn ground hardens a step at a
@@ -133,23 +281,24 @@ const Rules = (() => {
   const HIST_EVERY = 10 * HZ, HIST_MAX = 240;
   // What a thing is worth, with oil at four times supply, as it is that much scarcer.
   const worth = d => (d.cost || 0) + 4 * (d.oil || 0);
-  // The points a tech level is worth, from what reaching it costs.
-  const TECH_PTS = [0, 0, worth(TECH[2]) / 10, (worth(TECH[2]) + worth(TECH[3])) / 10];
+  // The points an age is worth, from what reaching it and the ages before cost.
+  const TECH_PTS = [0, 0];
+  for (let a = 2; a <= MAX_AGE; a++) TECH_PTS[a] = TECH_PTS[a - 1] + worth(TECH[a]) / 10;
 
   // A bridge stands this much damage. A house stands less, more for each floor.
   const BRIDGE_HP = 1500;
   const houseHp = h => 260 + 220 * h.floors;
 
   const DIFFICULTY = {
-    // tech1 and tech2 are the minutes before reaching for Tech II and Tech III. gap is seconds between powers.
+    // ageEvery is the minutes between reaching for each next age, up to maxAge. gap is seconds between powers.
     // ramp caps the army at ramp[0] units plus ramp[1] a minute. def is the most defences it builds.
     // delay is the seconds before the first wave. raid, if set, is how long a wave stays out before it goes
     // home. pulse, if set, says whether units built during a wave guard home instead of joining it.
-    recruit: { think: 4, income: 0.55, wave: 2600, grow: 300, delay: 720, power: false, tech: 2, apm: 1, tech1: 12, tech2: 99, gap: 90, silo: false, ramp: [4, 0.8], def: 2, name: 'Recruit' },
-    regular: { think: 3, income: 0.7, wave: 2600, grow: 400, delay: 420, power: true, tech: 3, apm: 2, tech1: 8, tech2: 22, gap: 120, silo: false, ramp: [6, 1.6], def: 3, name: 'Regular' },
-    veteran: { think: 0.75, income: 1.25, wave: 1500, grow: 1100, delay: 360, power: true, tech: 3, apm: 8, tech1: 3, tech2: 8, gap: 20, silo: true, ramp: [8, 3], def: 8, name: 'Veteran' },
+    recruit: { think: 4, income: 0.55, wave: 2600, grow: 300, delay: 720, power: false, maxAge: 5, apm: 1, ageEvery: 8, gap: 90, silo: false, ramp: [4, 0.8], def: 2, name: 'Recruit' },
+    regular: { think: 3, income: 0.7, wave: 2600, grow: 400, delay: 420, power: true, maxAge: 6, apm: 2, ageEvery: 5, gap: 120, silo: false, ramp: [6, 1.6], def: 3, name: 'Regular' },
+    veteran: { think: 0.75, income: 1.25, wave: 1500, grow: 1100, delay: 360, power: true, maxAge: 6, apm: 8, ageEvery: 3.5, gap: 20, silo: true, ramp: [8, 3], def: 8, name: 'Veteran' },
     // Holds a player's base while they are away: builds and defends, never sets out.
-    keeper: { think: 3, income: 1, wave: 1e9, grow: 0, delay: 1e9, power: false, tech: 2, apm: 2, tech1: 10, tech2: 99, gap: 90, silo: false, ramp: [8, 1], def: 6, stay: true, name: 'Keeper' },
+    keeper: { think: 3, income: 1, wave: 1e9, grow: 0, delay: 1e9, power: false, maxAge: 6, apm: 2, ageEvery: 6, gap: 90, silo: false, ramp: [8, 1], def: 6, stay: true, name: 'Keeper' },
   };
 
   // Seeded numbers and value noise.
@@ -713,7 +862,8 @@ const Rules = (() => {
   // A new game. layout is 'duel' (two slots, 128 cells), 'quad' (four, 192) or 'world' (eight, 256). seats
   // lists the slots that play, every slot unless given; the others stay empty. Each seated slot starts with a
   // base unless `empty` is set, and the seated slots' bases are spread evenly round the map, dealt at random
-  // when `shuffle` gives a random draw. The game is over when one side is left.
+  // when `shuffle` gives a random draw. Every side starts in the age `age`, Ancient unless given, with more
+  // supply the later it starts. The game is over when one side is left.
   function newGame(o = {}) {
     const kind = o.layout || 'duel', M = mapFor(o.seed || 1, kind, o.debug), seed = M.seed;
     coverPoints(M);
@@ -725,7 +875,7 @@ const Rules = (() => {
       fieldQueue: 0, occVer: 1, occ: new Int32Array(N), occLog: [], over: null, ais: [], sweeps: [], hash: [], bldHash: [], flights: [],
       terr: new Int8Array(N).fill(-1), infl: [], terrVer: 0, townOwnerVer: 0,
       ore: new Uint16Array(M.ore), oreVer: 0,
-      P: [], bases: pos.map(p => M.bases[p]), faces: pos.map(p => M.faces[p]), seats, pos, _fields: new Map(),
+      P: [], bases: pos.map(p => M.bases[p]), faces: pos.map(p => M.faces[p]), seats, pos, _fields: new Map(), age0: clamp(o.age | 0 || 1, 1, MAX_AGE),
       // The ground as it now is, which woods, bridges and fords change, and what has happened to the trees,
       // bridges and houses.
       gnd: new Uint8Array(M.ground), gndVer: 0, wood: new Uint8Array(N), woodVer: 0, burn: [], crush: [],
@@ -735,6 +885,7 @@ const Rules = (() => {
     S.rand = rngOf(S);
     for (let t = 0; t < n; t++) {
       const P = freshPlayer(t, o);
+      P.tech = S.age0; P.supply = o.supply || START_SUPPLY[S.age0];
       if (!seats.includes(t)) { P.alive = false; P.out = true; }
       S.P.push(P); S.infl.push(new Float32Array(N));
     }
@@ -801,7 +952,8 @@ const Rules = (() => {
     const b = S.bases[team], a = S.faces[team], f = [mcos(a), msin(a)], s = [-f[1], f[0]];
     const at = (fw, sd) => [b[0] + f[0] * fw + s[0] * sd, b[1] + f[1] * fw + s[1] * sd];
     addBuilding(S, 'hq', team, Math.round(b[0] - 2.5), Math.round(b[1] - 2.5), true);
-    spawn(S, 'rifle', team, ...at(7.0711, -2.8284)); spawn(S, 'rifle', team, ...at(7.0711, 2.8284)); spawn(S, 'humvee', team, ...at(9.1924, -0.7071));
+    const age = S.P[team].tech, inf = formOf('inf', age);
+    spawn(S, inf, team, ...at(7.0711, -2.8284)); spawn(S, inf, team, ...at(7.0711, 2.8284)); spawn(S, formOf('rec', age), team, ...at(9.1924, -0.7071));
   }
   // Everything a slot has goes, and it starts again from nothing at its place. Quietly, with no wrecks or
   // craters, when the slot is cleared for someone new.
@@ -853,7 +1005,7 @@ const Rules = (() => {
   const plain = e => { const o = {}; for (const k in e) if (k !== 'd' && k[0] !== '_') o[k] = e[k]; return o; };
   function save(S) {
     return {
-      v: 1, seed: S.seed, layout: S.layout, seats: S.seats, pos: S.pos, tick: S.tick, rs: S.rs, next: S.next, occVer: S.occVer, oreVer: S.oreVer, terrVer: S.terrVer, dirty: !!S.dirty, over: S.over,
+      v: 1, seed: S.seed, layout: S.layout, seats: S.seats, pos: S.pos, age0: S.age0, tick: S.tick, rs: S.rs, next: S.next, occVer: S.occVer, oreVer: S.oreVer, terrVer: S.terrVer, dirty: !!S.dirty, over: S.over,
       ents: S.ents.map(plain), towns: S.towns, shots: S.shots, sweeps: S.sweeps, flights: S.flights, occLog: S.occLog,
       fields: [...S.fields].map(([k, f]) => [k, f.ver, f.used, f.made, f.reach]),
       ore: b64.en(new Uint8Array(S.ore.buffer.slice(0))),
@@ -865,7 +1017,7 @@ const Rules = (() => {
   }
   function diffs(a, base) { const o = []; for (let c = 0; c < a.length; c++) if (a[c] !== (base ? base[c] : 0)) o.push(c, a[c]); return o; }
   function load(o) {
-    const S = newGame({ seed: o.seed, layout: o.layout, seats: o.seats, pos: o.pos, empty: true });
+    const S = newGame({ seed: o.seed, layout: o.layout, seats: o.seats, pos: o.pos, age: o.age0 || 5, empty: true });
     if (S.seed !== o.seed) throw new Error('map seed mismatch');
     Object.assign(S, { tick: o.tick, rs: o.rs, next: o.next, occVer: o.occVer, oreVer: o.oreVer, terrVer: o.terrVer, dirty: o.dirty, over: o.over, shots: o.shots, sweeps: o.sweeps, flights: o.flights, occLog: o.occLog || [] });
     S.towns = o.towns.map(t => Object.assign({}, t));
@@ -874,6 +1026,8 @@ const Rules = (() => {
     S.P = o.P.map(p => {
       const P = Object.assign(freshPlayer(p.team), p);
       P.stats = Object.assign(freshStats(), p.stats);
+      // A game saved before the ages counted three tech levels within today's world, the Modern Age.
+      if (!o.age0) P.tech = 5;
       P.vis = unbits(p.vis, N); P.seen = unbits(p.seen, N);
       for (const c in P.q) P.q[c] = p.q[c].map(it => Object.assign({}, it, { cost: c === 'tech' ? TECH[it.level] : (UNITS[it.kind] || BUILDINGS[it.kind]) }));
       return P;
@@ -970,7 +1124,7 @@ const Rules = (() => {
     logOcc(S, cells, prev);
     if (d.freeTruck && !instant) {
       const [ex, ey] = exitOf(S, e);
-      spawn(S, 'truck', team, ex, ey);
+      spawn(S, formOf('truck', S.P[team].tech), team, ex, ey);
     }
     territory(S); recount(S);
     return e;
@@ -997,7 +1151,7 @@ const Rules = (() => {
     }
     for (const P of S.P) {
       const was = P.low;
-      P.low = P.use > P.prod;
+      P.low = P.tech >= POWER_AGE && P.use > P.prod;
       if (P.low && !was) ownEvent(S, P.team, 'lowpower');
     }
   }
@@ -1542,7 +1696,8 @@ const Rules = (() => {
       shot.tx += (S.rand() - 0.5) * w.spread * 2; shot.ty += (S.rand() - 0.5) * w.spread * 2;
       shot.tz = terrainAt(S.map, shot.tx, shot.ty); shot.tgt = 0;
     }
-    if (w.fx === 'bullet' || w.fx === 'tracer' || w.fx === 'beam') {
+    // Shot, beams, pulses and blows land at once; the rest fly.
+    if (w.fx === 'bullet' || w.fx === 'tracer' || w.fx === 'beam' || w.fx === 'pulse' || w.fx === 'melee') {
       if (br !== undefined) hurtBridge(S, br, dmg * (w.vs.bld ?? 1), s.team);
       else hurt(S, t, dmg * (w.vs[t.d.armor] ?? 1), s.team, s.id);
       S.ev.push({ t: 'shot', w: wn, x: s.x, y: s.y, z: z0, tx: t.x, ty: t.y, tz: z1, team: s.team, dur: 0, id: s.id });
@@ -2114,10 +2269,11 @@ const Rules = (() => {
     const dark = e.d.needsPower && S.P[e.team].low;
     if (dark) return;
     let t = e.tgt ? S.byId.get(e.tgt) : null;
-    if (t && (t.hp <= 0 || atPeace(S, e.team, t.team) || !seenBy(S, e.team, t) || !inRange(S, e, e.d.weapons[0], t))) { t = null; e.tgt = 0; }
+    const arm = armOf(S, e);
+    if (t && (t.hp <= 0 || atPeace(S, e.team, t.team) || !seenBy(S, e.team, t) || !inRange(S, e, arm, t))) { t = null; e.tgt = 0; }
     if (!t && S.tick % 10 === e.id % 10) {
       let best = null, bd = Infinity;
-      const wn = e.d.weapons[0], R = WEAPONS[wn].r;
+      const wn = arm, R = WEAPONS[wn].r;
       near(S, e.x, e.y, R + 1, o => {
         if (o.team === e.team || o.hp <= 0 || o.drop > 0 || atPeace(S, e.team, o.team) || !canHit(wn, o) || !seenBy(S, e.team, o)) return;
         const d = gap(e.x, e.y, o);
@@ -2130,7 +2286,7 @@ const Rules = (() => {
     if (t) {
       const want = matan2(t.y - e.y, t.x - e.x), rate = e.d.turret || 6;
       e.ta += clamp(angleTo(e.ta, want), -rate * DT, rate * DT);
-      const wn = e.d.weapons[0];
+      const wn = arm;
       if (e.cd[0] <= 0 && Math.abs(angleTo(e.ta, want)) < 0.15 && clearShot(S, e, wn, t)) {
         e.cd[0] = WEAPONS[wn].cd * (S.P[e.team].low ? 2 : 1);
         fire(S, e, wn, t);
@@ -2216,12 +2372,28 @@ const Rules = (() => {
     return P.counts[k] || 0;
   }
 
+  // A new age turns every unit of the side into its line's form for that age, keeping its share of health.
+  function upgradeSide(S, team, age) {
+    for (const u of S.ents) {
+      if (u.team !== team || u.b || u.hp <= 0 || !u.d.line) continue;
+      const k = formOf(u.d.line, age);
+      if (!k || k === u.kind) continue;
+      const d = UNITS[k], f = u.hp / u.max;
+      u.kind = k; u.d = d; u.max = d.hp; u.hp = Math.max(1, d.hp * f); u.cd = d.weapons.map(() => 0);
+      if (d.cargo) u.cargo = Math.min(u.cargo, d.cargo);
+      if (d.bombs) u.ammo = d.bombs.n;
+      if (d.alt) u.z = Math.max(u.z, d.alt * 0.5);
+      S.ev.push({ t: 'upgrade', id: u.id, kind: k, team, x: u.x, y: u.y });
+    }
+    recount(S);
+  }
   function finish(S, P, cat, item) {
     if (cat === 'tech') {
       P.tech = item.level;
       S.ev.push({ t: 'tech', team: P.team, level: item.level });
       mark(S, P.team, 'tech', item.level);
       ownEvent(S, P.team, 'newtech');
+      upgradeSide(S, P.team, item.level);
       return;
     }
     const need = cat === 'inf' ? 'barracks' : cat === 'veh' ? 'factory' : 'airfield';
@@ -2229,7 +2401,8 @@ const Rules = (() => {
     for (const e of S.ents) if (e.b && e.team === P.team && e.kind === need && e.hp > 0) { n++; if (!best || e.primary) best = e; }
     if (!best) return;
     const [x, y] = exitOf(S, best);
-    const kind = item.kind, u = spawn(S, kind, P.team, x, y);
+    // A unit queued before the age turned comes out in the new age's form.
+    const kind = formOf(UNITS[item.kind].line, P.tech) || item.kind, u = spawn(S, kind, P.team, x, y);
     P.stats.made++; P.stats[u.d.cat === 'air' ? 'air' : u.d.cat === 'veh' ? 'veh' : 'inf']++;
     S.ev.push({ t: 'built', team: P.team, kind, id: u.id, x, y });
     ownEvent(S, P.team, 'unitready');
@@ -2289,8 +2462,12 @@ const Rules = (() => {
   // What can be built now. Says why not as a short reason, or null when it can.
   function blockedReason(S, team, kind) {
     const P = S.P[team], d = BUILDINGS[kind] || UNITS[kind];
-    if ((d.tech || 1) > P.tech) return 'Needs Tech ' + 'I'.repeat(d.tech);
-    if (d.need && !P.counts[d.need]) return 'Needs ' + BUILDINGS[d.need].name;
+    if (UNITS[kind]) {
+      // A unit is built in its line's form for the side's age, which an earlier form gives way to.
+      const now = formOf(d.line, P.tech);
+      if (now !== kind) return d.age > P.tech || !now ? 'Needs the ' + AGES[d.age].name + ' Age' : 'Now ' + UNITS[now].name;
+    } else if ((d.tech || 1) > P.tech) return 'Needs the ' + AGES[d.tech].name + ' Age';
+    if (d.need && !P.counts[d.need]) return 'Needs ' + nameOf(d.need, P.tech);
     if (BUILDINGS[kind] && !(P.counts.hq || P.counts.fob)) return 'Needs Headquarters';
     if (d.limit) {
       const made = (P.counts[kind] || 0) + P.q[d.cat].filter(i => i.kind === kind).length;
@@ -2359,12 +2536,14 @@ const Rules = (() => {
         u.wpT = 0; u.tgt = 0; u.home = null;
       });
     } else if (c.c === 'train' || c.c === 'build') {
-      const d = UNITS[c.kind] || BUILDINGS[c.kind];
-      if (!d || blockedReason(S, team, c.kind)) return;
+      // A unit is ordered by its line and comes in the form of the side's age.
+      const kind = c.c === 'train' && UNITS[c.kind] ? formOf(UNITS[c.kind].line, P.tech) || c.kind : c.kind;
+      const d = UNITS[kind] || BUILDINGS[kind];
+      if (!d || blockedReason(S, team, kind)) return;
       const cat = d.cat, q = P.q[cat];
       if (c.c === 'build' && q.length) return;
       if (q.length >= 9) return;
-      q.push({ kind: c.kind, cost: d, prog: 0, paid: 0, paidOil: 0, hold: false });
+      q.push({ kind, cost: d, prog: 0, paid: 0, paidOil: 0, hold: false });
     } else if (c.c === 'research') {
       const lv = P.tech + 1, d = TECH[lv];
       if (!d || P.q.tech.length || !P.counts.hq) return;
@@ -2446,7 +2625,7 @@ const Rules = (() => {
       const flight = mhypot(x - from[0], y - from[1]) / 26 + 1;
       for (let i = 0; i < 3; i++) {
         const a = i / 3 * TAU, sx = x + mcos(a) * 2, sy = y + msin(a) * 2;
-        const u = spawn(S, 'rifle', team, sx, sy, { drop: flight + 3 + i * 0.4 });
+        const u = spawn(S, formOf('inf', S.P[team].tech), team, sx, sy, { drop: flight + 3 + i * 0.4 });
         const c = goalCells(S, 'foot', clamp(sx | 0, 0, W - 1), clamp(sy | 0, 0, H - 1))[0];
         u.x = u.px = c % W + 0.5; u.y = u.py = (c / W | 0) + 0.5;
       }
@@ -2626,6 +2805,7 @@ const Rules = (() => {
 
   return {
     HZ, DT, RES, UNITS, BUILDINGS, WEAPONS, TECH, POWERS, DIFFICULTY, LAYOUT, SIZES, MAPS, spread, use,
+    AGES, MAX_AGE, POWER_AGE, LINES, LINE_ORDER, formOf, lineCount, nameOf, armOf,
     get W() { return W; }, get H() { return H; }, get VW() { return VW; }, get VH() { return VH; },
     newGame, step, push, spawn, addBuilding, scoreOf, worth, SERIES, pickFrom, fits, spotFor, roomy, blockedReason, near, rehash, seenBy, terrainAt, heightAt, los, isAir, armed, cellOf, summary, exitOf,
     mulberry, noiser, clamp, lerp, smooth, angleTo, toXY, toUV, gap, setSize, save, load, hashOf, restartSlot, razeSlot, makeMap, mapFor, layoutFor,

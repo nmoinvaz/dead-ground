@@ -17,7 +17,11 @@ const AI = (() => {
   }
 
   const has = (P, k) => P.counts[k] || 0;
-  const queuedIn = (P, cat, kind) => P.q[cat].filter(i => i.kind === kind).length;
+  const queuedIn = (P, cat, kind) => P.q[cat].filter(i => i.kind === kind || (UNITS[i.kind] && UNITS[kind] && UNITS[i.kind].line === UNITS[kind].line)).length;
+  // Whether a side's age has opened a building or power.
+  const opened = (P, d) => P.tech >= (d.tech || 1);
+  // Each line's form in the side's age, for the lines that have one by now.
+  const forms = (P, lines) => lines.map(l => R.formOf(l, P.tech)).filter(Boolean);
   const value = u => u.d.cost + (u.d.oil || 0) * 3;
   // The enemy to fight: the nearest living base that is not shielded. Looked at again now and then.
   function foeOf(S, me) {
@@ -68,9 +72,9 @@ const AI = (() => {
     const reachWell = S.map.wells.some(w => R.fits(S, me.team, 'derrick', w.x - 1, w.y - 1));
     if (reachWell && has(P, 'derrick') < 4) pref.push('derrick');
     if (!has(P, 'radar')) pref.push('radar');
-    if (P.tech >= 2 && !has(P, 'airfield')) pref.push('airfield');
-    if (P.tech >= 2 && !has(P, 'fob') && me.level !== 'recruit') pref.push('fob');
-    if (P.tech >= 3 && !has(P, 'silo') && D_silo(me)) pref.push('silo');
+    if (opened(P, BUILDINGS.airfield) && !has(P, 'airfield')) pref.push('airfield');
+    if (opened(P, BUILDINGS.fob) && !has(P, 'fob') && me.level !== 'recruit') pref.push('fob');
+    if (opened(P, BUILDINGS.silo) && !has(P, 'silo') && D_silo(me)) pref.push('silo');
     if (has(P, 'factory') < 2 && P.supply > 3000) pref.push('factory');
     if (has(P, 'refinery') < 3 && P.supply > 2500) pref.push('refinery');
     for (const k of pref) if (!R.blockedReason(S, me.team, k)) { R.push(S, me.team, { c: 'build', kind: k }); return; }
@@ -84,46 +88,50 @@ const AI = (() => {
     const want = Math.min(me.D.def, (m / 2.5 | 0));
     if (n >= want || P.supply < 900) return;
     const opts = ['bunker', 'atgun', 'atgun', 'bunker'];
-    if (P.tech >= 2) opts.push('sam');
-    if (P.tech >= 3) opts.push('rail');
+    if (opened(P, BUILDINGS.sam)) opts.push('sam');
+    if (opened(P, BUILDINGS.rail)) opts.push('rail');
     const k = opts[n % opts.length];
-    if (!R.blockedReason(S, me.team, k) && P.prod - P.use > -BUILDINGS[k].power) R.push(S, me.team, { c: 'build', kind: k });
+    // Before the Industrial Age there is no power to run short of.
+    if (!R.blockedReason(S, me.team, k) && (P.tech < R.POWER_AGE || P.prod - P.use > -BUILDINGS[k].power)) R.push(S, me.team, { c: 'build', kind: k });
   }
 
   function trainNext(S, me, P) {
-    const trucks = has(P, 'truck'), refs = has(P, 'refinery');
+    const trucks = R.lineCount(P, 'truck'), refs = has(P, 'refinery');
     const m = (S.tick - Math.max(0, me.startTick)) / HZ / 60;
     // A cap on the army, and a pause in spending while saving for the next tech level.
     const count = S.ents.reduce((n, e) => n + (e.team === me.team && !e.b ? 1 : 0), 0);
     // An easier commander's army grows no faster than ramp allows, units at the start and per minute.
     if (count >= Math.min(90, me.D.ramp ? me.D.ramp[0] + me.D.ramp[1] * m : 90)) return;
-    const lv = P.tech + 1, saving = lv <= me.D.tech && !P.q.tech.length && m >= techTime(me, P.tech);
+    const lv = P.tech + 1, saving = lv <= me.D.maxAge && !P.q.tech.length && m >= ageTime(S, me, P);
     if (saving && trucks >= refs && P.supply < TECH[lv].cost + 500 && count > 12) return;
     if (has(P, 'factory') && P.q.veh.length < 2) {
-      if (trucks < Math.min(refs * 2, 6) && !queuedIn(P, 'veh', 'truck')) R.push(S, me.team, { c: 'train', kind: 'truck' });
+      const truck = R.formOf('truck', P.tech);
+      if (trucks < Math.min(refs * 2, 6) && !queuedIn(P, 'veh', truck)) R.push(S, me.team, { c: 'train', kind: truck });
       else if (P.supply > 700) {
-        const mix = P.tech >= 3 ? ['tank', 'mlrs', 'tank', 'heavy', 'flak', 'ifv'] : P.tech >= 2 ? ['tank', 'ifv', 'tank', 'flak', 'support'] : ['ifv', 'humvee', 'ifv'];
+        // The main line most, then siege, the heaviest, carriers, flak and support, in whatever forms the age has.
+        const mix = forms(P, P.tech >= 5 ? ['mount', 'siege', 'mount', 'heavy', 'aa', 'ifv'] : P.tech >= 4 ? ['mount', 'ifv', 'mount', 'aa', 'sup', 'siege'] : ['mount', 'mount', 'siege', 'rec', 'heavy', 'sup']);
         const k = mix[me.plan++ % mix.length];
-        if (!R.blockedReason(S, me.team, k)) R.push(S, me.team, { c: 'train', kind: k });
+        // Two support vehicles are enough to mend an army.
+        if (!(UNITS[k].repair && R.lineCount(P, 'sup') >= 2) && !R.blockedReason(S, me.team, k)) R.push(S, me.team, { c: 'train', kind: k });
       }
     }
     if (has(P, 'barracks') && P.q.inf.length < 2 && P.supply > 300) {
-      const mix = ['rifle', 'rocket', 'rifle', 'rocket', 'rifle'];
-      if (P.tech >= 2) mix.push('sniper');
+      const mix = forms(P, ['inf', 'at', 'inf', 'at', 'inf', 'snp']);
       R.push(S, me.team, { c: 'train', kind: mix[(me.plan * 3 + (m | 0)) % mix.length] });
     }
     if (has(P, 'airfield') && P.q.air.length < 1 && P.supply > 1500) {
-      const opts = P.tech >= 3 ? ['heli', 'fpv', 'fpv', 'jet'] : ['heli', 'fpv', 'fpv'];
-      R.push(S, me.team, { c: 'train', kind: opts[me.plan % opts.length] });
+      const opts = forms(P, ['heli', 'fpv', 'fpv', 'jet']);
+      if (opts.length) R.push(S, me.team, { c: 'train', kind: opts[me.plan % opts.length] });
     }
   }
 
-  const techTime = (me, tech) => tech === 1 ? me.D.tech1 : me.D.tech2;
+  // The minute of the game a commander reaches for its next age, counted from the age the game began in.
+  const ageTime = (S, me, P) => me.D.ageEvery * (P.tech - (S.age0 || 1) + 1);
 
   function research(S, me, P) {
-    if (P.tech >= me.D.tech || P.q.tech.length) return;
+    if (P.tech >= me.D.maxAge || P.q.tech.length) return;
     const d = TECH[P.tech + 1], m = (S.tick - Math.max(0, me.startTick)) / HZ / 60;
-    if (m < techTime(me, P.tech)) return;
+    if (m < ageTime(S, me, P)) return;
     if (P.supply > d.cost + 400 && P.oil >= d.oil * 0.8) R.push(S, me.team, { c: 'research' });
   }
 
@@ -247,8 +255,8 @@ const AI = (() => {
 
   function powers(S, me, P) {
     if (!me.D.power || !has(P, 'radar') || S.tick - me.lastPower < me.D.gap * HZ) return;
-    // An easier commander calls no powers before Tech II.
-    if (me.level !== 'veteran' && P.tech < 2) return;
+    // An easier commander calls no powers before it can call a barrage.
+    if (me.level !== 'veteran' && !opened(P, POWERS.barrage)) return;
     // A strike goes where the most of the other side has been seen together. A shielded commander, a
     // newcomer's slot, makes no strike, since any would end its own shield.
     const foes = S.ents.filter(e => e.team !== me.team && R.seenBy(S, me.team, e) && !((S.P[e.team].shield || 0) > S.tick));
@@ -264,12 +272,12 @@ const AI = (() => {
           const silo = S.ents.find(e => e.b && e.team === me.team && e.kind === 'silo' && e.charge >= e.d.charge);
           if (silo && top >= 7) { R.push(S, me.team, { c: 'launch', x: best.x, y: best.y }); me.lastPower = S.tick; return; }
         }
-        if (P.tech >= 2 && P.cooldown.barrage <= 0 && P.supply > 800) {
+        if (opened(P, POWERS.barrage) && P.cooldown.barrage <= 0 && P.supply > 800) {
           R.push(S, me.team, { c: 'power', name: 'barrage', x: best.x, y: best.y }); me.lastPower = S.tick; return;
         }
       }
     }
-    if (P.cooldown.uav <= 0 && P.supply > 1200) {
+    if (opened(P, POWERS.uav) && P.cooldown.uav <= 0 && P.supply > 1200) {
       const foe = foeOf(S, me);
       if (foe < 0) return;
       const t = S.bases[foe], a = me.rand() * 6.28, r = 6 + me.rand() * 18;
