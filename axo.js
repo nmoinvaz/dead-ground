@@ -6,6 +6,7 @@ const Axo = (() => {
   const add = (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]], sub = (a, b) => [a[0] - b[0], a[1] - b[1], a[2] - b[2]];
   const mul = (a, k) => [a[0] * k, a[1] * k, a[2] * k], dot = (a, b) => a[0] * b[0] + a[1] * b[1] + a[2] * b[2];
   const len = a => Math.hypot(a[0], a[1], a[2]), norm = a => mul(a, 1 / (len(a) || 1));
+  const cross = (a, b) => [a[1] * b[2] - a[2] * b[1], a[2] * b[0] - a[0] * b[2], a[0] * b[1] - a[1] * b[0]];
   const mean = ps => mul(ps.reduce(add, [0, 0, 0]), 1 / ps.length);
   const RAD = Math.PI / 180;
 
@@ -52,6 +53,41 @@ const Axo = (() => {
   // A seeded random, so lumps of ore fall the same each time.
   const rng = s => () => (s = Math.imul(s ^ (s >>> 15), 2246822507) ^ Math.imul(s ^ (s >>> 13), 3266489909), ((s >>>= 0) % 10000) / 10000);
   const wheels = (xs, y, r, w, hub = true) => xs.flatMap(x => [1, -1].flatMap(s => [cyl('y', [x, s * y, r], r, w, 'dark', 18), ...(hub ? [cyl('y', [x, s * (y + w / 2 + 0.03), r], r * 0.44, 0.05, 'metal', 10)] : [])]));
+  // A rod from a to b with n sides, of radius r at a and r1 at b: a leg, a shaft, a strut or a barrel.
+  function rod(a, b, r, mat, n = 4, r1 = r, o = {}) {
+    const d = norm(sub(b, a)), u = norm(cross(d, Math.abs(d[2]) < 0.9 ? [0, 0, 1] : [1, 0, 0])), v = cross(d, u);
+    const ring = (c, rr) => Array.from({ length: n }, (_, i) => { const t = (i + 0.5) / n * 2 * Math.PI; return add(c, add(mul(u, Math.cos(t) * rr), mul(v, Math.sin(t) * rr))); });
+    return loft(ring(a, r), ring(b, r1), mat, Object.assign({ smooth: n > 5 }, o));
+  }
+  // A ball as two cones base to base, as a stone or a round shot.
+  const ball = (c, r, mat) => [cyl('z', [c[0], c[1], c[2] - r * 0.35], r * 0.6, r * 0.7, mat, 10, r), cyl('z', [c[0], c[1], c[2] + r * 0.35], r, r * 0.7, mat, 10, r * 0.6)];
+  // The parts of one body keep together in depth, so a far man or horse never laps a near one.
+  const grp = parts => { const g = {}; for (const p of parts) p.g = g; return parts; };
+  // A spoked wheel of wood on an iron hub, its spokes on the outer face.
+  function spoked(x, y, r, w, mat = 'wood') {
+    const s = Math.sign(y) || 1, yo = y + s * (w / 2 + 0.012);
+    const p = [cyl('y', [x, y, r], r, w, mat, 18), cyl('y', [x, y + s * (w / 2 + 0.025), r], r * 0.2, 0.06, 'metal', 8, r * 0.2, { b: 0.03 })];
+    for (const a of [0, 60, 120]) { const c = Math.cos(a * RAD) * r * 0.86, sn = Math.sin(a * RAD) * r * 0.86; p.push(rod([x - c, yo, r - sn], [x + c, yo, r + sn], 0.022, 'dark', 4, 0.022, { b: 0.02 })); }
+    return p;
+  }
+  // Lumps of ore heaped on a bed from z up, the same each time for a seed.
+  function lumps(x0, x1, y0, y1, z, n, seed, s0 = 0.28) {
+    const p = [], r = rng(seed);
+    for (let i = 0; i < n; i++) {
+      const x = x0 + r() * (x1 - x0), y = y0 + r() * (y1 - y0), s = s0 + r() * s0 * 0.8;
+      p.push(...turn(turn([box(x - s, x + s, y - s, y + s, z, z + s * 1.3, 'ore', { tx0: x - s * 0.5, tx1: x + s * 0.6, ty0: y - s * 0.4, ty1: y + s * 0.7 })], 'z', r() * 90, [x, y, z + 0.2]), 'x', (r() - 0.5) * 20, [x, y, z + 0.2]));
+    }
+    return p;
+  }
+  // A half round along x from x0 to x1, standing on z, as a wagon's canvas over its hoops.
+  function arch(x0, x1, r, z, mat) {
+    const ring = x => Array.from({ length: 9 }, (_, i) => { const a = i / 8 * Math.PI; return [x, Math.cos(a) * r, z + Math.sin(a) * r]; });
+    return loft(ring(x0), ring(x1), mat, { smooth: true });
+  }
+  // A pennant of the side's colour on a pole at (x, y) from z0, flying back.
+  const flag = (x, y, z0, h = 1.2, L = 0.62) => [rod([x, y, z0], [x, y, z0 + h], 0.025, 'wood'), py([[x, z0 + h - 0.02], [x - L, z0 + h - 0.17], [x, z0 + h - 0.38]], y - 0.02, y + 0.02, 'mark', { b: 0.05 })];
+  // Hover pads at each x and y, a dark housing over a band of light.
+  const hoverPads = (xs, ys, z = 0.42) => xs.flatMap(x => ys.flatMap(y => [cyl('z', [x, y, z + 0.08], 0.44, 0.22, 'dark', 12, 0.5), cyl('z', [x, y, z - 0.08], 0.38, 0.1, 'glow', 12, 0.42)]));
 
   // ---- People -------------------------------------------------------------------------------------------------
   // A standing figure facing x, 1.8 m, in o.cloth with o.legs, a helmet or o.hair, and what it carries.
