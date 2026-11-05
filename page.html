@@ -380,7 +380,7 @@ body[data-look="ink"] #end th { color: #3d352c; }
 body[data-look="ink"] .rtabs button, body[data-look="ink"] .rseries button { background: var(--paper-hi); border: 1.5px solid var(--ink); color: var(--ink); font-family: var(--display); font-weight: 400; }
 body[data-look="ink"] .rtabs button.on, body[data-look="ink"] .rseries button.on { background: var(--ink); color: var(--paper); border-color: var(--ink); }
 body[data-look="ink"] .rtabs button:hover:not(.on), body[data-look="ink"] .rseries button:hover:not(.on) { color: var(--redink); }
-body[data-look="ink"] #end thead th, body[data-look="ink"] #end .rkey { font-family: var(--label); }
+body[data-look="ink"] #end thead th, body[data-look="ink"] #end .rkey, body[data-look="ink"] #end .rcap { font-family: var(--label); }
 body[data-look="ink"] #end tbody tr + tr > * { border-top-color: rgba(31,26,22,.14); }
 body[data-look="ink"][data-scheme="dark"] #end tbody tr + tr > * { border-top-color: rgba(232,224,207,.12); }
 body[data-look="ink"] .slot { border-color: var(--ink); }
@@ -419,7 +419,13 @@ body[data-look="ink"] #menu, body[data-look="ink"] #watch, body[data-look="ink"]
 #maps button small { font: 13px var(--mono); opacity: .8; white-space: nowrap; }
 .preview { margin-top: 8px; }
 #preview { width: 100%; aspect-ratio: 1; display: block; border: 1.5px solid var(--ink); background: var(--paper-hi); }
-#map-about { margin: 6px 0 0; font: 500 15px/1.25 var(--ui); color: var(--ink-dim); text-wrap: pretty; }
+#map-about, #age-about { margin: 6px 0 0; font: 500 15px/1.25 var(--ui); color: var(--ink-dim); text-wrap: pretty; }
+#age-about { min-height: 2.5em; }
+/* The game's own choices stand under the players: the theatre and the age it begins in. */
+.rules { margin-top: 14px; display: grid; gap: 4px; }
+.rules h3 { margin: 8px 0 2px; }
+#m-age { grid-template-columns: repeat(6, 1fr); }
+body[data-look="ink"] #age-about, body[data-look="ink"] #map-about { font-family: var(--label); font-style: italic; font-weight: 400; }
 .seedrow { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin: 8px 0 14px; font: 500 16px var(--ui); }
 .seedrow b { font: 15px var(--mono); }
 #slots { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
@@ -469,6 +475,7 @@ body[data-look="ink"] #menu, body[data-look="ink"] #watch, body[data-look="ink"]
   .sheet footer { flex-wrap: wrap; }
   #go-why { flex-basis: 100%; }
   #rooms th:nth-child(2), #rooms td:nth-child(2) { display: none; }
+  #m-age { grid-template-columns: repeat(3, 1fr); }
 }
 body[data-look="ink"] #title.on-sheet { background: rgba(242,232,210,.62); }
 body[data-look="ink"][data-scheme="dark"] #title.on-sheet { background: rgba(26,24,20,.7); }
@@ -541,15 +548,18 @@ body[data-look="ink"] .sheet { box-shadow: 4px 4px 0 var(--ink); }
           <div id="maps" class="pick"></div>
           <div class="preview"><canvas id="preview"></canvas><p id="map-about"></p></div>
           <div class="seedrow"><span>Terrain <b id="seed"></b></span><button id="reseed">New terrain</button></div>
-          <h3>Theatre</h3>
-          <div id="m-theme" class="pick three"><button data-v="desert">Salt Flats</button><button data-v="steppe">Black Steppe</button><button data-v="winter">White Pass</button></div>
-          <h3>Starting age</h3>
-          <div id="m-age" class="pick three"><button data-v="1">Ancient</button><button data-v="2">Medieval</button><button data-v="3">Gunpowder</button><button data-v="4">Industrial</button><button data-v="5">Modern</button><button data-v="6">Future</button></div>
         </section>
         <section class="slotcol">
           <h3>Players</h3>
           <ol id="slots"></ol>
           <p id="watchers"></p>
+          <div class="rules">
+            <h3>Theatre</h3>
+            <div id="m-theme" class="pick three"><button data-v="desert">Salt Flats</button><button data-v="steppe">Black Steppe</button><button data-v="winter">White Pass</button></div>
+            <h3>Starting age</h3>
+            <div id="m-age" class="pick three"><button data-v="1">Ancient</button><button data-v="2">Medieval</button><button data-v="3">Gunpowder</button><button data-v="4">Industrial</button><button data-v="5">Modern</button><button data-v="6">Future</button></div>
+            <p id="age-about"></p>
+          </div>
           <div id="chat" hidden><div id="chat-log"></div><input id="chat-in" maxlength="200" placeholder="Say something, then Enter" autocomplete="off" spellcheck="false"></div>
         </section>
       </div>

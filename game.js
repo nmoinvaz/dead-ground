@@ -479,6 +479,7 @@ const Game = (() => {
       $('reseed').disabled = !edit;
       $('m-theme').querySelectorAll('button').forEach(b => { b.classList.toggle('on', b.dataset.v === v.theme); b.disabled = !edit && b.dataset.v !== v.theme; });
       $('m-age').querySelectorAll('button').forEach(b => { const on = +b.dataset.v === (v.age || 1); b.classList.toggle('on', on); b.disabled = !edit && !on; });
+      $('age-about').textContent = Rules.AGES[v.age || 1].note;
       drawPreview(v.map, v.seed, v.slots);
       // The slots.
       const list = $('slots');

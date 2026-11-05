@@ -2,6 +2,10 @@
 
 Interface work on the sidebar, the overlay, the menus and the end report. Newest first.
 
+- End report: chart marks are tags naming the age (Med, Gun, Ind), the timeline's hover gives each side's age,
+  the summary shows the age reached, and Economy has an ages-reached table in place of Tech II and III.
+  Setup: theatre and starting age moved under the players so the sheet fits, with a line on what the age
+  brings. Next: sidebar card states and tooltips.
 - Age-up moment: a card in the readout strip's gap names the new age, says what it brings and shows up to six
   of its new forms, unrolls from its middle, holds four seconds and lifts away. The sidebar's cards an age
   brings are drawn in one after another and marked new. The voice names the age. Next: report and setup.
