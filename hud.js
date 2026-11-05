@@ -1444,13 +1444,22 @@ const Hud = (() => {
         g.fillStyle = n.owner < 0 ? (ink ? '#6b6052' : '#e8e0c8') : ink ? SLOT_PLATE[n.owner] : SLOT_CSS[n.owner];
         g.fillRect(n.x - 2, n.y - 2, 4, 4);
       }
+      // Units are dots of a fixed size on the panel, whatever the map's size, each ringed in ink so it stands off
+      // the land. Each side is one path, filled then stroked.
+      const ur = size * 0.0085 / k, ring = ink ? '#2a221b' : 'rgba(0,0,0,0.8)', dots = new Map();
+      g.lineWidth = size * 0.0032 / k; g.strokeStyle = ring;
       for (const e of s.ents) {
         const mine = e.team === t || (t < 0 && e.team === 0);
         if (!mine && P0) { if (e.b ? !P0.seen[Rules.cellOf(e.x, e.y)] : !P0.vis[Rules.cellOf(e.x, e.y)]) continue; }
-        g.fillStyle = ink ? SLOT_PLATE[e.team] : SLOT_CSS[e.team];
-        if (e.b) g.fillRect(e.cx, e.cy, e.w, e.h);
-        else g.fillRect(e.x - 0.9, e.y - 0.9, 1.8, 1.8);
+        if (e.b) {
+          g.fillStyle = ink ? SLOT_PLATE[e.team] : SLOT_CSS[e.team];
+          g.fillRect(e.cx, e.cy, e.w, e.h); g.strokeRect(e.cx, e.cy, e.w, e.h);
+          continue;
+        }
+        let p = dots.get(e.team); if (!p) dots.set(e.team, p = new Path2D());
+        p.moveTo(e.x + ur, e.y); p.arc(e.x, e.y, ur, 0, 6.2832);
       }
+      for (const [tm, p] of dots) { g.fillStyle = ink ? SLOT_PLATE[tm] : SLOT_CSS[tm]; g.fill(p); g.stroke(p); }
       // The view as a shape on the ground.
       const corners = [[0, 0], [world.vw, 0], [world.vw, world.vh], [0, world.vh]].map(([x, y]) => groundUnder(x, y));
       if (corners.every(Boolean)) {
