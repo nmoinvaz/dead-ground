@@ -2,6 +2,8 @@
 
 Interface work on the sidebar, the overlay, the menus and the end report. Newest first.
 
+- Sidebar: a card that cannot be had is hatched across in ink and kept readable, in place of fading to 42%.
+  The tag merge keeps its place as groups grow, a quarter of a millisecond a frame over a busy base.
 - End report: chart marks are tags naming the age (Med, Gun, Ind), the timeline's hover gives each side's age,
   the summary shows the age reached, and Economy has an ages-reached table in place of Tech II and III.
   Setup: theatre and starting age moved under the players so the sheet fits, with a line on what the age

@@ -1340,14 +1340,15 @@ const Hud = (() => {
         };
         const touch = (p, q) => Math.abs(p.x - q.x) < (p.w + q.w) / 2 + 2 && Math.abs(p.y - q.y) < ht + 2;
         groups.forEach(size);
+        // A group that grows is checked again against the rest, and a pass that merged any is made again.
         for (let merged = true; merged;) {
           merged = false;
-          for (let i = 0; i < groups.length && !merged; i++) for (let j = i + 1; j < groups.length; j++) {
+          for (let i = 0; i < groups.length; i++) for (let j = i + 1; j < groups.length;) {
             const p = groups[i], q = groups[j];
-            if (p.key !== q.key || !touch(p, q)) continue;
+            if (p.key !== q.key || !touch(p, q)) { j++; continue; }
             p.sx += q.sx; p.sy += q.sy; p.n += q.n; p.x = p.sx / p.n; p.y = p.sy / p.n;
             for (const k in q.kinds) p.kinds[k] = (p.kinds[k] || 0) + q.kinds[k];
-            size(p); groups.splice(j, 1); merged = true; break;
+            size(p); groups.splice(j, 1); j = i + 1; merged = true;
           }
         }
         groups.sort((a, b) => (a.team === t) - (b.team === t) || a.on - b.on);
