@@ -20,8 +20,23 @@
       const ink = new THREE.ShaderMaterial({ uniforms: { t: { value: null }, tSubj: { value: null }, tHeat: { value: null }, tPaper: { value: null }, res: { value: new THREE.Vector2(1, 1) }, uTime: { value: 0 }, uK: { value: 1 }, uOff: { value: new THREE.Vector2() }, uStyle: { value: 8 }, tNorm: { value: null }, tFogS: { value: null }, tLand: { value: null }, uSun2: { value: new THREE.Vector2(-1, 0) }, uUpV: { value: new THREE.Vector3(0, 1, 0) }, uRoad: { value: 0 }, uOre: { value: 0 }, uMarks: { value: 1 },
         uWindS: { value: new THREE.Vector2() }, uView: { value: new THREE.Vector2(1, 0) }, tFx: { value: null }, tAnc: { value: null }, uDark: { value: 0 }, uInks: { value: 0 }, uFxs: { value: 0 }, uUnits: { value: 0 }, tH: SH.tH, uHSize: { value: new THREE.Vector2(1, 1) }, uHScale: { value: 1 }, uRain: { value: 0 }, uStorm: { value: 0 }, uSnowF: { value: 0 }, uSnowC: SH.uSnowC, uFog: { value: 0 }, uMist: { value: 0 }, uNight: { value: 0 }, uWet: { value: 0 },
         uDayMul: { value: new THREE.Vector3(1, 1, 1) }, uDayAdd: { value: new THREE.Vector3() }, uWaterL: { value: -0.15 }, uCloudK: SH.uCloudK,
-        uInvVP: { value: new THREE.Matrix4() }, uW2S: { value: new THREE.Vector4(1, 0, 0, 1) }, uLev: { value: 1 } }, vertexShader: vs, depthTest: false, depthWrite: false, fragmentShader: `
+        uInvVP: { value: new THREE.Matrix4() }, uW2S: { value: new THREE.Vector4(1, 0, 0, 1) }, uLev: { value: 1 },
+        // Each side's colour as the anchor pass keeps it, its hue and how coloured it is, and its inks on either paper.
+        uSideKey: { value: [...Array(8)].map(() => new THREE.Vector2()) }, uSideL: { value: [...Array(8)].map(() => new THREE.Vector3()) }, uSideD: { value: [...Array(8)].map(() => new THREE.Vector3()) } }, vertexShader: vs, depthTest: false, depthWrite: false, fragmentShader: `
         varying vec2 vUv; uniform sampler2D t, tSubj, tHeat, tPaper, tNorm, tFogS, tLand; uniform vec2 res, uOff, uSun2, uWindS, uView, uHSize; uniform float uHScale, uFxs; uniform int uUnits, uInks; uniform float uDark; uniform sampler2D tH, tFx, tAnc; uniform vec3 uUpV, uDayMul, uDayAdd; uniform float uTime, uK, uRain, uStorm, uSnowF, uSnowC, uFog, uMist, uNight, uWet, uWaterL, uCloudK, uMarks; uniform int uStyle, uRoad, uOre;
+        uniform vec2 uSideKey[8]; uniform vec3 uSideL[8], uSideD[8];
+        // A unit's ink, from the side whose hue and colourfulness lie nearest its anchor's. Hue tells most sides
+        // apart, and colourfulness tells brown from orange. A colour faded to grey, as a burning wreck's, takes the
+        // paper's plain ink.
+        vec3 sideInk(vec4 aw, bool dk) {
+          float best = 1e9; vec3 c = vec3(0.0);
+          for (int i = 0; i < 8; i++) {
+            float dh = abs(aw.z - uSideKey[i].x); dh = min(dh, 1.0 - dh) * 36.0;
+            float ds = (aw.w - uSideKey[i].y) * 20.0, d = dh * dh + ds * ds;
+            if (d < best) { best = d; c = dk ? uSideD[i] : uSideL[i]; }
+          }
+          return mix(dk ? vec3(0.88) : vec3(0.12), c, smoothstep(0.15, 0.4, aw.w));
+        }
         const vec3 PAPER = vec3(0.949, 0.910, 0.824), INK = vec3(0.122, 0.102, 0.086);
         // The soft axonometric's washes, after the atlas: speckled pale green ground, lilac water, pink paths,
         // three canopy greens, cream roofs over warm grey walls, and the ghost plan's blue-grey for what was.
@@ -332,9 +347,10 @@
             else if (uUnits == 3) uC = 0.0;
             else if (uUnits == 4) uC = max(hatch(p, uAng, mix(5.0, 2.6, smoothstep(0.15, 0.8, dens)), 0.9, seedU, 0.04) * smoothstep(0.12, 0.22, dens), smoothstep(0.84, 0.88, dens));
             else if (uUnits == 5) { vec2 uq = p / (2.2 * uK); float ud = length(fract(uq) - 0.5 - (vec2(hash(floor(uq) + seedU), hash(floor(uq) + seedU + 7.0)) - 0.5) * 0.3), ur = smoothstep(0.1, 0.85, dens) * 0.58; uC = max((1.0 - smoothstep(ur - 0.08, ur + 0.08, ud)) * step(0.06, ur), smoothstep(0.88, 0.92, dens)); }
-            // Small on screen, a unit's shade is a flat tint of its side's ink rather than hatching, which at that size
-            // only scribbles over the shape.
-            else uC = max(mix(hatch(p, 45.0, 3.2, 1.0, seedU, 0.04) * smoothstep(0.42, 0.46, dens), smoothstep(0.4, 0.72, dens) * 0.4, zU), smoothstep(0.8, 0.84, dens));
+            // Small on screen, a unit's shade is flat rather than hatched, which at that size only scribbles over the
+            // shape. On dark paper it is a tint of the side's ink. On light paper it is the ink laid solid, as a pen
+            // fills a small shape, since a pale tint of red is pink.
+            else uC = max(mix(hatch(p, 45.0, 3.2, 1.0, seedU, 0.04) * smoothstep(0.42, 0.46, dens), dk ? smoothstep(0.4, 0.72, dens) * 0.4 : smoothstep(0.5, 0.56, dens), zU), smoothstep(0.8, 0.84, dens));
             cover = isG * gC + isW * wC + isS * sC + isT * tC + isB * bC + isU * uC + isBr * brC + isO * oC + isL * smoothstep(0.88, 0.92, dens);
             // The bank drawn once, heavy, on whichever side of it the pixel lies.
             float bankL = 1.0 - smoothstep(0.7 * uK, 1.6 * uK, abs(dep - 0.03) / max(fwidth(dep), 1e-4));
@@ -495,15 +511,14 @@
               vec4 an = texture2D(tAnc, vUv);
               vec4 anN = max(max(texture2D(tAnc, vUv + k * vec2(1.2, 0)), texture2D(tAnc, vUv - k * vec2(1.2, 0))), max(texture2D(tAnc, vUv + k * vec2(0, 1.2)), texture2D(tAnc, vUv - k * vec2(0, 1.2))));
               vec4 aw = a > 0.9 ? an : anN;
-              vec3 sideInk = clamp(abs(mod(aw.z * 6.0 + vec3(0.0, 4.0, 2.0), 6.0) - 3.0) - 1.0, 0.0, 1.0);
-              sideInk = dk ? mix(vec3(0.88), sideInk * 0.45 + 0.5, smoothstep(0.15, 0.4, aw.w)) : mix(vec3(0.12), sideInk * 0.5 + 0.02, smoothstep(0.15, 0.4, aw.w));
+              vec3 uInk = sideInk(aw, dk);
               // The same inks on dark paper, each as pale as the light scheme's is deep.
               vec3 landI = uInks == 3 ? (dk ? vec3(0.7, 0.75, 0.9) : vec3(0.13, 0.15, 0.27)) : (dk ? vec3(0.8, 0.7, 0.56) : vec3(0.34, 0.23, 0.14));
               vec3 waterI = uInks == 3 ? landI : (dk ? vec3(0.55, 0.68, 0.88) : vec3(0.12, 0.24, 0.44));
               vec3 treeI = uInks == 1 ? (dk ? vec3(0.58, 0.74, 0.52) : vec3(0.13, 0.26, 0.12)) : landI;
               vec3 bldI = uInks == 1 ? (dk ? vec3(0.86, 0.8, 0.7) : vec3(0.22, 0.16, 0.12)) : landI;
               float tN = 1.0 - smoothstep(0.012, 0.025, abs(aN - 0.459));
-              inkC = aN > 0.9 ? sideInk : aN > 0.62 ? bldI : tN > 0.5 ? treeI : isW > 0.5 ? waterI : landI;
+              inkC = aN > 0.9 ? uInk : aN > 0.62 ? bldI : tN > 0.5 ? treeI : isW > 0.5 ? waterI : landI;
             }
             // On dark paper hatching is laid in a light grey, and only the outlines keep the inks. Units keep their
             // side's ink throughout.
@@ -544,7 +559,9 @@
             float gw = 1.0 - smoothstep(0.08, 0.15, A(vUv));
             float shade = smoothstep(mix(0.32, 0.52, gw), mix(0.78, 0.9, gw), dens) * (1.0 - lit) * (1.0 - waterK);
             // The soft axonometric has almost no light, so the mixture keeps its shade faint on the land.
-            col = mix(col, col * vec3(0.6, 0.64, 0.9) + vec3(0.03, 0.025, 0.07), shade * (uStyle == 8 ? mix(0.6, 0.3, gw) : mix(0.85, 0.6, gw)));
+            // A unit's shade is a cool slate. Violet on cream turns rose under the dawn and dusk light.
+            vec3 shW = mix(vec3(0.6, 0.64, 0.9), vec3(0.64, 0.7, 0.78), smoothstep(0.85, 0.95, s0)), shA = mix(vec3(0.03, 0.025, 0.07), vec3(0.02, 0.03, 0.05), smoothstep(0.85, 0.95, s0));
+            col = mix(col, col * shW + shA, shade * (uStyle == 8 ? mix(0.6, 0.3, gw) : mix(0.85, 0.6, gw)));
             if (uStyle == 0) col = mix(col, col * vec3(1.04, 0.99, 0.9), (1.0 - smoothstep(0.05, 0.35, dens)) * 0.6);
           }
           // The sides' markings in coloured ink.
@@ -556,12 +573,12 @@
           float wash = smoothstep(0.12, 0.25, mkx) * (1.0 - smoothstep(0.62, 0.8, mkx));
           // Each side's units drawn in its own ink (1), or their marks laid solid on a black body (2).
           float nearU = smoothstep(0.85, 0.95, max(max(A(uv + k * vec2(2.4, 0.0)), A(uv - k * vec2(2.4, 0.0))), max(max(A(uv + k * vec2(0.0, 2.4)), A(uv - k * vec2(0.0, 2.4))), s0)));
-          if (uUnits == 1) { vec3 tInk = dk ? mix(DINK, hue, 0.55) : mix(INK, hue, 0.6) * 0.8; col = mix(col, tInk, nearU * smoothstep(0.25, 0.6, cover) * step(0.05, mkx)); mark = 0.0; wash = 0.0; }
+          if (uUnits == 1) { vec3 tInk = sideInk(texture2D(tAnc, vUv), dk); col = mix(col, tInk, nearU * smoothstep(0.25, 0.6, cover) * step(0.05, mkx)); mark = 0.0; wash = 0.0; }
           if (uUnits == 2) { col = mix(col, hue * 0.85, mark * nearU); mark = 0.0; wash = 0.0; }
           // Line, hatch and stipple units keep their bodies paper, the side shown by its marks alone.
           if (uUnits >= 3 && uUnits <= 5) wash = 0.0;
           // Ore is marked gold; every side's own colour comes through as itself.
-          bool gold = hue.b < 0.3 && hue.g > 0.7;
+          bool gold = hue.b < 0.3 && hue.g > 0.7 && s0 < 0.85;
           vec3 wc = gold ? vec3(1.0, 0.8, 0.3) : mix(vec3(1.0), hue, 0.5);
           col = mix(col, col * wc, wash * (gold ? (uStyle == 8 && uOre != 0 ? 0.0 : 0.85) : 0.55));
           vec3 colour = hue * (dk ? 0.9 : 0.7);
@@ -689,10 +706,23 @@
           gl_FragColor = vec4(col, 1.0);
         }` });
       const look = Looks.get('ink');
+      // Each side's key as the anchor pass writes it, the hue and colourfulness of its linear colour, and its inks.
+      let sides = false;
+      const setSides = C => {
+        World.SLOT_COLORS.forEach((hex, i) => {
+          const c = new THREE.Color(hex), mx = Math.max(c.r, c.g, c.b), d = mx - Math.min(c.r, c.g, c.b);
+          let hh = d < 1e-4 ? 0 : mx === c.r ? ((c.g - c.b) / d + 6) % 6 : mx === c.g ? (c.b - c.r) / d + 2 : (c.r - c.g) / d + 4;
+          C.uSideKey.value[i].set(hh / 6, mx > 0 ? d / mx : 0);
+          const ink = (s, v) => v.set(parseInt(s.slice(1, 3), 16) / 255, parseInt(s.slice(3, 5), 16) / 255, parseInt(s.slice(5, 7), 16) / 255);
+          ink(World.SLOT_INKS.light[i], C.uSideL.value[i]); ink(World.SLOT_INKS.dark[i], C.uSideD.value[i]);
+        });
+        sides = true;
+      };
       return {
         render(K) {
           const C = ink.uniforms, { w, h, camera, sky } = K, [CX, CY] = K.center;
           if (!C.tPaper.value) C.tPaper.value = K.paper();
+          if (!sides) setSides(C);
           C.t.value = K.ldr.texture; C.tSubj.value = K.mask(); C.tNorm.value = K.norm(); C.tHeat.value = K.a0.texture;
           C.tFx.value = K.fx(); C.uFxs.value = look.fxs || 0; C.uUnits.value = look.units || 0; C.tAnc.value = K.anchor(); C.uDark.value = Looks.dark ? 1 : 0; C.uInks.value = look.inks || 0;
           C.res.value.set(w, h); C.uTime.value = K.time; C.uK.value = h / 1080;
