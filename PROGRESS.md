@@ -15,10 +15,16 @@
 - Bridges read as bridges from far out: cutwater piers stand out on the water past both sides of the deck, the deck's
   rails and seams are inked firmly, its shadow is hatched on the water away from the sun, and its lane marks show only
   from the Industrial Age.
+- Motion: horses walk, trot and gallop on two-part legs shared per coat (one mesh for all of a make), oxen and
+  elephants walk, the mech and titan step, wooden wheels roll, a cannon runs back as it fires. Soldiers' arms are their
+  own part: spears and pikes lunge, bows rise and draw, muskets kick and are lowered to load, grenades go overarm.
+  Riders' lances thrust and sabres chop, an elephant gores. The catapult's arm (its tilt fixed) snaps up against the
+  crossbar and is winched down, the trebuchet's weight drops and its arm whips over, and their stones leave from the
+  arm as it comes up. Melee ranks press in and jostle. Sidebar pictures and wrecks draw the rigs at rest.
+- Age-up: dust round each changed unit and building, and in ink a quick double loop of the pen in the side's colour
+  round each unit and a sketched frame round each building, gone in about a second. Daylight shows a pale ring.
 - A squad that changes form at an age-up keeps its men, where it used to drop corpses when its count differed.
 
 ## Next
 
 - Check the zoomed-out pass at 92, 150 and 200 in light and dark ink, then buildings, effects and battles far out.
-- Motion: gallop and walk cycles, melee swings, catapult and trebuchet throws, cannon recoil.
-- A scrum in melee, and a local sketch effect at an age-up.

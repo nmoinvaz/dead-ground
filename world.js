@@ -2338,7 +2338,7 @@ const World = (() => {
       // An engine's stone leaves as its arm comes up, and lands when the rules say it does.
       const T = rel && THROWS[src.kind], delay = T ? T.snap * 0.85 : 0;
       flyers.push({ w: e.w, fx: w.fx, x0, y0, z0, x1: e.tx, y1: e.tz, z1: e.ty, t: -delay, dur: Math.max(0.2, e.dur - delay), arc, tgt: e.tgt, trail: 0, px: x0, py: y0, pz: z0, k: BALLS[e.w] || 1, spin: Math.random() * 6 });
-      if (thrown) { if (rel) dustPuff(src.x, heightAt(M, src.x, src.y) + 0.1, src.y, 0.9); return; }
+      if (thrown) { if (rel) dustPuff(src.x, heightAt(M, src.x, src.y) + 0.06, src.y, 0.45); return; }
       muzzle(mx, up, my, w.fx === 'stone' ? 0.3 : 0.5);
       inkAdd({ k: 'star', x: mx, y: up, z: my, life: 0.1, s: w.fx === 'stone' ? 0.4 : 0.55 });
     }
@@ -2504,7 +2504,7 @@ const World = (() => {
       const g = heightAt(M, x, y), d = dustC(), n = b ? 14 : 7, rr = b ? Math.max(b.w, b.h) * 0.55 : R;
       for (let i = 0; i < n; i++) { const a = i / n * 6.283 + Math.random() * 0.5, q = rr * (0.8 + Math.random() * 0.3); smoke.add(x + Math.cos(a) * q, g + 0.08, y + Math.sin(a) * q, Math.cos(a) * 0.5, 0.35, Math.sin(a) * 0.5, 1.1 + Math.random() * 0.5, 0.35 + rr * 0.2, 1 + rr * 0.6, [d[0], d[1], d[2], 0.32], [d[0], d[1], d[2], 0], i % 4, { drag: 1.6, delay: Math.random() * 0.15 }); }
       if (style.hud !== 'ink') { rings.add(x, g, y, rr * 1.5, 0.7, teamCol[team].getHex()); return; }
-      const wk = 0.05 * clamp(cam.dist / 92, 0.8, 2.2), lift = 0.06, life = 1.25;
+      const wk = (b ? 0.034 : 0.04) * clamp(cam.dist / 92, 0.8, 2.2), lift = 0.06, life = 1.25;
       const seg = (ax, az, bx, bz, wait) => addStroke({ ax, ay: heightAt(M, ax, az) + lift, az, bx, by: heightAt(M, bx, bz) + lift, bz, w: wk, wait, grow: 0.025, life, fade: 0.4, team });
       if (b) {
         // The plot's frame, each side run a little past its corner as a draughtsman's quick lines are.
@@ -2826,6 +2826,8 @@ const World = (() => {
       roadWires,
       // The roadside furniture, for checks.
       get roadside() { return scen && scen.roadside; },
+      // How a unit is posed and what is in the air and on the ground, for checks.
+      probe(id) { const r = rs.get(id); return { pose: r && r.pose, armA: r && r.armA, loaded: r && r.loaded, flyers: flyers.length, arrows: flyers.filter(f => f.fx === 'arrow').length, stuck: stuckArrows.length, strokes: strokes.length }; },
       focus(x, y, d) { cam.x = x; cam.y = y; if (d) cam.dist = d; },
     };
     return world;
