@@ -1548,6 +1548,7 @@ const World = (() => {
           if (p.share) shared[p.share] = o;
           return o;
         });
+        sets[key].gait = parts.gait;
       };
       for (const k in MODELS.units) put(k, MODELS.units[k], k === 'plane' ? 4 : 72);
       for (const k in MODELS.buildings) put(k, MODELS.buildings[k], 24);
@@ -1730,14 +1731,15 @@ const World = (() => {
 
     // How a unit moves this frame: its gait's phase and strength, how far its wheels have turned, and how long since its
     // weapon last struck and how long that weapon takes. Kept on the unit's picture state r.
-    const REST = { gp: 0, amp: 0, roll: 0, since: 99, cd: 1, eng: 0, kick: 0, speed: 0 };
+    const REST = { gp: 0, amp: 0, roll: 0, since: 99, cd: 1, eng: 0, kick: 0, speed: 0, gi: 3 };
     function poseOf(e, r, parts, dt, alpha) {
       const P = r.pose || (r.pose = { gp: 0, amp: 0, roll: 0, prev: null, since: 99, cd: 1, eng: 0, kick: 0, speed: 0, g: null });
       const at = e.anim - e.v / HZ * (1 - alpha), step = P.prev === null ? 0 : clamp(at - P.prev, 0, 1);
       P.prev = at; P.roll += step / US; P.speed = e.v;
       P.amp += ((e.v > 0.1 ? 1 : 0) - P.amp) * Math.min(1, dt * 7);
       const G = parts && parts.gait;
-      if (G) { P.g = G.run && e.v > G.runAt ? G.run : G.trot && e.v > G.trotAt ? G.trot : G.walk; P.gp += step / P.g.cycle; }
+      // The gait by speed, and which of a hip's phases it uses: walk, trot or run.
+      if (G) { P.g = G.run && e.v > G.runAt ? G.run : G.trot && e.v > G.trotAt ? G.trot : G.walk; P.gi = P.g === G.run ? 5 : P.g === G.trot ? 4 : 3; P.gp += step / P.g.cycle; }
       const w = e.d.weapons && e.d.weapons[0] && Rules.WEAPONS[e.d.weapons[0]];
       P.cd = w ? w.cd : 1;
       P.since = e.fired ? (S.tick - e.fired + alpha) / HZ : 99;
@@ -1800,7 +1802,7 @@ const World = (() => {
             // next part draws.
             const lower = parts[i + 1], g = P.g || (parts.gait && parts.gait.walk), rest = g && g.rest, un = g && g.unsplay || 0;
             for (const h of d.hips) {
-              const ph = g === (parts.gait && parts.gait.run) ? h[5] : g === (parts.gait && parts.gait.trot) ? h[4] : h[3];
+              const ph = h[P.gi || 3];
               if (g && P.amp > 0.01) legPose(P.gp + ph, g, lp); else { lp[0] = 0; lp[1] = 0; }
               const hipA = lp[0] * P.amp + (rest ? rest[0] : 0), kneeA = lp[1] * P.amp + (rest ? rest[1] : 0);
               m2.makeTranslation(h[0], h[1], h[2]);
