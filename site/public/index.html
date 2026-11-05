@@ -4662,6 +4662,14 @@ const Models = (() => {
       car.box(0.02, 0.16, 0.4, -0.33, 0.39, 0, 0x404650, { rz: 0.5 });
       for (const [x, z] of [[0.32, 0.26], [0.32, -0.26], [-0.32, 0.26], [-0.32, -0.26]]) car.cyl(0.1, 0.1, 0.06, x, 0.1, z, 0x2a2a2a, { axis: 'z', seg: 8 });
       scenery.car = car.finish();
+      // Before the motor car, a horse and a two-wheeled cart, in their own colours.
+      const cart = G();
+      cart.box(0.36, 0.12, 0.12, 0.3, 0.24, 0, 0x6b4a32); cart.box(0.12, 0.06, 0.06, 0.52, 0.36, 0, 0x6b4a32, { rz: -0.5 });
+      for (const [x, z] of [[0.42, 0.04], [0.42, -0.04], [0.18, 0.04], [0.18, -0.04]]) cart.cyl(0.015, 0.012, 0.24, x, 0.12, z, 0x6b4a32, { seg: 4 });
+      cart.box(0.46, 0.12, 0.38, -0.2, 0.18, 0, 0x8a6a46); cart.box(0.46, 0.05, 0.38, -0.2, 0.3, 0, 0xc8b48a);
+      for (const z of [0.21, -0.21]) cart.cyl(0.13, 0.13, 0.03, -0.2, 0.13, z, 0x4e3a26, { axis: 'z', seg: 10 });
+      cart.box(0.4, 0.02, 0.02, 0.08, 0.22, 0.08, 0x4e3a26); cart.box(0.4, 0.02, 0.02, 0.08, 0.22, -0.08, 0x4e3a26);
+      scenery.cart = cart.finish();
       // Someone in a town: legs, a shirt the instance colours, a head.
       const folk = G();
       folk.cyl(0.05, 0.06, 0.32, 0, 0.16, 0, 0x5a5650, { seg: 6 });
@@ -6111,11 +6119,11 @@ if (typeof module !== 'undefined') module.exports = Looks;
       // Pen and ink, after the Lightning film and js/ink.js: tone in seven steps of hatching on cream paper, at
       // 45 and 135 degrees, then flat and upright lines for the darkest, each line a little uneven with small gaps.
       // The ground's hatching is pinned to the map so it pans with it, the units' redraws a few times a second.
-      const ink = new THREE.ShaderMaterial({ uniforms: { t: { value: null }, tSubj: { value: null }, tHeat: { value: null }, tPaper: { value: null }, res: { value: new THREE.Vector2(1, 1) }, uTime: { value: 0 }, uK: { value: 1 }, uOff: { value: new THREE.Vector2() }, uStyle: { value: 8 }, tNorm: { value: null }, tFogS: { value: null }, tLand: { value: null }, uSun2: { value: new THREE.Vector2(-1, 0) }, uUpV: { value: new THREE.Vector3(0, 1, 0) }, uRoad: { value: 0 }, uOre: { value: 0 },
+      const ink = new THREE.ShaderMaterial({ uniforms: { t: { value: null }, tSubj: { value: null }, tHeat: { value: null }, tPaper: { value: null }, res: { value: new THREE.Vector2(1, 1) }, uTime: { value: 0 }, uK: { value: 1 }, uOff: { value: new THREE.Vector2() }, uStyle: { value: 8 }, tNorm: { value: null }, tFogS: { value: null }, tLand: { value: null }, uSun2: { value: new THREE.Vector2(-1, 0) }, uUpV: { value: new THREE.Vector3(0, 1, 0) }, uRoad: { value: 0 }, uOre: { value: 0 }, uMarks: { value: 1 },
         uWindS: { value: new THREE.Vector2() }, uView: { value: new THREE.Vector2(1, 0) }, tFx: { value: null }, tAnc: { value: null }, uDark: { value: 0 }, uInks: { value: 0 }, uFxs: { value: 0 }, uUnits: { value: 0 }, tH: SH.tH, uHSize: { value: new THREE.Vector2(1, 1) }, uHScale: { value: 1 }, uRain: { value: 0 }, uStorm: { value: 0 }, uSnowF: { value: 0 }, uSnowC: SH.uSnowC, uFog: { value: 0 }, uMist: { value: 0 }, uNight: { value: 0 }, uWet: { value: 0 },
         uDayMul: { value: new THREE.Vector3(1, 1, 1) }, uDayAdd: { value: new THREE.Vector3() }, uWaterL: { value: -0.15 }, uCloudK: SH.uCloudK,
         uInvVP: { value: new THREE.Matrix4() }, uW2S: { value: new THREE.Vector4(1, 0, 0, 1) }, uLev: { value: 1 } }, vertexShader: vs, depthTest: false, depthWrite: false, fragmentShader: `
-        varying vec2 vUv; uniform sampler2D t, tSubj, tHeat, tPaper, tNorm, tFogS, tLand; uniform vec2 res, uOff, uSun2, uWindS, uView, uHSize; uniform float uHScale, uFxs; uniform int uUnits, uInks; uniform float uDark; uniform sampler2D tH, tFx, tAnc; uniform vec3 uUpV, uDayMul, uDayAdd; uniform float uTime, uK, uRain, uStorm, uSnowF, uSnowC, uFog, uMist, uNight, uWet, uWaterL, uCloudK; uniform int uStyle, uRoad, uOre;
+        varying vec2 vUv; uniform sampler2D t, tSubj, tHeat, tPaper, tNorm, tFogS, tLand; uniform vec2 res, uOff, uSun2, uWindS, uView, uHSize; uniform float uHScale, uFxs; uniform int uUnits, uInks; uniform float uDark; uniform sampler2D tH, tFx, tAnc; uniform vec3 uUpV, uDayMul, uDayAdd; uniform float uTime, uK, uRain, uStorm, uSnowF, uSnowC, uFog, uMist, uNight, uWet, uWaterL, uCloudK, uMarks; uniform int uStyle, uRoad, uOre;
         const vec3 PAPER = vec3(0.949, 0.910, 0.824), INK = vec3(0.122, 0.102, 0.086);
         // The soft axonometric's washes, after the atlas: speckled pale green ground, lilac water, pink paths,
         // three canopy greens, cream roofs over warm grey walls, and the ghost plan's blue-grey for what was.
@@ -6359,7 +6367,8 @@ if (typeof module !== 'undefined') module.exports = Looks;
             // The breaks in a line are found only where the line is.
             float rEdge = 1.0 - smoothstep(0.45 * uK * eW, 1.2 * uK * eW, abs(rd - 1.3) / rw), rMid = 1.0 - smoothstep(0.3 * uK, 0.9 * uK, rd / rw);
             if (rEdge > 0.0) rEdge *= step(0.12, landNoise(Wl, 30.0, vec2(0.0)) + 0.1);
-            if (rMid > 0.0) rMid *= step(0.5, landNoise(Wl, 4.5, vec2(0.0)));
+            // The broken middle line is a modern road's, from the Industrial Age.
+            if (rMid > 0.0) rMid *= step(0.5, landNoise(Wl, 4.5, vec2(0.0))) * uMarks;
             gC = max(gC * (1.0 - onRoad * 0.9), max(rEdge * 0.9, rMid * 0.4));
             // Where the land rises beside the road it is cut into, and where it falls the road is carried on an
             // embankment. Either bank is hachured, wider the steeper the fall, a cutting's beyond a ditch.
@@ -6762,7 +6771,7 @@ if (typeof module !== 'undefined') module.exports = Looks;
           C.uSun2.value.set((q1.x - q.x) * w, (q1.y - q.y) * h).normalize();
           // The world's up in view space, to tell a building's roof from its walls.
           C.uUpV.value.set(0, 1, 0).transformDirection(camera.matrixWorldInverse);
-          C.uRoad.value = K.opts.road; C.uOre.value = K.opts.ore;
+          C.uRoad.value = K.opts.road; C.uOre.value = K.opts.ore; C.uMarks.value = K.marked ? 1 : 0;
           C.uRain.value = sky.rain; C.uStorm.value = sky.storm; C.uSnowF.value = sky.snow; C.uFog.value = sky.fog; C.uMist.value = sky.mist;
           C.uNight.value = sky.night; C.uWet.value = sky.wet; C.uDayMul.value.set(...sky.mul); C.uDayAdd.value.set(...sky.add);
           C.uWaterL.value = K.waterLevel; C.uWindS.value.set(sky.windS, 0);
@@ -7265,6 +7274,8 @@ const World = (() => {
         get time() { return SH.uTime.value; }, get camera() { return camera; }, get cam() { return cam; }, get sky() { return sky; },
         get theme() { return theme; }, get center() { return [CX, CY]; }, get waterLevel() { return (M ? M.water : -0.15) + waterRise.value; },
         get opts() { return { ink: inkStyle, road: roadStyle, ore: oreStyle }; },
+        // Whether roads carry modern markings, from the Industrial Age.
+        get marked() { return worldAge() >= MOTOR_AGE; },
         // Where the low sun's light comes in from, across the screen.
         get glow() { return grade.uniforms.uGlow.value; },
         mask: () => drawInto(maskRT, 0x000000, 0, 1, markMat),
@@ -7872,6 +7883,10 @@ const World = (() => {
       }
     }
 
+    // The age the world is seen in: the side being shown, or the most advanced side when watching them all.
+    // Motor cars, telegraph lines and road markings belong to the Industrial Age and after.
+    const MOTOR_AGE = 4;
+    const worldAge = () => !S ? 5 : viewTeam >= 0 && S.P[viewTeam] ? S.P[viewTeam].tech : Math.max(1, ...S.P.filter(P => !P.out).map(P => P.tech));
     // Furniture along the roads: telegraph poles down one side of each road with wires between them, drawn on the
     // overlay, a milestone now and then on the other side, and at each junction a signpost with an arm for each
     // road. Vehicles and blasts knock them down and buildings put over them hide them. Only the picture keeps them.
@@ -7969,9 +7984,10 @@ const World = (() => {
         sm: posts.length ? instanced(sc.signpost, plainTint, posts) : null, am: arms.length ? instanced(sc.arm, plainTint, arms) : null,
       };
     }
-    // How a piece of roadside furniture stands: upright, knocked down, or hidden under a building.
+    // How a piece of roadside furniture stands: upright, knocked down, or hidden under a building. Telegraph
+    // poles stand only once the world has reached the Industrial Age.
     function poseRoadside(it) {
-      const R = scen.roadside, hide = !!it.hid, o = it.down ? Object.assign({}, it.o, it.kind === 'mile' ? { rz: 0.7 } : { rx: 1.45, y: it.o.y + 0.06 }) : it.o;
+      const R = scen.roadside, hide = !!it.hid || (it.kind === 'pole' && !!R.noPoles), o = it.down ? Object.assign({}, it.o, it.kind === 'mile' ? { rz: 0.7 } : { rx: 1.45, y: it.o.y + 0.06 }) : it.o;
       const mesh = it.kind === 'pole' ? R.pm : it.kind === 'mile' ? R.mm : R.sm;
       setInst(mesh, it.i, o, hide);
       if (it.arms) for (const a of it.arms) setInst(R.am, a, R.arms[a], hide || !!it.down);
@@ -7980,7 +7996,7 @@ const World = (() => {
     // The wires between standing poles, two to a span from the crossarm's ends, for the overlay.
     function roadWires() {
       const R = scen && scen.roadside;
-      if (!R) return [];
+      if (!R || R.noPoles) return [];
       const out = [];
       for (const [a, b] of R.spans) {
         if (a.down || b.down || a.hid || b.hid) continue;
@@ -8090,6 +8106,8 @@ const World = (() => {
         RS.occ = S.occVer;
         for (const it of RS.items) { const hid = S.occ[Rules.cellOf(it.x, it.y)] ? 1 : 0; if (hid !== it.hid) { it.hid = hid; poseRoadside(it); } }
       }
+      const noPoles = worldAge() < MOTOR_AGE;
+      if (RS && RS.noPoles !== noPoles) { RS.noPoles = noPoles; for (const it of RS.items) if (it.kind === 'pole') poseRoadside(it); }
       if (RS && RS.dirty) { RS.dirty = false; for (const m of [RS.pm, RS.mm, RS.sm, RS.am]) if (m) dirty(m); }
     }
 
@@ -8119,7 +8137,7 @@ const World = (() => {
         m.setColorAt(0, neutral); m.instanceColor.setUsage(THREE.DynamicDrawUsage);
         return add(m);
       };
-      life = { herds: [], cars: [], folk: [], boats: [], flocks: [], birds: [], alarm: [], danger: [], scanT: 0, deerM: mk(sc.deer, 60), carM: mk(sc.car, 32), folkM: mk(sc.folk, 200), boatM: mk(sc.boat, 12) };
+      life = { herds: [], cars: [], folk: [], boats: [], flocks: [], birds: [], alarm: [], danger: [], scanT: 0, deerM: mk(sc.deer, 60), carM: mk(sc.car, 32), cartM: mk(sc.cart, 32), folkM: mk(sc.folk, 200), boatM: mk(sc.boat, 12) };
       for (let i = 0; i < Math.round(4 * scale); i++) { const p = meadow(); if (p) life.herds.push(newHerd(p)); }
       for (let i = 0; i < Math.round(3 * scale); i++) { const p = meadow(true); if (p) life.flocks.push(newFlock(p)); }
       // The roads come in pieces that meet at junctions and at the ends of bridges. Each piece knows which others
@@ -8233,7 +8251,7 @@ const World = (() => {
         Rules.near(S, bx, by, 2.6, u => { if (u.hp > 0 && !u.b && !Rules.isAir(u) && Math.hypot(u.x - bx, u.y - by) < 2.2) block = true; });
         c.held = block ? (c.held || 0) + dt : 0;
         if (c.held > 6 && !onBridge) { c.held = 0; c.dir *= -1; c.wait = 1 + Math.random() * 2; continue; }
-        c.v += ((block ? 0 : 3.4) - c.v) * Math.min(1, dt * (block ? 6 : 1.4));
+        c.v += ((block ? 0 : worldAge() < MOTOR_AGE ? 1.6 : 3.4) - c.v) * Math.min(1, dt * (block ? 6 : 1.4));
         c.s += c.dir * c.v * dt;
         if (c.s <= 0 || c.s >= c.r.len) {
           // At the end of a piece a car drives on along one that joins it, and only turns back at a dead end.
@@ -8303,12 +8321,15 @@ const World = (() => {
       }
       L.deerM.count = n; dirty(L.deerM);
       n = 0;
+      // Motor cars from the Industrial Age, horse carts before it.
+      const motor = worldAge() >= MOTOR_AGE, CM = motor ? L.carM : L.cartM;
       for (const c of L.cars) {
         if (n >= 32 || !VIS(c.x, c.y)) continue;
         compose(m1, c.x, heightAt(M, c.x, c.y) + 0.02, c.y, -c.a, 0, 0, 0.9);
-        L.carM.setMatrixAt(n, m1); L.carM.setColorAt(n, colA.set(c.col)); n++;
+        CM.setMatrixAt(n, m1); CM.setColorAt(n, motor ? colA.set(c.col) : colA.set(0xffffff)); n++;
       }
-      L.carM.count = n; dirty(L.carM);
+      CM.count = n; dirty(CM);
+      (motor ? L.cartM : L.carM).count = 0;
       n = 0;
       for (const f of L.folk) {
         if (n >= 200 || f.hide > 0 || L.danger[f.town] || !VIS(f.x, f.y)) continue;

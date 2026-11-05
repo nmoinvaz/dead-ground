@@ -395,6 +395,8 @@ const World = (() => {
         get time() { return SH.uTime.value; }, get camera() { return camera; }, get cam() { return cam; }, get sky() { return sky; },
         get theme() { return theme; }, get center() { return [CX, CY]; }, get waterLevel() { return (M ? M.water : -0.15) + waterRise.value; },
         get opts() { return { ink: inkStyle, road: roadStyle, ore: oreStyle }; },
+        // Whether roads carry modern markings, from the Industrial Age.
+        get marked() { return worldAge() >= MOTOR_AGE; },
         // Where the low sun's light comes in from, across the screen.
         get glow() { return grade.uniforms.uGlow.value; },
         mask: () => drawInto(maskRT, 0x000000, 0, 1, markMat),
@@ -1002,6 +1004,10 @@ const World = (() => {
       }
     }
 
+    // The age the world is seen in: the side being shown, or the most advanced side when watching them all.
+    // Motor cars, telegraph lines and road markings belong to the Industrial Age and after.
+    const MOTOR_AGE = 4;
+    const worldAge = () => !S ? 5 : viewTeam >= 0 && S.P[viewTeam] ? S.P[viewTeam].tech : Math.max(1, ...S.P.filter(P => !P.out).map(P => P.tech));
     // Furniture along the roads: telegraph poles down one side of each road with wires between them, drawn on the
     // overlay, a milestone now and then on the other side, and at each junction a signpost with an arm for each
     // road. Vehicles and blasts knock them down and buildings put over them hide them. Only the picture keeps them.
@@ -1099,9 +1105,10 @@ const World = (() => {
         sm: posts.length ? instanced(sc.signpost, plainTint, posts) : null, am: arms.length ? instanced(sc.arm, plainTint, arms) : null,
       };
     }
-    // How a piece of roadside furniture stands: upright, knocked down, or hidden under a building.
+    // How a piece of roadside furniture stands: upright, knocked down, or hidden under a building. Telegraph
+    // poles stand only once the world has reached the Industrial Age.
     function poseRoadside(it) {
-      const R = scen.roadside, hide = !!it.hid, o = it.down ? Object.assign({}, it.o, it.kind === 'mile' ? { rz: 0.7 } : { rx: 1.45, y: it.o.y + 0.06 }) : it.o;
+      const R = scen.roadside, hide = !!it.hid || (it.kind === 'pole' && !!R.noPoles), o = it.down ? Object.assign({}, it.o, it.kind === 'mile' ? { rz: 0.7 } : { rx: 1.45, y: it.o.y + 0.06 }) : it.o;
       const mesh = it.kind === 'pole' ? R.pm : it.kind === 'mile' ? R.mm : R.sm;
       setInst(mesh, it.i, o, hide);
       if (it.arms) for (const a of it.arms) setInst(R.am, a, R.arms[a], hide || !!it.down);
@@ -1110,7 +1117,7 @@ const World = (() => {
     // The wires between standing poles, two to a span from the crossarm's ends, for the overlay.
     function roadWires() {
       const R = scen && scen.roadside;
-      if (!R) return [];
+      if (!R || R.noPoles) return [];
       const out = [];
       for (const [a, b] of R.spans) {
         if (a.down || b.down || a.hid || b.hid) continue;
@@ -1220,6 +1227,8 @@ const World = (() => {
         RS.occ = S.occVer;
         for (const it of RS.items) { const hid = S.occ[Rules.cellOf(it.x, it.y)] ? 1 : 0; if (hid !== it.hid) { it.hid = hid; poseRoadside(it); } }
       }
+      const noPoles = worldAge() < MOTOR_AGE;
+      if (RS && RS.noPoles !== noPoles) { RS.noPoles = noPoles; for (const it of RS.items) if (it.kind === 'pole') poseRoadside(it); }
       if (RS && RS.dirty) { RS.dirty = false; for (const m of [RS.pm, RS.mm, RS.sm, RS.am]) if (m) dirty(m); }
     }
 
@@ -1249,7 +1258,7 @@ const World = (() => {
         m.setColorAt(0, neutral); m.instanceColor.setUsage(THREE.DynamicDrawUsage);
         return add(m);
       };
-      life = { herds: [], cars: [], folk: [], boats: [], flocks: [], birds: [], alarm: [], danger: [], scanT: 0, deerM: mk(sc.deer, 60), carM: mk(sc.car, 32), folkM: mk(sc.folk, 200), boatM: mk(sc.boat, 12) };
+      life = { herds: [], cars: [], folk: [], boats: [], flocks: [], birds: [], alarm: [], danger: [], scanT: 0, deerM: mk(sc.deer, 60), carM: mk(sc.car, 32), cartM: mk(sc.cart, 32), folkM: mk(sc.folk, 200), boatM: mk(sc.boat, 12) };
       for (let i = 0; i < Math.round(4 * scale); i++) { const p = meadow(); if (p) life.herds.push(newHerd(p)); }
       for (let i = 0; i < Math.round(3 * scale); i++) { const p = meadow(true); if (p) life.flocks.push(newFlock(p)); }
       // The roads come in pieces that meet at junctions and at the ends of bridges. Each piece knows which others
@@ -1363,7 +1372,7 @@ const World = (() => {
         Rules.near(S, bx, by, 2.6, u => { if (u.hp > 0 && !u.b && !Rules.isAir(u) && Math.hypot(u.x - bx, u.y - by) < 2.2) block = true; });
         c.held = block ? (c.held || 0) + dt : 0;
         if (c.held > 6 && !onBridge) { c.held = 0; c.dir *= -1; c.wait = 1 + Math.random() * 2; continue; }
-        c.v += ((block ? 0 : 3.4) - c.v) * Math.min(1, dt * (block ? 6 : 1.4));
+        c.v += ((block ? 0 : worldAge() < MOTOR_AGE ? 1.6 : 3.4) - c.v) * Math.min(1, dt * (block ? 6 : 1.4));
         c.s += c.dir * c.v * dt;
         if (c.s <= 0 || c.s >= c.r.len) {
           // At the end of a piece a car drives on along one that joins it, and only turns back at a dead end.
@@ -1433,12 +1442,15 @@ const World = (() => {
       }
       L.deerM.count = n; dirty(L.deerM);
       n = 0;
+      // Motor cars from the Industrial Age, horse carts before it.
+      const motor = worldAge() >= MOTOR_AGE, CM = motor ? L.carM : L.cartM;
       for (const c of L.cars) {
         if (n >= 32 || !VIS(c.x, c.y)) continue;
         compose(m1, c.x, heightAt(M, c.x, c.y) + 0.02, c.y, -c.a, 0, 0, 0.9);
-        L.carM.setMatrixAt(n, m1); L.carM.setColorAt(n, colA.set(c.col)); n++;
+        CM.setMatrixAt(n, m1); CM.setColorAt(n, motor ? colA.set(c.col) : colA.set(0xffffff)); n++;
       }
-      L.carM.count = n; dirty(L.carM);
+      CM.count = n; dirty(CM);
+      (motor ? L.cartM : L.carM).count = 0;
       n = 0;
       for (const f of L.folk) {
         if (n >= 200 || f.hide > 0 || L.danger[f.town] || !VIS(f.x, f.y)) continue;

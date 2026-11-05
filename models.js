@@ -865,6 +865,14 @@ const Models = (() => {
       car.box(0.02, 0.16, 0.4, -0.33, 0.39, 0, 0x404650, { rz: 0.5 });
       for (const [x, z] of [[0.32, 0.26], [0.32, -0.26], [-0.32, 0.26], [-0.32, -0.26]]) car.cyl(0.1, 0.1, 0.06, x, 0.1, z, 0x2a2a2a, { axis: 'z', seg: 8 });
       scenery.car = car.finish();
+      // Before the motor car, a horse and a two-wheeled cart, in their own colours.
+      const cart = G();
+      cart.box(0.36, 0.12, 0.12, 0.3, 0.24, 0, 0x6b4a32); cart.box(0.12, 0.06, 0.06, 0.52, 0.36, 0, 0x6b4a32, { rz: -0.5 });
+      for (const [x, z] of [[0.42, 0.04], [0.42, -0.04], [0.18, 0.04], [0.18, -0.04]]) cart.cyl(0.015, 0.012, 0.24, x, 0.12, z, 0x6b4a32, { seg: 4 });
+      cart.box(0.46, 0.12, 0.38, -0.2, 0.18, 0, 0x8a6a46); cart.box(0.46, 0.05, 0.38, -0.2, 0.3, 0, 0xc8b48a);
+      for (const z of [0.21, -0.21]) cart.cyl(0.13, 0.13, 0.03, -0.2, 0.13, z, 0x4e3a26, { axis: 'z', seg: 10 });
+      cart.box(0.4, 0.02, 0.02, 0.08, 0.22, 0.08, 0x4e3a26); cart.box(0.4, 0.02, 0.02, 0.08, 0.22, -0.08, 0x4e3a26);
+      scenery.cart = cart.finish();
       // Someone in a town: legs, a shirt the instance colours, a head.
       const folk = G();
       folk.cyl(0.05, 0.06, 0.32, 0, 0.16, 0, 0x5a5650, { seg: 6 });
