@@ -271,7 +271,9 @@ const Game = (() => {
           case 'boom': if (heard || e.size >= 8) audio.at(e.size >= 8 ? 'boom_x' : e.size > 1.5 ? 'boom_l' : 'boom_m', e.x, e.y, { gain: e.size >= 8 ? 2 : 0.8, gap: 0.05, vary: 0.2 }); break;
           case 'die': if (heard) audio.at(e.b ? 'boom_l' : Rules.UNITS[e.kind]?.men ? 'scream' : 'boom_m', e.x, e.y, { gain: Rules.UNITS[e.kind]?.men ? 0.3 : 0.9, gap: 0.08, vary: 0.2 }); break;
           case 'say':
-            if (G.playing && e.team === G.team) { const v = VOICE[e.line]; if (v) { hud.say(v[0] + '.', v[1]); audio.voice(e.line, v[0]); } }
+            // A new age has its own card, so its call names the age and leaves no line in the log.
+            if (G.playing && e.team === G.team && e.line === 'newtech') audio.voice(e.line, `The ${Rules.AGES[S.P[e.team].tech].name} Age`);
+            else if (G.playing && e.team === G.team) { const v = VOICE[e.line]; if (v) { hud.say(v[0] + '.', v[1]); audio.voice(e.line, v[0]); } }
             break;
           case 'alert': if (G.playing && e.team === G.team) hud.alert(e.x, e.y); break;
           case 'hint': if (G.playing && e.team === G.team && e.hint === 'attrition') hud.say('Attrition: troops wear down abroad. A Support Truck stops it.', 'bad'); break;
@@ -477,6 +479,7 @@ const Game = (() => {
       $('reseed').disabled = !edit;
       $('m-theme').querySelectorAll('button').forEach(b => { b.classList.toggle('on', b.dataset.v === v.theme); b.disabled = !edit && b.dataset.v !== v.theme; });
       $('m-age').querySelectorAll('button').forEach(b => { const on = +b.dataset.v === (v.age || 1); b.classList.toggle('on', on); b.disabled = !edit && !on; });
+      $('age-about').textContent = Rules.AGES[v.age || 1].note;
       drawPreview(v.map, v.seed, v.slots);
       // The slots.
       const list = $('slots');

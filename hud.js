@@ -52,44 +52,90 @@ const Hud = (() => {
   // How far round a clicked enemy the marking reaches, in cells.
   const STRIKE_R = 6;
 
-  // Small pictures of each kind of unit, white on a plate of the side's colour, for when the models are too small.
-  function picto(g, x, y, s, sym, col, alpha) {
-    g.save();
-    g.globalAlpha = alpha;
-    g.translate(x, y);
-    const w = s * 1.15, h = s * 0.82, r = s * 0.22;
-    g.fillStyle = col; g.strokeStyle = 'rgba(20,16,12,0.9)'; g.lineWidth = Math.max(1, s * 0.09);
-    g.beginPath(); g.roundRect ? g.roundRect(-w, -h, w * 2, h * 2, r) : g.rect(-w, -h, w * 2, h * 2); g.fill(); g.stroke();
-    g.fillStyle = '#fff'; g.strokeStyle = '#fff'; g.lineCap = 'round'; g.lineJoin = 'round';
-    const u = s / 10;
-    g.scale(u, u);
-    g.lineWidth = 1.4;
+  // Small pictures of each kind of unit for when the models are too small, drawn in fg on a ground of bg in a
+  // space ten units to s. A unit's picture follows its form, so a horse archer is a horseman and not a car.
+  const PIC = { spear: 'spear', pike: 'spear', archer: 'bow', longbow: 'bow', crossbow: 'bow', grenadier: 'gren', outrider: 'horse', dragoon: 'horse', knight: 'horse', cuirassier: 'horse', chariot: 'chariot', elephant: 'elephant', oxcart: 'cart', wagon: 'cart', supcart: 'cart2', catapult: 'siege', trebuchet: 'siege', motorbike: 'bike', mech: 'walker', titan: 'walker', biplane: 'biplane' };
+  const picOf = e => PIC[e.kind] || e.d.sym;
+  function glyph(g, sym, fg, bg) {
+    g.fillStyle = fg; g.strokeStyle = fg; g.lineCap = 'round'; g.lineJoin = 'round'; g.lineWidth = 1.4;
     const box = (a, b, c, d) => g.fillRect(a, b, c, d);
     const ln = (pts) => { g.beginPath(); pts.forEach((p, i) => i ? g.lineTo(p[0], p[1]) : g.moveTo(p[0], p[1])); g.stroke(); };
     const dot = (a, b, rr) => { g.beginPath(); g.arc(a, b, rr, 0, 6.3); g.fill(); };
+    const ring = (a, b, rr) => { g.beginPath(); g.arc(a, b, rr, 0, 6.3); g.stroke(); };
+    const poly = (pts) => { g.beginPath(); pts.forEach((p, i) => i ? g.lineTo(p[0], p[1]) : g.moveTo(p[0], p[1])); g.closePath(); g.fill(); };
     const man = (dx = 0) => { dot(dx, -4.6, 1.5); ln([[dx, -3], [dx, 2]]); ln([[dx, 2], [dx - 1.8, 6]]); ln([[dx, 2], [dx + 1.8, 6]]); ln([[dx - 2.2, -1], [dx + 2.2, -1]]); };
+    // A beast side on, facing right, its body at (x, y) and w long: a horse, an ox or a team.
+    const beast = (x, y, w, h = 1.8) => { g.beginPath(); g.ellipse(x, y, w, h, 0, 0, 6.3); g.fill(); for (const k of [-0.8, -0.45, 0.45, 0.8]) ln([[x + k * w, y + h * 0.6], [x + k * w, y + h + 3.6]]); poly([[x + w * 0.7, y - h * 0.4], [x + w + 1.6, y - h - 2.6], [x + w + 3.2, y - h - 1.8], [x + w + 2.6, y - h - 0.9], [x + w + 1.2, y - h * 0.2]]); ln([[x - w, y - h * 0.3], [x - w - 1.4, y + h + 0.6]]); };
     switch (sym) {
       case 'inf': man(-2.5); man(2.5); ln([[-0.5, -2.5], [4.5, -4.5]]); break;
+      case 'spear': man(-2.5); man(2.5); ln([[-0.3, 5], [-0.3, -7.5]]); ln([[4.7, 5], [4.7, -7.5]]); break;
       case 'at': man(-1); g.lineWidth = 2.2; ln([[-5, -3.5], [5, -1.5]]); break;
+      case 'bow': man(-2.5); g.beginPath(); g.arc(1.4, -1, 4.6, -1.15, 1.15); g.stroke(); g.lineWidth = 0.7; ln([[3.4, -5.2], [3.4, 3.2]]); break;
+      case 'gren': man(-2); dot(3.6, -4.6, 2); ln([[4.6, -6.3], [5.6, -7.4]]); break;
       case 'eng': man(0); ln([[2.5, 0], [6, -3.5]]); ln([[5, -4.5], [7, -2.5]]); break;
       case 'snp': man(-1.5); ln([[0, -1.6], [8, -3.6]]); dot(3, -3, 1); break;
       case 'hero': g.beginPath(); for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + i * Math.PI / 5, rr = i % 2 ? 2.6 : 6; g.lineTo(Math.cos(a) * rr, Math.sin(a) * rr); } g.fill(); break;
+      case 'horse': beast(-1, 0.6, 4.2); dot(-1.2, -5.6, 1.4); ln([[-1.2, -4.2], [-1.2, -1]]); break;
+      case 'chariot': beast(3.4, 0.2, 2.6, 1.4); box(-7.2, -2.2, 5.4, 3); ring(-4.6, 3, 2.4); ln([[-1.8, -0.6], [1, -0.2]]); dot(-4.6, -4.8, 1.3); ln([[-4.6, -3.5], [-4.6, -2.2]]); break;
+      case 'elephant': g.beginPath(); g.ellipse(-1.5, -0.4, 5.6, 3.4, 0, 0, 6.3); g.fill(); for (const x of [-5.4, -2.2, 1.4]) box(x, 1.5, 2.2, 4.3); dot(4.6, -1.4, 2.8); g.lineWidth = 1.8; ln([[6.8, -0.4], [7.8, 2.6], [7.2, 5.4]]); g.lineWidth = 1.1; ln([[5.6, 1.2], [8.2, 1.6]]); box(-4, -6.6, 4.8, 2.2); break;
+      case 'cart': case 'cart2': beast(4.2, 0, 2.4, 1.3); box(-7.6, -2.6, 7.2, 3.6); ring(-4, 3, 2.4); ln([[-0.4, -0.6], [2, -0.6]]); if (sym === 'cart2') { g.fillStyle = bg; box(-5.4, -1.3, 3, 1); box(-4.4, -2.3, 1, 3); } break;
       case 'sup': box(-7, -3, 9, 5); box(2.5, -1, 4.5, 3); dot(-4.5, 3.5, 1.6); dot(4, 3.5, 1.6); break;
-      case 'sup2': box(-7, -3, 9, 5); box(2.5, -1, 4.5, 3); dot(-4.5, 3.5, 1.6); dot(4, 3.5, 1.6); g.fillStyle = col; box(-4, -2.4, 3, 0.9); box(-3, -3.4, 0.9, 3); break;
+      case 'sup2': box(-7, -3, 9, 5); box(2.5, -1, 4.5, 3); dot(-4.5, 3.5, 1.6); dot(4, 3.5, 1.6); g.fillStyle = bg; box(-4, -2.4, 3, 0.9); box(-3, -3.4, 0.9, 3); break;
       case 'rec': box(-6, -1.5, 12, 4); box(-2.5, -4, 4, 2.5); ln([[0, -3], [6, -4]]); dot(-3.5, 3.5, 1.5); dot(3.5, 3.5, 1.5); break;
+      case 'bike': ring(-4.6, 3, 2.5); ring(4.6, 3, 2.5); ln([[-4.6, 3], [-1, -0.5], [3, -0.5], [4.6, 3]]); dot(-0.8, -5.2, 1.4); ln([[-0.8, -3.8], [-1.6, -0.6]]); ln([[-0.8, -3.2], [3, -2]]); break;
       case 'ifv': box(-6.5, -2, 13, 4.5); box(-2, -4.5, 4, 2.5); ln([[1, -3.5], [7, -3.5]]); for (const xx of [-4.5, -1.5, 1.5, 4.5]) dot(xx, 3.6, 1.2); break;
       case 'arm': box(-7, -0.5, 14, 4); box(-3.5, -3.5, 6, 3); ln([[2, -2], [8.5, -2]]); break;
       case 'hvy': box(-7.5, -0.5, 15, 4.5); box(-4, -4, 7, 3.5); ln([[2, -3], [9, -3]]); ln([[2, -1.5], [9, -1.5]]); break;
+      case 'walker': box(-4, -6.5, 8, 4.4); ln([[-2.4, -2], [-4.4, 1.6], [-2.8, 6]]); ln([[2.4, -2], [4.4, 1.6], [2.8, 6]]); g.lineWidth = 1.8; ln([[3.6, -4.4], [8.6, -4.4]]); break;
       case 'aa': box(-6.5, 0, 13, 3.5); box(-2.5, -2.5, 5, 2.5); ln([[0, -2], [5, -7]]); ln([[1.5, -2], [6.5, -7]]); break;
       case 'art': box(-7, 0, 14, 3); dot(-4.5, 4, 1.4); dot(4.5, 4, 1.4); g.save(); g.rotate(-0.45); box(-5, -4.5, 9, 3.5); g.restore(); break;
+      case 'siege': ln([[-7, 5], [7, 5]]); ln([[-4.5, 5], [-0.5, -3], [3.5, 5]]); g.lineWidth = 1.8; ln([[-6, -5.4], [5, 1.4]]); dot(-6, -5.6, 1.8); dot(-5, 5, 1.4); dot(5, 5, 1.4); break;
       case 'uav': ln([[-5, -4], [5, 4]]); ln([[5, -4], [-5, 4]]); for (const [a, b] of [[-5, -4], [5, 4], [5, -4], [-5, 4]]) dot(a, b, 1.6); break;
       case 'hel': ln([[-7.5, -4], [7.5, -4]]); ln([[0, -4], [0, -2]]); g.beginPath(); g.ellipse(1, 0.5, 4, 2.4, 0, 0, 6.3); g.fill(); ln([[-2.5, 0.5], [-7.5, -1.5]]); break;
-      case 'jet': g.beginPath(); g.moveTo(7.5, 0); g.lineTo(-5, -6); g.lineTo(-3, 0); g.lineTo(-5, 6); g.closePath(); g.fill(); break;
+      case 'jet': poly([[7.5, 0], [-5, -6], [-3, 0], [-5, 6]]); break;
+      case 'biplane': box(-7.5, -3.6, 15, 1.4); box(-6.5, 1.6, 13, 1.4); ln([[-4, -2.2], [-4, 1.6]]); ln([[4, -2.2], [4, 1.6]]); dot(0, -0.2, 2.2); ln([[0, -5.6], [0, 5.2]]); break;
       default: box(-4, -4, 8, 8);
     }
-    g.restore();
   }
+  // A tag over a group of one side's units: a plate with each kind's picture and how many there are. Ours is a
+  // plate with square ends, an enemy's has pointed ends. In pen and ink it is paper washed in the side's colour
+  // with the pictures in ink, a chosen group ruled twice. Otherwise the pictures are white on the side's plate.
+  function tagPlate(g, x, y, s, items, o) {
+    const cw = s * 2.3, nw = s * 0.95, h = s * 0.82, pt = o.foe ? h * 0.9 : 0;
+    const w = items.reduce((a, it) => a + cw + (it.n > 1 ? nw : 0), 0), x0 = x - w / 2;
+    g.save();
+    g.globalAlpha = o.alpha;
+    const path = (grow) => {
+      const l = x0 - grow, r = x0 + w + grow, t = y - h - grow, b = y + h + grow;
+      g.beginPath();
+      if (o.foe) { g.moveTo(l, t); g.lineTo(r, t); g.lineTo(r + pt, y); g.lineTo(r, b); g.lineTo(l, b); g.lineTo(l - pt, y); g.closePath(); }
+      else if (g.roundRect) g.roundRect(l, t, r - l, b - t, s * 0.22);
+      else g.rect(l, t, r - l, b - t);
+    };
+    path(0);
+    g.fillStyle = o.fill; g.fill();
+    g.strokeStyle = o.line; g.lineWidth = Math.max(1, s * (o.ink ? 0.13 : 0.09)); g.stroke();
+    if (o.on && o.ink) { path(s * 0.32); g.lineWidth = Math.max(1, s * 0.11); g.stroke(); }
+    let cx = x0;
+    for (const it of items) {
+      g.save(); g.translate(cx + cw / 2, y); g.scale(s / 10, s / 10); glyph(g, it.sym, o.fg, o.fill); g.restore();
+      cx += cw;
+      if (it.n > 1) {
+        g.fillStyle = o.fg; g.font = `700 ${Math.round(s * 1.25)}px ${o.mono}`; g.textAlign = 'left'; g.textBaseline = 'middle';
+        g.fillText(String(it.n), cx - s * 0.15, y + s * 0.12); cx += nw;
+      }
+    }
+    g.restore();
+    return [x0 - pt, y - h, w + 2 * pt, 2 * h];
+  }
+  // Each building's mark on the map in each age, after its name in that age.
   const SHORT = { hq: 'HQ', power: 'PWR', refinery: 'ORE', barracks: 'BAR', factory: 'FAC', radar: 'RAD', airfield: 'AIR', fob: 'FOB', derrick: 'OIL', silo: 'SILO', bunker: 'MG', atgun: 'AT', sam: 'SAM', rail: 'RAIL' };
+  const SHORT_NAME = {
+    Citadel: 'CIT', Castle: 'CAS', Fort: 'FORT', 'Command Nexus': 'CMD', 'Fusion Plant': 'FUS', Smelter: 'SMLT', Stables: 'STBL', Foundry: 'FDRY', Fabricator: 'FAB',
+    Watchtower: 'WTCH', 'Signal Tower': 'SIG', 'Radio Station': 'RAD', 'Sensor Array': 'SENS', Skyport: 'SKY', Outpost: 'OUT', Redoubt: 'RDT', 'Orbital Lance': 'LNCE',
+    'Archer Tower': 'TWR', 'Musket Redoubt': 'MSKT', 'MG Nest': 'MG', 'Pulse Turret': 'PLS', Ballista: 'BAL', Springald: 'SPR', 'Cannon Battery': 'CAN', 'Field Gun': 'GUN', 'Coil Gun': 'COIL', 'AA Battery': 'AA', 'Laser AA': 'LAS',
+  };
+  const shortOf = (kind, age) => SHORT_NAME[Rules.nameOf(kind, age)] || SHORT[kind] || '';
 
   function create(world, game) {
     // Whether the look draws the overlay in ink: inked effects, ghost plans and the map key.
@@ -160,6 +206,11 @@ const Hud = (() => {
         const b = document.createElement('button'), info = camInfo(k), img = state.cameos[k];
         b.className = 'cam'; b.dataset.kind = k;
         b.innerHTML = `<canvas width="4" height="3"></canvas><b class="nm"></b><em class="ct"></em><u class="qty"></u><s class="key">${KEYS[i]}</s><span class="state"></span>`;
+        // A card a new age brought is drawn in, after those before it, and marked new for a few seconds.
+        if (state.fresh && state.fresh.has(k) && performance.now() < state.freshUntil) {
+          b.classList.add('fresh'); b.style.animationDelay = `${i * 70}ms`;
+          const n = document.createElement('i'); n.className = 'new'; n.textContent = 'new'; b.append(n);
+        }
         b.querySelector('.nm').textContent = info.name;
         const c = b.querySelector('canvas');
         if (img) b.style.setProperty('--img', `url(${img})`);
@@ -977,6 +1028,9 @@ const Hud = (() => {
       og.restore();
     }
     const smoothstepJS = (a, b, v) => { const x = clamp((v - a) / (b - a), 0, 1); return x * x * (3 - 2 * x); };
+    // The overlay's ink, and a side's colour let down toward the paper as a wash. The dark scheme turns the whole
+    // overlay over with a filter, so these are always the light paper's.
+    const INK = '#1f1a16', washOf = team => { const c = SLOT_CSS[team] || '#d9d4c3', m = [250, 244, 228]; return '#' + [1, 3, 5].map((i, j) => Math.round(parseInt(c.slice(i, i + 2), 16) * 0.55 + m[j] * 0.45).toString(16).padStart(2, '0')).join(''); };
     const onView = (x, y, m = 80) => x > -m && y > -m && x < world.vw + m && y < world.vh + m;
     // Lamps at night: warm light round lived-in houses and every building in sight, and cars' headlights.
     function drawLamps(s) {
@@ -1171,57 +1225,74 @@ const Hud = (() => {
       const P0 = t >= 0 ? s.P[t] : null;
       drawLamps(s);
 
-      // Towns show who holds them and how a capture is going.
+      // Towns show who holds them and how a capture is going. In pen and ink each is a pennant in its holder's
+      // wash and a name lettered on the paper, a little larger as the view pulls back.
+      const ink = inked(), dist = world.cam.dist;
       for (const n of s.towns) {
         const seen = t < 0 || P0.seen[Rules.cellOf(n.x, n.y)];
         if (!seen) continue;
         const [x, y] = world.project(n.x, terrainAt(s.map, n.x, n.y) + 2.8, n.y);
         const col = n.owner < 0 ? '#d9d4c3' : SLOT_CSS[n.owner];
         if (n.cap > 0) {
-          og.lineWidth = 3; og.strokeStyle = 'rgba(0,0,0,0.5)'; og.beginPath(); og.arc(x, y, 13, 0, 6.3); og.stroke();
-          og.strokeStyle = n.capTeam >= 0 ? SLOT_CSS[n.capTeam] : '#d9d4c3'; og.beginPath(); og.arc(x, y, 13, -1.57, -1.57 + n.cap * 6.283); og.stroke();
+          og.lineWidth = 3; og.strokeStyle = ink ? 'rgba(250,244,228,0.9)' : 'rgba(0,0,0,0.5)'; og.beginPath(); og.arc(x, y, 13, 0, 6.3); og.stroke();
+          og.strokeStyle = n.capTeam >= 0 ? (ink ? SLOT_PLATE[n.capTeam] : SLOT_CSS[n.capTeam]) : '#d9d4c3'; og.beginPath(); og.arc(x, y, 13, -1.57, -1.57 + n.cap * 6.283); og.stroke();
         }
-        og.fillStyle = col; og.font = '600 11px "Barlow Condensed", system-ui, sans-serif'; og.textAlign = 'center';
-        og.fillText(`TOWN ${String.fromCharCode(65 + n.id)}`, x, y - 18);
+        const name = `Town ${String.fromCharCode(65 + n.id)}`;
+        if (ink) {
+          const fs = Math.round(12 + smoothstepJS(110, 200, dist) * 3), yy = y - 17;
+          og.save(); og.setLineDash([]); og.lineJoin = 'round'; og.lineCap = 'round';
+          og.font = `italic 500 ${fs}px ${labelFont()}`; og.textAlign = 'left'; og.textBaseline = 'middle';
+          const tw = og.measureText(name).width, x0 = x - (tw + 12) / 2;
+          og.fillStyle = n.owner < 0 ? '#faf4e4' : washOf(n.owner); og.strokeStyle = INK; og.lineWidth = 1.2;
+          og.beginPath(); og.moveTo(x0, yy - fs * 0.62); og.lineTo(x0 + 8, yy - fs * 0.38); og.lineTo(x0, yy - fs * 0.12); og.closePath(); og.fill(); og.stroke();
+          og.beginPath(); og.moveTo(x0, yy - fs * 0.66); og.lineTo(x0, yy + fs * 0.5); og.stroke();
+          og.strokeStyle = 'rgba(250,244,228,0.95)'; og.lineWidth = 3.5; og.strokeText(name, x0 + 11, yy + 1);
+          og.fillStyle = INK; og.fillText(name, x0 + 11, yy + 1);
+          og.restore();
+        } else {
+          og.save(); og.font = `600 ${Math.round(13 + smoothstepJS(110, 200, dist) * 2)}px "Barlow Condensed", system-ui, sans-serif`; og.textAlign = 'center'; og.lineJoin = 'round';
+          og.strokeStyle = 'rgba(10,12,8,0.85)'; og.lineWidth = 3; og.strokeText(name.toUpperCase(), x, y - 18);
+          og.fillStyle = col; og.fillText(name.toUpperCase(), x, y - 18); og.restore();
+        }
       }
 
-      // Pictograms fade in as the view pulls back, and take the units' places at the farthest.
-      const dist = world.cam.dist, tag = smoothstepJS(84, 112, dist), big = smoothstepJS(130, 170, dist);
+      // Pictograms come in as the view pulls back past the play distance, and take the units' places at the
+      // farthest. Units of one side close together on screen share one tag that counts each kind, so a bunched
+      // army reads as one group and not a heap of plates. Buildings get a mark of their name in their age.
+      const tag = smoothstepJS(98, 122, dist), big = smoothstepJS(130, 170, dist), sz = 6.5 + big * 3.5, groups = [], labels = [];
       for (const o of world.onScreen) {
         const e = o.e, mine = e.team === t || (t < 0 && e.team === 0), col = SLOT_CSS[e.team] || '#d9d4c3', on = selected.has(e), hov = state.hover === e;
-        const plate = SLOT_PLATE[e.team] || '#555';
         if (tag > 0 && !e.b && !(e.drop > 0)) {
-          const sz = 6.5 + big * 3.5 + (on ? 1.5 : 0), lift = (1 - big) * (o.r + sz * 1.6);
-          picto(og, o.x, o.y - lift, sz, e.d.sym, on ? '#e0a020' : plate, tag);
+          const ax = o.x, ay = o.y - (1 - big) * (o.r + sz * 1.6), key = e.team * 2 + (on ? 1 : 0);
+          let q = null;
+          for (const g of groups) if (g.key === key && Math.abs(g.x - ax) < sz * 2.6 && Math.abs(g.y - ay) < sz * 1.9) { q = g; break; }
+          if (!q) groups.push(q = { key, team: e.team, on, x: ax, y: ay, n: 0, sx: 0, sy: 0, kinds: {} });
+          q.n++; q.sx += ax; q.sy += ay; q.x = q.sx / q.n; q.y = q.sy / q.n;
+          const k = picOf(e); q.kinds[k] = (q.kinds[k] || 0) + 1;
         }
-        if (tag > 0 && e.b) {
-          const label = SHORT[e.kind] || '';
-          og.save(); og.globalAlpha = tag;
-          og.font = `700 ${Math.round(10 + big * 3)}px "Barlow Condensed", system-ui, sans-serif`; og.textAlign = 'center'; og.textBaseline = 'middle';
-          const tw = og.measureText(label).width + 8, th = 14 + big * 3;
-          og.fillStyle = plate; og.strokeStyle = 'rgba(20,16,12,0.9)'; og.lineWidth = 1;
-          og.beginPath(); og.roundRect ? og.roundRect(o.x - tw / 2, o.y - th / 2, tw, th, 3) : og.rect(o.x - tw / 2, o.y - th / 2, tw, th); og.fill(); og.stroke();
-          og.fillStyle = '#fff'; og.fillText(label, o.x, o.y + 1);
-          og.restore();
-        }
+        if (tag > 0 && e.b) labels.push(o);
         if (hov && !far) {
-          const name = e.d.name + (e.team !== t && t >= 0 ? ' (enemy)' : '');
-          og.save(); og.font = '600 13px "Barlow Condensed", system-ui, sans-serif'; og.textAlign = 'center';
-          const tw = og.measureText(name).width + 12, yy = o.y - (e.b ? Math.max(e.w, e.h) * o.scale * 0.6 : o.r * 1.4) - 22;
-          og.fillStyle = 'rgba(20,18,14,0.86)'; og.fillRect(o.x - tw / 2, yy - 11, tw, 18);
-          og.fillStyle = col; og.fillRect(o.x - tw / 2, yy + 6, tw, 2);
-          og.fillStyle = '#f2e8d2'; og.fillText(name, o.x, yy + 2); og.restore();
+          const name = e.b ? Rules.nameOf(e.kind, s.P[e.team] ? s.P[e.team].tech : 1) : e.d.name, foe = e.team !== t && t >= 0;
+          og.save(); og.textAlign = 'center';
+          og.font = ink ? `500 14px ${labelFont()}` : '600 13px "Barlow Condensed", system-ui, sans-serif';
+          const text = name + (foe ? (ink ? ', enemy' : ' (enemy)') : ''), tw = og.measureText(text).width + 12, yy = o.y - (e.b ? Math.max(e.w, e.h) * o.scale * 0.6 : o.r * 1.4) - 22;
+          og.fillStyle = ink ? 'rgba(250,244,228,0.95)' : 'rgba(20,18,14,0.86)'; og.fillRect(o.x - tw / 2, yy - 11, tw, 18);
+          if (ink) { og.strokeStyle = INK; og.lineWidth = 1; og.setLineDash([]); og.strokeRect(o.x - tw / 2 + 0.5, yy - 10.5, tw - 1, 17); }
+          og.fillStyle = ink ? SLOT_PLATE[e.team] || INK : col; og.fillRect(o.x - tw / 2, yy + 5, tw, 2);
+          og.fillStyle = ink ? INK : '#f2e8d2'; og.fillText(text, o.x, yy + 2); og.restore();
         }
-        if (on || hov) {
+        // Where tags stand in for the units, a chosen unit is shown by its group's plate, not a ring and a bar each.
+        const tagged = !e.b && big > 0.5 && !hov;
+        if ((on || hov) && !tagged) {
           const r = e.b ? Math.max(e.w, e.h) * 0.74 * o.scale : Math.max(10, o.r * 1.25);
-          og.strokeStyle = on ? (mine ? '#a9f0c0' : '#ff8a70') : 'rgba(255,255,255,0.5)'; og.lineWidth = 1.4;
+          og.strokeStyle = on ? (mine ? (ink ? INK : '#a9f0c0') : (ink ? '#a3301e' : '#ff8a70')) : (ink ? 'rgba(31,26,22,0.45)' : 'rgba(255,255,255,0.5)'); og.lineWidth = 1.4; og.setLineDash([]);
           if (e.b) {
             const [ax, ay] = world.project(e.cx, terrainAt(s.map, e.x, e.y) + 0.1, e.cy), [bx, by] = world.project(e.cx + e.w, terrainAt(s.map, e.x, e.y) + 0.1, e.cy), [cx, cy] = world.project(e.cx + e.w, terrainAt(s.map, e.x, e.y) + 0.1, e.cy + e.h), [dx, dy] = world.project(e.cx, terrainAt(s.map, e.x, e.y) + 0.1, e.cy + e.h);
             og.beginPath(); og.moveTo(ax, ay); og.lineTo(bx, by); og.lineTo(cx, cy); og.lineTo(dx, dy); og.closePath(); og.stroke();
           } else { og.beginPath(); og.ellipse(o.x, o.y + o.r * 0.3, r, r * 0.62, 0, 0, 6.3); og.stroke(); }
         }
         const damaged = e.hp < e.max * 0.995;
-        if (on || hov || (damaged && mine && s.tick - e.under < 4 * HZ && o.scale > 8)) {
+        if (!tagged && (on || hov || (damaged && mine && s.tick - e.under < 4 * HZ && o.scale > 8))) {
           const bw = e.b ? Math.min(90, Math.max(e.w, e.h) * o.scale * 0.9) : Math.max(18, o.r * 1.8), by = o.y - (e.b ? o.r * 0.9 : o.r * 1.1 + 6), f = e.hp / e.max;
           og.fillStyle = 'rgba(0,0,0,0.62)'; og.fillRect(o.x - bw / 2 - 1, by - 1, bw + 2, 4);
           og.fillStyle = f > 0.55 ? '#58d068' : f > 0.28 ? '#f0c040' : '#f05040'; og.fillRect(o.x - bw / 2, by, bw * f, 2);
@@ -1234,6 +1305,61 @@ const Hud = (() => {
           og.beginPath(); og.moveTo(o.x, o.y); og.lineTo(rx, ry); og.stroke(); og.setLineDash([]); og.lineCap = 'butt';
         }
         if (e.b && e.c4) { og.fillStyle = '#ff5040'; og.font = '700 12px "Share Tech Mono", monospace'; og.textAlign = 'center'; og.fillText(Math.ceil((e.c4 - s.tick) / HZ) + '', o.x, o.y - 18); }
+      }
+
+      if (tag > 0) {
+        // Buildings first, the headquarters and the largest ahead, each mark left out where it would cover one
+        // already made. In pen and ink a mark is lettered on the paper and underlined in the side's colour.
+        const taken = [], free = r => !taken.some(q => r[0] < q[0] + q[2] && q[0] < r[0] + r[2] && r[1] < q[1] + q[3] && q[1] < r[1] + r[3]);
+        labels.sort((a, b) => (b.e.kind === 'hq') - (a.e.kind === 'hq') || b.e.w * b.e.h - a.e.w * a.e.h);
+        og.save(); og.globalAlpha = tag; og.setLineDash([]); og.textAlign = 'center'; og.textBaseline = 'middle'; og.lineJoin = 'round';
+        const fs = Math.round(10 + big * 3);
+        og.font = ink ? `600 ${fs}px ${labelFont()}` : `700 ${fs}px "Barlow Condensed", system-ui, sans-serif`;
+        for (const o of labels) {
+          const e = o.e, label = shortOf(e.kind, s.P[e.team] ? s.P[e.team].tech : 1);
+          if (!label) continue;
+          const tw = og.measureText(label).width + 8, th = fs + 4, r = [o.x - tw / 2 - 2, o.y - th / 2 - 1, tw + 4, th + 4];
+          if (!free(r)) continue;
+          taken.push(r);
+          if (ink) {
+            og.strokeStyle = 'rgba(250,244,228,0.95)'; og.lineWidth = 3.5; og.strokeText(label, o.x, o.y);
+            og.fillStyle = INK; og.fillText(label, o.x, o.y);
+            og.fillStyle = SLOT_PLATE[e.team] || INK; og.fillRect(o.x - tw / 2 + 3, o.y + fs * 0.55, tw - 6, 2);
+          } else {
+            og.fillStyle = SLOT_PLATE[e.team] || '#555'; og.strokeStyle = 'rgba(20,16,12,0.9)'; og.lineWidth = 1;
+            og.beginPath(); og.roundRect ? og.roundRect(o.x - tw / 2, o.y - th / 2, tw, th, 3) : og.rect(o.x - tw / 2, o.y - th / 2, tw, th); og.fill(); og.stroke();
+            og.fillStyle = '#fff'; og.fillText(label, o.x, o.y + 1);
+          }
+        }
+        og.restore();
+        // Then the units' tags. A side's groups whose plates would touch become one, so a bunched army has one
+        // plate. The enemy's go under ours and the chosen on top, each moved off any other side's it would cover.
+        const ht = sz * 1.64, size = q => {
+          q.items = Object.entries(q.kinds).sort((a, b) => b[1] - a[1]).slice(0, 3).map(([sym, n]) => ({ sym, n }));
+          q.foe = t >= 0 && q.team !== t; q.w = q.items.reduce((a, it) => a + sz * 2.3 + (it.n > 1 ? sz * 0.95 : 0), 0) + (q.foe ? sz * 1.5 : 0);
+        };
+        const touch = (p, q) => Math.abs(p.x - q.x) < (p.w + q.w) / 2 + 2 && Math.abs(p.y - q.y) < ht + 2;
+        groups.forEach(size);
+        // A group that grows is checked again against the rest, and a pass that merged any is made again.
+        for (let merged = true; merged;) {
+          merged = false;
+          for (let i = 0; i < groups.length; i++) for (let j = i + 1; j < groups.length;) {
+            const p = groups[i], q = groups[j];
+            if (p.key !== q.key || !touch(p, q)) { j++; continue; }
+            p.sx += q.sx; p.sy += q.sy; p.n += q.n; p.x = p.sx / p.n; p.y = p.sy / p.n;
+            for (const k in q.kinds) p.kinds[k] = (p.kinds[k] || 0) + q.kinds[k];
+            size(p); groups.splice(j, 1); j = i + 1; merged = true;
+          }
+        }
+        groups.sort((a, b) => (a.team === t) - (b.team === t) || a.on - b.on);
+        const plates = [];
+        for (const q of groups) {
+          for (let pass = 0; pass < 3; pass++) for (const p of plates) if (touch(p, q)) q.y = p.y + (q.y >= p.y ? 1 : -1) * (ht + 2);
+          plates.push(q);
+          tagPlate(og, q.x, q.y, sz, q.items, ink
+            ? { foe: q.foe, on: q.on, ink, alpha: tag, fill: washOf(q.team), line: INK, fg: INK, mono: '"Courier Prime", "Courier New", monospace' }
+            : { foe: q.foe, on: q.on, ink, alpha: tag, fill: q.on ? '#e0a020' : SLOT_PLATE[q.team] || '#555', line: 'rgba(20,16,12,0.9)', fg: '#fff', mono: '"Share Tech Mono", monospace' });
+        }
       }
 
       // Brackets on every enemy your units have marked, solid on those being fired at now.
@@ -1381,16 +1507,58 @@ const Hud = (() => {
       $('pwr').textContent = `${p.use}/${p.prod}`;
       const sec = s.tick / HZ | 0;
       $('clock').textContent = `${String(sec / 60 | 0).padStart(2, '0')}:${String(sec % 60).padStart(2, '0')}`;
-      $('techlv').textContent = Rules.AGES[p.tech].name;
+      if ($('techlv').textContent !== Rules.AGES[p.tech].name) { $('techlv').textContent = Rules.AGES[p.tech].name; $('agecell').title = `The ${Rules.AGES[p.tech].name} Age, ${p.tech} of ${Rules.MAX_AGE}`; }
       // A new age brings the lines' new forms to the cards, its buildings' pictures, and power to run short of.
       const picStale = !!game.pictures && p.tech !== game.picAge;
-      if (p.tech !== listAge || picStale) { lineLists(p.tech); if (picStale) game.pictures(); else buildCams(); }
+      if (p.tech !== listAge || picStale) {
+        const was = listAge;
+        lineLists(p.tech);
+        if (was > 0 && p.tech > was) freshen(was, p.tech);
+        if (picStale) game.pictures(); else buildCams();
+        if (was > 0 && p.tech > was && game.team >= 0) ageCard(p.tech);
+      }
       $('pwr').parentElement.classList.toggle('off', p.tech < Rules.POWER_AGE);
       if (p.tech < Rules.POWER_AGE) $('pwr').textContent = '—';
       const towns = s.towns.filter(t => t.owner === team()).length;
       $('towns').textContent = `${towns}/${s.towns.length}`;
       updateSelPanel();
       updateObjective();
+    }
+
+    // A new age is a moment: a card in the readout strip's gap with the age's name, what it brings and its new
+    // forms, held four seconds and let go, and the sidebar's new cards drawn in one after another.
+    const ROMAN = ['', 'I', 'II', 'III', 'IV', 'V', 'VI', 'VII'];
+    // The lines whose new forms the card shows first, the heavy hitters ahead.
+    const SHOW = ['mount', 'heavy', 'inf', 'jet', 'heli', 'at', 'siege', 'snp', 'rec', 'ifv', 'aa', 'fpv', 'hero', 'truck', 'sup'];
+    const newForms = (was, age) => SHOW.map(l => Rules.formOf(l, age)).filter((k, i) => k && k !== Rules.formOf(SHOW[i], was));
+    let ageT = [];
+    function ageCard(age) {
+      const card = $('agecard'), A = Rules.AGES[age];
+      card.innerHTML = `<small>Age ${ROMAN[age]} of ${ROMAN[Rules.MAX_AGE]}</small><h2>The <em></em> Age</h2><p></p><div class="forms"></div>`;
+      card.querySelector('em').textContent = A.name;
+      card.querySelector('p').textContent = A.note;
+      const row = card.querySelector('.forms');
+      for (const k of newForms(age - 1, age).slice(0, 6)) {
+        const f = document.createElement('figure'), img = document.createElement('img'), c = document.createElement('figcaption');
+        img.src = state.cameos[k] || ''; img.alt = ''; c.textContent = UNITS[k].name;
+        f.append(img, c); row.append(f);
+      }
+      // It stands centred in the gap between the readouts and the tools, or under the strip where there is none.
+      const vr = view.getBoundingClientRect(), a = $('top').querySelector('.gauge.grow'), b = $('top').querySelector('.tools');
+      const l = a && a.offsetParent ? a.getBoundingClientRect().right : vr.left, r = b ? b.getBoundingClientRect().left : vr.right, room = r - l - 16;
+      card.classList.toggle('under', room < 330);
+      card.style.left = room < 330 ? '' : `${(l + r) / 2 - vr.left}px`;
+      card.style.width = room < 330 ? '' : `${Math.min(460, room)}px`;
+      ageT.forEach(clearTimeout);
+      card.hidden = false; card.classList.remove('show', 'gone'); void card.offsetWidth; card.classList.add('show');
+      ageT = [setTimeout(() => card.classList.add('gone'), 4300), setTimeout(() => { card.hidden = true; card.classList.remove('show', 'gone'); }, 5000)];
+    }
+    // The cards an age brings: the lines' new forms, and the buildings and calls it opens.
+    function freshen(was, age) {
+      const f = new Set(['tech', ...Object.keys(Rules.LINES).map(l => Rules.formOf(l, age)).filter((k, i) => k && k !== Rules.formOf(Object.keys(Rules.LINES)[i], was))]);
+      for (const k of [...ALL.bld, ...ALL.def, ...ALL.pow]) { const d = k === 'launch' ? BUILDINGS.silo : BUILDINGS[k] || POWERS[k]; if (d && (d.tech || 1) > was && (d.tech || 1) <= age) f.add(k); }
+      state.fresh = f; state.freshUntil = performance.now() + 9000;
+      setTimeout(() => { for (const n of document.querySelectorAll('#cams .new')) n.remove(); }, 9000);
     }
 
     function updateSelPanel() {

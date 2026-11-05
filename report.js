@@ -17,7 +17,8 @@ const Report = (() => {
     { k: 'tw', name: 'Towns', y: 'Towns held' },
     { k: 'kv', name: 'Destroyed', y: 'Enemy worth destroyed (supply)' },
   ];
-  const ROMAN = ['', 'I', 'II', 'III'];
+  // An age by name, and the short name its mark on a chart carries.
+  const ageName = v => (Rules.AGES[v] || {}).name || '', ageShort = v => ageName(v).slice(0, 3);
   const store = { get(k, d) { try { return localStorage.getItem(k) || d; } catch (e) { return d; } }, set(k, v) { try { localStorage.setItem(k, v); } catch (e) { /* no store */ } } };
   const num = v => Math.round(v).toLocaleString('en-US');
   const clock = s => `${s / 60 | 0}:${String(s % 60 | 0).padStart(2, '0')}`;
@@ -100,12 +101,15 @@ const Report = (() => {
     g.fillText('game time', box.x + box.w, box.y + box.h + 20);
     return { box, X };
   }
-  // A small mark on a chart: a ringed tech level, an out cross, or a missile launch.
+  // A small mark on a chart: a tag naming the age a side reached, an out cross, or a missile launch.
   function glyph(g, I, k, x, y, col, v) {
     g.save();
     if (k === 'tech') {
-      g.beginPath(); g.arc(x, y, 8, 0, 6.2832); g.fillStyle = I.ground; g.fill(); g.lineWidth = 1.5; g.strokeStyle = col; g.stroke();
-      g.fillStyle = I.text; g.font = `600 8px ${I.font}`; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(ROMAN[v], x, y + 0.5);
+      g.font = `600 10px ${I.font}`;
+      const t = ageShort(v), w = g.measureText(t).width + 8, h = 14;
+      g.beginPath(); g.roundRect ? g.roundRect(x - w / 2, y - h / 2, w, h, 4) : g.rect(x - w / 2, y - h / 2, w, h);
+      g.fillStyle = I.ground; g.fill(); g.lineWidth = 1.5; g.strokeStyle = col; g.stroke();
+      g.fillStyle = I.text; g.textAlign = 'center'; g.textBaseline = 'middle'; g.fillText(t, x, y + 0.5);
     } else if (k === 'out') {
       g.strokeStyle = I.ground; g.lineWidth = 4.5; g.lineCap = 'round';
       const X = () => { g.beginPath(); g.moveTo(x - 5, y - 5); g.lineTo(x + 5, y + 5); g.moveTo(x + 5, y - 5); g.lineTo(x - 5, y + 5); g.stroke(); };
@@ -292,7 +296,8 @@ const Report = (() => {
       ts.forEach((s, k) => { const d = Math.abs(X(s) - hx); if (d < bd) { bd = d; j = k; } });
       const x = X(ts[j]);
       g.strokeStyle = I.text; g.lineWidth = 1.5; g.beginPath(); g.moveTo(x, box.y); g.lineTo(x, box.y + box.h); g.stroke();
-      const rows = bands.map((t, b) => [t, list.find(y => y.t === t).name, `${un[b][j] || 0} · ${Math.round((hi[b][j] - lo[b][j]) * 100)}%`, un[b][j] || 0]).sort((a, b) => b[3] - a[3]);
+      const ageAt = (t, tick) => h.marks.reduce((a, m) => m.k === 'tech' && m.team === t && m.t <= tick && m.v > a ? m.v : a, S.age0 || 1);
+      const rows = bands.map((t, b) => [t, list.find(y => y.t === t).name, `${un[b][j] || 0} · ${Math.round((hi[b][j] - lo[b][j]) * 100)}% · ${ageName(ageAt(t, h.t[j]))}`, un[b][j] || 0]).sort((a, b) => b[3] - a[3]);
       return { head: `Units at ${clock(ts[j])}`, rows };
     };
     draw(null);
@@ -336,19 +341,26 @@ const Report = (() => {
       pane.replaceChildren(); tip.hidden = true; cur.redraw = null;
       const S = o.S;
       if (k === 'sum') {
-        pane.appendChild(table(list, [['Score', x => num(x.sc.total)], ['Military', x => num(x.sc.mil)], ['Economy', x => num(x.sc.eco)], ['Technology', x => num(x.sc.tec)], ['Territory', x => num(x.sc.ter)], ['Result', x => result(S, x)]]));
-        pane.appendChild(el('p', 'rkey', 'Military is a tenth of the enemy worth destroyed, economy a twentieth of all supply and oil earned, technology the cost of tech levels reached, territory 40 a town and 10 for each percent of the map held.'));
+        pane.appendChild(table(list, [['Score', x => num(x.sc.total)], ['Military', x => num(x.sc.mil)], ['Economy', x => num(x.sc.eco)], ['Ages', x => num(x.sc.tec)], ['Territory', x => num(x.sc.ter)], ['Reached', x => ageName(x.P.tech)], ['Result', x => result(S, x)]]));
+        pane.appendChild(el('p', 'rkey', 'Military is a tenth of the enemy worth destroyed, economy a twentieth of all supply and oil earned, ages the cost of the ages reached, territory 40 a town and 10 for each percent of the map held.'));
       } else if (k === 'mil') {
         pane.appendChild(table(list, [['Made', x => num(x.s.made)], ['Infantry', x => num(x.s.inf)], ['Vehicles', x => num(x.s.veh)], ['Aircraft', x => num(x.s.air)], ['Kills', x => num(x.s.killed)], ['Razed', x => num(x.s.razed)], ['Units lost', x => num(x.s.lost)], ['Bldgs lost', x => num(x.s.blost)]]));
         pane.appendChild(worthBars(list));
       } else if (k === 'eco') {
-        const when = (x, v) => x.tech[v] !== undefined ? clock(x.tech[v] / HZ) : x.P.tech >= v ? 'yes' : '—';
-        pane.appendChild(table(list, [['Ore mined', x => num(x.s.mined)], ['From towns', x => num(x.s.townIn)], ['Oil', x => num(x.s.oilIn)], ['Spent', x => num(x.s.spent)], ['Oil spent', x => num(x.s.spentOil)], ['Built', x => num(x.s.built)], ['Tech II', x => when(x, 2)], ['Tech III', x => when(x, 3)]]));
+        pane.appendChild(table(list, [['Ore mined', x => num(x.s.mined)], ['From towns', x => num(x.s.townIn)], ['Oil', x => num(x.s.oilIn)], ['Spent', x => num(x.s.spent)], ['Oil spent', x => num(x.s.spentOil)], ['Built', x => num(x.s.built)]]));
+        // When each side reached each age after the one the game began in, as far as any side went.
+        const a0 = S.age0 || 1, top = Math.max(...list.map(x => x.P.tech));
+        if (top > a0) {
+          const when = (x, v) => x.tech[v] !== undefined ? clock(x.tech[v] / HZ) : x.P.tech >= v ? 'yes' : '—', cols = [];
+          for (let v = a0 + 1; v <= top; v++) cols.push([ageName(v), x => when(x, v)]);
+          pane.appendChild(el('p', 'rcap', 'Ages reached, by game time'));
+          pane.appendChild(table(list, cols));
+        }
       } else if (!charted) {
         pane.appendChild(el('p', 'rkey', 'The game was too short to chart.'));
       } else if (k === 'time') {
         const c = el('canvas', 'rchart'); pane.append(c, tip);
-        const key = el('p', 'rkey', 'Lines across the bands are fighting between two sides, in the colour of the side that did more harm. Rings mark tech levels, triangles missile launches and crosses the end of a side.');
+        const key = el('p', 'rkey', 'Lines across the bands are fighting between two sides, in the colour of the side that did more harm. Tags name the age a side reached, triangles mark missile launches and crosses the end of a side.');
         pane.appendChild(key);
         cur.redraw = () => timeline(c, tip, pane, o, list);
       } else if (k === 'graph') {

@@ -73,12 +73,33 @@ body[data-look="ink"][data-scheme="dark"] #end, body[data-look="ink"][data-schem
 .tools button:hover { color: var(--amber); }
 .tools button.off { color: #6a6a58; text-decoration: line-through; }
 
-#notes { position: absolute; left: max(10px, env(safe-area-inset-left, 0px)); top: calc(54px + env(safe-area-inset-top, 0px)); display: flex; flex-direction: column; gap: 5px; width: min(480px, calc(100% - 20px)); pointer-events: none; }
+#notes { position: absolute; left: max(10px, env(safe-area-inset-left, 0px)); top: calc(54px + env(safe-area-inset-top, 0px)); display: flex; flex-direction: column; gap: 5px; width: min(430px, calc(100% - 20px)); pointer-events: none; }
 #objective { padding: 6px 11px; background: rgba(20,22,15,.86); border-left: 4px solid var(--amber); font: 500 16px/1.22 var(--ui); }
 #objective b { color: var(--amber); font-weight: 600; }
 #objective.flash { animation: glow .9s ease-out; }
 @keyframes glow { from { background: rgba(120,84,20,.92); } }
 #banner { position: absolute; top: calc(54px + env(safe-area-inset-top, 0px)); left: 50%; transform: translateX(-50%); padding: 6px 14px; background: rgba(90,60,10,.9); border: 1px solid var(--amber); font: 600 16px var(--ui); letter-spacing: .03em; white-space: nowrap; pointer-events: none; z-index: 3; max-width: calc(100% - 24px); overflow: hidden; text-overflow: ellipsis; }
+
+/* A new age: a card in the gap of the readout strip, unrolled from its middle, held, then lifted away. */
+#agecard { position: absolute; top: calc(8px + env(safe-area-inset-top, 0px)); left: 50%; transform: translateX(-50%); z-index: 3; pointer-events: none; width: min(460px, calc(100% - 24px)); box-sizing: border-box; padding: 9px 16px 10px; text-align: center; background: linear-gradient(#3a3f31, #262a20); border: 1px solid #000; box-shadow: inset 0 1px 0 var(--steel-hi), 0 6px 18px rgba(0,0,0,.55); color: var(--stencil); }
+#agecard.under { top: calc(54px + env(safe-area-inset-top, 0px)); }
+#agecard small { display: block; font: 600 12px var(--ui); letter-spacing: .14em; text-transform: uppercase; color: var(--dim); }
+#agecard h2 { margin: 1px 0 3px; font: 30px/1.05 var(--display); color: var(--stencil); }
+#agecard h2 em { font-style: normal; color: var(--amber); }
+#agecard p { margin: 0; font: 500 15px/1.25 var(--ui); text-wrap: balance; }
+#agecard .forms { display: flex; justify-content: center; gap: 4px; margin-top: 7px; }
+#agecard .forms:empty { display: none; }
+#agecard figure { margin: 0; width: 66px; min-width: 0; }
+#agecard figure img { display: block; width: 66px; height: 44px; object-fit: contain; }
+#agecard figcaption { font: 500 11px/1.15 var(--ui); color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#agecard.show { animation: agein .55s cubic-bezier(.2,.7,.3,1) both; }
+#agecard.gone { animation: ageout .7s ease-in both; }
+@keyframes agein { from { opacity: 0; clip-path: inset(0 50% 0 50%); } 40% { opacity: 1; } to { opacity: 1; clip-path: inset(-24px -24px -24px -24px); } }
+@keyframes ageout { from { opacity: 1; } to { opacity: 0; translate: 0 -8px; } }
+/* The sidebar's cards an age brings are drawn in from the left, as a pen would, and marked new. */
+.cam.fresh { animation: camin .5s ease-out both; }
+@keyframes camin { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(0 0 0 0); } }
+.cam .new { position: absolute; top: 1px; left: 14px; font: 600 11px var(--ui); font-style: italic; color: var(--amber); text-shadow: 0 1px 2px #000; }
 
 #log { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; }
 .line { font: 500 15px/1.2 var(--ui); padding: 2px 8px; background: rgba(12,14,9,.72); border-left: 3px solid var(--stencil); transition: opacity .7s; text-wrap: pretty; }
@@ -109,9 +130,9 @@ body[data-look="ink"][data-scheme="dark"] #end, body[data-look="ink"][data-schem
 #plate small { font: 11px var(--mono); color: var(--dim); }
 #mapwell { position: relative; width: 100%; aspect-ratio: 1; flex: 0 1 auto; max-height: 34vh; background: var(--well); border: 1px solid #000; box-shadow: inset 0 2px 6px #000, 0 1px 0 var(--steel-hi); align-self: center; }
 #map { width: 100%; height: 100%; display: block; touch-action: none; }
-#stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; font: 11px var(--ui); letter-spacing: .08em; color: var(--dim); text-transform: uppercase; }
-#stats div { display: flex; justify-content: space-between; gap: 4px; background: #1b1d15; padding: 1px 5px; border: 1px solid #0a0b07; }
-#stats b { font: 12px var(--mono); color: var(--amber); }
+#stats { display: grid; grid-template-columns: 1.7fr 1fr; gap: 4px; font: 11px var(--ui); letter-spacing: .08em; color: var(--dim); text-transform: uppercase; }
+#stats div { display: flex; justify-content: space-between; align-items: baseline; gap: 6px; min-width: 0; background: #1b1d15; padding: 1px 5px; border: 1px solid #0a0b07; }
+#stats b { font: 12px var(--mono); color: var(--amber); min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #tabs { display: grid; grid-template-columns: repeat(6, 1fr); gap: 2px; }
 .tab { position: relative; padding: 4px 0 3px; background: linear-gradient(#2f3328, #1d1f17); border: 1px solid #0a0b07; font: 600 12px var(--ui); letter-spacing: .03em; color: var(--dim); text-transform: uppercase; }
 .tab:hover { color: var(--stencil); }
@@ -248,7 +269,10 @@ body[data-look="ink"] #net { background: var(--paper-hi); border: 2px solid var(
   .gauge { padding: 1px 6px; }
   .gauge.grow { display: none; }
   .tools button { min-height: 28px; width: 32px; }
-  #notes, #banner { top: calc(36px + env(safe-area-inset-top, 0px)); }
+  #notes, #banner, #agecard.under { top: calc(36px + env(safe-area-inset-top, 0px)); }
+  #agecard { padding: 6px 12px; }
+  #agecard h2 { font-size: 22px; }
+  #agecard .forms { display: none; }
   .line { font-size: 13px; }
   #objective { font-size: 13px; padding: 4px 8px; }
   #title { background: linear-gradient(90deg, rgba(6,7,4,.9), rgba(6,7,4,.5)); padding-block: 8px; }
@@ -276,7 +300,7 @@ body[data-look="ink"] #net { background: var(--paper-hi); border: 2px solid var(
   .help { display: none; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .cam.ready, #pwrbar.low, .tab.lit i { animation: none; }
+  .cam.ready, #pwrbar.low, .tab.lit i, #agecard.show, .cam.fresh { animation: none; }
 }
 
 /* Pen and ink: the panels are cream paper ruled in black ink, labels in a draughtsman's plain lettering, figures typed,
@@ -324,9 +348,20 @@ body[data-look="ink"] .cam .ct, body[data-look="ink"] .cam .qty { color: var(--r
 body[data-look="ink"] .cam .key { color: var(--ink-dim); }
 body[data-look="ink"] .cam .state { color: var(--ink); text-shadow: 0 0 3px var(--paper-hi), 0 0 3px var(--paper-hi); }
 body[data-look="ink"] .cam.busy::after { background: conic-gradient(rgba(0,0,0,0) var(--p), rgba(242,232,210,.72) var(--p)); }
-body[data-look="ink"] .cam.off { filter: none; opacity: .42; }
+/* A card that cannot be had is hatched across in ink, its picture and name still readable under it. */
+body[data-look="ink"] .cam.off { filter: none; opacity: .66; }
+body[data-look="ink"] .cam.off:not(.busy)::after { content: ""; position: absolute; inset: 0; pointer-events: none; background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--ink) 22%, transparent) 0 1px, transparent 1px 6px); }
+body[data-look="ink"] .cam.off .nm, body[data-look="ink"] .cam.off .ct { color: var(--ink-dim); }
 body[data-look="ink"] .cam.ready { box-shadow: inset 0 0 0 2px var(--redink); animation: none; }
 body[data-look="ink"] .cam.ready .state { color: var(--redink); }
+body[data-look="ink"] #agecard { background: var(--paper-hi); border: 1.5px solid var(--ink); outline: 1px solid var(--ink); outline-offset: 3px; box-shadow: 4px 4px 0 rgba(31,26,22,.45); color: var(--ink); }
+body[data-look="ink"][data-scheme="dark"] #agecard { box-shadow: 4px 4px 0 rgba(0,0,0,.5); }
+body[data-look="ink"] #agecard small { font: 400 13px var(--display); letter-spacing: .08em; text-transform: none; color: var(--ink-dim); }
+body[data-look="ink"] #agecard h2 { font: 400 32px/1.05 var(--display); color: var(--ink); }
+body[data-look="ink"] #agecard h2 em { color: var(--redink); }
+body[data-look="ink"] #agecard p { font: italic 400 16px/1.25 var(--label); color: var(--ink); }
+body[data-look="ink"] #agecard figcaption { font-family: var(--label); color: var(--ink-dim); }
+body[data-look="ink"] .cam .new { font-family: var(--label); font-weight: 500; color: var(--redink); text-shadow: 0 0 2px var(--paper-hi), 0 0 2px var(--paper-hi); }
 body[data-look="ink"] #tip h3 { color: var(--ink); font-family: var(--display); font-weight: 400; font-size: 17px; }
 body[data-look="ink"] #tip p { color: #3d352c; }
 body[data-look="ink"] #tip .idle { color: var(--ink-dim); font-style: italic; }
@@ -348,7 +383,7 @@ body[data-look="ink"] #end th { color: #3d352c; }
 body[data-look="ink"] .rtabs button, body[data-look="ink"] .rseries button { background: var(--paper-hi); border: 1.5px solid var(--ink); color: var(--ink); font-family: var(--display); font-weight: 400; }
 body[data-look="ink"] .rtabs button.on, body[data-look="ink"] .rseries button.on { background: var(--ink); color: var(--paper); border-color: var(--ink); }
 body[data-look="ink"] .rtabs button:hover:not(.on), body[data-look="ink"] .rseries button:hover:not(.on) { color: var(--redink); }
-body[data-look="ink"] #end thead th, body[data-look="ink"] #end .rkey { font-family: var(--label); }
+body[data-look="ink"] #end thead th, body[data-look="ink"] #end .rkey, body[data-look="ink"] #end .rcap { font-family: var(--label); }
 body[data-look="ink"] #end tbody tr + tr > * { border-top-color: rgba(31,26,22,.14); }
 body[data-look="ink"][data-scheme="dark"] #end tbody tr + tr > * { border-top-color: rgba(232,224,207,.12); }
 body[data-look="ink"] .slot { border-color: var(--ink); }
@@ -387,7 +422,13 @@ body[data-look="ink"] #menu, body[data-look="ink"] #watch, body[data-look="ink"]
 #maps button small { font: 13px var(--mono); opacity: .8; white-space: nowrap; }
 .preview { margin-top: 8px; }
 #preview { width: 100%; aspect-ratio: 1; display: block; border: 1.5px solid var(--ink); background: var(--paper-hi); }
-#map-about { margin: 6px 0 0; font: 500 15px/1.25 var(--ui); color: var(--ink-dim); text-wrap: pretty; }
+#map-about, #age-about { margin: 6px 0 0; font: 500 15px/1.25 var(--ui); color: var(--ink-dim); text-wrap: pretty; }
+#age-about { min-height: 2.5em; }
+/* The game's own choices stand under the players: the theatre and the age it begins in. */
+.rules { margin-top: 14px; display: grid; gap: 4px; }
+.rules h3 { margin: 8px 0 2px; }
+#m-age { grid-template-columns: repeat(6, 1fr); }
+body[data-look="ink"] #age-about, body[data-look="ink"] #map-about { font-family: var(--label); font-style: italic; font-weight: 400; }
 .seedrow { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin: 8px 0 14px; font: 500 16px var(--ui); }
 .seedrow b { font: 15px var(--mono); }
 #slots { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
@@ -437,6 +478,7 @@ body[data-look="ink"] #menu, body[data-look="ink"] #watch, body[data-look="ink"]
   .sheet footer { flex-wrap: wrap; }
   #go-why { flex-basis: 100%; }
   #rooms th:nth-child(2), #rooms td:nth-child(2) { display: none; }
+  #m-age { grid-template-columns: repeat(3, 1fr); }
 }
 body[data-look="ink"] #title.on-sheet { background: rgba(242,232,210,.62); }
 body[data-look="ink"][data-scheme="dark"] #title.on-sheet { background: rgba(26,24,20,.7); }
@@ -466,6 +508,7 @@ body[data-look="ink"] .sheet { box-shadow: 4px 4px 0 var(--ink); }
       <div class="choice"><h2>Paper</h2><div id="s-scheme"><button data-v="auto">As the system</button><button data-v="light">Light</button><button data-v="dark">Dark</button></div></div>
     </div>
     <div id="banner" hidden></div>
+    <div id="agecard" hidden aria-live="polite"></div>
     <div id="sel" hidden></div>
     <div id="roster" hidden></div>
     <div id="net" hidden></div>
@@ -473,7 +516,7 @@ body[data-look="ink"] .sheet { box-shadow: 4px 4px 0 var(--ink); }
   <aside id="side">
     <div id="plate"><span>DEAD GROUND</span><small id="clock">00:00</small></div>
     <div id="mapwell"><canvas id="map" width="400" height="400" aria-label="Map of the battlefield"></canvas></div>
-    <div id="stats"><div>Age<b id="techlv">Ancient</b></div><div>Towns<b id="towns">0/6</b></div><div>Lvl<b id="lvl">&#9733;</b></div></div>
+    <div id="stats"><div id="agecell">Age<b id="techlv">Ancient</b></div><div>Towns<b id="towns">0/6</b></div></div>
     <nav id="tabs"></nav>
     <div id="cams"></div>
     <div id="tip"><p class="idle">Hover a picture for what it does.</p></div>
@@ -508,15 +551,18 @@ body[data-look="ink"] .sheet { box-shadow: 4px 4px 0 var(--ink); }
           <div id="maps" class="pick"></div>
           <div class="preview"><canvas id="preview"></canvas><p id="map-about"></p></div>
           <div class="seedrow"><span>Terrain <b id="seed"></b></span><button id="reseed">New terrain</button></div>
-          <h3>Theatre</h3>
-          <div id="m-theme" class="pick three"><button data-v="desert">Salt Flats</button><button data-v="steppe">Black Steppe</button><button data-v="winter">White Pass</button></div>
-          <h3>Starting age</h3>
-          <div id="m-age" class="pick three"><button data-v="1">Ancient</button><button data-v="2">Medieval</button><button data-v="3">Gunpowder</button><button data-v="4">Industrial</button><button data-v="5">Modern</button><button data-v="6">Future</button></div>
         </section>
         <section class="slotcol">
           <h3>Players</h3>
           <ol id="slots"></ol>
           <p id="watchers"></p>
+          <div class="rules">
+            <h3>Theatre</h3>
+            <div id="m-theme" class="pick three"><button data-v="desert">Salt Flats</button><button data-v="steppe">Black Steppe</button><button data-v="winter">White Pass</button></div>
+            <h3>Starting age</h3>
+            <div id="m-age" class="pick three"><button data-v="1">Ancient</button><button data-v="2">Medieval</button><button data-v="3">Gunpowder</button><button data-v="4">Industrial</button><button data-v="5">Modern</button><button data-v="6">Future</button></div>
+            <p id="age-about"></p>
+          </div>
           <div id="chat" hidden><div id="chat-log"></div><input id="chat-in" maxlength="200" placeholder="Say something, then Enter" autocomplete="off" spellcheck="false"></div>
         </section>
       </div>
