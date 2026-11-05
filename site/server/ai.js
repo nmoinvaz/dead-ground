@@ -85,7 +85,8 @@ const AI = (() => {
     if (P.q.def.length) return;
     const m = (S.tick - Math.max(0, me.startTick)) / HZ / 60;
     const n = (has(P, 'bunker') + has(P, 'atgun') + has(P, 'sam') + has(P, 'rail'));
-    const want = Math.min(me.D.def, (m / 2.5 | 0));
+    // A rich commander puts up two thirds as many defences again, so that its bank goes into holding home.
+    const want = Math.min(me.D.def + (P.supply > 2500 ? me.D.def * 2 / 3 | 0 : 0), (m / 2.5 | 0));
     if (n >= want || P.supply < 900) return;
     const opts = ['bunker', 'atgun', 'atgun', 'bunker'];
     if (opened(P, BUILDINGS.sam)) opts.push('sam');
@@ -94,6 +95,24 @@ const AI = (() => {
     // Before the Industrial Age there is no power to run short of.
     if (!R.blockedReason(S, me.team, k) && (P.tech < R.POWER_AGE || P.prod - P.use > -BUILDINGS[k].power)) R.push(S, me.team, { c: 'build', kind: k });
   }
+
+  // The vehicle lines built in each age, the main line most, in the forms the age has. The Modern Age keeps the
+  // mix it was tuned with.
+  const VEH_MIX = [null,
+    ['mount', 'heavy', 'mount', 'siege', 'rec', 'sup'],
+    ['mount', 'heavy', 'mount', 'siege', 'rec', 'sup'],
+    ['mount', 'siege', 'mount', 'heavy', 'rec', 'sup'],
+    ['mount', 'ifv', 'heavy', 'siege', 'mount', 'aa', 'sup'],
+    ['mount', 'siege', 'mount', 'heavy', 'aa', 'ifv'],
+    ['mount', 'siege', 'heavy', 'ifv', 'mount', 'aa', 'sup'],
+  ];
+  // The dearest lines, which a rich commander buys first so that its bank goes into the field.
+  const RICH = ['heavy', 'siege', 'mount'];
+  const INF_MIX = ['inf', 'at', 'inf', 'at', 'inf', 'snp'], AIR_MIX = ['heli', 'fpv', 'fpv', 'jet'];
+  // The share of its spending each queue should have, with an air arm and without. The queue furthest below its
+  // share buys at its gate, and the others wait for AHEAD more, so the cheap barracks does not starve the rest.
+  const SHARE = { inf: 0.4, veh: 0.45, air: 0.15 }, SHARE_GROUND = { inf: 0.45, veh: 0.55, air: 0 };
+  const GATE = { inf: 300, veh: 600, air: 700 }, AHEAD = 700;
 
   function trainNext(S, me, P) {
     const trucks = R.lineCount(P, 'truck'), refs = has(P, 'refinery');
@@ -104,34 +123,41 @@ const AI = (() => {
     if (count >= Math.min(90, me.D.ramp ? me.D.ramp[0] + me.D.ramp[1] * m : 90)) return;
     const lv = P.tech + 1, saving = lv <= me.D.maxAge && !P.q.tech.length && m >= ageTime(S, me, P);
     if (saving && trucks >= refs && P.supply < TECH[lv].cost + 500 && count > 12) return;
+    // What each queue has in the field and in hand, by worth, against its share.
+    const held = { inf: 0, veh: 0, air: 0 };
+    for (const e of S.ents) if (e.team === me.team && !e.b && !e.d.cargo) held[e.d.cat] += R.worth(e.d);
+    for (const c in held) for (const it of P.q[c]) held[c] += R.worth(UNITS[it.kind]);
+    const air = has(P, 'airfield') ? forms(P, AIR_MIX) : [], share = air.length ? SHARE : SHARE_GROUND;
+    const total = held.inf + held.veh + held.air + 1, under = c => held[c] / total - share[c];
+    const behind = ['inf', 'veh', 'air'].filter(c => share[c] > 0).sort((a, b) => under(a) - under(b))[0];
+    const ready = c => P.supply > GATE[c] + (c === behind ? 0 : AHEAD);
+    const buy = k => R.push(S, me.team, { c: 'train', kind: k });
     if (has(P, 'factory') && P.q.veh.length < 2) {
       const truck = R.formOf('truck', P.tech);
       if (trucks < Math.min(refs * 2, 6) && !queuedIn(P, 'veh', truck)) R.push(S, me.team, { c: 'train', kind: truck });
-      else if (P.supply > 700) {
-        // The main line most, then siege, the heaviest, carriers, flak and support, in whatever forms the age has.
-        const mix = forms(P, P.tech >= 5 ? ['mount', 'siege', 'mount', 'heavy', 'aa', 'ifv'] : P.tech >= 4 ? ['mount', 'ifv', 'mount', 'aa', 'sup', 'siege'] : ['mount', 'mount', 'siege', 'rec', 'heavy', 'sup']);
+      else if (ready('veh')) {
+        const mix = forms(P, P.supply > 3000 ? RICH : VEH_MIX[P.tech]);
         const k = mix[me.plan++ % mix.length];
         // Two support vehicles are enough to mend an army.
-        if (!(UNITS[k].repair && R.lineCount(P, 'sup') >= 2) && !R.blockedReason(S, me.team, k)) R.push(S, me.team, { c: 'train', kind: k });
+        if (!(UNITS[k].repair && R.lineCount(P, 'sup') >= 2) && !R.blockedReason(S, me.team, k)) buy(k);
       }
     }
-    if (has(P, 'barracks') && P.q.inf.length < 2 && P.supply > 300) {
-      const mix = forms(P, ['inf', 'at', 'inf', 'at', 'inf', 'snp']);
-      R.push(S, me.team, { c: 'train', kind: mix[(me.plan * 3 + (m | 0)) % mix.length] });
+    if (has(P, 'barracks') && P.q.inf.length < 2 && ready('inf')) {
+      const mix = forms(P, INF_MIX);
+      buy(mix[(me.plan * 3 + (m | 0)) % mix.length]);
     }
-    if (has(P, 'airfield') && P.q.air.length < 1 && P.supply > 1500) {
-      const opts = forms(P, ['heli', 'fpv', 'fpv', 'jet']);
-      if (opts.length) R.push(S, me.team, { c: 'train', kind: opts[me.plan % opts.length] });
-    }
+    if (air.length && P.q.air.length < 1 && ready('air')) buy(air[me.plan % air.length]);
   }
 
-  // The minute of the game a commander reaches for its next age, counted from the age the game began in.
-  const ageTime = (S, me, P) => me.D.ageEvery * (P.tech - (S.age0 || 1) + 1);
+  // The minute of the game a commander reaches for its next age, counted from the age the game began in. A game
+  // begun in a later age stays longer in it, a quarter of an age's time for each age it skipped.
+  const ageTime = (S, me, P) => { const a0 = S.age0 || 1; return me.D.ageEvery * (P.tech - a0 + 1 + (a0 - 1) / 4); };
 
   function research(S, me, P) {
     if (P.tech >= me.D.maxAge || P.q.tech.length) return;
-    const d = TECH[P.tech + 1], m = (S.tick - Math.max(0, me.startTick)) / HZ / 60;
-    if (m < ageTime(S, me, P)) return;
+    const d = TECH[P.tech + 1], m = (S.tick - Math.max(0, me.startTick)) / HZ / 60, due = ageTime(S, me, P);
+    // A level with `rich` reaches for an age up to half an age's time early when it has that much more than it costs.
+    if (m < due && !(me.D.rich && m >= due - me.D.ageEvery / 2 && P.supply > d.cost + me.D.rich)) return;
     if (P.supply > d.cost + 400 && P.oil >= d.oil * 0.8) R.push(S, me.team, { c: 'research' });
   }
 
