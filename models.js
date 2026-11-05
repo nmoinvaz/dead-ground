@@ -856,6 +856,8 @@ const Models = (() => {
       w.box(1, 0.2, 1, 0, 0, 0, 0xffffff);
       w.box(1, 0.18, 0.05, 0, 0.2, 0.47, 0xdddddd);
       w.box(1, 0.18, 0.05, 0, 0.2, -0.47, 0xdddddd);
+      // Seams across the deck between its parapets, so a long bridge reads as one and not as a blank slab.
+      for (let i = 1; i < 18; i++) w.box(0.006, 0.014, 0.88, -0.5 + i / 18, 0.2, 0, 0xd4d4d4);
       scenery.deck = w.finish();
       const pier = G();
       pier.box(0.4, 2.4, 1.2, 0, -2.2, 0, P.concDk);

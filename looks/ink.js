@@ -359,7 +359,8 @@
             if (uOre >= 1 && uOre <= 4) {
               float nearO = max(max(oA(uv + k * vec2(1.6, 0)), oA(uv - k * vec2(1.6, 0))), max(max(oA(uv + k * vec2(0, 1.6)), oA(uv - k * vec2(0, 1.6))), isO));
               cover *= 1.0 - nearO;
-              oreL = outline * nearO;
+              // A field of nuggets each ringed in brown is the busiest thing on the land, so the rings are light.
+              oreL = outline * nearO * mix(0.85, 0.5, zU);
             }
             paperC = dk ? DPAPER : vec3(0.96, 0.93, 0.86);
             lineK = max(max(heavy, swell * (1.0 - step(0.6, a))), max(detail, max(edge * 0.55 * (1.0 - bankZone) * isG, max(rEdge * 0.9 * isG, bankL * step(0.001, dep + 0.05) * (isG + isW)))));
@@ -430,6 +431,10 @@
             // Roofs palest, then the walls by which way they face, on either paper.
             vec3 face = dot(nV, uUpV) > 0.6 ? ROOF : nV.x < 0.0 ? WALL_L : WALL_R;
             if (dk) face = dot(nV, uUpV) > 0.6 ? vec3(0.3, 0.28, 0.25) : nV.x < 0.0 ? vec3(0.23, 0.21, 0.19) : vec3(0.17, 0.155, 0.14);
+            // Over the faces, a light wash of what the building is made of, so from far off a base reads its age
+            // by its stuff: straw thatch and mud brick, grey stone and red tile, slate and brick.
+            vec3 bMat = clamp(texture2D(tSubj, vUv).rgb * 2.0, 0.0, 1.0);
+            face = mix(face, min(face * (0.5 + 0.62 * bMat), vec3(1.0)), dk ? 0.75 : 0.6);
             base = mix(base, face, isB);
             base = mix(base, dk ? vec3(0.45, 0.46, 0.48) : vec3(0.99), uSnowC * isB * step(0.6, dot(nV, uUpV)));
             // Deer, cars, townsfolk and boats keep their own colours, as a light wash.
@@ -592,10 +597,12 @@
             float dash = length(gd) > 0.02 ? step(0.42, fract(dot(p, normalize(vec2(-gd.y, gd.x))) / (6.5 * uK))) : step(0.35, hash(floor(p / (5.0 * uK)) + 17.0));
             // On dark paper what was keeps its grey a little dimmed, so it does not sink to black.
             vec3 past = dk ? mix(vec3(dot(baseC, vec3(0.3, 0.59, 0.11))), baseC, 0.3) * 0.85 : mix(paperC, baseC, 0.4);
-            // Remembered ore is the brightest thing on dark paper, so it is sunk toward the paper there.
-            if (dk) past = mix(past, paperC * 1.5, oA(vUv) * 0.55);
+            // Remembered ore is the brightest thing on dark paper, so it is sunk toward the paper there, and its many
+            // small rings are dashed lightly on either paper.
+            float oreP = max(max(oA(vUv + k * vec2(1.6, 0)), oA(vUv - k * vec2(1.6, 0))), max(max(oA(vUv + k * vec2(0, 1.6)), oA(vUv - k * vec2(0, 1.6))), oA(vUv)));
+            if (dk) past = mix(past, paperC * 1.5, oreP * 0.55);
             past = mix(past, hue * 0.8, mark * 0.3);
-            past = mix(past, dk ? vec3(0.5, 0.58, 0.74) : WAS, clamp(lineK, 0.0, 1.0) * dash * 0.75);
+            past = mix(past, dk ? vec3(0.5, 0.58, 0.74) : WAS, clamp(lineK, 0.0, 1.0) * dash * 0.75 * (1.0 - 0.6 * oreP));
             col = mix(past, col, visE);
           } else {
             vec3 faded = mix(paperC, col, 0.55);

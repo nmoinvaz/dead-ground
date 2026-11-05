@@ -244,8 +244,9 @@ const World = (() => {
           float n = fract(sin(dot(vUv + fract(uTime), vec2(12.9898, 78.233))) * 43758.5453);
           gl_FragColor = vec4(c + (n - 0.5) * 0.018, 1.0); }` });
       // The units and buildings for the outlines: white where they stand, their side's colour on their markings.
-      const markMat = catRef.mat = new THREE.ShaderMaterial({ uniforms: { uCat: catU, uSwayOn: swayU, uTime: SH.uTime, uWind: SH.uWind }, vertexShader: `
-        attribute float aTeam; varying vec3 vC; varying float vT; uniform float uSwayOn, uTime; uniform vec2 uWind;
+      // A building's own stuff, thatch, tile, stone or brick, goes in at half strength, below any marking's.
+      const markMat = catRef.mat = new THREE.ShaderMaterial({ vertexColors: true, uniforms: { uCat: catU, uSwayOn: swayU, uTime: SH.uTime, uWind: SH.uWind }, vertexShader: `
+        attribute float aTeam; varying vec3 vC; varying vec3 vM; varying float vT; uniform float uSwayOn, uTime; uniform vec2 uWind;
         ${SWAY}
         void main() {
           vec4 p = vec4(position, 1.0);
@@ -258,9 +259,16 @@ const World = (() => {
           #else
             vC = vec3(0.0);
           #endif
+          #ifdef USE_COLOR
+            vM = color;
+          #else
+            vM = vec3(0.0);
+          #endif
           vT = aTeam;
           gl_Position = projectionMatrix * modelViewMatrix * p;
-        }`, fragmentShader: `uniform float uCat; varying vec3 vC; varying float vT; void main() { vec3 c = uCat > 0.6 ? vC * (vT > 0.9 ? 1.0 : uCat > 0.9 ? 0.45 : 0.0) : uCat > 0.52 && uCat < 0.58 ? vec3(0.5, 0.4, 0.1) : vec3(0.0); gl_FragColor = vec4(c, uCat); }` });
+        }`, fragmentShader: `uniform float uCat; varying vec3 vC; varying vec3 vM; varying float vT; void main() { vec3 c = uCat > 0.6 ? vC * (vT > 0.9 ? 1.0 : uCat > 0.9 ? 0.45 : 0.0) : uCat > 0.52 && uCat < 0.58 ? vec3(0.5, 0.4, 0.1) : vec3(0.0);
+          if (uCat > 0.7 && uCat < 0.8 && vT <= 0.9) c = vM * 0.5;
+          gl_FragColor = vec4(c, uCat); }` });
       // Surface direction and distance of everything drawn in line, for the lines inside a shape.
       const normMat = catRef.norm = new THREE.ShaderMaterial({ uniforms: { uSwayOn: swayU, uTime: SH.uTime, uWind: SH.uWind }, vertexShader: `
         varying vec3 vN; varying float vD; uniform float uSwayOn, uTime; uniform vec2 uWind;
@@ -381,7 +389,8 @@ const World = (() => {
       }
       let paperTex = null;
       // The kit a look draws with. Buffers are drawn when asked for:
-      //   mask()   units, buildings and scenery in their line categories (alpha), white with the sides' markings
+      //   mask()   units, buildings and scenery in their line categories (alpha), with the sides' markings, and a
+      //            building's own colours at half strength
       //   norm()   surface direction and view distance of everything drawn in line
       //   fog()    the land alone: visible, seen, height + 20, scars and tread marks
       //   land()   the land alone: road distance, cloud shadow, fog banks, track hardness
