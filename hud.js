@@ -1,0 +1,1494 @@
+// Dead Ground, the commander's desk. The sidebar, the minimap, what is drawn over the picture, and
+// every way of giving an order, by mouse, keys or fingers.
+const Hud = (() => {
+  const { HZ, UNITS, BUILDINGS, TECH, POWERS, clamp, terrainAt } = Rules;
+  // The map's size is read from the world being shown, since a duel and the shared world differ.
+  let W = 128, H = 128;
+  // Each slot's colour on the overlay and its plate behind a pictogram, light enough to read on dark ground.
+  const SLOT_CSS = ['#6fb0ff', '#ff7a60', '#6fd47f', '#b98af0', '#ffae52', '#4fd8d4', '#ff7ac0', '#c99a6c'];
+  const SLOT_PLATE = ['#2f6fd6', '#c8402f', '#2f9a48', '#7a48c8', '#d8781a', '#1c9a98', '#c83c8a', '#7a5230'];
+  const $ = id => document.getElementById(id);
+  const fmt = n => Math.floor(n).toLocaleString('en-US');
+
+  // Tactical map symbols, friendly in a rectangle and hostile in a diamond, as on a real overlay.
+  function symbol(g, x, y, s, sym, hostile, color) {
+    g.save();
+    g.translate(x, y);
+    g.strokeStyle = color; g.lineWidth = Math.max(1, s * 0.1); g.lineJoin = 'round';
+    g.fillStyle = 'rgba(8,10,8,0.62)';
+    const w = s, h = s * 0.68;
+    g.beginPath();
+    if (hostile) { g.moveTo(0, -s * 0.72); g.lineTo(s * 0.85, 0); g.lineTo(0, s * 0.72); g.lineTo(-s * 0.85, 0); g.closePath(); }
+    else g.rect(-w, -h, w * 2, h * 2);
+    g.fill(); g.stroke();
+    const k = hostile ? 0.55 : 0.8, a = w * k, b = h * k;
+    g.beginPath();
+    const cross = () => { g.moveTo(-a, -b); g.lineTo(a, b); g.moveTo(a, -b); g.lineTo(-a, b); };
+    const oval = () => g.ellipse(0, 0, a * 0.72, b * 0.62, 0, 0, 6.3);
+    const dot = r => { g.moveTo(r, 0); g.arc(0, 0, r, 0, 6.3); };
+    switch (sym) {
+      case 'inf': cross(); break;
+      case 'at': cross(); g.moveTo(-a * 0.5, b); g.lineTo(0, -b); g.lineTo(a * 0.5, b); break;
+      case 'eng': g.moveTo(-a, -b * 0.4); g.lineTo(a, -b * 0.4); g.moveTo(-a, -b * 0.4); g.lineTo(-a, b); g.moveTo(0, -b * 0.4); g.lineTo(0, b); g.moveTo(a, -b * 0.4); g.lineTo(a, b); break;
+      case 'snp': cross(); dot(b * 0.3); break;
+      case 'hero': g.moveTo(-a * 0.3, -b); g.lineTo(a * 0.5, -b * 0.1); g.lineTo(-a * 0.1, b * 0.1); g.lineTo(a * 0.3, b); break;
+      case 'sup': case 'sup2': g.moveTo(-a, b * 0.5); g.lineTo(a, b * 0.5); if (sym === 'sup2') { g.moveTo(0, -b); g.lineTo(0, b * 0.2); g.moveTo(-a * 0.4, -b * 0.4); g.lineTo(a * 0.4, -b * 0.4); } break;
+      case 'rec': g.moveTo(-a, b); g.lineTo(a, -b); break;
+      case 'ifv': oval(); g.moveTo(-a * 0.7, 0); g.lineTo(a * 0.7, 0); break;
+      case 'arm': oval(); break;
+      case 'hvy': oval(); g.moveTo(-a * 0.36, -b * 0.5); g.lineTo(-a * 0.36, b * 0.5); g.moveTo(a * 0.36, -b * 0.5); g.lineTo(a * 0.36, b * 0.5); break;
+      case 'aa': g.arc(0, b * 0.9, b * 1.3, Math.PI * 1.15, Math.PI * 1.85); break;
+      case 'art': dot(b * 0.36); break;
+      case 'hel': g.moveTo(-a, -b); g.lineTo(a, b); g.lineTo(a, -b); g.lineTo(-a, b); g.closePath(); break;
+      case 'jet': g.moveTo(0, -b); g.lineTo(a, b * 0.6); g.lineTo(0, b * 0.1); g.lineTo(-a, b * 0.6); g.closePath(); break;
+      case 'uav': g.moveTo(-a, -b * 0.6); g.lineTo(0, b * 0.6); g.lineTo(a, -b * 0.6); break;
+      case 'par': g.arc(0, 0, a * 0.7, Math.PI, 0); g.moveTo(-a * 0.7, 0); g.lineTo(0, b); g.lineTo(a * 0.7, 0); break;
+      default: g.rect(-a * 0.5, -b * 0.5, a, b);
+    }
+    g.stroke();
+    g.restore();
+  }
+
+  // How far round a clicked enemy the marking reaches, in cells.
+  const STRIKE_R = 6;
+
+  // Small pictures of each kind of unit, white on a plate of the side's colour, for when the models are too small.
+  function picto(g, x, y, s, sym, col, alpha) {
+    g.save();
+    g.globalAlpha = alpha;
+    g.translate(x, y);
+    const w = s * 1.15, h = s * 0.82, r = s * 0.22;
+    g.fillStyle = col; g.strokeStyle = 'rgba(20,16,12,0.9)'; g.lineWidth = Math.max(1, s * 0.09);
+    g.beginPath(); g.roundRect ? g.roundRect(-w, -h, w * 2, h * 2, r) : g.rect(-w, -h, w * 2, h * 2); g.fill(); g.stroke();
+    g.fillStyle = '#fff'; g.strokeStyle = '#fff'; g.lineCap = 'round'; g.lineJoin = 'round';
+    const u = s / 10;
+    g.scale(u, u);
+    g.lineWidth = 1.4;
+    const box = (a, b, c, d) => g.fillRect(a, b, c, d);
+    const ln = (pts) => { g.beginPath(); pts.forEach((p, i) => i ? g.lineTo(p[0], p[1]) : g.moveTo(p[0], p[1])); g.stroke(); };
+    const dot = (a, b, rr) => { g.beginPath(); g.arc(a, b, rr, 0, 6.3); g.fill(); };
+    const man = (dx = 0) => { dot(dx, -4.6, 1.5); ln([[dx, -3], [dx, 2]]); ln([[dx, 2], [dx - 1.8, 6]]); ln([[dx, 2], [dx + 1.8, 6]]); ln([[dx - 2.2, -1], [dx + 2.2, -1]]); };
+    switch (sym) {
+      case 'inf': man(-2.5); man(2.5); ln([[-0.5, -2.5], [4.5, -4.5]]); break;
+      case 'at': man(-1); g.lineWidth = 2.2; ln([[-5, -3.5], [5, -1.5]]); break;
+      case 'eng': man(0); ln([[2.5, 0], [6, -3.5]]); ln([[5, -4.5], [7, -2.5]]); break;
+      case 'snp': man(-1.5); ln([[0, -1.6], [8, -3.6]]); dot(3, -3, 1); break;
+      case 'hero': g.beginPath(); for (let i = 0; i < 10; i++) { const a = -Math.PI / 2 + i * Math.PI / 5, rr = i % 2 ? 2.6 : 6; g.lineTo(Math.cos(a) * rr, Math.sin(a) * rr); } g.fill(); break;
+      case 'sup': box(-7, -3, 9, 5); box(2.5, -1, 4.5, 3); dot(-4.5, 3.5, 1.6); dot(4, 3.5, 1.6); break;
+      case 'sup2': box(-7, -3, 9, 5); box(2.5, -1, 4.5, 3); dot(-4.5, 3.5, 1.6); dot(4, 3.5, 1.6); g.fillStyle = col; box(-4, -2.4, 3, 0.9); box(-3, -3.4, 0.9, 3); break;
+      case 'rec': box(-6, -1.5, 12, 4); box(-2.5, -4, 4, 2.5); ln([[0, -3], [6, -4]]); dot(-3.5, 3.5, 1.5); dot(3.5, 3.5, 1.5); break;
+      case 'ifv': box(-6.5, -2, 13, 4.5); box(-2, -4.5, 4, 2.5); ln([[1, -3.5], [7, -3.5]]); for (const xx of [-4.5, -1.5, 1.5, 4.5]) dot(xx, 3.6, 1.2); break;
+      case 'arm': box(-7, -0.5, 14, 4); box(-3.5, -3.5, 6, 3); ln([[2, -2], [8.5, -2]]); break;
+      case 'hvy': box(-7.5, -0.5, 15, 4.5); box(-4, -4, 7, 3.5); ln([[2, -3], [9, -3]]); ln([[2, -1.5], [9, -1.5]]); break;
+      case 'aa': box(-6.5, 0, 13, 3.5); box(-2.5, -2.5, 5, 2.5); ln([[0, -2], [5, -7]]); ln([[1.5, -2], [6.5, -7]]); break;
+      case 'art': box(-7, 0, 14, 3); dot(-4.5, 4, 1.4); dot(4.5, 4, 1.4); g.save(); g.rotate(-0.45); box(-5, -4.5, 9, 3.5); g.restore(); break;
+      case 'uav': ln([[-5, -4], [5, 4]]); ln([[5, -4], [-5, 4]]); for (const [a, b] of [[-5, -4], [5, 4], [5, -4], [-5, 4]]) dot(a, b, 1.6); break;
+      case 'hel': ln([[-7.5, -4], [7.5, -4]]); ln([[0, -4], [0, -2]]); g.beginPath(); g.ellipse(1, 0.5, 4, 2.4, 0, 0, 6.3); g.fill(); ln([[-2.5, 0.5], [-7.5, -1.5]]); break;
+      case 'jet': g.beginPath(); g.moveTo(7.5, 0); g.lineTo(-5, -6); g.lineTo(-3, 0); g.lineTo(-5, 6); g.closePath(); g.fill(); break;
+      default: box(-4, -4, 8, 8);
+    }
+    g.restore();
+  }
+  const SHORT = { hq: 'HQ', power: 'PWR', refinery: 'ORE', barracks: 'BAR', factory: 'FAC', radar: 'RAD', airfield: 'AIR', fob: 'FOB', derrick: 'OIL', silo: 'SILO', bunker: 'MG', atgun: 'AT', sam: 'SAM', rail: 'RAIL' };
+
+  function create(world, game) {
+    // Whether the look draws the overlay in ink: inked effects, ghost plans and the map key.
+    const inked = () => world.style.hud === 'ink';
+    const view = $('view'), gl = $('gl'), ov = $('ov'), og = ov.getContext('2d');
+    const mini = $('map'), mg = mini.getContext('2d');
+    const state = {
+      tab: 'bld', sel: [], groups: {}, mode: null, drag: null, hover: null, hoverTown: -1, alerts: [], marks: [], lastAlert: null, attackMove: false, tipKind: null, seenTabs: {},
+      keys: new Set(), mouse: { x: 0, y: 0, in: false }, touches: new Map(), pinch: null, lastTap: 0, cams: {}, cameos: {}, hintShown: 0, side: 0, touchUsed: false, ping: 0,
+    };
+    const S = () => game.S, team = () => Math.max(0, game.team), P = () => game.S.P[team()];
+
+    const TABS = [
+      { id: 'bld', label: 'Base', key: 'Z' }, { id: 'def', label: 'Guns', key: 'X' }, { id: 'inf', label: 'Men', key: 'C' },
+      { id: 'veh', label: 'Armor', key: 'V' }, { id: 'air', label: 'Air', key: 'B' }, { id: 'pow', label: 'Calls', key: 'N' },
+    ];
+    // Everything a side may come to build; the sidebar shows what its age has opened.
+    const ALL = {
+      bld: ['power', 'refinery', 'barracks', 'factory', 'radar', 'derrick', 'fob', 'airfield', 'silo'],
+      def: ['bunker', 'atgun', 'sam', 'rail'],
+      pow: ['tech', 'uav', 'barrage', 'para', 'launch'],
+    };
+    const LISTS = { bld: [], def: [], inf: [], veh: [], air: [], pow: [] };
+    const KEYS = 'QWERTYUIO';
+    // The cards show only what the side's age has opened: one card for each line, in its form for that age, and
+    // the buildings, defences and calls of that age.
+    const sameLine = (a, b) => a === b || (!!UNITS[a] && !!UNITS[b] && UNITS[a].line === UNITS[b].line);
+    let listAge = 0;
+    function lineLists(age) {
+      if (age === listAge) return;
+      listAge = age;
+      for (const cat of ['inf', 'veh', 'air']) LISTS[cat] = Rules.LINE_ORDER[cat].map(l => Rules.formOf(l, age)).filter(Boolean);
+      const opened = k => k === 'tech' || ((k === 'launch' ? BUILDINGS.silo : BUILDINGS[k] || POWERS[k]).tech || 1) <= age;
+      for (const cat in ALL) LISTS[cat] = ALL[cat].filter(opened);
+    }
+
+    const tabs = $('tabs');
+    TABS.forEach(t => {
+      const b = document.createElement('button');
+      b.id = 'tab-' + t.id; b.className = 'tab'; b.innerHTML = `<span>${t.label}</span><i></i>`;
+      b.title = `${t.label} (${t.key})`;
+      b.addEventListener('click', () => { pickTab(t.id); game.audio.ui('click'); });
+      tabs.appendChild(b);
+    });
+    function pickTab(id) {
+      state.tab = id;
+      lineLists(P() ? P().tech : 1);
+      for (const t of TABS) $('tab-' + t.id).classList.toggle('on', t.id === id);
+      buildCams();
+    }
+
+    function camInfo(k) {
+      if (k === 'tech') { const lv = P().tech + 1, d = TECH[lv]; return d ? { name: 'To the ' + d.name, cost: d.cost, oil: d.oil, note: d.note + ' Every unit you have takes its new form.', sym: 'hq', time: d.time } : { name: 'The last age', note: 'Every age is reached.', sym: 'hq' }; }
+      if (k === 'launch') return { name: 'Launch Missile', note: 'Fire the silo at any point on the map.', sym: 'sil' };
+      const d = POWERS[k] || UNITS[k] || BUILDINGS[k];
+      // Buildings and calls go by their age's names.
+      return d && d.names ? Object.assign({}, d, { name: Rules.nameOf(k, P() ? P().tech : 1) }) : d;
+    }
+
+    const axoImg = k => (state.cameos[k] || '').startsWith('data:image/svg') ? ' class="axo"' : '';
+    function buildCams() {
+      const box = $('cams');
+      box.textContent = '';
+      state.cams = {};
+      LISTS[state.tab].forEach((k, i) => {
+        const b = document.createElement('button'), info = camInfo(k), img = state.cameos[k];
+        b.className = 'cam'; b.dataset.kind = k;
+        b.innerHTML = `<canvas width="4" height="3"></canvas><b class="nm"></b><em class="ct"></em><u class="qty"></u><s class="key">${KEYS[i]}</s><span class="state"></span>`;
+        b.querySelector('.nm').textContent = info.name;
+        const c = b.querySelector('canvas');
+        if (img) b.style.setProperty('--img', `url(${img})`);
+        else { c.width = 132; c.height = 88; symbol(c.getContext('2d'), 66, 44, 26, info.sym, false, '#e8d9a8'); b.style.setProperty('--img', `url(${c.toDataURL()})`); }
+        // A unit's line drawing is already in the look's inks, so it is laid on as it is.
+        if (img && img.startsWith('data:image/svg')) b.classList.add('axo');
+        c.remove();
+        b.addEventListener('click', e => { e.preventDefault(); camClick(k, e.shiftKey ? 5 : 1); });
+        b.addEventListener('contextmenu', e => { e.preventDefault(); camCancel(k); });
+        b.addEventListener('pointerenter', () => { state.tipKind = k; drawTip(); });
+        b.addEventListener('pointerleave', () => { if (state.tipKind === k) { state.tipKind = null; drawTip(); } });
+        // A held finger cancels, as a right click does.
+        let hold = 0;
+        b.addEventListener('pointerdown', e => { if (e.pointerType === 'touch') { state.tipKind = k; drawTip(); hold = setTimeout(() => { camCancel(k); hold = -1; }, 500); } });
+        for (const ev of ['pointerup', 'pointercancel']) b.addEventListener(ev, () => { if (hold > 0) clearTimeout(hold); });
+        box.appendChild(b);
+        state.cams[k] = b;
+      });
+      updateCams(true);
+    }
+
+    function queueOf(k) {
+      const d = UNITS[k] || BUILDINGS[k];
+      return d && d.cat ? P().q[d.cat] : null;
+    }
+
+    function camClick(k, n = 1) {
+      const s = S(), t = team(), p = P();
+      if (s.over) return;
+      if (k === 'tech') { if (p.q.tech.length) return; if (TECH[p.tech + 1]) { game.order(s, t, { c: 'research' }); game.audio.ui('click'); } return; }
+      if (k === 'launch') { const si = s.ents.find(e => e.b && e.team === t && e.kind === 'silo' && e.charge >= e.d.charge); if (si) enter({ type: 'launch' }); return; }
+      if (POWERS[k]) {
+        const d = POWERS[k];
+        if (p.cooldown[k] > 0 || p.tech < d.tech || !p.counts.radar || p.supply < d.cost) { game.audio.ui('deny'); return; }
+        enter({ type: 'power', name: k });
+        return;
+      }
+      const why = Rules.blockedReason(s, t, k), q = queueOf(k);
+      if (BUILDINGS[k]) {
+        const head = q[0];
+        if (head && head.kind === k && head.prog >= 1) { enter({ type: 'place', kind: k }); return; }
+        if (head && head.kind === k) { game.order(s, t, { c: 'hold', cat: BUILDINGS[k].cat, i: 0 }); return; }
+        if (head) { say('One structure at a time. Place or cancel the current one.'); game.audio.ui('deny'); return; }
+        if (why) { say(why + '.'); game.audio.ui('deny'); return; }
+        game.order(s, t, { c: 'build', kind: k });
+        game.audio.ui('click');
+        return;
+      }
+      if (why) { say(why + '.'); game.audio.ui('deny'); return; }
+      for (let i = 0; i < n; i++) game.order(s, t, { c: 'train', kind: k });
+      game.audio.ui('click');
+    }
+    function camCancel(k) {
+      const q = queueOf(k);
+      if (!q) return;
+      for (let i = q.length - 1; i >= 0; i--) if (sameLine(q[i].kind, k)) { game.order(S(), team(), { c: 'cancel', cat: (UNITS[k] || BUILDINGS[k]).cat, i }); game.audio.ui('click'); return; }
+    }
+
+    let camClock = 0;
+    function updateCams(force) {
+      const now = performance.now();
+      if (!force && now - camClock < 110) return;
+      camClock = now;
+      if (!S()) return;
+      const s = S(), t = team(), p = P();
+      for (const k in state.cams) {
+        const b = state.cams[k], st = b.querySelector('.state'), qty = b.querySelector('.qty'), ct = b.querySelector('.ct');
+        const info = camInfo(k);
+        let off = false, ready = false, prog = 0, label = '', count = 0;
+        if (k === 'tech') {
+          const q = p.q.tech[0];
+          off = !TECH[p.tech + 1];
+          if (q) { prog = q.prog; label = 'RESEARCH'; }
+          b.querySelector('.nm').textContent = info.name;
+        } else if (k === 'launch') {
+          const si = s.ents.find(e => e.b && e.team === t && e.kind === 'silo');
+          off = !si; if (si) { prog = si.charge / si.d.charge; ready = prog >= 1; if (ready) prog = 0; label = ready ? 'FIRE' : si ? Math.ceil(si.d.charge - si.charge) + 's' : ''; }
+        } else if (POWERS[k]) {
+          const cd = p.cooldown[k], d = POWERS[k];
+          off = !p.counts.radar || p.tech < d.tech;
+          if (cd > 0) { prog = 1 - cd / d.cd; label = Math.ceil(cd) + 's'; }
+        } else {
+          off = !!Rules.blockedReason(s, t, k);
+          const q = queueOf(k);
+          for (const it of q) if (sameLine(it.kind, k)) count++;
+          const head = q[0];
+          if (head && sameLine(head.kind, k)) { prog = head.prog; if (head.prog >= 1 && BUILDINGS[k]) { ready = true; prog = 0; label = 'READY'; } else if (head.hold) label = 'HOLD'; else if (head.short) label = 'FUNDS'; }
+          else if (head && BUILDINGS[k]) off = true;
+          if (count) off = false;
+        }
+        b.classList.toggle('off', off);
+        b.classList.toggle('ready', ready);
+        b.style.setProperty('--p', (prog * 360).toFixed(1) + 'deg');
+        b.classList.toggle('busy', prog > 0);
+        if (st.textContent !== label) st.textContent = label;
+        const show = count > 1 && UNITS[k] ? count : '';
+        if (qty.textContent !== String(show)) qty.textContent = show;
+        const price = info.cost ? '$' + info.cost + (info.oil ? ' · ' + info.oil + ' oil' : '') : '';
+        if (ct.textContent !== price) ct.textContent = price;
+      }
+      // A tab with something ready shows a light.
+      for (const c of ['bld', 'def']) $('tab-' + c).classList.toggle('lit', !!(p.q[c][0] && p.q[c][0].prog >= 1));
+      const silo = s.ents.some(e => e.b && e.team === t && e.kind === 'silo' && e.charge >= e.d.charge);
+      $('tab-pow').classList.toggle('lit', silo);
+      drawTip();
+    }
+
+    function drawTip() {
+      const tip = $('tip'), k = state.tipKind;
+      if (!k) { if (tip.dataset.k) { tip.dataset.k = ''; tip.innerHTML = '<p class="idle">Hover a picture for what it does.</p>'; } return; }
+      const info = camInfo(k), why = UNITS[k] || BUILDINGS[k] ? Rules.blockedReason(S(), team(), k) : null;
+      const html = `<h3>${info.name}</h3><p class="price">${info.cost ? '$' + info.cost : ''}${info.oil ? ' &middot; ' + info.oil + ' oil' : ''}${info.power ? ' &middot; ' + (info.power > 0 ? '+' : '') + info.power + ' power' : ''}</p><p>${info.note || ''}</p>${why ? `<p class="why">${why}</p>` : ''}`;
+      if (tip.innerHTML !== html) tip.innerHTML = html;
+      tip.dataset.k = k;
+    }
+
+    function enter(mode) {
+      state.mode = mode;
+      if (mode.type === 'place') { state.ghost = null; moveGhost(); }
+      view.classList.add('aiming');
+      showBanner(mode.type === 'place' ? `Place ${BUILDINGS[mode.kind].name} inside your border` : mode.type === 'launch' ? 'Pick a target for the missile' : `Pick a spot for ${POWERS[mode.name].name}`, true);
+    }
+    function leave() {
+      state.mode = null; state.attackMove = false;
+      world.setGhost(null);
+      view.classList.remove('aiming');
+      showBanner('');
+    }
+    function moveGhost() {
+      const m = state.mode;
+      if (!m || m.type !== 'place') return;
+      const d = BUILDINGS[m.kind], p = world.pick(state.mouse.x, state.mouse.y);
+      if (!p) return;
+      let x = Math.round(p.x - d.w / 2), y = Math.round(p.y - d.h / 2);
+      if (d.well) {
+        let best = null, bd = 9;
+        for (const w of S().map.wells) { const r = Math.hypot(w.x - p.x, w.y - p.y); if (r < bd) { bd = r; best = w; } }
+        if (best) { x = best.x - 1; y = best.y - 1; }
+      }
+      world.setGhost({ kind: m.kind, x, y, ok: Rules.fits(S(), team(), m.kind, x, y) });
+      state.ghost = { x, y };
+    }
+
+    let bannerText = '';
+    function showBanner(t, stay) {
+      if (t === bannerText) return;
+      bannerText = t;
+      const b = $('banner');
+      b.textContent = t; b.hidden = !t;
+    }
+
+    // Short reports. Each stays at least four seconds so it can be read.
+    function say(text, kind = '') {
+      const log = $('log');
+      for (const c of log.children) if (c.textContent === text) { c.remove(); break; }
+      const d = document.createElement('div');
+      d.className = 'line ' + kind; d.textContent = text;
+      log.appendChild(d);
+      while (log.children.length > 4) log.firstChild.remove();
+      setTimeout(() => d.classList.add('gone'), 5000);
+      setTimeout(() => d.remove(), 5800);
+    }
+
+    function select(list, add) {
+      if (!add) state.sel = [];
+      for (const e of list) if (!state.sel.includes(e)) state.sel.push(e);
+      state.selDirty = true;
+    }
+    const alive = e => e.hp > 0 && S().byId.get(e.id) === e;
+
+    function entAt(px, py) {
+      let best = null, bd = 1e9;
+      for (const o of world.onScreen) {
+        const r = Math.max(13, o.r * 1.15), d = Math.hypot(o.x - px, o.y - py);
+        if (!o.e.b && d < r && d < bd) { bd = d; best = o.e; }
+      }
+      if (best) return best;
+      const p = world.pick(px, py);
+      if (!p) return null;
+      const c = Rules.cellOf(p.x, p.y), id = S().occ[c], e = id ? S().byId.get(id) : null;
+      if (e && (e.team === team() || world.onScreen.some(o => o.e === e))) return e;
+      return null;
+    }
+
+    function clickSelect(px, py, add, dbl) {
+      const e = entAt(px, py);
+      if (dbl && e && !e.b && e.team === team()) {
+        select(world.onScreen.filter(o => o.e.team === team() && o.e.kind === e.kind).map(o => o.e), add);
+        return;
+      }
+      if (e) {
+        if (add && state.sel.includes(e)) { state.sel = state.sel.filter(q => q !== e); state.selDirty = true; return; }
+        select([e], add && e.team === team() && !e.b);
+        if (e.team === team() && !e.b) game.audio.ack(e);
+        if (e.b && e.team === team()) { const tab = e.kind === 'barracks' ? 'inf' : e.kind === 'factory' ? 'veh' : e.kind === 'airfield' ? 'air' : e.kind === 'radar' || e.kind === 'silo' ? 'pow' : e.kind === 'hq' ? 'bld' : null; if (tab && tab !== state.tab) pickTab(tab); }
+      } else if (!add) select([]);
+    }
+
+    function boxSelect(x0, y0, x1, y1, add) {
+      const a = Math.min(x0, x1), b = Math.min(y0, y1), c = Math.max(x0, x1), d = Math.max(y0, y1);
+      let got = world.onScreen.filter(o => !o.e.b && o.e.team === team() && o.x >= a && o.x <= c && o.y >= b && o.y <= d).map(o => o.e);
+      const fighters = got.filter(u => !u.d.cargo);
+      if (fighters.length) got = fighters;
+      select(got, add);
+      if (got.length) game.audio.ack(got[0]);
+    }
+
+    function orderIds() { return state.sel.filter(e => alive(e) && !e.b && e.team === team()).map(e => e.id); }
+    function marker(x, y, color) { state.marks.push({ x, y, t: 0, color }); }
+
+    function smart(px, py, forceAttack) {
+      const s = S(), t = team();
+      if (s.over) return;
+      const ids = orderIds(), g = world.pick(px, py);
+      if (!g) return;
+      const blds = state.sel.filter(e => alive(e) && e.b && e.team === t);
+      if (!ids.length) {
+        if (blds.length) { for (const b of blds) game.order(s, t, { c: 'rally', id: b.id, x: g.x, y: g.y }); marker(g.x, g.y, '#7fe0a0'); game.audio.ui('click'); }
+        return;
+      }
+      const e = entAt(px, py), us = state.sel.filter(u => alive(u) && !u.b);
+      if (e && e.team !== t) {
+        // Marks the enemy and every enemy seen near it. Alt picks the one alone.
+        if (state.alt) game.order(s, t, { c: 'attack', ids, id: e.id });
+        else game.order(s, t, { c: 'strike', ids, id: e.id, x: e.x, y: e.y, r: STRIKE_R });
+        marker(e.x, e.y, '#ff5a40');
+        game.audio.ack(us[0], true);
+        return;
+      }
+      if (e && e.b && e.team === t && us.some(u => u.d.engineer)) { game.order(s, t, { c: 'attack', ids: us.filter(u => u.d.engineer).map(u => u.id), id: e.id }); marker(e.x, e.y, '#7fe0a0'); return; }
+      // A bridge: engineers mend or rebuild it, and an attack order on it brings it down.
+      const bi = e ? -1 : Rules.bridgeAt(s, g.x, g.y);
+      if (bi >= 0) {
+        const st = s.bridges[bi], eng = us.filter(u => u.d.engineer);
+        if (eng.length && !st.fix && (st.hp < Rules.BRIDGE_HP || st.c4)) {
+          game.order(s, t, { c: 'mend', ids: eng.map(u => u.id), i: bi }); marker(g.x, g.y, '#7fe0a0'); game.audio.ack(eng[0]);
+          say(st.hp > 0 ? 'Engineer sent to mend the bridge.' : 'Engineer sent to rebuild the bridge.');
+          return;
+        }
+        if (forceAttack && st.hp > 0) { game.order(s, t, { c: 'bridge', ids, i: bi }); marker(g.x, g.y, '#ff5a40'); game.audio.ack(us[0], true); say('Bringing the bridge down.'); return; }
+      }
+      const town = s.towns.find(n => Math.hypot(n.x - g.x, n.y - g.y) < 3.5);
+      if (town && town.owner !== t && us.some(u => u.d.capture)) {
+        const rest = us.filter(u => !u.d.capture).map(u => u.id);
+        game.order(s, t, { c: 'capture', ids: us.filter(u => u.d.capture).map(u => u.id), town: town.id });
+        if (rest.length) game.order(s, t, { c: 'move', ids: rest, x: g.x, y: g.y, a: true });
+        marker(town.x, town.y, '#ffd34d'); game.audio.ack(us[0]);
+        return;
+      }
+      if (us.every(u => u.d.cargo) && s.ore[Rules.cellOf(g.x, g.y)]) { game.order(s, t, { c: 'harvest', ids, cell: Rules.cellOf(g.x, g.y) }); marker(g.x, g.y, '#ffd34d'); game.audio.ack(us[0]); return; }
+      if (e && e.kind === 'refinery' && us.some(u => u.d.cargo)) { game.order(s, t, { c: 'harvest', ids, cell: -1 }); return; }
+      // Infantry sent near a cover point go to the point itself.
+      const snap = us.some(u => u.d.men) ? tacSnap(s, g.x, g.y) : null;
+      if (snap) { g.x = snap.x; g.y = snap.y; }
+      game.order(s, t, { c: 'move', ids, x: g.x, y: g.y, a: !!forceAttack });
+      marker(g.x, g.y, forceAttack ? '#ffa040' : '#7fe0a0');
+      game.audio.ack(us[0], forceAttack);
+    }
+
+    function useMode(px, py) {
+      const m = state.mode, g = world.pick(px, py);
+      if (!g) return;
+      if (m.type === 'place') {
+        moveGhost();
+        const q = state.ghost;
+        if (q && Rules.fits(S(), team(), m.kind, q.x, q.y)) {
+          game.order(S(), team(), { c: 'place', kind: m.kind, x: q.x, y: q.y });
+          game.audio.ui('place');
+          leave();
+        } else { game.audio.ui('deny'); say('That ground will not take it. Stay inside your border, on flat open ground.'); }
+      } else if (m.type === 'power') {
+        game.order(S(), team(), { c: 'power', name: m.name, x: g.x, y: g.y }); marker(g.x, g.y, '#ffa040'); game.audio.ui('click'); leave();
+      } else if (m.type === 'launch') {
+        game.order(S(), team(), { c: 'launch', x: g.x, y: g.y }); marker(g.x, g.y, '#ff5a40'); leave();
+      } else if (m.type === 'amove') {
+        smart(px, py, true); leave();
+      }
+    }
+
+    // Mouse and touch share one path through pointer events.
+    const rect = () => view.getBoundingClientRect();
+    const local = e => { const r = rect(); return [e.clientX - r.left, e.clientY - r.top]; };
+
+    function down(e) {
+      // The top bar and the notes live inside the view. A press on them is theirs, not the map's.
+      if (e.target !== view && e.target !== gl && e.target !== ov) return;
+      state.alt = e.altKey;
+      if (!game.playing) return;
+      e.preventDefault();
+      game.audio.wake();
+      const [x, y] = local(e);
+      view.setPointerCapture?.(e.pointerId);
+      if (e.pointerType === 'touch') {
+        state.touchUsed = true;
+        state.touches.set(e.pointerId, { x, y, x0: x, y0: y, t: performance.now(), moved: false });
+        if (state.touches.size === 2) {
+          const [a, b] = [...state.touches.values()];
+          state.pinch = { d: Math.hypot(a.x - b.x, a.y - b.y), ang: Math.atan2(b.y - a.y, b.x - a.x), dist: world.cam.dist, yaw: world.cam.yaw };
+          clearTimeout(state.lp); state.drag = null;
+        } else {
+          state.lp = setTimeout(() => {
+            const t = state.touches.get(e.pointerId);
+            if (t && !t.moved && state.touches.size === 1) { state.drag = { x0: t.x, y0: t.y, x1: t.x, y1: t.y, box: true, touch: true }; navigator.vibrate?.(10); }
+          }, 320);
+        }
+        return;
+      }
+      state.mouse.x = x; state.mouse.y = y;
+      // A middle button is a mouse's, so its wheel zooms from here on.
+      if (e.button === 1) { pad = false; state.pan = { x, y, cx: world.cam.x, cy: world.cam.y, yaw: world.cam.yaw }; return; }
+      if (e.button === 2) { if (state.mode) { leave(); return; } state.rdown = { x, y, moved: false }; return; }
+      if (state.mode) { useMode(x, y); return; }
+      state.drag = { x0: x, y0: y, x1: x, y1: y, box: false, add: e.shiftKey };
+    }
+
+    function moveView(dx, dy) {
+      // Screen drag moves the ground under the finger.
+      const c = world.cam, k = c.dist * 2 * Math.tan(13 * Math.PI / 180) / world.vh;
+      const rx = -Math.sin(c.yaw), ry = Math.cos(c.yaw), fx = Math.cos(c.yaw), fy = Math.sin(c.yaw);
+      c.x += (-dx * rx + dy * fx / Math.sin(c.pitchNow || c.pitch)) * k;
+      c.y += (-dx * ry + dy * fy / Math.sin(c.pitchNow || c.pitch)) * k;
+    }
+
+    function move(e) {
+      const [x, y] = local(e);
+      if (e.pointerType === 'touch') {
+        const t = state.touches.get(e.pointerId);
+        if (!t) return;
+        const dx = x - t.x, dy = y - t.y;
+        t.x = x; t.y = y;
+        if (Math.hypot(t.x - t.x0, t.y - t.y0) > 10) { if (!t.moved) clearTimeout(state.lp); t.moved = true; }
+        if (state.touches.size === 2 && state.pinch) {
+          const [a, b] = [...state.touches.values()], d = Math.hypot(a.x - b.x, a.y - b.y), ang = Math.atan2(b.y - a.y, b.x - a.x), c = world.cam;
+          c.dist = clamp(state.pinch.dist * state.pinch.d / d, c.minD, c.maxD);
+          c.yaw = state.pinch.yaw - (ang - state.pinch.ang);
+          moveView(dx / 2, dy / 2);
+          return;
+        }
+        if (state.drag && state.drag.box) { state.drag.x1 = x; state.drag.y1 = y; return; }
+        state.mouse.x = x; state.mouse.y = y;
+        if (state.mode && state.mode.type === 'place') moveGhost();
+        else if (t.moved) moveView(dx, dy);
+        return;
+      }
+      state.mouse.x = x; state.mouse.y = y; state.mouse.in = true;
+      if (state.pan) {
+        const c = world.cam;
+        if (e.altKey || e.ctrlKey) c.yaw = state.pan.yaw + (x - state.pan.x) * 0.006;
+        else { moveView(e.movementX, e.movementY); }
+      }
+      if (state.rdown && Math.hypot(x - state.rdown.x, y - state.rdown.y) > 6) { state.rdown.moved = true; moveView(e.movementX, e.movementY); }
+      if (state.drag) {
+        state.drag.x1 = x; state.drag.y1 = y;
+        if (Math.hypot(x - state.drag.x0, y - state.drag.y0) > 6) state.drag.box = true;
+      }
+      if (state.mode) moveGhost();
+    }
+
+    function up(e) {
+      const [x, y] = local(e);
+      if (e.pointerType === 'touch') {
+        const t = state.touches.get(e.pointerId);
+        state.touches.delete(e.pointerId);
+        clearTimeout(state.lp);
+        if (state.touches.size < 2) state.pinch = null;
+        if (state.drag && state.drag.box) { boxSelect(state.drag.x0, state.drag.y0, state.drag.x1, state.drag.y1); state.drag = null; return; }
+        if (!t || t.moved) return;
+        const now = performance.now(), dbl = now - state.lastTap < 300;
+        state.lastTap = now;
+        if (state.mode) { state.mouse.x = x; state.mouse.y = y; useMode(x, y); return; }
+        const ee = entAt(x, y);
+        // A tap on your own unit selects it. With units chosen, a tap anywhere else is an order.
+        if (ee && ee.team === team()) { clickSelect(x, y, false, dbl); return; }
+        if (orderIds().length) { smart(x, y, state.attackMove); return; }
+        if (state.sel.some(q => q.b && q.team === team())) { select([]); return; }
+        clickSelect(x, y, false, false);
+        return;
+      }
+      if (e.button === 1) { state.pan = null; return; }
+      if (e.button === 2) { const r = state.rdown; state.rdown = null; if (r && !r.moved && !state.mode) smart(x, y); return; }
+      if (state.drag) {
+        const d = state.drag; state.drag = null;
+        if (d.box) boxSelect(d.x0, d.y0, x, y, d.add);
+        else {
+          const now = performance.now(), dbl = now - state.lastTap < 280;
+          state.lastTap = now;
+          clickSelect(x, y, d.add, dbl);
+        }
+      }
+    }
+
+    view.addEventListener('pointerdown', down);
+    view.addEventListener('pointermove', move);
+    view.addEventListener('pointerup', up);
+    view.addEventListener('pointercancel', e => { state.touches.delete(e.pointerId); state.drag = null; state.rdown = null; state.pan = null; });
+    view.addEventListener('pointerleave', () => { state.mouse.in = false; });
+    view.addEventListener('contextmenu', e => e.preventDefault());
+    // Zooms about a screen point, so the ground under the cursor or the fingers stays put.
+    function zoomAt(px, py, factor) {
+      const c = world.cam, before = world.pick(px, py);
+      c.dist = clamp(c.dist * factor, c.minD, c.maxD);
+      world.place();
+      const after = before && world.pick(px, py);
+      if (after) { c.x += before.x - after.x; c.y += before.y - after.y; world.place(); }
+    }
+    // A trackpad pinch reaches Chrome and Firefox as a wheel with ctrl held, and zooms. A two-finger swipe pans. A mouse
+    // wheel zooms by a step a notch. A wheel moves in lines, or on a Mac in fractional accelerated steps, or elsewhere
+    // in whole notches of a hundred or so after a pause. A trackpad moves in whole steps, nearly always with some
+    // sideways movement. A step that shows neither follows the last device seen, and a mouse until a trackpad shows.
+    let pad = false, lastWheel = -1e9;
+    const wheelKind = e => {
+      const now = performance.now(), gap = now - lastWheel;
+      lastWheel = now;
+      if (e.ctrlKey) return 'pinch';
+      if (e.deltaMode !== 0) return (pad = false, 'wheel');
+      if (e.deltaX !== 0 && !e.shiftKey) return (pad = true, 'pad');
+      if (!Number.isInteger(e.deltaY)) return (pad = false, 'wheel');
+      if (Math.abs(e.deltaY) >= 50 && gap > 250) return (pad = false, 'wheel');
+      return pad ? 'pad' : 'wheel';
+    };
+    state.wheelKind = wheelKind;
+    view.addEventListener('wheel', e => {
+      e.preventDefault();
+      if (!game.playing) return;
+      const [x, y] = local(e), kind = wheelKind(e);
+      if (kind === 'pinch') { pad = true; zoomAt(x, y, Math.exp(clamp(e.deltaY, -120, 120) * 0.009)); return; }
+      if (kind === 'pad') { moveView(-e.deltaX, -e.deltaY); if (state.mode) moveGhost(); return; }
+      // A notch zooms a tenth at least, however small the step the system reports for it.
+      const px = e.deltaY * (e.deltaMode === 1 ? 33 : e.deltaMode === 2 ? 400 : 1);
+      if (px) zoomAt(x, y, Math.exp(Math.sign(px) * clamp(Math.abs(px) * 0.0015, 0.1, 0.25)));
+    }, { passive: false });
+    // Safari sends a pinch as gesture events, with a scale since the start and a twist in degrees.
+    let gesture = null;
+    view.addEventListener('gesturestart', e => { e.preventDefault(); trackpad = true; gesture = { dist: world.cam.dist, yaw: world.cam.yaw }; });
+    view.addEventListener('gesturechange', e => {
+      e.preventDefault();
+      if (!gesture || !game.playing) return;
+      const [x, y] = local(e);
+      zoomAt(x, y, gesture.dist / Math.max(0.05, e.scale) / world.cam.dist);
+      world.cam.yaw = gesture.yaw - (e.rotation || 0) * Math.PI / 180;
+    });
+    view.addEventListener('gestureend', e => { e.preventDefault(); gesture = null; });
+    // Outside the picture a pinch would zoom the page itself, which only blurs it.
+    document.addEventListener('wheel', e => { if (e.ctrlKey) e.preventDefault(); }, { passive: false });
+    for (const ev of ['gesturestart', 'gesturechange', 'gestureend']) document.addEventListener(ev, e => e.preventDefault());
+
+    function keyDown(e) {
+      if (e.target && /INPUT|SELECT|TEXTAREA/.test(e.target.tagName)) return;
+      if (!game.playing) { if (e.code === 'Enter' && !$('title').hidden) game.menuEnter(); return; }
+      const k = e.code, s = S(), t = team();
+      state.keys.add(k);
+      if (/^Digit[1-9]$/.test(k)) {
+        const n = k[5];
+        if (e.ctrlKey || e.metaKey) { e.preventDefault(); state.groups[n] = state.sel.filter(alive); say(`Group ${n} set, ${state.groups[n].length} units.`); return; }
+        const g = (state.groups[n] || []).filter(alive);
+        if (g.length) {
+          const again = state.sel.length === g.length && state.sel.every(q => g.includes(q)) && performance.now() - (state.groupT || 0) < 400;
+          state.groupT = performance.now();
+          select(g);
+          if (again) world.focus(g[0].x, g[0].y);
+        }
+        return;
+      }
+      const tabKey = { KeyZ: 'bld', KeyX: 'def', KeyC: 'inf', KeyV: 'veh', KeyB: 'air', KeyN: 'pow' }[k];
+      if (tabKey) { pickTab(tabKey); return; }
+      const slot = { KeyQ: 0, KeyW: 1, KeyE: 2, KeyR: 3, KeyT: 4, KeyY: 5, KeyU: 6, KeyI: 7, KeyO: 8 }[k];
+      if (slot !== undefined) { const c = LISTS[state.tab][slot]; if (c) camClick(c, e.shiftKey ? 5 : 1); return; }
+      if (k === 'KeyA') { if (orderIds().length) enter({ type: 'amove' }), showBanner('Attack-move: click a spot', true); return; }
+      if (k === 'KeyS') { const ids = orderIds(); if (ids.length) game.order(s, t, { c: 'stop', ids }); return; }
+      if (k === 'KeyG') { const b = state.sel.find(q => alive(q) && q.b); if (b) game.order(s, t, { c: 'repair', id: b.id }); return; }
+      if (k === 'Delete') { const b = state.sel.find(q => alive(q) && q.b); if (b) game.order(s, t, { c: 'sell', id: b.id }); return; }
+      if (k === 'Space') { e.preventDefault(); const a = state.lastAlert; if (a) world.focus(a.x, a.y); return; }
+      if (k === 'KeyH') { const hq = s.ents.find(q => q.b && q.team === t && q.kind === 'hq'); if (hq) { world.focus(hq.x, hq.y); select([hq]); } return; }
+      if (k === 'Escape') { if (state.mode) leave(); else if (state.sel.length) select([]); else game.togglePause(); return; }
+      if (k === 'KeyP') { game.togglePause(); return; }
+      if (k === 'KeyM') { game.audio.toggle(); say(game.audio.muted ? 'Sound off.' : 'Sound on.'); return; }
+      if (k === 'KeyF') { game.fullscreen(); return; }
+      if (k === 'KeyK') {
+        const names = ['Lightning crosshatch', 'Noir', 'Stipple', 'Engraving', 'Clean line', 'Scratchboard', 'Ink and wash', 'Crow quill', 'Mixed pen and ink'];
+        game.inkStyle = ((game.inkStyle ?? 8) + 1) % names.length;
+        game.look = 'ink'; world.setLook('ink'); world.setInk(game.inkStyle);
+        say(names[game.inkStyle] + '.');
+        return;
+      }
+      if (k === 'KeyL') {
+        const order = Looks.list(), next = order[(order.findIndex(l => l.name === world.look) + 1) % order.length];
+        game.look = next.name; world.setLook(game.look); if (game.pictures) game.pictures();
+        try { localStorage.setItem('dg-look', game.look); } catch (e) { /* no store */ }
+        say(next.said); return;
+      }
+      if (k === 'Equal' || k === 'NumpadAdd') { game.setSpeed(1); return; }
+      if (k === 'Minus' || k === 'NumpadSubtract') { game.setSpeed(-1); return; }
+      if (k === 'Comma') { world.cam.yaw -= Math.PI / 12; return; }
+      if (k === 'Period') { world.cam.yaw += Math.PI / 12; return; }
+      if (k.startsWith('Arrow')) e.preventDefault();
+    }
+    document.addEventListener('keydown', keyDown);
+    document.addEventListener('keyup', e => state.keys.delete(e.code));
+    window.addEventListener('blur', () => state.keys.clear());
+
+    function scroll(dt) {
+      const c = world.cam, k = c.dist * 1.1 * dt;
+      let dx = 0, dy = 0;
+      const K = state.keys;
+      if (K.has('ArrowLeft')) dx -= 1; if (K.has('ArrowRight')) dx += 1; if (K.has('ArrowUp')) dy += 1; if (K.has('ArrowDown')) dy -= 1;
+      if (state.mouse.in && !state.drag && !state.touchUsed && document.hasFocus()) {
+        const m = state.mouse, e = 8;
+        if (m.x < e) dx -= 1; if (m.x > world.vw - e) dx += 1; if (m.y < e) dy += 1; if (m.y > world.vh - e) dy -= 1;
+      }
+      if (dx || dy) {
+        c.x += (dx * -Math.sin(c.yaw) + dy * Math.cos(c.yaw)) * k;
+        c.y += (dx * Math.cos(c.yaw) + dy * Math.sin(c.yaw)) * k;
+        if (state.mode) moveGhost();
+      }
+    }
+
+    // The picture overlay.
+    // Pen-and-ink motion: stars at muzzles, bursts with action lines at blasts, speed lines behind what is fast.
+    const rnd = (seed, i) => { const v = Math.sin(seed * 12.9898 + i * 78.233) * 43758.5453; return v - Math.floor(v); };
+    function star(x, y, R, seed, n, outer, inner, lines) {
+      og.save(); og.translate(x, y); og.lineJoin = 'round';
+      const pts = r0 => { og.beginPath(); for (let i = 0; i < n * 2; i++) { const a = i / (n * 2) * 6.283 + seed, rr = i % 2 ? r0 * 0.42 : r0 * (0.75 + 0.5 * rnd(seed, i)); og.lineTo(Math.cos(a) * rr, Math.sin(a) * rr); } og.closePath(); };
+      pts(R); og.fillStyle = outer; og.fill(); og.strokeStyle = '#1a1512'; og.lineWidth = Math.max(1, R * 0.08); og.stroke();
+      pts(R * 0.55); og.fillStyle = inner; og.fill();
+      if (lines) {
+        og.strokeStyle = '#1a1512'; og.lineWidth = Math.max(1, R * 0.05); og.lineCap = 'round'; og.beginPath();
+        for (let i = 0; i < lines; i++) { const a = i / lines * 6.283 + seed * 2 + rnd(seed, i + 40) * 0.3, r0 = R * (1.15 + 0.2 * rnd(seed, i + 7)), r1 = r0 + R * (0.4 + 0.5 * rnd(seed, i + 9)); og.moveTo(Math.cos(a) * r0, Math.sin(a) * r0); og.lineTo(Math.cos(a) * r1, Math.sin(a) * r1); }
+        og.stroke();
+      }
+      og.restore();
+    }
+    // Twenty more ways to draw a blast, each from the point, with R the burst's radius on screen, k how far through
+    // its life it is, grow its first swell, seed its own die, and mz true for a muzzle flash. The canvas is already
+    // at the point. Soft ones (WASHY) sit on washed fire and smudged scorch; the rest on white fire and hatching.
+    // On dark paper the overlay is turned over by a filter, so a paper fill would land as a black blot over the
+    // picture's own bright flash. There the blasts leave their paper out and let the flash under them show.
+    let blastDark = false, PAPER_C = '#f3ecdc';
+    const INK_C = '#1a1512', pap = a => blastDark ? 'rgba(0,0,0,0)' : 'rgba(243,236,220,' + a + ')';
+    const WASHY = new Set([2, 4, 6, 11, 12, 16, 17, 18, 19, 22, 26, 30]);
+    const BLAST = {
+      // 5 Woodcut: bold black wedges round a paper core.
+      5(R, k, grow, fade, seed, mz) { const rr = i => rnd(seed, i), n = mz ? 5 : 9; og.fillStyle = INK_C; for (let i = 0; i < n; i++) { const a = i / n * 6.283 + seed, w = 0.18 + 0.12 * rr(i), r0 = R * 0.3, r1 = R * (0.9 + 0.5 * rr(i + 9)) * (0.5 + 0.5 * grow); og.beginPath(); og.moveTo(Math.cos(a - w) * r0, Math.sin(a - w) * r0); og.lineTo(Math.cos(a) * r1, Math.sin(a) * r1); og.lineTo(Math.cos(a + w) * r0, Math.sin(a + w) * r0); og.closePath(); og.fill(); } og.fillStyle = PAPER_C; og.beginPath(); og.arc(0, 0, R * 0.28, 0, 6.283); og.fill(); },
+      // 6 Stipple cloud: dots thickest at the heart, lifting as it goes.
+      6(R, k, grow, fade, seed, mz) { const rr = i => rnd(seed, i), n = mz ? 40 : 260; og.fillStyle = INK_C; for (let i = 0; i < n; i++) { const a = rr(i) * 6.283, d = Math.sqrt(rr(i + 500)) * R * 1.3 * (0.6 + 0.4 * grow); og.globalAlpha = fade * Math.max(0, 1 - d / (R * 1.4)) * 0.9; og.beginPath(); og.arc(Math.cos(a) * d, Math.sin(a) * d * 0.8 - R * 0.4 * k * (0.5 + rr(i + 900)), 0.8 + 1.4 * rr(i + 300), 0, 6.283); og.fill(); } },
+      // 7 Engraved column: nested loops of smoke stacked upward, hatched.
+      7(R, k, grow, fade, seed, mz) { const rr = i => rnd(seed, i), n = mz ? 2 : 5; og.strokeStyle = INK_C; for (let i = 0; i < n; i++) { const t = i / n, cy = -R * (0.2 + 1.3 * t) * (0.4 + 0.6 * k), rx = R * (0.35 + 0.35 * t) * (0.6 + 0.4 * grow), ry = rx * 0.6, cx = (rr(i) - 0.5) * R * 0.3; og.save(); og.lineWidth = Math.max(1, R * 0.015); og.beginPath(); og.ellipse(cx, cy, rx, ry, 0, 0, 6.283); og.stroke(); og.clip(); og.lineWidth = Math.max(0.8, R * 0.01); og.globalAlpha = fade * 0.6; og.beginPath(); for (let h = -rx * 1.5; h < rx * 1.5; h += Math.max(2.5, R * 0.06)) { og.moveTo(cx + h - ry, cy + ry); og.lineTo(cx + h + ry * 0.5, cy - ry); } og.stroke(); og.restore(); } og.globalAlpha = fade; og.fillStyle = PAPER_C; og.beginPath(); og.arc(0, 0, R * 0.25, 0, 6.283); og.fill(); },
+      // 8 Spatter: ink flicked from a brush, streaks that end in drops.
+      8(R, k, grow, fade, seed, mz) { const rr = i => rnd(seed, i), n = mz ? 10 : 44; og.strokeStyle = INK_C; og.fillStyle = INK_C; og.lineCap = 'round'; for (let i = 0; i < n; i++) { const a = rr(i) * 6.283, r0 = R * (0.2 + 0.4 * rr(i + 50)), len = R * (0.3 + 1.2 * rr(i + 100)) * grow, w = Math.max(0.6, R * (0.004 + 0.012 * rr(i + 150))); og.lineWidth = w; og.beginPath(); og.moveTo(Math.cos(a) * r0, Math.sin(a) * r0); og.lineTo(Math.cos(a) * (r0 + len), Math.sin(a) * (r0 + len)); og.stroke(); og.beginPath(); og.arc(Math.cos(a) * (r0 + len), Math.sin(a) * (r0 + len), w * 1.6, 0, 6.283); og.fill(); } },
+      // 9 Shock rings: thin circles running outward, as a diagram of the blast wave.
+      9(R, k, grow, fade, seed, mz) { og.strokeStyle = INK_C; for (let i = 0; i < 3; i++) { og.globalAlpha = fade * (1 - i * 0.25) * (1 - k * 0.5); og.lineWidth = Math.max(0.8, R * (0.02 - 0.005 * i)); og.beginPath(); og.arc(0, 0, R * (0.35 + 0.45 * i) * (0.3 + 0.9 * k), 0, 6.283); og.stroke(); } og.globalAlpha = fade; og.fillStyle = PAPER_C; og.beginPath(); og.arc(0, 0, R * 0.2 * (1 - k * 0.5), 0, 6.283); og.fill(); },
+      // 10 Impact lines: strokes converging on the point from outside, as manga draws a hit.
+      10(R, k, grow, fade, seed, mz) { const rr = i => rnd(seed, i), n = mz ? 8 : 26; og.strokeStyle = INK_C; og.lineCap = 'round'; for (let i = 0; i < n; i++) { const a = i / n * 6.283 + seed + rr(i) * 0.2, r0 = R * (0.5 + 0.3 * rr(i + 7)), r1 = R * (1.4 + 1.2 * rr(i + 13)); og.lineWidth = Math.max(0.6, R * (0.006 + 0.02 * rr(i + 20))); og.beginPath(); og.moveTo(Math.cos(a) * r0, Math.sin(a) * r0); og.lineTo(Math.cos(a) * r1, Math.sin(a) * r1); og.stroke(); } },
+      // 11 Sumi splash: one wet blot with dry-brush flares.
+      11(R, k, grow, fade, seed, mz) { const rr = i => rnd(seed, i); og.fillStyle = 'rgba(30,24,20,0.55)'; og.beginPath(); for (let i = 0; i <= 40; i++) { const a = i / 40 * 6.283, r = R * (0.6 + 0.5 * rr(i % 40 + 3)) * (0.5 + 0.5 * grow); og.lineTo(Math.cos(a) * r, Math.sin(a) * r); } og.closePath(); og.fill(); og.strokeStyle = 'rgba(30,24,20,0.7)'; og.lineCap = 'butt'; for (let i = 0; i < (mz ? 3 : 7); i++) { const a = rr(i + 60) * 6.283, r1 = R * (1.2 + 0.9 * rr(i + 70)); og.lineWidth = Math.max(1, R * 0.05 * (1 - 0.5 * rr(i + 80))); og.setLineDash([Math.max(2, R * 0.05), Math.max(1, R * 0.03 * rr(i + 90))]); og.beginPath(); og.moveTo(Math.cos(a) * R * 0.7, Math.sin(a) * R * 0.7); og.lineTo(Math.cos(a) * r1, Math.sin(a) * r1); og.stroke(); } og.setLineDash([]); },
+      // 12 White-out: the paper bleached round the point, with a faint grey ring.
+      12(R, k, grow, fade, seed, mz) { const g = og.createRadialGradient(0, 0, 0, 0, 0, R * 1.5); g.addColorStop(0, pap(1)); g.addColorStop(0.5, pap(0.9)); g.addColorStop(1, pap(0)); og.fillStyle = g; og.beginPath(); og.arc(0, 0, R * 1.5, 0, 6.283); og.fill(); og.strokeStyle = 'rgba(80,70,60,0.5)'; og.lineWidth = Math.max(1, R * 0.02); og.beginPath(); og.arc(0, 0, R * (0.9 + 0.4 * k), 0, 6.283); og.stroke(); },
+      // 13 Crosshatch blot: a ragged disc of nothing but hatching in three directions.
+      13(R, k, grow, fade, seed, mz) { const rr = i => rnd(seed, i); og.save(); og.beginPath(); for (let i = 0; i <= 30; i++) { const a = i / 30 * 6.283, r = R * (0.75 + 0.3 * rr(i % 30 + 11)) * (0.5 + 0.5 * grow); og.lineTo(Math.cos(a) * r, Math.sin(a) * r); } og.closePath(); og.clip(); og.strokeStyle = INK_C; og.lineWidth = Math.max(0.8, R * 0.012); const sp = Math.max(2.5, R * 0.07); for (const ang of [0.6, 2.0, 1.3]) { og.save(); og.rotate(ang); og.beginPath(); for (let h = -R * 1.5; h <= R * 1.5; h += sp) { og.moveTo(h, -R * 1.5); og.lineTo(h, R * 1.5); } og.stroke(); og.restore(); } og.restore(); if (!mz) { og.fillStyle = PAPER_C; og.beginPath(); og.arc(0, 0, R * 0.2, 0, 6.283); og.fill(); } },
+      // 14 Scribble: a frantic line thrown round the point, rising.
+      14(R, k, grow, fade, seed, mz) { const rr = i => rnd(seed, i), n = mz ? 20 : 70; og.strokeStyle = INK_C; og.lineWidth = Math.max(0.8, R * 0.012); og.beginPath(); og.moveTo(0, 0); for (let i = 0; i < n; i++) { const a = rr(i) * 6.283, d = Math.sqrt(rr(i + 200)) * R * (0.4 + 0.6 * grow); og.lineTo(Math.cos(a) * d, Math.sin(a) * d * 0.8 - R * 0.5 * k); } og.stroke(); },
+      // 15 Debris arcs: dotted paths of fragments flung out, each ending in a lump.
+      15(R, k, grow, fade, seed, mz) { const rr = i => rnd(seed, i), n = mz ? 3 : 8; og.strokeStyle = INK_C; og.fillStyle = INK_C; og.setLineDash([2, Math.max(2, R * 0.04)]); og.lineWidth = Math.max(0.8, R * 0.012); for (let i = 0; i < n; i++) { const a = i / n * 6.283 + seed + rr(i) * 0.4, dist = R * (0.9 + 0.9 * rr(i + 9)) * grow, up = R * (0.5 + 0.6 * rr(i + 19)), ex = Math.cos(a) * dist, ey = Math.sin(a) * dist * 0.6; og.beginPath(); og.moveTo(0, 0); og.quadraticCurveTo(ex * 0.5, ey * 0.5 - up, ex, ey); og.stroke(); og.beginPath(); og.arc(ex, ey, Math.max(1, R * 0.03), 0, 6.283); og.fill(); } og.setLineDash([]); },
+      // 16 Ink bleed: a blot with a fibrous fringe, as ink spreads in wet paper.
+      16(R, k, grow, fade, seed, mz) { const rr = i => rnd(seed, i), n = mz ? 20 : 90, r0 = R * 0.55 * (0.5 + 0.5 * grow); og.fillStyle = 'rgba(40,32,26,0.6)'; og.beginPath(); og.arc(0, 0, r0 * 1.1, 0, 6.283); og.fill(); og.strokeStyle = 'rgba(40,32,26,0.55)'; og.lineWidth = Math.max(0.6, R * 0.008); og.beginPath(); for (let i = 0; i < n; i++) { const a = i / n * 6.283 + rr(i) * 0.1, r1 = r0 + R * (0.1 + 0.5 * rr(i + 40)) * grow; og.moveTo(Math.cos(a) * r0, Math.sin(a) * r0); og.lineTo(Math.cos(a) * r1, Math.sin(a) * r1); } og.stroke(); },
+      // 17 Dust puff: a pale cloud low and wide, outlined, stippled inside, and no fire.
+      17(R, k, grow, fade, seed, mz) { const rr = i => rnd(seed, i), w = R * (1.0 + 0.6 * k), h = R * 0.5; og.fillStyle = pap(0.9); og.strokeStyle = INK_C; og.lineWidth = Math.max(0.8, R * 0.012); og.beginPath(); for (let i = 0; i <= 24; i++) { const a = i / 24 * 6.283, r = 1 + 0.18 * rr(i % 24 + 5); og.lineTo(Math.cos(a) * w * r, Math.sin(a) * h * r - R * 0.15); } og.closePath(); og.fill(); og.stroke(); og.fillStyle = INK_C; for (let i = 0; i < (mz ? 10 : 50); i++) { const a = rr(i + 300) * 6.283, d = Math.sqrt(rr(i + 400)); og.beginPath(); og.arc(Math.cos(a) * d * w * 0.9, Math.sin(a) * d * h * 0.9 - R * 0.15, Math.max(0.5, R * 0.012), 0, 6.283); og.fill(); } },
+      // 18 Halftone: a printed disc of dots, large at the heart and vanishing outward.
+      18(R, k, grow, fade, seed, mz) { og.fillStyle = INK_C; const sp = Math.max(3, R * 0.1), Rm = R * 1.3 * (0.5 + 0.5 * grow); for (let gx = -Rm; gx <= Rm; gx += sp) for (let gy = -Rm; gy <= Rm; gy += sp) { const d = Math.hypot(gx, gy) / Rm; if (d > 1) continue; const r = sp * 0.5 * (1 - d) * (1 - k * 0.5); if (r < 0.4) continue; og.beginPath(); og.arc(gx, gy, r, 0, 6.283); og.fill(); } },
+      // 19 Charcoal smudge: a soft dark cloud with the finger dragged through it.
+      19(R, k, grow, fade, seed, mz) { const rr = i => rnd(seed, i), g = og.createRadialGradient(0, 0, 0, 0, 0, R * 1.2); g.addColorStop(0, 'rgba(50,44,40,0.75)'); g.addColorStop(0.6, 'rgba(50,44,40,0.35)'); g.addColorStop(1, 'rgba(50,44,40,0)'); og.fillStyle = g; og.beginPath(); og.arc(0, 0, R * 1.2, 0, 6.283); og.fill(); og.strokeStyle = 'rgba(50,44,40,0.25)'; og.lineCap = 'round'; og.lineWidth = Math.max(2, R * 0.12); for (let i = 0; i < (mz ? 3 : 9); i++) { const yy = (rr(i) - 0.5) * R * 1.4, len = R * (0.8 + 0.8 * rr(i + 9)); og.beginPath(); og.moveTo(-len * 0.3, yy); og.lineTo(len * 0.9, yy - len * 0.15); og.stroke(); } },
+      // 20 Cracked ground: a web of cracks running out from the point, with a dark heart.
+      20(R, k, grow, fade, seed, mz) { const rr = i => rnd(seed, i), n = mz ? 4 : 9; og.strokeStyle = INK_C; og.lineCap = 'round'; og.lineWidth = Math.max(0.8, R * 0.02); for (let i = 0; i < n; i++) { let a = i / n * 6.283 + seed + rr(i) * 0.3, px = 0, py = 0; og.beginPath(); og.moveTo(0, 0); for (let s2 = 1; s2 <= 4; s2++) { const len = R * (0.25 + 0.25 * rr(i * 7 + s2)) * (0.5 + 0.5 * grow); a += (rr(i * 11 + s2) - 0.5) * 0.8; px += Math.cos(a) * len; py += Math.sin(a) * len * 0.7; og.lineTo(px, py); if (s2 === 2) { const b = a + (rr(i + 50) - 0.5) * 2; og.lineTo(px + Math.cos(b) * len * 0.6, py + Math.sin(b) * len * 0.4); og.moveTo(px, py); } } og.stroke(); } og.fillStyle = INK_C; og.beginPath(); og.arc(0, 0, R * 0.12, 0, 6.283); og.fill(); },
+      // 21 Negative cut: a pool of ink with the burst cut out of it white.
+      21(R, k, grow, fade, seed, mz) { const rr = i => rnd(seed, i); og.fillStyle = INK_C; og.beginPath(); og.arc(0, 0, R * 1.1 * (0.6 + 0.4 * grow), 0, 6.283); og.fill(); og.fillStyle = PAPER_C; og.beginPath(); for (let i = 0; i < 16; i++) { const a = i / 16 * 6.283 + seed, r = i % 2 ? R * 0.3 : R * (0.8 + 0.2 * rr(i)); og.lineTo(Math.cos(a) * r, Math.sin(a) * r); } og.closePath(); og.fill(); },
+      // 22 Spiral smoke: one line unwinding upward from the point.
+      22(R, k, grow, fade, seed, mz) { og.strokeStyle = INK_C; og.lineCap = 'round'; og.lineWidth = Math.max(0.8, R * 0.012); og.beginPath(); for (let i = 0; i <= 80; i++) { const t = i / 80, a = t * 2.5 * 6.283 + seed, r = R * (0.1 + 0.6 * t) * (0.5 + 0.5 * grow); og.lineTo(Math.cos(a) * r, Math.sin(a) * r * 0.5 - R * 1.6 * t * k); } og.stroke(); },
+      // 23 Flames in line: tongues drawn in outline alone, no fill.
+      23(R, k, grow, fade, seed, mz) { const rr = i => rnd(seed, i), n = mz ? 2 : 5; og.strokeStyle = INK_C; og.lineWidth = Math.max(0.8, R * 0.015); for (let i = 0; i < n; i++) { const bx = (n > 1 ? i / (n - 1) - 0.5 : 0) * R * 1.1, h = R * (0.8 + 0.7 * rr(i + 3 + Math.floor(k * 6))), w = R * 0.25; og.beginPath(); og.moveTo(bx - w, 0); og.quadraticCurveTo(bx - w * 0.6, -h * 0.5, bx + (rr(i + 30) - 0.5) * w, -h); og.quadraticCurveTo(bx + w * 0.7, -h * 0.4, bx + w, 0); og.stroke(); } },
+      // 25 Hergé cloud: a cumulus of round puffs under one clean outline, growing and lifting.
+      25(R, k, grow, fade, seed, mz) { const rr = i => rnd(seed, i), n = mz ? 3 : 8, cs = []; for (let i = 0; i < n; i++) { const a = rr(i) * 6.283, d = R * 0.45 * Math.sqrt(rr(i + 9)) * (0.4 + 0.6 * grow); cs.push([Math.cos(a) * d, Math.sin(a) * d * 0.7 - R * 0.5 * k, R * (0.28 + 0.3 * rr(i + 19)) * (0.5 + 0.5 * grow)]); } og.strokeStyle = INK_C; og.lineWidth = Math.max(2, R * 0.03); for (const [x, y, r] of cs) { og.beginPath(); og.arc(x, y, r, 0, 6.283); og.stroke(); } og.fillStyle = PAPER_C; for (const [x, y, r] of cs) { og.beginPath(); og.arc(x, y, r, 0, 6.283); og.fill(); } },
+      // 26 Akira dome: a thin edge racing outward with the inside bleached, and a second edge behind it.
+      26(R, k, grow, fade, seed, mz) { const r1 = R * (0.3 + 1.4 * k), r2 = R * (0.1 + 1.0 * k); og.fillStyle = pap((0.9 * (1 - k)).toFixed(2)); og.beginPath(); og.arc(0, 0, r1, 0, 6.283); og.fill(); og.strokeStyle = INK_C; og.lineWidth = Math.max(0.8, R * 0.012); og.beginPath(); og.arc(0, 0, r1, 0, 6.283); og.stroke(); og.globalAlpha = fade * 0.5; og.beginPath(); og.arc(0, 0, r2, 0, 6.283); og.stroke(); },
+      // 27 Kirby krackle: a ring of black dots of every size round a paper core.
+      27(R, k, grow, fade, seed, mz) { const rr = i => rnd(seed, i), n = mz ? 10 : 40; og.fillStyle = PAPER_C; og.beginPath(); og.arc(0, 0, R * 0.45 * grow, 0, 6.283); og.fill(); og.fillStyle = INK_C; for (let i = 0; i < n; i++) { const a = rr(i) * 6.283, d = R * (0.5 + 0.75 * rr(i + 50)) * grow, r = R * (0.03 + 0.09 * rr(i + 100) * rr(i + 100)); og.beginPath(); og.arc(Math.cos(a) * d, Math.sin(a) * d * 0.9, r, 0, 6.283); og.fill(); } },
+      // 28 Callot smoke: small spirals piled above the point, as the old battle etchings curl their smoke.
+      28(R, k, grow, fade, seed, mz) { const rr = i => rnd(seed, i), n = mz ? 2 : 7; og.strokeStyle = INK_C; og.lineWidth = Math.max(0.8, R * 0.012); og.lineCap = 'round'; for (let i = 0; i < n; i++) { const cx = (rr(i) - 0.5) * R * 1.1, cy = -R * (0.1 + 0.9 * rr(i + 9)) * (0.3 + 0.7 * k) - R * 0.3 * k, sr = R * (0.12 + 0.16 * rr(i + 19)) * (0.5 + 0.5 * grow), dirn = rr(i + 29) < 0.5 ? 1 : -1; og.beginPath(); for (let j = 0; j <= 30; j++) { const t = j / 30, a = dirn * t * 2.2 * 6.283, r = sr * (0.15 + 0.85 * t); og.lineTo(cx + Math.cos(a) * r, cy + Math.sin(a) * r * 0.8); } og.stroke(); } og.fillStyle = PAPER_C; og.beginPath(); og.arc(0, 0, R * 0.2, 0, 6.283); og.fill(); },
+      // 29 Mignola cut: one flat black jagged shape with a white jag cut inside it.
+      29(R, k, grow, fade, seed, mz) { const rr = i => rnd(seed, i), jag = (rad, off, fill) => { og.fillStyle = fill; og.beginPath(); for (let i = 0; i < 14; i++) { const a = i / 14 * 6.283 + seed, r = rad * (i % 2 ? 0.55 : 0.85 + 0.3 * rr(i + off)); og.lineTo(Math.cos(a) * r, Math.sin(a) * r); } og.closePath(); og.fill(); }; jag(R * 1.1 * (0.5 + 0.5 * grow), 0, INK_C); jag(R * 0.55 * (0.5 + 0.5 * grow), 30, PAPER_C); },
+      // 30 Effects bloom: a flash, then a crown with a scalloped edge on a stem, then puffs that part and go.
+      30(R, k, grow, fade, seed, mz) { const rr = i => rnd(seed, i); og.strokeStyle = INK_C; og.lineWidth = Math.max(1, R * 0.015); if (k < 0.12) { og.fillStyle = PAPER_C; og.beginPath(); og.arc(0, 0, R * 1.3, 0, 6.283); og.fill(); return; } if (k < 0.55) { const t = (k - 0.12) / 0.43, cy = -R * 0.6 * t, cr = R * (0.5 + 0.5 * t); og.fillStyle = PAPER_C; og.beginPath(); for (let i = 0; i < 7; i++) { const a = Math.PI + i / 6 * Math.PI; og.arc(Math.cos(a) * cr * 0.8, cy + Math.sin(a) * cr * 0.6, cr * 0.32, 0, 6.283); } og.fill(); og.beginPath(); for (let i = 0; i < 7; i++) { const a = Math.PI + i / 6 * Math.PI; og.moveTo(Math.cos(a) * cr * 0.8 + cr * 0.32, cy + Math.sin(a) * cr * 0.6); og.arc(Math.cos(a) * cr * 0.8, cy + Math.sin(a) * cr * 0.6, cr * 0.32, 0, 6.283); } og.stroke(); og.beginPath(); og.moveTo(-cr * 0.25, 0); og.lineTo(-cr * 0.2, cy); og.moveTo(cr * 0.25, 0); og.lineTo(cr * 0.2, cy); og.stroke(); return; } const t = (k - 0.55) / 0.45; for (let i = 0; i < (mz ? 2 : 4); i++) { const a = rr(i) * 6.283, d = R * (0.3 + 0.6 * t) * (0.5 + rr(i + 9)), pr = R * 0.3 * (1 - t) * (0.7 + 0.6 * rr(i + 19)); if (pr < 1) continue; const px = Math.cos(a) * d, py = -R * 0.6 - R * 0.8 * t + Math.sin(a) * d * 0.5; og.fillStyle = PAPER_C; og.beginPath(); og.arc(px, py, pr, 0, 6.283); og.fill(); og.beginPath(); og.arc(px, py, pr, 0, 6.283); og.stroke(); } },
+      // 31 Scratch: quick scratchy strokes every way, and bits of debris thrown clear.
+      31(R, k, grow, fade, seed, mz) { const rr = i => rnd(seed, i), n = mz ? 10 : 34; og.strokeStyle = INK_C; og.lineCap = 'round'; for (let i = 0; i < n; i++) { const a = rr(i) * 6.283, d = R * 0.9 * rr(i + 50) * grow, len = R * (0.15 + 0.45 * rr(i + 100)), b = rr(i + 150) * 6.283; og.lineWidth = Math.max(0.6, R * (0.006 + 0.018 * rr(i + 200))); og.beginPath(); og.moveTo(Math.cos(a) * d, Math.sin(a) * d); og.lineTo(Math.cos(a) * d + Math.cos(b) * len, Math.sin(a) * d + Math.sin(b) * len); og.stroke(); } og.fillStyle = INK_C; for (let i = 0; i < (mz ? 3 : 12); i++) { const a = rr(i + 300) * 6.283, d = R * (1.0 + 1.2 * k) * (0.5 + 0.5 * rr(i + 400)); og.beginPath(); og.arc(Math.cos(a) * d, Math.sin(a) * d * 0.8 - R * 0.6 * k * rr(i + 500), Math.max(0.8, R * 0.025), 0, 6.283); og.fill(); } },
+      // 32 Ring and skirt: a thin blast ring running out, a low hatched skirt of dust spreading, and a stem.
+      32(R, k, grow, fade, seed, mz) { og.strokeStyle = INK_C; og.lineWidth = Math.max(0.8, R * 0.012); og.beginPath(); og.arc(0, 0, R * (0.4 + 1.3 * k), 0, 6.283); og.stroke(); const w = R * (0.6 + 0.9 * k), h = w * 0.35; og.save(); og.beginPath(); og.ellipse(0, R * 0.1, w, h, 0, 0, 6.283); og.clip(); og.lineWidth = Math.max(0.6, R * 0.008); og.globalAlpha = fade * 0.7; og.beginPath(); for (let x = -w; x <= w; x += Math.max(2.5, R * 0.06)) { og.moveTo(x - h, R * 0.1 + h); og.lineTo(x + h, R * 0.1 - h); } og.stroke(); og.restore(); og.globalAlpha = fade; og.beginPath(); og.ellipse(0, R * 0.1, w, h, 0, 0, 6.283); og.stroke(); if (!mz) { og.beginPath(); for (let i = -1; i <= 1; i++) { og.moveTo(i * R * 0.12, 0); og.lineTo(i * R * 0.18, -R * (0.6 + 0.6 * k)); } og.stroke(); } },
+      // 24 Fragments: small asterisks flung outward, the pieces of what went up.
+      24(R, k, grow, fade, seed, mz) { const rr = i => rnd(seed, i), n = mz ? 4 : 14; og.strokeStyle = INK_C; og.lineCap = 'round'; og.lineWidth = Math.max(0.8, R * 0.012); for (let i = 0; i < n; i++) { const a = rr(i) * 6.283, d = R * (0.5 + 0.9 * rr(i + 9)) * grow, s2 = R * (0.06 + 0.06 * rr(i + 19)), cx = Math.cos(a) * d, cy = Math.sin(a) * d * 0.8 - R * 0.3 * k; og.beginPath(); for (let j = 0; j < 3; j++) { const b = j * 1.047 + rr(i + 29); og.moveTo(cx - Math.cos(b) * s2, cy - Math.sin(b) * s2); og.lineTo(cx + Math.cos(b) * s2, cy + Math.sin(b) * s2); } og.stroke(); } },
+    };
+    // The cover points the rules hold, one list a map, with a kind and the way each faces.
+    const tacPoints = s => Rules.coverPoints(s.map);
+    const TAC_NAMES = { wall: 'hold the yard corner', bridge: 'hold the bridge end', ford: 'cover the ford', wood: 'lie in the tree line', rock: 'take cover at the rock', crest: 'overwatch from the crest' };
+    function tacSymbol(kind, px, py, r, dir) {
+      og.beginPath();
+      if (kind === 'wall') { og.moveTo(px - r, py + r * 0.2); og.lineTo(px - r, py - r); og.lineTo(px + r * 0.2, py - r); }
+      else if (kind === 'bridge') { og.moveTo(px - r * 0.4, py - r); og.lineTo(px - r * 0.4, py + r); og.moveTo(px + r * 0.4, py - r); og.lineTo(px + r * 0.4, py + r); }
+      else if (kind === 'ford') { og.moveTo(px - r, py); og.quadraticCurveTo(px - r * 0.5, py - r, px, py); og.quadraticCurveTo(px + r * 0.5, py + r, px + r, py); }
+      else if (kind === 'wood') { for (let i = -1; i <= 1; i++) { og.moveTo(px + i * r * 0.7, py + r); og.lineTo(px + i * r * 0.7, py - r * (i ? 0.6 : 1)); } }
+      else if (kind === 'rock') { og.moveTo(px - r, py + r * 0.7); og.lineTo(px, py - r); og.lineTo(px + r, py + r * 0.7); og.closePath(); }
+      else { og.moveTo(px - r, py + r * 0.6); og.lineTo(px, py - r); og.lineTo(px + r, py + r * 0.6); }
+      og.stroke();
+    }
+    // The point an order near the cursor would snap to, within a stride and a half on the land.
+    function tacSnap(s, gx, gy) {
+      let best = null, bd = 1.5;
+      for (const q of tacPoints(s)) { const d = Math.hypot(q.x - gx, q.y - gy); if (d < bd) { bd = d; best = q; } }
+      return best;
+    }
+    // While infantry are chosen, the points near the cursor show, fading with distance. The one the order would
+    // snap to is ringed, the chosen squad's order runs to it, and the order it would be is written beside it.
+    function drawTactical(s, t) {
+      const v = 2, inf = state.sel.filter(e => !e.b && e.team === t && e.d && e.d.men);
+      if (!inf.length || !state.mouse.in || state.mode) return;
+      const pts = tacPoints(s), m = state.mouse, SEP = '#5a4636';
+      let best = null, bd = 1e9;
+      og.save(); og.setLineDash([]); og.lineCap = 'round'; og.lineJoin = 'round';
+      for (const q of pts) {
+        const [px, py] = world.project(q.x, terrainAt(s.map, q.x, q.y) + 0.05, q.y);
+        if (!onView(px, py, 20)) continue;
+        q.px = px; q.py = py;
+        const dm = Math.hypot(px - m.x, py - m.y);
+        if (dm < bd) { bd = dm; best = q; }
+      }
+      for (const q of pts) {
+        if (q.px === undefined || !onView(q.px, q.py, 20)) continue;
+        const dm = Math.hypot(q.px - m.x, q.py - m.y), u = world.ppu(q.x, 0, q.y);
+        let a = 0.85;
+        if (v === 2) { a = 1 - smoothstepJ(u * 5, u * 9, dm); if (a <= 0) continue; }
+        og.globalAlpha = a; og.strokeStyle = SEP; og.lineWidth = 1.4;
+        tacSymbol(q.kind, q.px, q.py, 6, q.dir);
+        og.fillStyle = SEP; og.beginPath(); og.arc(q.px, q.py + 9, 1.2, 0, 6.283); og.fill();
+        if (v === 3) {
+          // The arc the point faces, as a light hatch between two radii.
+          const r = u * 5, a0 = q.dir - 0.6, a1 = q.dir + 0.6;
+          og.save(); og.globalAlpha = a * 0.5; og.beginPath(); og.moveTo(q.px, q.py); og.arc(q.px, q.py, r, a0, a1); og.closePath(); og.clip();
+          og.lineWidth = 0.8; og.beginPath(); for (let h = -r; h <= r; h += 4) { og.moveTo(q.px + h - r, q.py + r); og.lineTo(q.px + h + r, q.py - r); } og.stroke(); og.restore();
+          og.beginPath(); og.arc(q.px, q.py, r, a0, a1); og.stroke();
+        }
+      }
+      og.globalAlpha = 1;
+      const g = world.pick(m.x, m.y), snap = g && tacSnap(s, g.x, g.y);
+      if (snap && snap.px !== undefined) best = snap; else best = null;
+      if (best) {
+        // The snapped point: a dashed ring, the order line from the squad, and what the order would be.
+        og.strokeStyle = PLAN; og.setLineDash([3, 3]); og.lineWidth = 1.5; og.beginPath(); og.arc(best.px, best.py, 13, 0, 6.283); og.stroke();
+        const e = inf[0], [ex, ey] = world.project(e.x, terrainAt(s.map, e.x, e.y) + 0.3, e.y);
+        dotted(); og.strokeStyle = PLAN; og.beginPath(); og.moveTo(ex, ey); og.lineTo(best.px, best.py); og.stroke();
+        og.setLineDash([]); og.font = `italic 14px ${labelFont()}`; og.fillStyle = '#1a1512'; og.textAlign = 'left'; og.textBaseline = 'middle';
+        const label = TAC_NAMES[best.kind], tw = og.measureText(label).width;
+        og.fillStyle = 'rgba(243,236,220,0.9)'; og.fillRect(best.px + 16, best.py - 10, tw + 10, 20);
+        og.fillStyle = '#1a1512'; og.fillText(label, best.px + 21, best.py);
+      }
+      og.restore();
+    }
+    const smoothstepJ = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+    function drawInk(s, t) {
+      // The blasts, in the manner the look asks for: 0 the comic burst, 1 an engraver's rays and scribbled smoke, 2 an
+      // ink blot with flung drops, 3 a plan's dashed circle of the blast, 4 nothing drawn over the scene.
+      blastDark = world.look === 'ink' && document.body.dataset.scheme === 'dark';
+      PAPER_C = blastDark ? 'rgba(0,0,0,0)' : '#f3ecdc';
+      const INKC = '#1a1512', PAPERC = PAPER_C;
+      for (const f of world.inkFx) {
+        // A burst carries the style of what went up; a muzzle flash is always a few rays.
+        const fx = f.k === 'star' ? 1 : f.fx !== undefined ? f.fx : (world.style.fx || 0);
+        if (fx === 4) continue;
+        const [x, y] = world.project(f.x, f.y, f.z);
+        if (x < -60 || y < -60 || x > world.vw + 60 || y > world.vh + 60) continue;
+        const u = world.ppu(f.x, f.y, f.z), k = f.t / f.life, grow = Math.min(1, k / 0.25), fade = k > 0.7 ? 1 - (k - 0.7) / 0.3 : 1;
+        const muzzle = f.k === 'star', R = muzzle ? f.s * u * (0.5 + 0.5 * grow) : Math.min(f.s * u * 0.95, 140) * (0.4 + 0.6 * grow);
+        if (!(R > 0.5)) continue;
+        og.globalAlpha = fade;
+        if (fx === 0) { if (muzzle) star(x, y, R, f.seed, 6, '#ff9a1e', '#ffe680', 0); else star(x, y, R, f.seed, 9, '#e8471c', '#ffd84a', 10); }
+        else if (fx === 1) {
+          og.save(); og.translate(x, y); og.strokeStyle = INKC; og.lineCap = 'round';
+          if (!muzzle) { og.fillStyle = PAPERC; og.beginPath(); og.arc(0, 0, R * 0.32, 0, 6.283); og.fill(); }
+          const n = muzzle ? 4 : 16;
+          for (let i = 0; i < n; i++) {
+            const a = i / n * 6.283 + f.seed + rnd(f.seed, i) * 0.25, r0 = R * (muzzle ? 0.2 : 0.36 + 0.1 * rnd(f.seed, i + 3)), r1 = r0 + R * (muzzle ? 0.9 : 0.5 + 0.9 * rnd(f.seed, i + 9)) * (0.6 + 0.4 * grow);
+            og.lineWidth = Math.max(1, R * (i % 2 ? 0.012 : 0.02)); og.beginPath(); og.moveTo(Math.cos(a) * r0, Math.sin(a) * r0); og.lineTo(Math.cos(a) * r1, Math.sin(a) * r1); og.stroke();
+          }
+          // Smoke as an engraver scribbles it: loops piled above the burst, rising as it dies.
+          if (!muzzle && k > 0.2) {
+            og.lineWidth = Math.max(0.8, R * 0.01); og.globalAlpha = fade * 0.8;
+            for (let i = 0; i < 6; i++) { const q = rnd(f.seed, i + 20), cx = (q - 0.5) * R * 0.9, cy = -R * (0.3 + 0.9 * k) - rnd(f.seed, i + 30) * R * 0.5, rr = R * (0.18 + 0.2 * rnd(f.seed, i + 40)) * (0.5 + k);
+              og.beginPath(); for (let j = 0; j < 3; j++) og.ellipse(cx + (rnd(f.seed, i * 3 + j) - 0.5) * rr * 0.5, cy + (rnd(f.seed, i * 5 + j) - 0.5) * rr * 0.3, rr, rr * 0.7, j, 0, 6.283); og.stroke(); }
+          }
+          og.restore();
+        } else if (fx === 2) {
+          og.save(); og.translate(x, y);
+          const g = og.createRadialGradient(0, 0, 0, 0, 0, R * 1.3);
+          g.addColorStop(0, 'rgba(40,32,26,0.1)'); g.addColorStop(0.35, 'rgba(40,32,26,0.55)'); g.addColorStop(1, 'rgba(40,32,26,0)');
+          og.fillStyle = g; og.beginPath(); og.arc(0, 0, R * 1.3, 0, 6.283); og.fill();
+          if (!muzzle) { og.fillStyle = PAPERC; og.globalAlpha = fade * (1 - grow * 0.6); og.beginPath(); og.arc(0, 0, R * 0.25, 0, 6.283); og.fill(); og.globalAlpha = fade; }
+          og.fillStyle = 'rgba(40,32,26,0.8)';
+          for (let i = 0; i < (muzzle ? 3 : 9); i++) { const a = rnd(f.seed, i) * 6.283, d = R * (1.1 + 0.9 * rnd(f.seed, i + 11)) * grow, rr = R * (0.03 + 0.05 * rnd(f.seed, i + 23)); og.beginPath(); og.arc(Math.cos(a) * d, Math.sin(a) * d, rr, 0, 6.283); og.fill(); }
+          og.restore();
+        } else if (fx === 3) {
+          og.save(); og.translate(x, y); og.strokeStyle = INKC; og.lineWidth = Math.max(1, R * 0.012); og.lineCap = 'butt';
+          og.setLineDash([Math.max(2, R * 0.08), Math.max(2, R * 0.06)]); og.beginPath(); og.arc(0, 0, R, 0, 6.283); og.stroke();
+          if (!muzzle) { og.setLineDash([1, Math.max(2, R * 0.05)]); og.beginPath(); og.arc(0, 0, R * 0.5, 0, 6.283); og.stroke(); }
+          og.setLineDash([]);
+          for (let i = 0; i < 8; i++) { const a = i / 8 * 6.283; og.beginPath(); og.moveTo(Math.cos(a) * R * 0.92, Math.sin(a) * R * 0.92); og.lineTo(Math.cos(a) * R * 1.1, Math.sin(a) * R * 1.1); og.stroke(); }
+          const c = R * 0.14; og.lineWidth = Math.max(1, R * 0.02); og.beginPath(); og.moveTo(-c, -c); og.lineTo(c, c); og.moveTo(c, -c); og.lineTo(-c, c); og.stroke();
+          og.restore();
+        } else if (BLAST[fx]) {
+          og.save(); og.translate(x, y); og.lineJoin = 'round'; og.setLineDash([]);
+          BLAST[fx](R, k, grow, fade, f.seed, muzzle);
+          og.restore();
+        }
+        og.globalAlpha = 1;
+      }
+      // Study 6: pulled back, a unit becomes a plan's tag, a paper plate with a hand letter, square for ours and
+      // a lozenge for theirs, in the side's ink.
+      if (world.style.units === 6 && world.cam.dist > 100) {
+        const TAG = { tank: 'T', heavy: 'H', ifv: 'I', humvee: 'J', truck: 'Tk', flak: 'AA', support: 'S', mlrs: 'R', rifle: 'i', rocket: 'at', engineer: 'e', sniper: 's', hero: 'h', heli: 'He', jet: 'Jt', fpv: 'd' };
+        og.save(); og.setLineDash([]); og.font = `italic 11px ${labelFont()}`; og.textAlign = 'center'; og.textBaseline = 'middle';
+        for (const o of world.onScreen) {
+          const e = o.e; if (e.b || !e.d) continue;
+          const own = e.team === t, c = world.teamCol[Math.max(0, e.team)], ink = own ? '#1f3f8a' : '#8a2a1e', s2 = 8;
+          og.fillStyle = '#f3ecdc'; og.strokeStyle = ink; og.lineWidth = 1.2; og.beginPath();
+          if (own) og.rect(o.x - s2, o.y - s2 * 0.7, s2 * 2, s2 * 1.4); else { og.moveTo(o.x, o.y - s2); og.lineTo(o.x + s2 * 1.2, o.y); og.lineTo(o.x, o.y + s2); og.lineTo(o.x - s2 * 1.2, o.y); og.closePath(); }
+          og.fill(); og.stroke(); og.fillStyle = ink; og.fillText(TAG[e.kind] || '?', o.x, o.y + 0.5);
+        }
+        og.restore();
+      }
+      if (world.cam.dist > 140) return;
+      og.strokeStyle = 'rgba(26,21,18,0.75)'; og.lineCap = 'round';
+      for (const o of world.onScreen) {
+        const e = o.e;
+        if (e.b || !e.d) continue;
+        const air = Rules.isAir(e), fast = e.d.move === 'jet' ? e.z > 1 : e.d.kamikaze ? true : air ? e.v > 3 : e.v > 3.6;
+        if (!fast) continue;
+        const h = Rules.heightAt(s.map, Rules.clamp(e.x, 0, W), Rules.clamp(e.y, 0, H)) + (air ? e.z : 0.5);
+        const L = 1.2 + e.v * 0.12, [bx, by] = world.project(e.x - Math.cos(e.a) * L, h, e.y - Math.sin(e.a) * L), [ax, ay] = world.project(e.x, h, e.y);
+        let dx = bx - ax, dy = by - ay; const len = Math.hypot(dx, dy) || 1; dx /= len; dy /= len;
+        const nx = -dy, ny = dx, r = Math.max(5, o.r * 0.8);
+        og.lineWidth = 1.3; og.beginPath();
+        for (let i = -1; i <= 1; i++) {
+          const sx = o.x + dx * r + nx * i * r * 0.55, sy = o.y + dy * r + ny * i * r * 0.55, ln = len * (0.7 + 0.3 * rnd(e.id, i + Math.floor(performance.now() / 120)));
+          og.moveTo(sx, sy); og.lineTo(sx + dx * ln, sy + dy * ln);
+        }
+        og.stroke();
+      }
+    }
+    // The ghost plan, in pen and ink: what is planned in dotted orange, what was in dashed blue-grey.
+    const PLAN = '#e0703a', PLAN_BAD = '#c8321e', WAS = '#6d82ad';
+    const dotted = () => { og.setLineDash([0.5, 4]); og.lineCap = 'round'; og.lineWidth = 2; };
+    const dashed = () => { og.setLineDash([6, 4]); og.lineCap = 'butt'; og.lineWidth = 1.4; };
+    // A box standing on the ground over cells x..x+w, y..y+h, ht tall, as a wireframe.
+    function box3(s, x, y, w, h, ht) {
+      const g = terrainAt(s.map, clamp(x + w / 2, 0, W), clamp(y + h / 2, 0, H)) + 0.05;
+      const c = [[x, y], [x + w, y], [x + w, y + h], [x, y + h]];
+      const lo = c.map(([a, b]) => world.project(a, g, b)), hi = c.map(([a, b]) => world.project(a, g + ht, b));
+      og.beginPath();
+      for (let i = 0; i < 4; i++) {
+        const j = (i + 1) % 4;
+        og.moveTo(lo[i][0], lo[i][1]); og.lineTo(lo[j][0], lo[j][1]);
+        og.moveTo(hi[i][0], hi[i][1]); og.lineTo(hi[j][0], hi[j][1]);
+        og.moveTo(lo[i][0], lo[i][1]); og.lineTo(hi[i][0], hi[i][1]);
+      }
+      og.stroke();
+    }
+    function drawGhostPlan(s, t, selected) {
+      og.save();
+      // What was: a building destroyed in sight stays a minute as its dashed outline.
+      og.strokeStyle = WAS; dashed();
+      for (const b of world.pastBoxes) { og.globalAlpha = Math.min(1, (b.life - b.t) / 15) * 0.9; box3(s, b.x, b.y, b.w, b.h, b.ht); }
+      og.globalAlpha = 1;
+      // What is planned: the building being placed, and where the chosen units are bound.
+      const g = world.ghostState;
+      if (g) { og.strokeStyle = g.ok ? PLAN : PLAN_BAD; dotted(); const d = BUILDINGS[g.kind]; box3(s, g.x, g.y, d.w, d.h, world.bHeight(g.kind)); }
+      og.strokeStyle = PLAN; dotted();
+      const ends = [];
+      let byId = null;
+      for (const e of selected) {
+        if (!e || e.b || e.team !== t || e.hp <= 0 || !e.ord) continue;
+        const o = e.ord;
+        let tx, ty;
+        if (o.t === 'move' || o.t === 'amove') { tx = o.x; ty = o.y; }
+        else if (o.id !== undefined) {
+          byId = byId || new Map(s.ents.map(u => [u.id, u]));
+          const v = byId.get(o.id);
+          if (v && v.hp > 0 && Rules.seenBy(s, t, v)) { tx = v.x; ty = v.y; } else if (o.x !== undefined) { tx = o.x; ty = o.y; }
+        } else if (o.t === 'capture' && s.towns[o.town]) { tx = s.towns[o.town].x; ty = s.towns[o.town].y; }
+        if (tx === undefined) continue;
+        tx = clamp(tx, 0, W); ty = clamp(ty, 0, H);
+        const air = Rules.isAir(e);
+        const [ax, ay] = world.project(e.x, Rules.heightAt(s.map, clamp(e.x, 0, W), clamp(e.y, 0, H)) + (air ? e.z : 0.2), e.y);
+        const [bx, by] = world.project(tx, Rules.heightAt(s.map, tx, ty) + 0.2, ty);
+        og.beginPath(); og.moveTo(ax, ay); og.lineTo(bx, by); og.stroke();
+        if (!ends.some(p => Math.abs(p[0] - bx) < 8 && Math.abs(p[1] - by) < 8)) ends.push([bx, by]);
+      }
+      for (const [x, y] of ends) { og.beginPath(); og.ellipse(x, y, 9, 5.5, 0, 0, 6.3); og.stroke(); }
+      og.restore();
+    }
+    // A key to the plan, as the atlas's ghost plan carries one, in the corner the selection panel leaves free.
+    function drawKey() {
+      const x = world.vw - 118, y = world.vh - 72;
+      og.save(); og.setLineDash([]);
+      og.fillStyle = 'rgba(250,244,228,0.9)'; og.strokeStyle = 'rgba(31,26,22,0.85)'; og.lineWidth = 1;
+      og.fillRect(x, y, 104, 58); og.strokeRect(x + 0.5, y + 0.5, 103, 57);
+      og.font = `italic 14px ${labelFont()}`; og.textBaseline = 'middle'; og.textAlign = 'left';
+      const row = (i, label, draw) => { const yy = y + 12 + i * 17; draw(x + 10, yy); og.setLineDash([]); og.fillStyle = '#3d352c'; og.fillText(label, x + 46, yy + 1); };
+      row(0, 'was', (a, b) => { og.strokeStyle = WAS; dashed(); og.beginPath(); og.moveTo(a, b); og.lineTo(a + 28, b); og.stroke(); });
+      row(1, 'planned', (a, b) => { og.strokeStyle = PLAN; dotted(); og.beginPath(); og.moveTo(a, b); og.lineTo(a + 28, b); og.stroke(); });
+      row(2, 'now', (a, b) => { og.fillStyle = '#cdc1ab'; og.fillRect(a + 7, b - 5, 14, 10); og.strokeStyle = '#1f1a16'; og.lineWidth = 1.2; og.strokeRect(a + 7, b - 5, 14, 10); });
+      og.restore();
+    }
+    const smoothstepJS = (a, b, v) => { const x = clamp((v - a) / (b - a), 0, 1); return x * x * (3 - 2 * x); };
+    const onView = (x, y, m = 80) => x > -m && y > -m && x < world.vw + m && y < world.vh + m;
+    // Lamps at night: warm light round lived-in houses and every building in sight, and cars' headlights.
+    function drawLamps(s) {
+      const sk = world.sky, L = world.life, k = sk.night;
+      if (!inked() || k < 0.15) return;
+      og.save();
+      const pool = (x, y, z, r, a) => {
+        const [px, py] = world.project(x, y, z);
+        if (!onView(px, py)) return;
+        const R = r * world.ppu(x, y, z), g = og.createRadialGradient(px, py, 0, px, py, R);
+        g.addColorStop(0, `rgba(255,212,130,${a * k})`); g.addColorStop(1, 'rgba(255,212,130,0)');
+        og.fillStyle = g; og.fillRect(px - R, py - R, R * 2, R * 2);
+      };
+      s.map.houses.forEach((h, i) => { const x = h.x + h.w / 2, y = h.y + h.h / 2; if (s.hh[i] > 0 && world.visible(x, y)) pool(x, terrainAt(s.map, x, y) + 0.8, y, 2.4, 0.36); });
+      for (const o of world.onScreen) if (o.e.b) pool(o.e.x, terrainAt(s.map, o.e.x, o.e.y) + 1, o.e.y, Math.max(o.e.w, o.e.h) * 0.75, 0.24);
+      if (L) for (const c of L.cars) {
+        if (!world.visible(c.x, c.y) || c.wait > 0) continue;
+        const ca = Math.cos(c.a), sa = Math.sin(c.a), g0 = Rules.heightAt(s.map, c.x, c.y) + 0.2;
+        const [ax, ay] = world.project(c.x + ca * 0.5, g0, c.y + sa * 0.5), [bx, by] = world.project(c.x + ca * 4.5 - sa * 1.3, g0, c.y + sa * 4.5 + ca * 1.3), [cx, cy] = world.project(c.x + ca * 4.5 + sa * 1.3, g0, c.y + sa * 4.5 - ca * 1.3);
+        if (!onView(ax, ay)) continue;
+        const g = og.createLinearGradient(ax, ay, (bx + cx) / 2, (by + cy) / 2);
+        g.addColorStop(0, `rgba(255,240,180,${0.5 * k})`); g.addColorStop(1, 'rgba(255,240,180,0)');
+        og.fillStyle = g; og.beginPath(); og.moveTo(ax, ay); og.lineTo(bx, by); og.lineTo(cx, cy); og.closePath(); og.fill();
+      }
+      og.restore();
+    }
+    // Trees on fire, in pen and ink: tongues of flat red, orange and yellow ink in a flickering black outline.
+    function drawFires() {
+      const F = world.fireSpots;
+      if (!F || !F.length || !inked()) return;
+      const now = performance.now() / 1000;
+      og.save(); og.setLineDash([]); og.lineJoin = 'round'; og.strokeStyle = '#1a1512';
+      for (const f of F) {
+        const [x, y] = world.project(f.x, f.y, f.z);
+        if (!onView(x, y, 40)) continue;
+        const u = world.ppu(f.x, f.y, f.z) * f.s * 0.8, k = Math.floor(now * 7 + f.c) % 3;
+        const tongue = (h, w, col, lw) => {
+          og.beginPath(); og.moveTo(x - w, y);
+          for (let i = 0; i < 3; i++) {
+            const cx = x - w + w * (i + 0.5) * 2 / 3, tip = h * (0.7 + 0.3 * ((i * 7 + k * 3 + f.c) % 5) / 4);
+            og.quadraticCurveTo(cx - w * 0.3, y - tip * 0.5, cx + (k - 1) * w * 0.12, y - tip);
+            og.quadraticCurveTo(cx + w * 0.3, y - tip * 0.45, x - w + w * (i + 1) * 2 / 3, y - h * 0.18);
+          }
+          og.quadraticCurveTo(x + w * 0.6, y + h * 0.12, x - w, y); og.closePath();
+          og.fillStyle = col; og.fill(); if (lw) { og.lineWidth = lw; og.stroke(); }
+        };
+        // Flames in the look's manner: filled bands, flicks of line alone, or a warm wash.
+        const fx = world.style.fx || 0;
+        if (fx === 0) { tongue(u * 0.95, u * 0.42, '#d8401c', Math.max(1, u * 0.05)); tongue(u * 0.62, u * 0.3, '#f5891e', 0); tongue(u * 0.32, u * 0.17, '#ffd84a', 0); }
+        else if (WASHY.has(fx)) { tongue(u * 0.95, u * 0.42, 'rgba(232,110,40,0.45)', 0); tongue(u * 0.55, u * 0.26, 'rgba(255,200,90,0.6)', 0); }
+        else { tongue(u * 0.95, u * 0.42, 'rgba(0,0,0,0)', Math.max(1, u * 0.05)); tongue(u * 0.55, u * 0.22, 'rgba(0,0,0,0)', Math.max(0.8, u * 0.035)); }
+      }
+      og.restore();
+    }
+    // Telegraph wires from pole to pole, sagging a little between, over ground the side has seen.
+    function drawWires() {
+      const ws = world.roadWires();
+      if (!ws.length) return;
+      og.save(); og.strokeStyle = 'rgba(31,26,22,0.55)'; og.lineWidth = 0.8; og.setLineDash([]);
+      og.beginPath();
+      for (const [a, b] of ws) {
+        if (!world.known(a[0], a[2]) || !world.known(b[0], b[2])) continue;
+        const p = world.project(a[0], a[1], a[2]), q = world.project(b[0], b[1], b[2]);
+        if (!onView(p[0], p[1], 40) && !onView(q[0], q[1], 40)) continue;
+        // The curve passes through the sagging middle.
+        const m = world.project((a[0] + b[0]) / 2, (a[1] + b[1]) / 2 - 0.3, (a[2] + b[2]) / 2);
+        og.moveTo(p[0], p[1]); og.quadraticCurveTo(2 * m[0] - (p[0] + q[0]) / 2, 2 * m[1] - (p[1] + q[1]) / 2, q[0], q[1]);
+      }
+      og.stroke(); og.restore();
+    }
+    // Birds as two quick strokes each, wings rising and falling.
+    function drawBirds() {
+      const L = world.life;
+      if (!L || !L.birds.length) return;
+      og.save(); og.strokeStyle = 'rgba(31,26,22,0.85)'; og.lineCap = 'round'; og.lineJoin = 'round'; og.setLineDash([]);
+      for (const b of L.birds) {
+        if (!world.visible(b.x, b.z)) continue;
+        const [x, y] = world.project(b.x, b.y, b.z);
+        if (!onView(x, y, 20)) continue;
+        const sz = clamp(world.ppu(b.x, b.y, b.z) * 0.32, 2.5, 8), f = Math.sin(b.flap);
+        og.lineWidth = Math.max(1, sz * 0.2);
+        og.beginPath(); og.moveTo(x - sz, y - sz * 0.4 * f); og.quadraticCurveTo(x - sz * 0.45, y - sz * 0.45 - sz * 0.3 * f, x, y);
+        og.quadraticCurveTo(x + sz * 0.45, y - sz * 0.45 - sz * 0.3 * f, x + sz, y - sz * 0.4 * f); og.stroke();
+      }
+      og.restore();
+    }
+    // Lightning in a storm, a jagged bolt for a moment, with thunder after.
+    let bolt = null, boltT = 4;
+    function drawLightning(dt) {
+      const sk = world.sky;
+      boltT -= dt;
+      if (sk.storm > 0.6 && boltT <= 0 && !bolt) {
+        boltT = 3 + Math.random() * 7;
+        const x = world.vw * (0.15 + Math.random() * 0.7), y = world.vh * (0.3 + Math.random() * 0.55), x0 = x + (Math.random() - 0.5) * 120, pts = [[x0, -10]];
+        for (let i = 1; i <= 8; i++) { const k = i / 8; pts.push([x0 + (x - x0) * k + (i < 8 ? (Math.random() - 0.5) * 46 * (1 - k * 0.5) : 0), -10 + (y + 10) * k]); }
+        bolt = { pts, t: 0 };
+        setTimeout(() => game.audio.play('thunder', { gain: 0.9, vary: 0.2 }), 400 + Math.random() * 1600);
+      }
+      if (!bolt) return;
+      bolt.t += dt;
+      if (bolt.t > 0.24) { bolt = null; return; }
+      og.save(); og.setLineDash([]); og.lineJoin = 'miter';
+      og.globalAlpha = bolt.t < 0.06 || (bolt.t > 0.11 && bolt.t < 0.16) ? 1 : 0.45;
+      const line = (w, col) => { og.strokeStyle = col; og.lineWidth = w; og.beginPath(); bolt.pts.forEach(([a, b], i) => i ? og.lineTo(a, b) : og.moveTo(a, b)); og.stroke(); };
+      line(8, 'rgba(255,246,190,0.75)'); line(2.2, '#1f1a16');
+      const [ex, ey] = bolt.pts[bolt.pts.length - 1];
+      star(ex, ey, 16, bolt.pts[1][0], 9, '#fff2a0', '#ffffff', 8);
+      og.restore();
+    }
+    // The face for notes written on the map, as the page's --label sets it, looked up again each second.
+    let labelF = 'Georgia, serif', labelT = -1e9;
+    function labelFont() {
+      const now = performance.now();
+      if (now - labelT > 1000) { labelT = now; labelF = getComputedStyle(document.body).getPropertyValue('--label').trim() || labelF; }
+      return labelF;
+    }
+    // The weather and the hour in a corner, with what the weather does, and a word of what is coming.
+    const SKY_NAME = { clear: 'Fair', cloud: 'Overcast', rain: 'Rain', storm: 'Storm', fog: 'Fog', snow: 'Snow' };
+    const SKY_NOTE = { rain: 'Wheels bog down off the roads', storm: 'Aircraft grounded', fog: 'Sight cut short', snow: 'Everyone slowed' };
+    const hourName = d => d < 0.05 || d >= 0.95 ? 'Dawn' : d < 0.3 ? 'Morning' : d < 0.5 ? 'Midday' : d < 0.7 ? 'Afternoon' : d < 0.8 ? 'Dusk' : 'Night';
+    function drawSkyNote(s) {
+      const w = Rules.sky(s), ink = inked();
+      let note = SKY_NOTE[w.kind] || '';
+      if (s.flooded) note = note ? note + '. Fords flooded' : 'Fords flooded';
+      if (w.next !== w.kind && w.left < 40 * HZ) note = (SKY_NAME[w.next] || w.next) + ' coming';
+      // A newcomer's protection, counting down.
+      const me = game.team >= 0 ? s.P[game.team] : null, left = me && me.shield > s.tick ? Math.ceil((me.shield - s.tick) / HZ) : 0;
+      if (left) note = `Protected ${left / 60 | 0}:${String(left % 60).padStart(2, '0')} · until you attack`;
+      const top = `${SKY_NAME[w.kind] || ''} · ${hourName(world.sky.day)}`, x = world.vw - 12, y = 52;
+      og.save(); og.setLineDash([]); og.textAlign = 'right'; og.textBaseline = 'middle';
+      const f1 = ink ? `italic 16px ${labelFont()}` : '600 14px "Barlow Condensed", system-ui, sans-serif', f2 = ink ? `italic 13px ${labelFont()}` : '500 12px "Barlow Condensed", system-ui, sans-serif';
+      og.font = f1; let tw = og.measureText(top).width;
+      og.font = f2; if (note) tw = Math.max(tw, og.measureText(note).width);
+      const bh = note ? 40 : 24;
+      og.fillStyle = ink ? 'rgba(250,244,228,0.92)' : 'rgba(20,22,15,0.8)'; og.fillRect(x - tw - 14, y, tw + 14, bh);
+      if (ink) { og.strokeStyle = 'rgba(31,26,22,0.85)'; og.lineWidth = 1; og.strokeRect(x - tw - 13.5, y + 0.5, tw + 13, bh - 1); }
+      og.fillStyle = ink ? '#2a231c' : '#e8e0c8'; og.font = f1; og.fillText(top, x - 7, y + 12);
+      if (note) { og.fillStyle = ink ? '#8a3a22' : '#f0b060'; og.font = f2; og.fillText(note, x - 7, y + 29); }
+      og.restore();
+    }
+    // A fallen bridge: its outline as what was, dotted orange while it is being rebuilt, and C4 counting down.
+    function drawBridges(s, t) {
+      const P0 = t >= 0 ? s.P[t] : null, ink = inked();
+      s.map.bridges.forEach((m, i) => {
+        const st = s.bridges[i], mx = (m.x0 + m.x1) / 2, my = (m.y0 + m.y1) / 2;
+        if ((st.hp > 0 && !st.c4) || (P0 && !P0.seen[Rules.cellOf(mx, my)])) return;
+        const [cx, cy] = world.project(mx, m.z + 0.6, my);
+        if (!onView(cx, cy, 200)) return;
+        og.save();
+        if (st.hp <= 0 && (st.fix || ink)) {
+          const nx = -m.uy * m.w / 2, ny = m.ux * m.w / 2, z = m.z + 0.1;
+          const c = [[m.x0 - m.ux + nx, m.y0 - m.uy + ny], [m.x1 + m.ux + nx, m.y1 + m.uy + ny], [m.x1 + m.ux - nx, m.y1 + m.uy - ny], [m.x0 - m.ux - nx, m.y0 - m.uy - ny]].map(([a, b]) => world.project(a, z, b));
+          if (st.fix) { og.strokeStyle = PLAN; dotted(); } else { og.strokeStyle = WAS; dashed(); }
+          og.beginPath(); c.forEach(([a, b], k) => k ? og.lineTo(a, b) : og.moveTo(a, b)); og.closePath(); og.stroke();
+          if (st.fix) { og.setLineDash([]); og.fillStyle = PLAN; og.font = `italic 14px ${labelFont()}`; og.textAlign = 'center'; og.fillText(`rebuilding, ${Math.max(0, Math.ceil((st.fix - s.tick) / HZ))}s`, cx, cy - 14); }
+        }
+        if (st.c4) { og.setLineDash([]); og.fillStyle = '#ff5040'; og.font = '700 13px "Share Tech Mono", monospace'; og.textAlign = 'center'; og.fillText('C4 ' + Math.max(0, Math.ceil((st.c4 - s.tick) / HZ)), cx, cy - 14); }
+        og.restore();
+      });
+    }
+    // What the ground under the pointer is, when it is a bridge or a ford.
+    let groundT = 0, groundAt = null;
+    function drawGroundTip(s, dt) {
+      groundT -= dt;
+      if (groundT <= 0) { groundT = 0.12; groundAt = state.mouse.in && !state.hover && !state.drag && world.cam.dist < 150 ? world.pick(state.mouse.x, state.mouse.y) : null; }
+      if (!groundAt || state.hover) return;
+      const g = groundAt, bi = Rules.bridgeAt(s, g.x, g.y), us = state.sel.filter(u => alive(u) && !u.b && u.team === team());
+      let text = '';
+      if (bi >= 0) {
+        const st = s.bridges[bi];
+        text = st.hp > 0 ? `Bridge, ${Math.round(st.hp / Rules.BRIDGE_HP * 100)}%` : st.fix ? 'Bridge, being rebuilt' : 'Bridge down';
+        if (us.some(u => u.d.engineer) && !st.fix && st.hp < Rules.BRIDGE_HP) text += st.hp > 0 ? ' · right-click to mend' : ' · right-click to rebuild';
+        else if (us.length && st.hp > 0) text += ' · A, then click, to blow it';
+      } else {
+        if (!state.fords || state.fords.W !== W) { state.fords = new Set(s.map.fordCells); state.fords.W = W; }
+        if (state.fords.has(Rules.cellOf(g.x, g.y))) text = s.flooded ? 'Ford, under water' : 'Ford, slow going';
+      }
+      if (!text) return;
+      og.save(); og.setLineDash([]); og.font = '600 13px "Barlow Condensed", system-ui, sans-serif'; og.textAlign = 'center';
+      const tw = og.measureText(text).width + 12, x = state.mouse.x, yy = state.mouse.y - 26;
+      og.fillStyle = 'rgba(20,18,14,0.86)'; og.fillRect(x - tw / 2, yy - 11, tw, 18);
+      og.fillStyle = '#f2e8d2'; og.fillText(text, x, yy + 2); og.restore();
+    }
+    function drawOverlay(dt) {
+      const dpr = Math.min(2, devicePixelRatio || 1), w = world.vw, h = world.vh;
+      if (ov.width !== Math.round(w * dpr)) { ov.width = Math.round(w * dpr); ov.height = Math.round(h * dpr); }
+      og.setTransform(dpr, 0, 0, dpr, 0, 0);
+      og.clearRect(0, 0, w, h);
+      const s = S(), t = game.team, far = world.cam.dist > 150;
+      if (!s) return;
+      const selected = new Set(state.sel);
+      const P0 = t >= 0 ? s.P[t] : null;
+      drawLamps(s);
+
+      // Towns show who holds them and how a capture is going.
+      for (const n of s.towns) {
+        const seen = t < 0 || P0.seen[Rules.cellOf(n.x, n.y)];
+        if (!seen) continue;
+        const [x, y] = world.project(n.x, terrainAt(s.map, n.x, n.y) + 2.8, n.y);
+        const col = n.owner < 0 ? '#d9d4c3' : SLOT_CSS[n.owner];
+        if (n.cap > 0) {
+          og.lineWidth = 3; og.strokeStyle = 'rgba(0,0,0,0.5)'; og.beginPath(); og.arc(x, y, 13, 0, 6.3); og.stroke();
+          og.strokeStyle = n.capTeam >= 0 ? SLOT_CSS[n.capTeam] : '#d9d4c3'; og.beginPath(); og.arc(x, y, 13, -1.57, -1.57 + n.cap * 6.283); og.stroke();
+        }
+        og.fillStyle = col; og.font = '600 11px "Barlow Condensed", system-ui, sans-serif'; og.textAlign = 'center';
+        og.fillText(`TOWN ${String.fromCharCode(65 + n.id)}`, x, y - 18);
+      }
+
+      // Pictograms fade in as the view pulls back, and take the units' places at the farthest.
+      const dist = world.cam.dist, tag = smoothstepJS(84, 112, dist), big = smoothstepJS(130, 170, dist);
+      for (const o of world.onScreen) {
+        const e = o.e, mine = e.team === t || (t < 0 && e.team === 0), col = SLOT_CSS[e.team] || '#d9d4c3', on = selected.has(e), hov = state.hover === e;
+        const plate = SLOT_PLATE[e.team] || '#555';
+        if (tag > 0 && !e.b && !(e.drop > 0)) {
+          const sz = 6.5 + big * 3.5 + (on ? 1.5 : 0), lift = (1 - big) * (o.r + sz * 1.6);
+          picto(og, o.x, o.y - lift, sz, e.d.sym, on ? '#e0a020' : plate, tag);
+        }
+        if (tag > 0 && e.b) {
+          const label = SHORT[e.kind] || '';
+          og.save(); og.globalAlpha = tag;
+          og.font = `700 ${Math.round(10 + big * 3)}px "Barlow Condensed", system-ui, sans-serif`; og.textAlign = 'center'; og.textBaseline = 'middle';
+          const tw = og.measureText(label).width + 8, th = 14 + big * 3;
+          og.fillStyle = plate; og.strokeStyle = 'rgba(20,16,12,0.9)'; og.lineWidth = 1;
+          og.beginPath(); og.roundRect ? og.roundRect(o.x - tw / 2, o.y - th / 2, tw, th, 3) : og.rect(o.x - tw / 2, o.y - th / 2, tw, th); og.fill(); og.stroke();
+          og.fillStyle = '#fff'; og.fillText(label, o.x, o.y + 1);
+          og.restore();
+        }
+        if (hov && !far) {
+          const name = e.d.name + (e.team !== t && t >= 0 ? ' (enemy)' : '');
+          og.save(); og.font = '600 13px "Barlow Condensed", system-ui, sans-serif'; og.textAlign = 'center';
+          const tw = og.measureText(name).width + 12, yy = o.y - (e.b ? Math.max(e.w, e.h) * o.scale * 0.6 : o.r * 1.4) - 22;
+          og.fillStyle = 'rgba(20,18,14,0.86)'; og.fillRect(o.x - tw / 2, yy - 11, tw, 18);
+          og.fillStyle = col; og.fillRect(o.x - tw / 2, yy + 6, tw, 2);
+          og.fillStyle = '#f2e8d2'; og.fillText(name, o.x, yy + 2); og.restore();
+        }
+        if (on || hov) {
+          const r = e.b ? Math.max(e.w, e.h) * 0.74 * o.scale : Math.max(10, o.r * 1.25);
+          og.strokeStyle = on ? (mine ? '#a9f0c0' : '#ff8a70') : 'rgba(255,255,255,0.5)'; og.lineWidth = 1.4;
+          if (e.b) {
+            const [ax, ay] = world.project(e.cx, terrainAt(s.map, e.x, e.y) + 0.1, e.cy), [bx, by] = world.project(e.cx + e.w, terrainAt(s.map, e.x, e.y) + 0.1, e.cy), [cx, cy] = world.project(e.cx + e.w, terrainAt(s.map, e.x, e.y) + 0.1, e.cy + e.h), [dx, dy] = world.project(e.cx, terrainAt(s.map, e.x, e.y) + 0.1, e.cy + e.h);
+            og.beginPath(); og.moveTo(ax, ay); og.lineTo(bx, by); og.lineTo(cx, cy); og.lineTo(dx, dy); og.closePath(); og.stroke();
+          } else { og.beginPath(); og.ellipse(o.x, o.y + o.r * 0.3, r, r * 0.62, 0, 0, 6.3); og.stroke(); }
+        }
+        const damaged = e.hp < e.max * 0.995;
+        if (on || hov || (damaged && mine && s.tick - e.under < 4 * HZ && o.scale > 8)) {
+          const bw = e.b ? Math.min(90, Math.max(e.w, e.h) * o.scale * 0.9) : Math.max(18, o.r * 1.8), by = o.y - (e.b ? o.r * 0.9 : o.r * 1.1 + 6), f = e.hp / e.max;
+          og.fillStyle = 'rgba(0,0,0,0.62)'; og.fillRect(o.x - bw / 2 - 1, by - 1, bw + 2, 4);
+          og.fillStyle = f > 0.55 ? '#58d068' : f > 0.28 ? '#f0c040' : '#f05040'; og.fillRect(o.x - bw / 2, by, bw * f, 2);
+          if (e.vet) { og.fillStyle = '#ffd34d'; og.font = '9px system-ui'; og.textAlign = 'left'; og.fillText('★'.repeat(e.vet), o.x - bw / 2, by - 2); }
+          if (e.repairing) { og.fillStyle = '#7fe0a0'; og.font = '10px system-ui'; og.textAlign = 'center'; og.fillText('+', o.x + bw / 2 + 5, by + 4); }
+        }
+        if (e.b && on && e.rally && mine) {
+          const [rx, ry] = world.project(e.rally[0], terrainAt(s.map, e.rally[0], e.rally[1]) + 0.1, e.rally[1]);
+          if (inked()) { og.strokeStyle = PLAN; dotted(); } else { og.strokeStyle = '#7fe0a0'; og.setLineDash([5, 4]); og.lineWidth = 1; }
+          og.beginPath(); og.moveTo(o.x, o.y); og.lineTo(rx, ry); og.stroke(); og.setLineDash([]); og.lineCap = 'butt';
+        }
+        if (e.b && e.c4) { og.fillStyle = '#ff5040'; og.font = '700 12px "Share Tech Mono", monospace'; og.textAlign = 'center'; og.fillText(Math.ceil((e.c4 - s.tick) / HZ) + '', o.x, o.y - 18); }
+      }
+
+      // Brackets on every enemy your units have marked, solid on those being fired at now.
+      const marked = new Set(), aimed = new Set();
+      for (const u of s.ents) if (u.team === t && !u.b && u.ord && u.ord.t === 'group') { for (const id of u.ord.list) marked.add(id); aimed.add(u.ord.id); }
+      const brackets = (x, y, r, solid, col) => {
+        const q = r * 0.42;
+        og.strokeStyle = col; og.lineWidth = solid ? 2.4 : 1.8;
+        og.beginPath();
+        for (const [sx, sy] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) { og.moveTo(x + sx * r, y + sy * (r - q)); og.lineTo(x + sx * r, y + sy * r); og.lineTo(x + sx * (r - q), y + sy * r); }
+        og.stroke();
+      };
+      if (marked.size) for (const o of world.onScreen) if (marked.has(o.e.id)) brackets(o.x, o.y, Math.max(9, o.e.b ? Math.max(o.e.w, o.e.h) * o.scale * 0.5 : o.r * 1.3), aimed.has(o.e.id), aimed.has(o.e.id) ? '#ff5a40' : 'rgba(255,120,90,0.75)');
+      const hv = state.hover;
+      if (hv && hv.team !== t && t >= 0 && state.sel.some(u => alive(u) && !u.b && u.team === t) && !state.mode && !state.alt) {
+        for (const o of world.onScreen) if (o.e.team !== t && (o.e === hv || Rules.gap(hv.x, hv.y, o.e) <= STRIKE_R) && Rules.seenBy(s, t, o.e)) brackets(o.x, o.y, Math.max(9, o.e.b ? Math.max(o.e.w, o.e.h) * o.scale * 0.5 : o.r * 1.3), o.e === hv, o.e === hv ? '#ff5a40' : 'rgba(255,110,80,0.85)');
+      }
+
+      if (inked()) { drawGhostPlan(s, t, selected); drawKey(); drawInk(s, t); drawTactical(s, t); }
+      drawBridges(s, t); drawWires(); drawFires(); drawBirds(); drawLightning(dt);
+      if (game.playing) { drawSkyNote(s); drawGroundTip(s, dt); }
+
+      for (let i = state.marks.length - 1; i >= 0; i--) {
+        const m = state.marks[i];
+        m.t += dt;
+        if (m.t > 0.5) { state.marks.splice(i, 1); continue; }
+        const [x, y] = world.project(m.x, Rules.heightAt(s.map, m.x, m.y), m.y), k = 1 - m.t / 0.5;
+        og.strokeStyle = m.color; og.globalAlpha = k; og.lineWidth = 1.6;
+        og.beginPath(); og.ellipse(x, y, 16 * k + 2, (16 * k + 2) * 0.6, 0, 0, 6.3); og.stroke();
+        og.beginPath(); og.ellipse(x, y, 6 * k + 1, (6 * k + 1) * 0.6, 0, 0, 6.3); og.stroke();
+        og.globalAlpha = 1;
+      }
+
+      const m = state.mode;
+      if (m && (m.type === 'power' || m.type === 'launch')) {
+        const g = world.pick(state.mouse.x, state.mouse.y);
+        if (g) {
+          const r = m.type === 'launch' ? 10 : POWERS[m.name].r, [x, y] = [state.mouse.x, state.mouse.y], sc = world.vh / (2 * Math.tan(13 * Math.PI / 180) * world.cam.dist);
+          if (inked()) { og.strokeStyle = PLAN; dotted(); } else { og.strokeStyle = '#ffa040'; og.lineWidth = 1.5; og.setLineDash([8, 5]); }
+          og.beginPath(); og.ellipse(x, y, r * sc, r * sc * 0.82, 0, 0, 6.3); og.stroke(); og.setLineDash([]); og.lineCap = 'butt';
+        }
+      }
+
+      const d = state.drag;
+      if (d && d.box) {
+        og.strokeStyle = '#a9f0c0'; og.lineWidth = 1; og.fillStyle = 'rgba(120,240,160,0.08)';
+        og.fillRect(d.x0, d.y0, d.x1 - d.x0, d.y1 - d.y0); og.strokeRect(d.x0, d.y0, d.x1 - d.x0, d.y1 - d.y0);
+      }
+    }
+
+    // The minimap stands on its corner with the viewer's base at the foot, as the camera first sees it.
+    function miniTurn() { const s = S(), f = s && s.faces ? s.faces[Math.max(0, game.team)] : Math.PI / 4; return -(f + Math.PI / 2); }
+    function drawMini(dt) {
+      const s = S(), size = mini.width, t = team();
+      if (!s || !world.baseImage) return;
+      state.miniT = (state.miniT || 0) - dt;
+      if (state.miniT > 0) return;
+      state.miniT = 0.2;
+      const P0 = t >= 0 ? s.P[t] : null, g = mg;
+      // In pen and ink the map is printed on the paper: the land in sepia, the unknown left blank.
+      // On dark paper the page's filter turns the map over, so its paper is a grey that lands on the panel's own
+      // and its land is printed paler, to land near that paper.
+      const ink = inked(), dkm = ink && Looks.dark, blank = ink ? (dkm ? [233, 229, 224] : [242, 232, 210]) : [0, 0, 0];
+      g.setTransform(1, 0, 0, 1, 0, 0);
+      g.fillStyle = ink ? (dkm ? '#e9e5e0' : '#f2e8d2') : '#10130f'; g.fillRect(0, 0, size, size);
+      // The map stands on its corner, your base at the foot, as the camera sees it.
+      const k = size / Math.SQRT2 / W;
+      g.translate(size / 2, size / 2); g.rotate(miniTurn()); g.scale(k, k); g.translate(-W / 2, -H / 2);
+      if (ink) g.filter = dkm ? 'grayscale(1) sepia(0.3) contrast(1.15) brightness(1.45)' : 'grayscale(1) sepia(0.55) contrast(1.15) brightness(1.3)';
+      g.drawImage(world.baseImage, 0, 0, W, H);
+      g.filter = 'none';
+      if (P0) {
+        if (state.fogC && state.fogC.width !== W) state.fogC = null;
+        if (!state.fogC) { state.fogC = document.createElement('canvas'); state.fogC.width = W; state.fogC.height = H; state.fogG = state.fogC.getContext('2d'); state.fogI = state.fogG.createImageData(W, H); }
+        const dt0 = state.fogI.data;
+        for (let c = 0; c < W * H; c++) { dt0[c * 4] = blank[0]; dt0[c * 4 + 1] = blank[1]; dt0[c * 4 + 2] = blank[2]; dt0[c * 4 + 3] = !P0.seen[c] ? 255 : P0.vis[c] ? 0 : (ink ? 110 : 130); }
+        state.fogG.putImageData(state.fogI, 0, 0);
+        g.drawImage(state.fogC, 0, 0, W, H);
+      }
+      for (const n of s.towns) {
+        if (P0 && !P0.seen[Rules.cellOf(n.x, n.y)]) continue;
+        g.fillStyle = n.owner < 0 ? (ink ? '#6b6052' : '#e8e0c8') : ink ? SLOT_PLATE[n.owner] : SLOT_CSS[n.owner];
+        g.fillRect(n.x - 2, n.y - 2, 4, 4);
+      }
+      for (const e of s.ents) {
+        const mine = e.team === t || (t < 0 && e.team === 0);
+        if (!mine && P0) { if (e.b ? !P0.seen[Rules.cellOf(e.x, e.y)] : !P0.vis[Rules.cellOf(e.x, e.y)]) continue; }
+        g.fillStyle = ink ? SLOT_PLATE[e.team] : SLOT_CSS[e.team];
+        if (e.b) g.fillRect(e.cx, e.cy, e.w, e.h);
+        else g.fillRect(e.x - 0.9, e.y - 0.9, 1.8, 1.8);
+      }
+      // The view as a shape on the ground.
+      const corners = [[0, 0], [world.vw, 0], [world.vw, world.vh], [0, world.vh]].map(([x, y]) => groundUnder(x, y));
+      if (corners.every(Boolean)) {
+        g.strokeStyle = ink ? '#1f1a16' : '#ffffff'; g.lineWidth = 0.6; g.beginPath();
+        corners.forEach((c, i) => i ? g.lineTo(c[0], c[1]) : g.moveTo(c[0], c[1])); g.closePath(); g.stroke();
+      }
+      for (let i = state.alerts.length - 1; i >= 0; i--) {
+        const a = state.alerts[i];
+        a.t += 0.2;
+        if (a.t > 3) { state.alerts.splice(i, 1); continue; }
+        g.strokeStyle = '#ff5040'; g.lineWidth = 0.9; g.beginPath(); g.arc(a.x, a.y, 2 + (a.t * 3 % 4) * 2, 0, 6.3); g.stroke();
+      }
+    }
+    // Where a screen corner lands on a flat ground plane, for the view shape on the map.
+    function groundUnder(px, py) {
+      const THREE_ = window.THREE, cam = world.camera, v = new THREE_.Vector3(px / world.vw * 2 - 1, 1 - py / world.vh * 2, 0.5).unproject(cam).sub(cam.position).normalize();
+      if (v.y >= -0.01) return null;
+      const t = (cam.position.y - 1) / -v.y;
+      return [cam.position.x + v.x * t, cam.position.z + v.z * t];
+    }
+    function miniTo(e) {
+      const r = mini.getBoundingClientRect(), a = (e.clientX - r.left) / r.width * mini.width - mini.width / 2, b = (e.clientY - r.top) / r.height * mini.height - mini.height / 2;
+      const c = Math.cos(-miniTurn()), si = Math.sin(-miniTurn()), k = mini.width / Math.SQRT2 / W;
+      return [(a * c - b * si) / k + W / 2, (a * si + b * c) / k + H / 2];
+    }
+    let miniDown = false;
+    mini.addEventListener('pointerdown', e => {
+      e.preventDefault();
+      const [x, y] = miniTo(e);
+      if (e.button === 2) {
+        const ids = orderIds();
+        if (ids.length) { game.order(S(), team(), { c: 'move', ids, x, y, a: false }); marker(x, y, '#7fe0a0'); }
+        return;
+      }
+      miniDown = true; mini.setPointerCapture?.(e.pointerId); world.focus(x, y);
+    });
+    mini.addEventListener('pointermove', e => { if (miniDown) { const [x, y] = miniTo(e); world.focus(x, y); } });
+    mini.addEventListener('pointerup', () => { miniDown = false; });
+    mini.addEventListener('contextmenu', e => e.preventDefault());
+
+    let ro = { sup: -1, oil: -1 }, roClock = 0;
+    function updateReadouts() {
+      const now = performance.now();
+      if (now - roClock < 100) return;
+      roClock = now;
+      const s = S(), p = P();
+      const shownS = ro.sup < 0 ? p.supply : ro.sup + (p.supply - ro.sup) * 0.5, shownO = ro.oil < 0 ? p.oil : ro.oil + (p.oil - ro.oil) * 0.5;
+      ro.sup = shownS; ro.oil = shownO;
+      $('sup').textContent = fmt(shownS); $('oil').textContent = fmt(shownO);
+      const left = p.prod ? clamp(p.use / p.prod, 0, 1.2) : 1;
+      const bar = $('pwrbar');
+      bar.style.width = Math.min(100, left * 100) + '%';
+      bar.className = p.low ? 'low' : left > 0.85 ? 'tight' : '';
+      $('pwr').textContent = `${p.use}/${p.prod}`;
+      const sec = s.tick / HZ | 0;
+      $('clock').textContent = `${String(sec / 60 | 0).padStart(2, '0')}:${String(sec % 60).padStart(2, '0')}`;
+      $('techlv').textContent = Rules.AGES[p.tech].name;
+      // A new age brings the lines' new forms to the cards, and power to run short of.
+      if (p.tech !== listAge) { lineLists(p.tech); buildCams(); }
+      $('pwr').parentElement.classList.toggle('off', p.tech < Rules.POWER_AGE);
+      if (p.tech < Rules.POWER_AGE) $('pwr').textContent = '—';
+      const towns = s.towns.filter(t => t.owner === team()).length;
+      $('towns').textContent = `${towns}/${s.towns.length}`;
+      updateSelPanel();
+      updateObjective();
+    }
+
+    function updateSelPanel() {
+      state.sel = state.sel.filter(alive);
+      const box = $('sel'), list = state.sel, key = list.map(e => e.id).join() + (list[0] ? (list[0].repairing ? 'r' : '') + (list[0].team) : '');
+      if (key !== state.selKey) {
+        state.selKey = key;
+        box.hidden = !list.length;
+        if (list.length) {
+          const groups = {};
+          for (const e of list) (groups[e.kind] = groups[e.kind] || []).push(e);
+          const kinds = Object.keys(groups), first = list[0], mine = first.team === team();
+          let html = '<div class="who">';
+          if (kinds.length === 1 && list.length === 1) {
+            html += `<div class="one"><img src="${state.cameos[first.kind] || ''}"${axoImg(first.kind)} alt=""><div><h3>${first.d.name}</h3><div class="hp"><i id="hp1"></i></div><p id="stat1"></p></div></div>`;
+          } else {
+            html += '<div class="many">' + kinds.map(k => `<button data-k="${k}"><img src="${state.cameos[k] || ''}"${axoImg(k)} alt=""><b>${groups[k].length}</b></button>`).join('') + '</div>';
+          }
+          html += '</div><div class="acts">';
+          if (mine) {
+            if (first.b) {
+              html += `<button id="a-rep" class="${first.repairing ? 'on' : ''}">Repair <kbd>G</kbd></button>`;
+              if (first.kind !== 'hq') html += '<button id="a-sell">Sell <kbd>Del</kbd></button>';
+            } else {
+              html += `<button id="a-move" class="${state.attackMove ? 'on' : ''}">Attack-move <kbd>A</kbd></button><button id="a-stop">Stop <kbd>S</kbd></button>`;
+            }
+            html += '<button id="a-clear">Clear</button>';
+          }
+          html += '</div>';
+          box.innerHTML = html;
+          box.querySelectorAll('.many button').forEach(b => b.addEventListener('click', () => select(state.sel.filter(e => e.kind === b.dataset.k))));
+          const on = (id, fn) => { const b = document.getElementById(id); if (b) b.addEventListener('click', fn); };
+          on('a-rep', () => game.order(S(), team(), { c: 'repair', id: first.id }));
+          on('a-sell', () => { game.order(S(), team(), { c: 'sell', id: first.id }); select([]); });
+          on('a-stop', () => game.order(S(), team(), { c: 'stop', ids: orderIds() }));
+          on('a-move', () => { if (state.touchUsed) { state.attackMove = !state.attackMove; state.selKey = ''; } else enter({ type: 'amove' }); });
+          on('a-clear', () => select([]));
+        }
+      }
+      if (list.length === 1) {
+        const e = list[0], hp = $('hp1'), st = $('stat1');
+        if (hp) hp.style.width = e.hp / e.max * 100 + '%';
+        if (st) {
+          let t = `${Math.ceil(e.hp)}/${e.max}`;
+          if (e.d.cargo) t += ` · load ${Math.round(e.cargo)}/${e.d.cargo}`;
+          if (e.vet) t += ` · ${'★'.repeat(e.vet)}`;
+          if (e.b && e.d.power) t += ` · ${e.d.power > 0 ? '+' : ''}${e.d.power} pw`;
+          if (st.textContent !== t) st.textContent = t;
+        }
+      }
+    }
+
+    const OBJECTIVES = [
+      { done: p => p.counts.power || p.tech < Rules.POWER_AGE, text: 'Open <b>Base</b>, click <b>Power Plant</b>, wait for READY, click it again, then click inside your blue border.' },
+      { done: p => p.counts.refinery, text: p => `Open <b>Base</b> and build a <b>${Rules.nameOf('refinery', p.tech)}</b> by the gold ore: click it, wait for READY, click again, then click inside your border. It brings a ${UNITS[Rules.formOf('truck', p.tech)].name.toLowerCase()} that mines by itself.` },
+      { done: p => p.counts.barracks, text: p => `Build <b>Barracks</b>, then train <b>${UNITS[Rules.formOf('inf', p.tech)].name}</b> under the Men tab.` },
+      { done: (p, S, t) => S.towns.some(n => n.owner === t), text: 'Select a squad and right-click a <b>town flag</b>. Towns pay out and push your border.' },
+      { done: p => p.counts.factory, text: p => `Build <b>${Rules.nameOf('factory', p.tech)}</b> for horse and engines, and a <b>${Rules.nameOf('radar', p.tech)}</b> to see far.` },
+      { done: (p, S) => p.tech > (S.age0 || 1) || p.tech >= Rules.MAX_AGE, text: p => `Advance to the <b>${Rules.AGES[Math.min(Rules.MAX_AGE, p.tech + 1)].name} Age</b> under Calls. Every unit you have takes its new form.` },
+      { done: () => false, text: 'Destroy every enemy building.' },
+    ];
+    function updateObjective() {
+      const o = $('objective'), p = P(), s = S();
+      if (!game.showHints || !p) { o.hidden = true; return; }
+      const next = OBJECTIVES.find(q => !q.done(p, s, team()));
+      if (!next) { o.hidden = true; return; }
+      const text = typeof next.text === 'function' ? next.text(p, s) : next.text;
+      if (o.dataset.t !== text) { o.dataset.t = text; o.innerHTML = text; o.classList.remove('flash'); void o.offsetWidth; o.classList.add('flash'); }
+      o.hidden = false;
+    }
+
+    function layoutMini() {
+      const r = mini.getBoundingClientRect(), n = Math.round(r.width * Math.min(2, devicePixelRatio || 1));
+      if (n > 0 && mini.width !== n) { mini.width = mini.height = n; }
+    }
+
+    return {
+      state, pickTab, say, symbol, enter, leave, select, layoutMini,
+      reset() {
+        state.sel = []; state.groups = {}; state.mode = null; state.marks = []; state.alerts = []; state.lastAlert = null; state.selKey = null; state.fogC = null; ro = { sup: -1, oil: -1 };
+        world.setGhost(null); showBanner(''); $('log').textContent = '';
+        pickTab('bld');
+      },
+      alert(x, y) { state.alerts.push({ x, y, t: 0 }); state.lastAlert = { x, y }; },
+      frame(dt) {
+        if (game.S) { W = game.S.map.W; H = game.S.map.H; }
+        if (game.playing) { scroll(dt); updateCams(); updateReadouts(); drawMini(dt); }
+        const hover = game.playing && state.mouse.in && !state.drag ? entAt(state.mouse.x, state.mouse.y) : null;
+        state.hover = hover;
+        if (game.playing) {
+          const m = state.mode, en = hover && hover.team !== team(), mine = state.sel.some(e => !e.b && e.team === team());
+          view.dataset.cur = m ? (m.type === 'place' ? 'place' : 'aim') : en && mine ? 'attack' : mine ? 'order' : hover ? 'pick' : '';
+        }
+        drawOverlay(dt);
+      },
+      setCameos(c) { state.cameos = c; buildCams(); },
+      // The control groups as unit ids, for a saved game, and back.
+      groupIds() { const o = {}; for (const n in state.groups) o[n] = state.groups[n].map(e => e.id); return o; },
+      setGroups(g) { state.groups = {}; for (const n in g || {}) state.groups[n] = g[n].map(id => game.S.byId.get(id)).filter(Boolean); },
+    };
+  }
+
+  return { create, symbol };
+})();

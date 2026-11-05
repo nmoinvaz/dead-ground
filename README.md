@@ -1,15 +1,43 @@
 # Dead Ground
 
-A real-time strategy game in three.js after Red Alert and Rise of Nations. Play a skirmish against computers, or
-open a game room that others join from the list. The host picks the map, the terrain and how many computers play
-and how hard, and the room plays out once everyone is ready.
+A real-time strategy game in three.js, after Red Alert and Rise of Nations, drawn in pen and ink. Every side
+advances through six ages, Ancient to Future, and each of its units takes a new form in each age: spearmen become
+pikemen, musketeers, riflemen, rifle squads and exo troopers. Play a skirmish against computers or open a game room
+for others to join at https://dead-ground.nathan-05a.workers.dev.
 
-- `public/index.html` is the game, built from the game's own folder by `site.sh`.
-- `server/index.js` is a Cloudflare Worker. Each game room is a Durable Object that holds its lobby, then steps
-  the game and sends each step's commands to every player. A Directory object lists the rooms.
-  `server/rules.js` and `server/ai.js` are the same rules and commander the page runs, so every copy of a game
-  stays the same.
+## Layout
 
-Run locally with `npx wrangler dev`, deploy with `npx wrangler deploy`.
+```
+rules.js       the world as deterministic rules, with no drawing: maps, units, ages, combat, economy, the record
+ai.js          the computer commander, Recruit, Regular and Veteran
+models.js      every unit and building built from primitives
+world.js       the 3D picture: terrain, units, effects, weather, scenery
+looks.js       the registry of looks, with looks/ink.js (pen and ink) and looks/daylight.js
+hud.js         the sidebar, minimap, overlay, and every way of giving an order
+report.js      the end-of-game report, after Age of Empires
+axo.js         the sidebar's unit pictures as axonometric line drawings
+game.js        the menus, skirmish and game rooms, saving, sound
+page.html      the page the game is built into
+server.js      the game rooms' server, a Cloudflare Worker with Durable Objects
+sfx.py         the synthesized sounds, into sfx/
+site/          the built site that is deployed, made by site.sh
+```
+
+## Building
+
+The page is built with film-studio's `player/build.py`:
+
+```sh
+~/Source/film-studio/.venv/bin/python ~/Source/film-studio/player/build.py game.json          # dist/index.html
+./site.sh                                                                                      # site/
+cd site && npx wrangler deploy
+```
+
+## Checks
+
+```sh
+node check.js --games 6            # computers play each other headless and report how the games went
+node lobbycheck.js URL [outdir]    # two players through a game room against a running server
+```
 
 x.com/nmnvzr · Opus 5.5

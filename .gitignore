@@ -1,3 +1,9 @@
-.wrangler/
+# Studies and renders stay on the desk, and site.sh builds the page.
+review/
+review-*/
+dist/
 node_modules/
+.wrangler/
 .DS_Store
+*.rej
+*.orig

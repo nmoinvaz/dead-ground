@@ -1,0 +1,61 @@
+{
+  "title": "Dead Ground",
+  "alt": "Dead Ground: a real-time strategy game of modern war in three.js.",
+  "page": "page.html",
+  "art": {
+    "width": 1280,
+    "height": 720
+  },
+  "game": {},
+  "film": {
+    "global": "DeadGround",
+    "scripts": [
+      "rules.js",
+      "ai.js",
+      "models.js",
+      "looks.js",
+      "looks/ink.js",
+      "looks/daylight.js",
+      "looks/charcoal.js",
+      "world.js",
+      "hud.js",
+      "report.js",
+      "axo.js",
+      "game.js"
+    ]
+  },
+  "sounds": {
+    "ack1": "sfx/ack1.mp3",
+    "ack2": "sfx/ack2.mp3",
+    "auto": "sfx/auto.mp3",
+    "boom_l": "sfx/boom_l.mp3",
+    "boom_m": "sfx/boom_m.mp3",
+    "boom_s": "sfx/boom_s.mp3",
+    "boom_x": "sfx/boom_x.mp3",
+    "bow": "sfx/bow.mp3",
+    "cannon": "sfx/cannon.mp3",
+    "catapult": "sfx/catapult.mp3",
+    "clash": "sfx/clash.mp3",
+    "click": "sfx/click.mp3",
+    "deny": "sfx/deny.mp3",
+    "flak": "sfx/flak.mp3",
+    "hmg": "sfx/hmg.mp3",
+    "launch": "sfx/launch.mp3",
+    "lost": "sfx/lost.mp3",
+    "missile": "sfx/missile.mp3",
+    "music": "sfx/music.mp3",
+    "musket": "sfx/musket.mp3",
+    "place": "sfx/place.mp3",
+    "pulse": "sfx/pulse.mp3",
+    "rail": "sfx/rail.mp3",
+    "rain": "sfx/rain.mp3",
+    "rifle": "sfx/rifle.mp3",
+    "rocket": "sfx/rocket.mp3",
+    "scream": "sfx/scream.mp3",
+    "sniper": "sfx/sniper.mp3",
+    "thunder": "sfx/thunder.mp3",
+    "wind": "sfx/wind.mp3",
+    "won": "sfx/won.mp3"
+  },
+  "out": "dist/index.html"
+}
