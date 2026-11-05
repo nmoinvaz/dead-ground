@@ -349,7 +349,7 @@ export class Room {
     this.slots.forEach((s, t) => { if (s.kind === 'human' || s.kind === 'ai') seats.push(t); });
     const waiting = this.slots.some(s => s.kind === 'human' && s.id !== this.host && !s.ready);
     if (seats.length < 2 || waiting) return;
-    this.S = R.newGame({ seed: this.seed, layout: R.MAPS[this.map].layout, seats });
+    this.S = R.newGame({ seed: this.seed, layout: R.MAPS[this.map].layout, seats, shuffle: Math.random });
     this.S.ev.length = 0;
     this.ais = this.slots.map((s, t) => s.kind === 'ai' ? AI.create(t, s.level, this.seed + t) : null);
     for (const s of this.slots) { s.out = false; s.left = false; s.away = 0; }

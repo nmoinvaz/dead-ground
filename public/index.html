@@ -762,10 +762,12 @@ const Rules = (() => {
     quad: { name: 'Four Quarters', layout: 'quad', seats: 4, about: 'Four corners parted by two crossing rivers.' },
     world: { name: 'Crossed Rivers', layout: 'world', seats: 8, about: 'Eight bases round a ring, two to each quarter.' },
   };
-  // Which of a map's bases each seated slot starts at: spread evenly round the ring, in slot order.
-  function spread(seats, n) {
-    const pos = new Array(n).fill(-1), used = new Set();
-    seats.forEach((t, j) => { const p = Math.round(j * n / seats.length) % n; pos[t] = p; used.add(p); });
+  // Which of a map's bases each seated slot starts at: spread evenly round the ring. In slot order, or given a
+  // random draw rnd, with the ring turned a random step and the sides dealt the places in a random order.
+  function spread(seats, n, rnd) {
+    const pos = new Array(n).fill(-1), used = new Set(), order = seats.slice(), turn = rnd ? Math.floor(rnd() * n) : 0;
+    if (rnd) for (let i = order.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [order[i], order[j]] = [order[j], order[i]]; }
+    order.forEach((t, j) => { const p = (Math.round(j * n / order.length) + turn) % n; pos[t] = p; used.add(p); });
     // The empty slots take the bases left over.
     const rest = [...Array(n).keys()].filter(p => !used.has(p));
     for (let t = 0; t < n; t++) if (pos[t] < 0) pos[t] = rest.shift();
@@ -1268,14 +1270,14 @@ const Rules = (() => {
 
   // A new game. layout is 'duel' (two slots, 128 cells), 'quad' (four, 192) or 'world' (eight, 256). seats
   // lists the slots that play, every slot unless given; the others stay empty. Each seated slot starts with a
-  // base unless `empty` is set, and the seated slots' bases are spread evenly round the map. The game is over
-  // when one side is left.
+  // base unless `empty` is set, and the seated slots' bases are spread evenly round the map, dealt at random
+  // when `shuffle` gives a random draw. The game is over when one side is left.
   function newGame(o = {}) {
     const kind = o.layout || 'duel', M = mapFor(o.seed || 1, kind, o.debug), seed = M.seed;
     coverPoints(M);
     const n = M.bases.length;
     const seats = (o.seats || [...Array(n).keys()]).filter(t => t >= 0 && t < n);
-    const pos = o.pos || spread(seats, n);
+    const pos = o.pos || spread(seats, n, o.shuffle);
     const S = {
       HZ, tick: 0, seed, layout: kind, map: M, rs: seed ^ 0x51ed, ents: [], next: 1, byId: new Map(), cmds: [], log: [], keepLog: !!o.log, ev: [], shots: [], fields: new Map(),
       fieldQueue: 0, occVer: 1, occ: new Int32Array(N), occLog: [], over: null, ais: [], sweeps: [], hash: [], bldHash: [], flights: [],
@@ -5058,8 +5060,8 @@ if (typeof module !== 'undefined') module.exports = Looks;
           else { cover *= 1.0 - lit; cover = max(cover, rim); }
           if (uFxs > 0.5 && uFxs < 1.5) cover *= 1.0 - fxSmk * 0.9;
           vec3 col = mix(uStyle == 8 ? baseC : paperC, inkC, clamp(cover, 0.0, 1.0));
-          // A flash is bare paper on light paper, and bright on dark as it heats, so a faint glint keeps the wash under it.
-          vec3 flashC = dk ? mix(baseC, vec3(0.98, 0.95, 0.86), smoothstep(0.45, 1.0, hn)) : paperC;
+          // A flash is bare paper on light paper, and a warm glow on dark as it heats, never a white-out.
+          vec3 flashC = dk ? mix(baseC, vec3(0.72, 0.6, 0.42), smoothstep(0.45, 1.0, hn) * 0.85) : paperC;
           // Smoke as a grey wash and fire as a warm wash round a bare-paper core, for the washed effects.
           if (uFxs > 0.5 && uFxs < 1.5) {
             col = mix(col, vec3(0.56, 0.53, 0.49), fxSmk * 0.5);
@@ -5133,7 +5135,10 @@ if (typeof module !== 'undefined') module.exports = Looks;
           col = mix(col, col * vec3(0.86, 0.89, 0.97), LND.g * uCloudK * 0.85 * step(1.0, F.b));
           // Ground not seen for a while is drawn paler and without colour. Ground never seen is bare paper with the
           // faint pencil of an unfinished drawing: contour lines of the land and long construction lines.
-          float edgeN = (noise(px * 0.03 / uK) - 0.5) * 0.5;
+          // The shroud's marks are laid on the land under the pixel, from the height the fog pass left, so they keep
+          // their place as the view is dragged. pL measures the land in pixels at the zoom's level, pL2 at the next.
+          vec2 pL = landAt(vUv, F.b - 20.0) * 80.0 * exp2(-gLm) * uK, pL2 = pL * 0.5;
+          float edgeN = (mix(noise(pL * 0.03 / uK), noise(pL2 * 0.03 / uK + 7.0), gLf) - 0.5) * 0.5;
           float seenE = smoothstep(0.38, 0.62, F.g + edgeN), visE = smoothstep(0.3, 0.7, F.r + edgeN * 0.5);
           if (uStyle == 8) {
             // What was, as a ghost plan draws it: pale washes and dashed blue-grey line, with no tone. Each dash
@@ -5155,8 +5160,8 @@ if (typeof module !== 'undefined') module.exports = Looks;
           // Off the map there is no land, so no contours, only the guide lines.
           float onMap = step(1.0, F.b), hgt = F.b - 20.0;
           float hw = max(fwidth(hgt), 1e-4), hf = fract(hgt / 0.8);
-          float cont = (1.0 - smoothstep(0.4 * uK, 1.2 * uK, min(hf, 1.0 - hf) * 0.8 / hw)) * step(0.3, noise(px * 0.04 / uK + 3.0)) * onMap;
-          float guide = hatch(px, 18.0, 70.0, 0.7, 3.0, 0.55) + hatch(px, 104.0, 95.0, 0.6, 8.0, 0.6);
+          float cont = (1.0 - smoothstep(0.4 * uK, 1.2 * uK, min(hf, 1.0 - hf) * 0.8 / hw)) * step(0.3, mix(noise(pL * 0.04 / uK + 3.0), noise(pL2 * 0.04 / uK + 5.0), gLf)) * onMap;
+          float guide = mix(hatch(pL, 18.0, 70.0, 0.7, 3.0, 0.55) + hatch(pL, 104.0, 95.0, 0.6, 8.0, 0.6), hatch(pL2, 18.0, 70.0, 0.7, 3.0, 0.55) + hatch(pL2, 104.0, 95.0, 0.6, 8.0, 0.6), gLf);
           // Roads are pencilled in too, as two faint ruled lines.
           float rdS = texture2D(tLand, vUv).r;
           float rP = (1.0 - smoothstep(0.4 * uK, 1.0 * uK, abs(rdS - 1.3) / max(fwidth(rdS), 1e-4))) * onMap;
@@ -5224,6 +5229,11 @@ if (typeof module !== 'undefined') module.exports = Looks;
           const q = new THREE.Vector3(CX, 1, CY).project(camera); C.uOff.value.set((q.x + 1) / 2 * w, (q.y + 1) / 2 * h);
           C.uStyle.value = K.opts.ink;
           K.landUniforms(C);
+          // The pen thins as the view draws back and thickens a little close in, as a drawing at a smaller scale is
+          // drawn with a finer pen. Every line, hatch and tap in the pass is measured in uK, so all of them follow.
+          // Full weight at the usual view, level 1.77, and never finer than a small screen's own pixel allows.
+          const kBase = h / 1080, kZoom = Math.min(1.12, Math.max(0.62, Math.pow(2, -(C.uLev.value - 1.77) * 0.65)));
+          C.uK.value = Math.max(Math.min(kBase, 0.75), kBase * kZoom);
           // Which way the sun lies across the screen.
           const s = SH.uSunDir.value, q1 = new THREE.Vector3(CX + s.x * 8 / Math.hypot(s.x, s.z), 1, CY + s.z * 8 / Math.hypot(s.x, s.z)).project(camera);
           C.uSun2.value.set((q1.x - q.x) * w, (q1.y - q.y) * h).normalize();
@@ -7334,9 +7344,10 @@ const World = (() => {
       pp.grade.uniforms.uFlash.value = Math.max(pp.grade.uniforms.uFlash.value, 0.5 * near);
       cam.shake = Math.max(cam.shake, 1.4 * near);
       const s = theme.smoke;
+      // The fireball is kept to its middle and short, so it never blanks the view.
       for (let i = 0; i < 120; i++) {
         const a = Math.random() * 6.28, r = Math.random() * size * 0.6, up = 2 + Math.random() * size * 0.9;
-        glow.add(x + Math.cos(a) * r, y + Math.random() * 3, z + Math.sin(a) * r, Math.cos(a) * 5, up, Math.sin(a) * 5, 1.3 + Math.random() * 1.3, size * 0.55, size * 1, [7, 3.2, 1, 1], [1.2, 0.2, 0.03, 0], 4 + (i % 4), { drag: 1.1, spin: 1, delay: Math.random() * 0.6 });
+        if (i % 3 === 0) glow.add(x + Math.cos(a) * r * 0.6, y + Math.random() * 3, z + Math.sin(a) * r * 0.6, Math.cos(a) * 3, up, Math.sin(a) * 3, 0.8 + Math.random() * 0.7, size * 0.3, size * 0.5, [7, 3.2, 1, 1], [1.2, 0.2, 0.03, 0], 4 + (i % 4), { drag: 1.1, spin: 1, delay: Math.random() * 0.6 });
         smoke.add(x + Math.cos(a) * r * 0.5, y + 1, z + Math.sin(a) * r * 0.5, Math.cos(a) * 1.2, 2 + up * 0.8, Math.sin(a) * 1.2, 7 + Math.random() * 5, size * 0.6, size * 1.6, [s[0], s[1], s[2], 0.82], [s[0] * 3, s[1] * 3, s[2] * 3, 0], i % 4, { drag: 0.42, spin: 0.1, delay: Math.random() * 1.6 });
       }
       for (let i = 0; i < 80; i++) {
@@ -8479,7 +8490,10 @@ const Hud = (() => {
     // Twenty more ways to draw a blast, each from the point, with R the burst's radius on screen, k how far through
     // its life it is, grow its first swell, seed its own die, and mz true for a muzzle flash. The canvas is already
     // at the point. Soft ones (WASHY) sit on washed fire and smudged scorch; the rest on white fire and hatching.
-    const INK_C = '#1a1512', PAPER_C = '#f3ecdc';
+    // On dark paper the overlay is turned over by a filter, so a paper fill would land as a black blot over the
+    // picture's own bright flash. There the blasts leave their paper out and let the flash under them show.
+    let blastDark = false, PAPER_C = '#f3ecdc';
+    const INK_C = '#1a1512', pap = a => blastDark ? 'rgba(0,0,0,0)' : 'rgba(243,236,220,' + a + ')';
     const WASHY = new Set([2, 4, 6, 11, 12, 16, 17, 18, 19, 22, 26, 30]);
     const BLAST = {
       // 5 Woodcut: bold black wedges round a paper core.
@@ -8497,7 +8511,7 @@ const Hud = (() => {
       // 11 Sumi splash: one wet blot with dry-brush flares.
       11(R, k, grow, fade, seed, mz) { const rr = i => rnd(seed, i); og.fillStyle = 'rgba(30,24,20,0.55)'; og.beginPath(); for (let i = 0; i <= 40; i++) { const a = i / 40 * 6.283, r = R * (0.6 + 0.5 * rr(i % 40 + 3)) * (0.5 + 0.5 * grow); og.lineTo(Math.cos(a) * r, Math.sin(a) * r); } og.closePath(); og.fill(); og.strokeStyle = 'rgba(30,24,20,0.7)'; og.lineCap = 'butt'; for (let i = 0; i < (mz ? 3 : 7); i++) { const a = rr(i + 60) * 6.283, r1 = R * (1.2 + 0.9 * rr(i + 70)); og.lineWidth = Math.max(1, R * 0.05 * (1 - 0.5 * rr(i + 80))); og.setLineDash([Math.max(2, R * 0.05), Math.max(1, R * 0.03 * rr(i + 90))]); og.beginPath(); og.moveTo(Math.cos(a) * R * 0.7, Math.sin(a) * R * 0.7); og.lineTo(Math.cos(a) * r1, Math.sin(a) * r1); og.stroke(); } og.setLineDash([]); },
       // 12 White-out: the paper bleached round the point, with a faint grey ring.
-      12(R, k, grow, fade, seed, mz) { const g = og.createRadialGradient(0, 0, 0, 0, 0, R * 1.5); g.addColorStop(0, 'rgba(243,236,220,1)'); g.addColorStop(0.5, 'rgba(243,236,220,0.9)'); g.addColorStop(1, 'rgba(243,236,220,0)'); og.fillStyle = g; og.beginPath(); og.arc(0, 0, R * 1.5, 0, 6.283); og.fill(); og.strokeStyle = 'rgba(80,70,60,0.5)'; og.lineWidth = Math.max(1, R * 0.02); og.beginPath(); og.arc(0, 0, R * (0.9 + 0.4 * k), 0, 6.283); og.stroke(); },
+      12(R, k, grow, fade, seed, mz) { const g = og.createRadialGradient(0, 0, 0, 0, 0, R * 1.5); g.addColorStop(0, pap(1)); g.addColorStop(0.5, pap(0.9)); g.addColorStop(1, pap(0)); og.fillStyle = g; og.beginPath(); og.arc(0, 0, R * 1.5, 0, 6.283); og.fill(); og.strokeStyle = 'rgba(80,70,60,0.5)'; og.lineWidth = Math.max(1, R * 0.02); og.beginPath(); og.arc(0, 0, R * (0.9 + 0.4 * k), 0, 6.283); og.stroke(); },
       // 13 Crosshatch blot: a ragged disc of nothing but hatching in three directions.
       13(R, k, grow, fade, seed, mz) { const rr = i => rnd(seed, i); og.save(); og.beginPath(); for (let i = 0; i <= 30; i++) { const a = i / 30 * 6.283, r = R * (0.75 + 0.3 * rr(i % 30 + 11)) * (0.5 + 0.5 * grow); og.lineTo(Math.cos(a) * r, Math.sin(a) * r); } og.closePath(); og.clip(); og.strokeStyle = INK_C; og.lineWidth = Math.max(0.8, R * 0.012); const sp = Math.max(2.5, R * 0.07); for (const ang of [0.6, 2.0, 1.3]) { og.save(); og.rotate(ang); og.beginPath(); for (let h = -R * 1.5; h <= R * 1.5; h += sp) { og.moveTo(h, -R * 1.5); og.lineTo(h, R * 1.5); } og.stroke(); og.restore(); } og.restore(); if (!mz) { og.fillStyle = PAPER_C; og.beginPath(); og.arc(0, 0, R * 0.2, 0, 6.283); og.fill(); } },
       // 14 Scribble: a frantic line thrown round the point, rising.
@@ -8507,7 +8521,7 @@ const Hud = (() => {
       // 16 Ink bleed: a blot with a fibrous fringe, as ink spreads in wet paper.
       16(R, k, grow, fade, seed, mz) { const rr = i => rnd(seed, i), n = mz ? 20 : 90, r0 = R * 0.55 * (0.5 + 0.5 * grow); og.fillStyle = 'rgba(40,32,26,0.6)'; og.beginPath(); og.arc(0, 0, r0 * 1.1, 0, 6.283); og.fill(); og.strokeStyle = 'rgba(40,32,26,0.55)'; og.lineWidth = Math.max(0.6, R * 0.008); og.beginPath(); for (let i = 0; i < n; i++) { const a = i / n * 6.283 + rr(i) * 0.1, r1 = r0 + R * (0.1 + 0.5 * rr(i + 40)) * grow; og.moveTo(Math.cos(a) * r0, Math.sin(a) * r0); og.lineTo(Math.cos(a) * r1, Math.sin(a) * r1); } og.stroke(); },
       // 17 Dust puff: a pale cloud low and wide, outlined, stippled inside, and no fire.
-      17(R, k, grow, fade, seed, mz) { const rr = i => rnd(seed, i), w = R * (1.0 + 0.6 * k), h = R * 0.5; og.fillStyle = 'rgba(243,236,220,0.9)'; og.strokeStyle = INK_C; og.lineWidth = Math.max(0.8, R * 0.012); og.beginPath(); for (let i = 0; i <= 24; i++) { const a = i / 24 * 6.283, r = 1 + 0.18 * rr(i % 24 + 5); og.lineTo(Math.cos(a) * w * r, Math.sin(a) * h * r - R * 0.15); } og.closePath(); og.fill(); og.stroke(); og.fillStyle = INK_C; for (let i = 0; i < (mz ? 10 : 50); i++) { const a = rr(i + 300) * 6.283, d = Math.sqrt(rr(i + 400)); og.beginPath(); og.arc(Math.cos(a) * d * w * 0.9, Math.sin(a) * d * h * 0.9 - R * 0.15, Math.max(0.5, R * 0.012), 0, 6.283); og.fill(); } },
+      17(R, k, grow, fade, seed, mz) { const rr = i => rnd(seed, i), w = R * (1.0 + 0.6 * k), h = R * 0.5; og.fillStyle = pap(0.9); og.strokeStyle = INK_C; og.lineWidth = Math.max(0.8, R * 0.012); og.beginPath(); for (let i = 0; i <= 24; i++) { const a = i / 24 * 6.283, r = 1 + 0.18 * rr(i % 24 + 5); og.lineTo(Math.cos(a) * w * r, Math.sin(a) * h * r - R * 0.15); } og.closePath(); og.fill(); og.stroke(); og.fillStyle = INK_C; for (let i = 0; i < (mz ? 10 : 50); i++) { const a = rr(i + 300) * 6.283, d = Math.sqrt(rr(i + 400)); og.beginPath(); og.arc(Math.cos(a) * d * w * 0.9, Math.sin(a) * d * h * 0.9 - R * 0.15, Math.max(0.5, R * 0.012), 0, 6.283); og.fill(); } },
       // 18 Halftone: a printed disc of dots, large at the heart and vanishing outward.
       18(R, k, grow, fade, seed, mz) { og.fillStyle = INK_C; const sp = Math.max(3, R * 0.1), Rm = R * 1.3 * (0.5 + 0.5 * grow); for (let gx = -Rm; gx <= Rm; gx += sp) for (let gy = -Rm; gy <= Rm; gy += sp) { const d = Math.hypot(gx, gy) / Rm; if (d > 1) continue; const r = sp * 0.5 * (1 - d) * (1 - k * 0.5); if (r < 0.4) continue; og.beginPath(); og.arc(gx, gy, r, 0, 6.283); og.fill(); } },
       // 19 Charcoal smudge: a soft dark cloud with the finger dragged through it.
@@ -8523,7 +8537,7 @@ const Hud = (() => {
       // 25 Hergé cloud: a cumulus of round puffs under one clean outline, growing and lifting.
       25(R, k, grow, fade, seed, mz) { const rr = i => rnd(seed, i), n = mz ? 3 : 8, cs = []; for (let i = 0; i < n; i++) { const a = rr(i) * 6.283, d = R * 0.45 * Math.sqrt(rr(i + 9)) * (0.4 + 0.6 * grow); cs.push([Math.cos(a) * d, Math.sin(a) * d * 0.7 - R * 0.5 * k, R * (0.28 + 0.3 * rr(i + 19)) * (0.5 + 0.5 * grow)]); } og.strokeStyle = INK_C; og.lineWidth = Math.max(2, R * 0.03); for (const [x, y, r] of cs) { og.beginPath(); og.arc(x, y, r, 0, 6.283); og.stroke(); } og.fillStyle = PAPER_C; for (const [x, y, r] of cs) { og.beginPath(); og.arc(x, y, r, 0, 6.283); og.fill(); } },
       // 26 Akira dome: a thin edge racing outward with the inside bleached, and a second edge behind it.
-      26(R, k, grow, fade, seed, mz) { const r1 = R * (0.3 + 1.4 * k), r2 = R * (0.1 + 1.0 * k); og.fillStyle = 'rgba(243,236,220,' + (0.9 * (1 - k)).toFixed(2) + ')'; og.beginPath(); og.arc(0, 0, r1, 0, 6.283); og.fill(); og.strokeStyle = INK_C; og.lineWidth = Math.max(0.8, R * 0.012); og.beginPath(); og.arc(0, 0, r1, 0, 6.283); og.stroke(); og.globalAlpha = fade * 0.5; og.beginPath(); og.arc(0, 0, r2, 0, 6.283); og.stroke(); },
+      26(R, k, grow, fade, seed, mz) { const r1 = R * (0.3 + 1.4 * k), r2 = R * (0.1 + 1.0 * k); og.fillStyle = pap((0.9 * (1 - k)).toFixed(2)); og.beginPath(); og.arc(0, 0, r1, 0, 6.283); og.fill(); og.strokeStyle = INK_C; og.lineWidth = Math.max(0.8, R * 0.012); og.beginPath(); og.arc(0, 0, r1, 0, 6.283); og.stroke(); og.globalAlpha = fade * 0.5; og.beginPath(); og.arc(0, 0, r2, 0, 6.283); og.stroke(); },
       // 27 Kirby krackle: a ring of black dots of every size round a paper core.
       27(R, k, grow, fade, seed, mz) { const rr = i => rnd(seed, i), n = mz ? 10 : 40; og.fillStyle = PAPER_C; og.beginPath(); og.arc(0, 0, R * 0.45 * grow, 0, 6.283); og.fill(); og.fillStyle = INK_C; for (let i = 0; i < n; i++) { const a = rr(i) * 6.283, d = R * (0.5 + 0.75 * rr(i + 50)) * grow, r = R * (0.03 + 0.09 * rr(i + 100) * rr(i + 100)); og.beginPath(); og.arc(Math.cos(a) * d, Math.sin(a) * d * 0.9, r, 0, 6.283); og.fill(); } },
       // 28 Callot smoke: small spirals piled above the point, as the old battle etchings curl their smoke.
@@ -8608,7 +8622,9 @@ const Hud = (() => {
     function drawInk(s, t) {
       // The blasts, in the manner the look asks for: 0 the comic burst, 1 an engraver's rays and scribbled smoke, 2 an
       // ink blot with flung drops, 3 a plan's dashed circle of the blast, 4 nothing drawn over the scene.
-      const INKC = '#1a1512', PAPERC = '#f3ecdc';
+      blastDark = world.look === 'ink' && document.body.dataset.scheme === 'dark';
+      PAPER_C = blastDark ? 'rgba(0,0,0,0)' : '#f3ecdc';
+      const INKC = '#1a1512', PAPERC = PAPER_C;
       for (const f of world.inkFx) {
         // A burst carries the style of what went up; a muzzle flash is always a few rays.
         const fx = f.k === 'star' ? 1 : f.fx !== undefined ? f.fx : (world.style.fx || 0);
@@ -10260,7 +10276,7 @@ const Game = (() => {
       const m = Rules.MAPS[sk.map], seats = [], you = sk.slots.findIndex(s => s.kind === 'you');
       sk.slots.forEach((s, t) => { if (s.kind === 'you' || s.kind === 'ai') seats.push(t); });
       if (seats.length < 2 || you < 0) return;
-      const S = Rules.newGame({ seed: params.has('seed') ? +params.get('seed') : sk.seed, layout: m.layout, seats });
+      const S = Rules.newGame({ seed: params.has('seed') ? +params.get('seed') : sk.seed, layout: m.layout, seats, shuffle: Math.random });
       sk.slots.forEach((s, t) => { if (s.kind === 'ai') S.ais.push(AI.create(t, s.level, S.seed + t)); });
       G.names = sk.slots.map(s => s.kind === 'you' ? (G.name || 'You') : s.kind === 'ai' ? `Computer (${Rules.DIFFICULTY[s.level].name})` : '');
       G.theme = sk.theme; G.mapKey = sk.map; G.online = false;

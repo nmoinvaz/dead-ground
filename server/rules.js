@@ -204,10 +204,12 @@ const Rules = (() => {
     quad: { name: 'Four Quarters', layout: 'quad', seats: 4, about: 'Four corners parted by two crossing rivers.' },
     world: { name: 'Crossed Rivers', layout: 'world', seats: 8, about: 'Eight bases round a ring, two to each quarter.' },
   };
-  // Which of a map's bases each seated slot starts at: spread evenly round the ring, in slot order.
-  function spread(seats, n) {
-    const pos = new Array(n).fill(-1), used = new Set();
-    seats.forEach((t, j) => { const p = Math.round(j * n / seats.length) % n; pos[t] = p; used.add(p); });
+  // Which of a map's bases each seated slot starts at: spread evenly round the ring. In slot order, or given a
+  // random draw rnd, with the ring turned a random step and the sides dealt the places in a random order.
+  function spread(seats, n, rnd) {
+    const pos = new Array(n).fill(-1), used = new Set(), order = seats.slice(), turn = rnd ? Math.floor(rnd() * n) : 0;
+    if (rnd) for (let i = order.length - 1; i > 0; i--) { const j = Math.floor(rnd() * (i + 1)); [order[i], order[j]] = [order[j], order[i]]; }
+    order.forEach((t, j) => { const p = (Math.round(j * n / order.length) + turn) % n; pos[t] = p; used.add(p); });
     // The empty slots take the bases left over.
     const rest = [...Array(n).keys()].filter(p => !used.has(p));
     for (let t = 0; t < n; t++) if (pos[t] < 0) pos[t] = rest.shift();
@@ -710,14 +712,14 @@ const Rules = (() => {
 
   // A new game. layout is 'duel' (two slots, 128 cells), 'quad' (four, 192) or 'world' (eight, 256). seats
   // lists the slots that play, every slot unless given; the others stay empty. Each seated slot starts with a
-  // base unless `empty` is set, and the seated slots' bases are spread evenly round the map. The game is over
-  // when one side is left.
+  // base unless `empty` is set, and the seated slots' bases are spread evenly round the map, dealt at random
+  // when `shuffle` gives a random draw. The game is over when one side is left.
   function newGame(o = {}) {
     const kind = o.layout || 'duel', M = mapFor(o.seed || 1, kind, o.debug), seed = M.seed;
     coverPoints(M);
     const n = M.bases.length;
     const seats = (o.seats || [...Array(n).keys()]).filter(t => t >= 0 && t < n);
-    const pos = o.pos || spread(seats, n);
+    const pos = o.pos || spread(seats, n, o.shuffle);
     const S = {
       HZ, tick: 0, seed, layout: kind, map: M, rs: seed ^ 0x51ed, ents: [], next: 1, byId: new Map(), cmds: [], log: [], keepLog: !!o.log, ev: [], shots: [], fields: new Map(),
       fieldQueue: 0, occVer: 1, occ: new Int32Array(N), occLog: [], over: null, ais: [], sweeps: [], hash: [], bldHash: [], flights: [],
