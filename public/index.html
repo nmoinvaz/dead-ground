@@ -7959,9 +7959,9 @@ const Hud = (() => {
         b.querySelector('.nm').textContent = info.name;
         const c = b.querySelector('canvas');
         if (img) b.style.setProperty('--img', `url(${img})`);
+        else { c.width = 132; c.height = 88; symbol(c.getContext('2d'), 66, 44, 26, info.sym, false, '#e8d9a8'); b.style.setProperty('--img', `url(${c.toDataURL()})`); }
         // A unit's line drawing is already in the look's inks, so it is laid on as it is.
         if (img && img.startsWith('data:image/svg')) b.classList.add('axo');
-        else { c.width = 132; c.height = 88; symbol(c.getContext('2d'), 66, 44, 26, info.sym, false, '#e8d9a8'); b.style.setProperty('--img', `url(${c.toDataURL()})`); }
         c.remove();
         b.addEventListener('click', e => { e.preventDefault(); camClick(k, e.shiftKey ? 5 : 1); });
         b.addEventListener('contextmenu', e => { e.preventDefault(); camCancel(k); });
