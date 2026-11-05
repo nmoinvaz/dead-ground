@@ -2,6 +2,11 @@
 
 Interface work on the sidebar, the overlay, the menus and the end report. Newest first.
 
+- Zoomed-out overlay: tags come in past dist 98 (no faint plates at the play distance 92), a side's units close
+  together share one plate counting each kind, pictures follow the unit's form (horsemen, spears, bows, carts,
+  siege engines, elephants, walkers), enemy plates have pointed ends, and in ink they are paper washed in the
+  side's colour. Building marks follow the age (STBL, SMLT, WTCH) and skip any that would cover another. Towns
+  are named with a pennant. The stats row drops the dead Lvl cell so the age fits. Next: age-up card.
 - Drew all 46 older and future forms in axo.js after their models, with horses, riders, carts, siege engines,
   hover pads and walkers, and wood, hide and light washes in all three palettes. Pictures are drawn once per
   palette. Study in review-hud/axo.html. Next: the zoomed-out overlay, then the age-up card.

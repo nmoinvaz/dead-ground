@@ -109,9 +109,9 @@ body[data-look="ink"][data-scheme="dark"] #end, body[data-look="ink"][data-schem
 #plate small { font: 11px var(--mono); color: var(--dim); }
 #mapwell { position: relative; width: 100%; aspect-ratio: 1; flex: 0 1 auto; max-height: 34vh; background: var(--well); border: 1px solid #000; box-shadow: inset 0 2px 6px #000, 0 1px 0 var(--steel-hi); align-self: center; }
 #map { width: 100%; height: 100%; display: block; touch-action: none; }
-#stats { display: grid; grid-template-columns: repeat(3, 1fr); gap: 4px; font: 11px var(--ui); letter-spacing: .08em; color: var(--dim); text-transform: uppercase; }
-#stats div { display: flex; justify-content: space-between; gap: 4px; background: #1b1d15; padding: 1px 5px; border: 1px solid #0a0b07; }
-#stats b { font: 12px var(--mono); color: var(--amber); }
+#stats { display: grid; grid-template-columns: 1.7fr 1fr; gap: 4px; font: 11px var(--ui); letter-spacing: .08em; color: var(--dim); text-transform: uppercase; }
+#stats div { display: flex; justify-content: space-between; align-items: baseline; gap: 6px; min-width: 0; background: #1b1d15; padding: 1px 5px; border: 1px solid #0a0b07; }
+#stats b { font: 12px var(--mono); color: var(--amber); min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #tabs { display: grid; grid-template-columns: repeat(6, 1fr); gap: 2px; }
 .tab { position: relative; padding: 4px 0 3px; background: linear-gradient(#2f3328, #1d1f17); border: 1px solid #0a0b07; font: 600 12px var(--ui); letter-spacing: .03em; color: var(--dim); text-transform: uppercase; }
 .tab:hover { color: var(--stencil); }
@@ -473,7 +473,7 @@ body[data-look="ink"] .sheet { box-shadow: 4px 4px 0 var(--ink); }
   <aside id="side">
     <div id="plate"><span>DEAD GROUND</span><small id="clock">00:00</small></div>
     <div id="mapwell"><canvas id="map" width="400" height="400" aria-label="Map of the battlefield"></canvas></div>
-    <div id="stats"><div>Age<b id="techlv">Ancient</b></div><div>Towns<b id="towns">0/6</b></div><div>Lvl<b id="lvl">&#9733;</b></div></div>
+    <div id="stats"><div id="agecell">Age<b id="techlv">Ancient</b></div><div>Towns<b id="towns">0/6</b></div></div>
     <nav id="tabs"></nav>
     <div id="cams"></div>
     <div id="tip"><p class="idle">Hover a picture for what it does.</p></div>
