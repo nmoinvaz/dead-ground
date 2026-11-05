@@ -667,7 +667,7 @@ const World = (() => {
       statics = [];
       for (const k in sets) for (const p of sets[k]) { scene.remove(p.mesh); p.mesh.dispose(); }
       sets = {};
-      rs.clear(); wrecks = []; corpses = []; flyers = []; planes = []; falls = []; inkFx.length = 0; pastBoxes.length = 0; scen = null; life = null;
+      rs.clear(); wrecks = []; corpses = []; flyers = []; planes = []; falls = []; inkFx.length = 0; pastBoxes.length = 0; stuckArrows.length = 0; strokes.length = 0; scen = null; life = null;
     }
     const add = o => { scene.add(o); statics.push(o); return o; };
     function lineCat(mesh, cat, sway = false) {
@@ -1543,6 +1543,12 @@ const World = (() => {
       for (const k in MODELS.man) put('man' + k, MODELS.man[k].map(p => Object.assign({}, p, { mult: p.id === 'leg' ? 2 : 1 })), UNITS[k] && UNITS[k].line === 'inf' ? 300 : k === 'hero' ? 8 : 120);
       put('chute', [{ id: 'c', geo: MODELS.chute }], 24);
       put('rubble', [{ id: 'r', geo: MODELS.scenery.rubble }], 60);
+      // Arrows, thrown stones and strokes of the pen, drawn in line as units are. Strokes cast no shadow.
+      put('arrow', [{ id: 'a', geo: MODELS.fx.arrow }], 500);
+      put('ball', [{ id: 'b', geo: MODELS.fx.ball }], 80);
+      put('stroke', [{ id: 's', geo: MODELS.fx.stroke }], 1600);
+      put('tstroke', [{ id: 's', geo: MODELS.fx.tstroke }], 1600);
+      sets.stroke[0].mesh.castShadow = sets.tstroke[0].mesh.castShadow = false;
     }
 
     // Each look may bring its own light, in place of the theatre's.
@@ -1939,7 +1945,9 @@ const World = (() => {
         if (w.smoke <= 0 && w.t < 26 && VIS(w.x, w.z)) { w.smoke = 0.14 + w.t * 0.012; burn(w.x, w.y + 0.5, w.z, 0.9 + (w.rubble ? 0.4 : 0), w.t < 10); }
       }
 
-      // An empty set is hidden, so the many models nobody draws this frame cost no draw calls.
+    }
+    // An empty set is hidden, so the many models nobody draws this frame cost no draw calls.
+    function finishSets() {
       for (const k in sets) for (const p of sets[k]) {
         p.mesh.count = p.n; p.mesh.visible = p.n > 0;
         if (p.n) { p.mesh.instanceMatrix.needsUpdate = true; p.mesh.instanceColor.needsUpdate = true; }
@@ -2140,11 +2148,80 @@ const World = (() => {
         return;
       }
       const dist = Math.hypot(e.tx - e.x, e.ty - e.y);
-      const arc = w.fx === 'rocket' ? 2.2 + dist * 0.24 : w.fx === 'arrow' ? 0.3 + dist * 0.07 : w.fx === 'stone' ? 1.2 + dist * 0.22 : 0.5 + dist * 0.05;
-      flyers.push({ w: e.w, fx: w.fx, x0: mx, y0: up, z0: my, x1: e.tx, y1: e.tz, z1: e.ty, t: 0, dur: e.dur, arc, tgt: e.tgt, trail: 0, px: mx, py: up, pz: my });
-      if (w.fx === 'arrow') return;
-      muzzle(mx, up, my, w.fx === 'stone' ? 0.2 : 0.5);
-      inkAdd({ k: 'star', x: mx, y: up, z: my, life: 0.1, s: w.fx === 'stone' ? 0.3 : 0.55 });
+      const arc = w.fx === 'rocket' ? 2.2 + dist * 0.24 : w.fx === 'arrow' ? 0.4 + dist * 0.09 : w.fx === 'stone' ? 1.2 + dist * 0.22 : 0.5 + dist * 0.05;
+      const src = S.byId.get(e.id), r = src && rs.get(e.id);
+      if (w.fx === 'arrow') {
+        // A volley: an arrow from each man of a squad, the first at the mark and the rest about it, where they stick.
+        const men = src && src.d.men && r ? Math.max(1, r.alive) : 1, k = ARROWS[e.w] || 1;
+        for (let i = 0; i < men; i++) {
+          let x0 = mx, y0 = up + 0.3, z0 = my;
+          if (src && src.d.men && r) { const [px, pz] = manAt(src.d.men, i, src.x, src.y, r.yaw); x0 = px + cA * 0.12; z0 = pz + sA * 0.12; y0 = heightAt(M, px, pz) + 0.62; }
+          else if (src && !src.b) y0 = heightAt(M, e.x, e.y) + 0.7;
+          const off = i ? 0.3 + Math.random() * 0.6 : 0, oa = Math.random() * 6.28, tx = e.tx + Math.cos(oa) * off, ty = e.ty + Math.sin(oa) * off;
+          flyers.push({ w: e.w, fx: 'arrow', x0, y0, z0, x1: tx, y1: i ? heightAt(M, tx, ty) : e.tz, z1: ty, t: -i * 0.045, dur: e.dur * (0.94 + Math.random() * 0.12), arc: arc * (0.9 + Math.random() * 0.2), tgt: i ? 0 : e.tgt, stick: i > 0 || !e.tgt, k });
+        }
+        return;
+      }
+      // A thrown stone leaves from the engine's arm, a grenade from the thrower's hand.
+      const thrown = w.fx === 'stone' && w.snd !== 'cannon', rel = src && MODELS.units[src.kind] && MODELS.units[src.kind].release;
+      let x0 = mx, y0 = up, z0 = my;
+      if (thrown && rel && r) { const c = Math.cos(-r.yaw), sn = Math.sin(-r.yaw); x0 = src.x + c * rel[0] * US; z0 = src.y + sn * rel[0] * US; y0 = heightAt(M, src.x, src.y) + rel[1] * US; }
+      else if (thrown) y0 = up + 0.55;
+      flyers.push({ w: e.w, fx: w.fx, x0, y0, z0, x1: e.tx, y1: e.tz, z1: e.ty, t: 0, dur: e.dur, arc, tgt: e.tgt, trail: 0, px: x0, py: y0, pz: z0, k: BALLS[e.w] || 1, spin: Math.random() * 6 });
+      if (thrown) { if (rel) dustPuff(src.x, heightAt(M, src.x, src.y) + 0.1, src.y, 0.9); return; }
+      muzzle(mx, up, my, w.fx === 'stone' ? 0.3 : 0.5);
+      inkAdd({ k: 'star', x: mx, y: up, z: my, life: 0.1, s: w.fx === 'stone' ? 0.4 : 0.55 });
+    }
+    // How large each kind of arrow and thrown thing is drawn: a bolt shorter, a javelin and a ballista's bolt longer.
+    const ARROWS = { xbow: 0.8, longbow: 1.15, javelin: 1.5, ballista: 2.2 };
+    const BALLS = { stone: 1, trebstone: 1.35, grenade: 0.4, howitz: 0.55 };
+    // Arrows and bolts stuck where they fell, and strokes of the pen: trails behind thrown stones and sketched marks.
+    const stuckArrows = [], strokes = [];
+    const s3 = new THREE.Vector3();
+    // A stroke from a to b, w thick, as a set's instance.
+    function strokeAt(set, ax, ay, az, bx, by, bz, w, color) {
+      const dx = bx - ax, dy = by - ay, dz = bz - az, len = Math.hypot(dx, dy, dz);
+      if (len < 1e-4 || w <= 0) return;
+      q1.setFromEuler(e1.set(0, Math.atan2(-dz, dx), Math.asin(dy / len), 'YXZ'));
+      mOut.compose(p1.set(ax, ay, az), q1, s3.set(len, w, w));
+      put(set, mOut, color);
+    }
+    // A thing along x, at (x, y, z) and heading along (dx, dy, dz), scaled by k, and by w across.
+    function alongAt(set, x, y, z, dx, dy, dz, k, w, color, roll = 0) {
+      const len = Math.hypot(dx, dy, dz) || 1;
+      q1.setFromEuler(e1.set(roll, Math.atan2(-dz, dx), Math.asin(clamp(dy / len, -1, 1)), 'YXZ'));
+      mOut.compose(p1.set(x, y, z), q1, s3.set(k, k * w, k * w));
+      put(set, mOut, color);
+    }
+    // Strokes added with a life: drawn on over grow seconds from wait, held, then thinned away over its last fade.
+    const addStroke = o => { if (strokes.length < 1500) strokes.push(Object.assign({ t: 0, wait: 0, grow: 0, fade: 0.2, team: -1 }, o)); };
+    const inkBlack = new THREE.Color(0x000000);
+    function drawStrokes(dt) {
+      let j = 0;
+      for (const st of strokes) {
+        st.t += dt;
+        if (st.t >= st.life) continue;
+        strokes[j++] = st;
+        const t = st.t - st.wait;
+        if (t < 0) continue;
+        const g = st.grow > 0 ? Math.min(1, t / st.grow) : 1, f = Math.min(1, (st.life - st.t) / st.fade);
+        const bx = st.ax + (st.bx - st.ax) * g, by = st.ay + (st.by - st.ay) * g, bz = st.az + (st.bz - st.az) * g;
+        if (st.team >= 0) strokeAt(sets.tstroke[0], st.ax, st.ay, st.az, bx, by, bz, st.w * f, teamCol[st.team]);
+        else strokeAt(sets.stroke[0], st.ax, st.ay, st.az, bx, by, bz, st.w * f, inkBlack);
+      }
+      strokes.length = j;
+      // Arrows stand where they fell for a few seconds, then sink away.
+      j = 0;
+      const set = sets.arrow[0];
+      for (const a of stuckArrows) {
+        a.t += dt;
+        if (a.t > 4.5) continue;
+        stuckArrows[j++] = a;
+        if (!VIS(a.x, a.z)) continue;
+        const sink = a.t > 4 ? (a.t - 4) * 0.5 : 0;
+        alongAt(set, a.x - a.dx * 0.13 * a.k, a.y - a.dy * 0.13 * a.k - sink, a.z - a.dz * 0.13 * a.k, a.dx, a.dy, a.dz, a.k, a.w, inkBlack, a.roll);
+      }
+      stuckArrows.length = j;
     }
 
     function stepFlyers(dt) {
@@ -2155,9 +2232,24 @@ const World = (() => {
         if (f.tgt) { const t = S.byId.get(f.tgt); if (t) { f.x1 = t.x; f.z1 = t.y; f.y1 = t.b ? f.y1 : heightAt(M, t.x, t.y) + (Rules.isAir(t) ? t.z : 0.5); } }
         const x = lerp(f.x0, f.x1, k), z = lerp(f.z0, f.z1, k), y = lerp(f.y0, f.y1, k) + f.arc * 4 * k * (1 - k);
         if (f.w === 'bomb') { smoke.add(x, y, z, 0, 0, 0, 0.1, 0.14, 0.1, [0.1, 0.1, 0.1, 1], [0.1, 0.1, 0.1, 0], 11); }
-        // An arrow is a dark dash along its flight; a stone a dark ball.
-        else if (f.fx === 'arrow') { for (let i = 0; i < 3; i++) smoke.add(lerp(f.px, x, i / 3), lerp(f.py, y, i / 3), lerp(f.pz, z, i / 3), 0, 0, 0, 0.07, 0.05, 0.03, [0.14, 0.11, 0.09, 1], [0.14, 0.11, 0.09, 0], 11); f.px = x; f.py = y; f.pz = z; }
-        else if (f.fx === 'stone') smoke.add(x, y, z, 0, 0, 0, 0.08, 0.2, 0.18, [0.16, 0.14, 0.12, 1], [0.16, 0.14, 0.12, 0], 11);
+        // An arrow is a shaft along its flight, inked as the units are, a little thicker as the view draws back so a
+        // volley still reads. One that misses stays stuck in the ground.
+        else if (f.fx === 'arrow') {
+          if (f.t < 0) continue;
+          const vx = f.x1 - f.x0, vz = f.z1 - f.z0, vy = f.y1 - f.y0 + f.arc * 4 * (1 - 2 * k), wk = clamp(cam.dist / 92, 1, 2.2);
+          if (VIS(x, z)) alongAt(sets.arrow[0], x, y, z, vx, vy, vz, f.k, wk, inkBlack);
+          if (f.t >= f.dur && f.stick) { const n = Math.hypot(vx, vy, vz) || 1; if (stuckArrows.length < 240) stuckArrows.push({ x, y, z, dx: vx / n, dy: vy / n, dz: vz / n, k: f.k, w: wk, roll: Math.random() * 3, t: 0 }); }
+        }
+        // A stone tumbles along its arc, and in ink a trail of the pen follows it, so the throw reads as a curve.
+        else if (f.fx === 'stone') {
+          f.spin += dt * 9;
+          if (VIS(x, z)) {
+            q1.setFromEuler(e1.set(f.spin, f.spin * 0.6, f.spin * 0.3));
+            mOut.compose(p1.set(x, y, z), q1, s3.set(f.k, f.k, f.k)); put(sets.ball[0], mOut, inkBlack);
+            if (style.hud === 'ink' && f.k > 0.5) addStroke({ ax: f.px, ay: f.py, az: f.pz, bx: x, by: y, bz: z, w: 0.035 * clamp(cam.dist / 92, 0.8, 2.2) * f.k, life: 0.3, fade: 0.3 });
+          }
+          f.px = x; f.py = y; f.pz = z;
+        }
         else if (f.w === 'nuke') {
           const hot = k > 0.8 ? 0 : 1;
           glow.add(x, y, z, 0, 0, 0, 0.12, 1.6, 0.4, [9, 6, 3, 1], [4, 1.4, 0.2, 0], 8);
@@ -2329,6 +2421,8 @@ const World = (() => {
       updateFog(dt); updateOre(); updateTrail(dt); updateScenery(dt); stepLife(dt);
       drawEntities(alpha, dt, now);
       stepFlyers(dt);
+      drawStrokes(dt);
+      finishSets();
       rings.step(dt);
       let j = 0;
       for (let i = 0; i < inkFx.length; i++) { const f = inkFx[i]; f.t += dt; if (f.t < f.life) inkFx[j++] = f; }

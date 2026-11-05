@@ -2230,7 +2230,24 @@ const Models = (() => {
     // A building's model in an age is its own for that age if it has one, else the modern one.
     const ageKey = (kind, age) => buildings[kind + '@' + age] ? kind + '@' + age : kind;
 
-    return { units, buildings, man, chute, scenery, ageKey };
+    // Things in flight and marks of the pen, drawn in line as the units are: an arrow along x from its middle, a
+    // thrown stone, and a stroke one long along x from its start, dark, or white to take the side's colour.
+    const fx = {};
+    {
+      const a = G();
+      a.box(0.4, 0.014, 0.014, -0.01, -0.007, 0, 0x2e251c);
+      a.add(new THREE.ConeGeometry(0.024, 0.07, 5), 0.22, 0, 0, A.iron, { rz: -Math.PI / 2 });
+      a.box(0.08, 0.05, 0.004, -0.17, -0.025, 0, A.linen); a.box(0.08, 0.004, 0.05, -0.17, -0.002, 0, A.linen);
+      fx.arrow = a.finish();
+      const s = new THREE.IcosahedronGeometry(0.11, 0).toNonIndexed(), sp = s.attributes.position;
+      for (let i = 0; i < sp.count; i++) { const x = sp.getX(i), y = sp.getY(i), z = sp.getZ(i), h = Math.sin(x * 71.3 + y * 37.9 + z * 19.7) * 43758.5, k = 0.8 + 0.35 * (h - Math.floor(h)); sp.setXYZ(i, x * k, y * k, z * k); }
+      s.computeVertexNormals();
+      fx.ball = G().add(s, 0, 0, 0, 0x7e786c).finish();
+      fx.stroke = G().box(1, 1, 1, 0.5, -0.5, 0, 0x1e1a16).finish();
+      fx.tstroke = G().box(1, 1, 1, 0.5, -0.5, 0, 0xffffff, { t: 1 }).finish();
+    }
+
+    return { units, buildings, man, chute, scenery, fx, ageKey };
   }
 
   return { make, P };
