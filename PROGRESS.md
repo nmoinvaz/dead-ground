@@ -2,6 +2,9 @@
 
 Interface work on the sidebar, the overlay, the menus and the end report. Newest first.
 
+- Age-up moment: a card in the readout strip's gap names the new age, says what it brings and shows up to six
+  of its new forms, unrolls from its middle, holds four seconds and lifts away. The sidebar's cards an age
+  brings are drawn in one after another and marked new. The voice names the age. Next: report and setup.
 - Zoomed-out overlay: tags come in past dist 98 (no faint plates at the play distance 92), a side's units close
   together share one plate counting each kind, pictures follow the unit's form (horsemen, spears, bows, carts,
   siege engines, elephants, walkers), enemy plates have pointed ends, and in ink they are paper washed in the

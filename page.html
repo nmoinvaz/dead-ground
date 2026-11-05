@@ -73,12 +73,33 @@ body[data-look="ink"][data-scheme="dark"] #end, body[data-look="ink"][data-schem
 .tools button:hover { color: var(--amber); }
 .tools button.off { color: #6a6a58; text-decoration: line-through; }
 
-#notes { position: absolute; left: max(10px, env(safe-area-inset-left, 0px)); top: calc(54px + env(safe-area-inset-top, 0px)); display: flex; flex-direction: column; gap: 5px; width: min(480px, calc(100% - 20px)); pointer-events: none; }
+#notes { position: absolute; left: max(10px, env(safe-area-inset-left, 0px)); top: calc(54px + env(safe-area-inset-top, 0px)); display: flex; flex-direction: column; gap: 5px; width: min(430px, calc(100% - 20px)); pointer-events: none; }
 #objective { padding: 6px 11px; background: rgba(20,22,15,.86); border-left: 4px solid var(--amber); font: 500 16px/1.22 var(--ui); }
 #objective b { color: var(--amber); font-weight: 600; }
 #objective.flash { animation: glow .9s ease-out; }
 @keyframes glow { from { background: rgba(120,84,20,.92); } }
 #banner { position: absolute; top: calc(54px + env(safe-area-inset-top, 0px)); left: 50%; transform: translateX(-50%); padding: 6px 14px; background: rgba(90,60,10,.9); border: 1px solid var(--amber); font: 600 16px var(--ui); letter-spacing: .03em; white-space: nowrap; pointer-events: none; z-index: 3; max-width: calc(100% - 24px); overflow: hidden; text-overflow: ellipsis; }
+
+/* A new age: a card in the gap of the readout strip, unrolled from its middle, held, then lifted away. */
+#agecard { position: absolute; top: calc(8px + env(safe-area-inset-top, 0px)); left: 50%; transform: translateX(-50%); z-index: 3; pointer-events: none; width: min(460px, calc(100% - 24px)); box-sizing: border-box; padding: 9px 16px 10px; text-align: center; background: linear-gradient(#3a3f31, #262a20); border: 1px solid #000; box-shadow: inset 0 1px 0 var(--steel-hi), 0 6px 18px rgba(0,0,0,.55); color: var(--stencil); }
+#agecard.under { top: calc(54px + env(safe-area-inset-top, 0px)); }
+#agecard small { display: block; font: 600 12px var(--ui); letter-spacing: .14em; text-transform: uppercase; color: var(--dim); }
+#agecard h2 { margin: 1px 0 3px; font: 30px/1.05 var(--display); color: var(--stencil); }
+#agecard h2 em { font-style: normal; color: var(--amber); }
+#agecard p { margin: 0; font: 500 15px/1.25 var(--ui); text-wrap: balance; }
+#agecard .forms { display: flex; justify-content: center; gap: 4px; margin-top: 7px; }
+#agecard .forms:empty { display: none; }
+#agecard figure { margin: 0; width: 66px; min-width: 0; }
+#agecard figure img { display: block; width: 66px; height: 44px; object-fit: contain; }
+#agecard figcaption { font: 500 11px/1.15 var(--ui); color: var(--dim); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+#agecard.show { animation: agein .55s cubic-bezier(.2,.7,.3,1) both; }
+#agecard.gone { animation: ageout .7s ease-in both; }
+@keyframes agein { from { opacity: 0; clip-path: inset(0 50% 0 50%); } 40% { opacity: 1; } to { opacity: 1; clip-path: inset(-24px -24px -24px -24px); } }
+@keyframes ageout { from { opacity: 1; } to { opacity: 0; translate: 0 -8px; } }
+/* The sidebar's cards an age brings are drawn in from the left, as a pen would, and marked new. */
+.cam.fresh { animation: camin .5s ease-out both; }
+@keyframes camin { from { clip-path: inset(0 100% 0 0); } to { clip-path: inset(0 0 0 0); } }
+.cam .new { position: absolute; top: 1px; left: 14px; font: 600 11px var(--ui); font-style: italic; color: var(--amber); text-shadow: 0 1px 2px #000; }
 
 #log { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; }
 .line { font: 500 15px/1.2 var(--ui); padding: 2px 8px; background: rgba(12,14,9,.72); border-left: 3px solid var(--stencil); transition: opacity .7s; text-wrap: pretty; }
@@ -248,7 +269,10 @@ body[data-look="ink"] #net { background: var(--paper-hi); border: 2px solid var(
   .gauge { padding: 1px 6px; }
   .gauge.grow { display: none; }
   .tools button { min-height: 28px; width: 32px; }
-  #notes, #banner { top: calc(36px + env(safe-area-inset-top, 0px)); }
+  #notes, #banner, #agecard.under { top: calc(36px + env(safe-area-inset-top, 0px)); }
+  #agecard { padding: 6px 12px; }
+  #agecard h2 { font-size: 22px; }
+  #agecard .forms { display: none; }
   .line { font-size: 13px; }
   #objective { font-size: 13px; padding: 4px 8px; }
   #title { background: linear-gradient(90deg, rgba(6,7,4,.9), rgba(6,7,4,.5)); padding-block: 8px; }
@@ -276,7 +300,7 @@ body[data-look="ink"] #net { background: var(--paper-hi); border: 2px solid var(
   .help { display: none; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .cam.ready, #pwrbar.low, .tab.lit i { animation: none; }
+  .cam.ready, #pwrbar.low, .tab.lit i, #agecard.show, .cam.fresh { animation: none; }
 }
 
 /* Pen and ink: the panels are cream paper ruled in black ink, labels in a draughtsman's plain lettering, figures typed,
@@ -327,6 +351,14 @@ body[data-look="ink"] .cam.busy::after { background: conic-gradient(rgba(0,0,0,0
 body[data-look="ink"] .cam.off { filter: none; opacity: .42; }
 body[data-look="ink"] .cam.ready { box-shadow: inset 0 0 0 2px var(--redink); animation: none; }
 body[data-look="ink"] .cam.ready .state { color: var(--redink); }
+body[data-look="ink"] #agecard { background: var(--paper-hi); border: 1.5px solid var(--ink); outline: 1px solid var(--ink); outline-offset: 3px; box-shadow: 4px 4px 0 rgba(31,26,22,.45); color: var(--ink); }
+body[data-look="ink"][data-scheme="dark"] #agecard { box-shadow: 4px 4px 0 rgba(0,0,0,.5); }
+body[data-look="ink"] #agecard small { font: 400 13px var(--display); letter-spacing: .08em; text-transform: none; color: var(--ink-dim); }
+body[data-look="ink"] #agecard h2 { font: 400 32px/1.05 var(--display); color: var(--ink); }
+body[data-look="ink"] #agecard h2 em { color: var(--redink); }
+body[data-look="ink"] #agecard p { font: italic 400 16px/1.25 var(--label); color: var(--ink); }
+body[data-look="ink"] #agecard figcaption { font-family: var(--label); color: var(--ink-dim); }
+body[data-look="ink"] .cam .new { font-family: var(--label); font-weight: 500; color: var(--redink); text-shadow: 0 0 2px var(--paper-hi), 0 0 2px var(--paper-hi); }
 body[data-look="ink"] #tip h3 { color: var(--ink); font-family: var(--display); font-weight: 400; font-size: 17px; }
 body[data-look="ink"] #tip p { color: #3d352c; }
 body[data-look="ink"] #tip .idle { color: var(--ink-dim); font-style: italic; }
@@ -466,6 +498,7 @@ body[data-look="ink"] .sheet { box-shadow: 4px 4px 0 var(--ink); }
       <div class="choice"><h2>Paper</h2><div id="s-scheme"><button data-v="auto">As the system</button><button data-v="light">Light</button><button data-v="dark">Dark</button></div></div>
     </div>
     <div id="banner" hidden></div>
+    <div id="agecard" hidden aria-live="polite"></div>
     <div id="sel" hidden></div>
     <div id="roster" hidden></div>
     <div id="net" hidden></div>

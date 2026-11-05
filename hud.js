@@ -206,6 +206,11 @@ const Hud = (() => {
         const b = document.createElement('button'), info = camInfo(k), img = state.cameos[k];
         b.className = 'cam'; b.dataset.kind = k;
         b.innerHTML = `<canvas width="4" height="3"></canvas><b class="nm"></b><em class="ct"></em><u class="qty"></u><s class="key">${KEYS[i]}</s><span class="state"></span>`;
+        // A card a new age brought is drawn in, after those before it, and marked new for a few seconds.
+        if (state.fresh && state.fresh.has(k) && performance.now() < state.freshUntil) {
+          b.classList.add('fresh'); b.style.animationDelay = `${i * 70}ms`;
+          const n = document.createElement('i'); n.className = 'new'; n.textContent = 'new'; b.append(n);
+        }
         b.querySelector('.nm').textContent = info.name;
         const c = b.querySelector('canvas');
         if (img) b.style.setProperty('--img', `url(${img})`);
@@ -1276,7 +1281,9 @@ const Hud = (() => {
           og.fillStyle = ink ? SLOT_PLATE[e.team] || INK : col; og.fillRect(o.x - tw / 2, yy + 5, tw, 2);
           og.fillStyle = ink ? INK : '#f2e8d2'; og.fillText(text, o.x, yy + 2); og.restore();
         }
-        if (on || hov) {
+        // Where tags stand in for the units, a chosen unit is shown by its group's plate, not a ring and a bar each.
+        const tagged = !e.b && big > 0.5 && !hov;
+        if ((on || hov) && !tagged) {
           const r = e.b ? Math.max(e.w, e.h) * 0.74 * o.scale : Math.max(10, o.r * 1.25);
           og.strokeStyle = on ? (mine ? (ink ? INK : '#a9f0c0') : (ink ? '#a3301e' : '#ff8a70')) : (ink ? 'rgba(31,26,22,0.45)' : 'rgba(255,255,255,0.5)'); og.lineWidth = 1.4; og.setLineDash([]);
           if (e.b) {
@@ -1285,7 +1292,7 @@ const Hud = (() => {
           } else { og.beginPath(); og.ellipse(o.x, o.y + o.r * 0.3, r, r * 0.62, 0, 0, 6.3); og.stroke(); }
         }
         const damaged = e.hp < e.max * 0.995;
-        if (on || hov || (damaged && mine && s.tick - e.under < 4 * HZ && o.scale > 8)) {
+        if (!tagged && (on || hov || (damaged && mine && s.tick - e.under < 4 * HZ && o.scale > 8))) {
           const bw = e.b ? Math.min(90, Math.max(e.w, e.h) * o.scale * 0.9) : Math.max(18, o.r * 1.8), by = o.y - (e.b ? o.r * 0.9 : o.r * 1.1 + 6), f = e.hp / e.max;
           og.fillStyle = 'rgba(0,0,0,0.62)'; og.fillRect(o.x - bw / 2 - 1, by - 1, bw + 2, 4);
           og.fillStyle = f > 0.55 ? '#58d068' : f > 0.28 ? '#f0c040' : '#f05040'; og.fillRect(o.x - bw / 2, by, bw * f, 2);
@@ -1502,13 +1509,55 @@ const Hud = (() => {
       if ($('techlv').textContent !== Rules.AGES[p.tech].name) { $('techlv').textContent = Rules.AGES[p.tech].name; $('agecell').title = `The ${Rules.AGES[p.tech].name} Age, ${p.tech} of ${Rules.MAX_AGE}`; }
       // A new age brings the lines' new forms to the cards, its buildings' pictures, and power to run short of.
       const picStale = !!game.pictures && p.tech !== game.picAge;
-      if (p.tech !== listAge || picStale) { lineLists(p.tech); if (picStale) game.pictures(); else buildCams(); }
+      if (p.tech !== listAge || picStale) {
+        const was = listAge;
+        lineLists(p.tech);
+        if (was > 0 && p.tech > was) freshen(was, p.tech);
+        if (picStale) game.pictures(); else buildCams();
+        if (was > 0 && p.tech > was) ageCard(p.tech);
+      }
       $('pwr').parentElement.classList.toggle('off', p.tech < Rules.POWER_AGE);
       if (p.tech < Rules.POWER_AGE) $('pwr').textContent = '—';
       const towns = s.towns.filter(t => t.owner === team()).length;
       $('towns').textContent = `${towns}/${s.towns.length}`;
       updateSelPanel();
       updateObjective();
+    }
+
+    // A new age is a moment: a card in the readout strip's gap with the age's name, what it brings and its new
+    // forms, held four seconds and let go, and the sidebar's new cards drawn in one after another.
+    const ROMAN = ['', 'I', 'II', 'III', 'IV', 'V', 'VI', 'VII'];
+    // The lines whose new forms the card shows first, the heavy hitters ahead.
+    const SHOW = ['mount', 'heavy', 'inf', 'jet', 'heli', 'at', 'siege', 'snp', 'rec', 'ifv', 'aa', 'fpv', 'hero', 'truck', 'sup'];
+    const newForms = (was, age) => SHOW.map(l => Rules.formOf(l, age)).filter((k, i) => k && k !== Rules.formOf(SHOW[i], was));
+    let ageT = [];
+    function ageCard(age) {
+      const card = $('agecard'), A = Rules.AGES[age];
+      card.innerHTML = `<small>Age ${ROMAN[age]} of ${ROMAN[Rules.MAX_AGE]}</small><h2>The <em></em> Age</h2><p></p><div class="forms"></div>`;
+      card.querySelector('em').textContent = A.name;
+      card.querySelector('p').textContent = A.note;
+      const row = card.querySelector('.forms');
+      for (const k of newForms(age - 1, age).slice(0, 6)) {
+        const f = document.createElement('figure'), img = document.createElement('img'), c = document.createElement('figcaption');
+        img.src = state.cameos[k] || ''; img.alt = ''; c.textContent = UNITS[k].name;
+        f.append(img, c); row.append(f);
+      }
+      // It stands centred in the gap between the readouts and the tools, or under the strip where there is none.
+      const vr = view.getBoundingClientRect(), a = $('top').querySelector('.gauge.grow'), b = $('top').querySelector('.tools');
+      const l = a && a.offsetParent ? a.getBoundingClientRect().right : vr.left, r = b ? b.getBoundingClientRect().left : vr.right, room = r - l - 16;
+      card.classList.toggle('under', room < 330);
+      card.style.left = room < 330 ? '' : `${(l + r) / 2 - vr.left}px`;
+      card.style.width = room < 330 ? '' : `${Math.min(460, room)}px`;
+      ageT.forEach(clearTimeout);
+      card.hidden = false; card.classList.remove('show', 'gone'); void card.offsetWidth; card.classList.add('show');
+      ageT = [setTimeout(() => card.classList.add('gone'), 4300), setTimeout(() => { card.hidden = true; card.classList.remove('show', 'gone'); }, 5000)];
+    }
+    // The cards an age brings: the lines' new forms, and the buildings and calls it opens.
+    function freshen(was, age) {
+      const f = new Set(['tech', ...Object.keys(Rules.LINES).map(l => Rules.formOf(l, age)).filter((k, i) => k && k !== Rules.formOf(Object.keys(Rules.LINES)[i], was))]);
+      for (const k of [...ALL.bld, ...ALL.def, ...ALL.pow]) { const d = k === 'launch' ? BUILDINGS.silo : BUILDINGS[k] || POWERS[k]; if (d && (d.tech || 1) > was && (d.tech || 1) <= age) f.add(k); }
+      state.fresh = f; state.freshUntil = performance.now() + 9000;
+      setTimeout(() => { for (const n of document.querySelectorAll('#cams .new')) n.remove(); }, 9000);
     }
 
     function updateSelPanel() {
