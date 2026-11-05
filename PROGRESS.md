@@ -29,11 +29,18 @@ Skin tones (`0xc99a78` in models.js, `#e6c8a6` in axo.js) are hue 24 to 32 degre
 - Read the unit colour path through models.js, world.js (paint, mask, anchor), looks/ink.js, axo.js and the HUD.
 - Listed the sources above. Saved the baseline build as `review-units/before.html`.
 
+## Baseline, measured
+
+`review-units/tools/pink.js` stands every form of an age in two rows, the red side (slot 1) above slot 6, on the
+eight-seat map with no fog, close (distance 45) and far (180, all 62 forms, with and without the HUD tags).
+`review-units/tools/pinkcount.py` counts pink pixels in each unit's screen circle. Baseline frames are in
+`review-units/base/`. On dark paper the red side reads salmon and slot 6 pink at a glance.
+
 ## Now
 
-- Building a lineup shot script and the computed pink detector, then the baseline counts.
+- Designing eight side inks, one for light paper and one for dark, and a colour for slot 6.
 
 ## Left
 
-- Baseline counts, light and dark, every age, red side and slot 6, close and far, and the axo pictures.
+- The axo pictures' baseline count.
 - New slot colours and per-side inks, then the after counts, pairs, swatch and page-error check.
