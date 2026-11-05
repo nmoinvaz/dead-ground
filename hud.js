@@ -150,6 +150,8 @@ const Hud = (() => {
     }
 
     const axoImg = k => (state.cameos[k] || '').startsWith('data:image/svg') ? ' class="axo"' : '';
+    // A building's picture in its owner's age, anything else's by its kind.
+    const picKey = e => { const P = e.b && game.S.P[e.team], k = P ? world.ageKey(e.kind, P.tech) : e.kind; return state.cameos[k] ? k : e.kind; };
     function buildCams() {
       const box = $('cams');
       box.textContent = '';
@@ -1380,8 +1382,9 @@ const Hud = (() => {
       const sec = s.tick / HZ | 0;
       $('clock').textContent = `${String(sec / 60 | 0).padStart(2, '0')}:${String(sec % 60).padStart(2, '0')}`;
       $('techlv').textContent = Rules.AGES[p.tech].name;
-      // A new age brings the lines' new forms to the cards, and power to run short of.
-      if (p.tech !== listAge) { lineLists(p.tech); buildCams(); }
+      // A new age brings the lines' new forms to the cards, its buildings' pictures, and power to run short of.
+      const picStale = !!game.pictures && p.tech !== game.picAge;
+      if (p.tech !== listAge || picStale) { lineLists(p.tech); if (picStale) game.pictures(); else buildCams(); }
       $('pwr').parentElement.classList.toggle('off', p.tech < Rules.POWER_AGE);
       if (p.tech < Rules.POWER_AGE) $('pwr').textContent = '—';
       const towns = s.towns.filter(t => t.owner === team()).length;
@@ -1402,9 +1405,9 @@ const Hud = (() => {
           const kinds = Object.keys(groups), first = list[0], mine = first.team === team();
           let html = '<div class="who">';
           if (kinds.length === 1 && list.length === 1) {
-            html += `<div class="one"><img src="${state.cameos[first.kind] || ''}"${axoImg(first.kind)} alt=""><div><h3>${first.d.name}</h3><div class="hp"><i id="hp1"></i></div><p id="stat1"></p></div></div>`;
+            html += `<div class="one"><img src="${state.cameos[picKey(first)] || ''}"${axoImg(first.kind)} alt=""><div><h3>${first.d.name}</h3><div class="hp"><i id="hp1"></i></div><p id="stat1"></p></div></div>`;
           } else {
-            html += '<div class="many">' + kinds.map(k => `<button data-k="${k}"><img src="${state.cameos[k] || ''}"${axoImg(k)} alt=""><b>${groups[k].length}</b></button>`).join('') + '</div>';
+            html += '<div class="many">' + kinds.map(k => `<button data-k="${k}"><img src="${state.cameos[picKey(groups[k][0])] || ''}"${axoImg(k)} alt=""><b>${groups[k].length}</b></button>`).join('') + '</div>';
           }
           html += '</div><div class="acts">';
           if (mine) {

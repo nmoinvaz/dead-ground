@@ -363,11 +363,15 @@ const Game = (() => {
     let scheme = store.get('dg-scheme', 'auto');
     // The sidebar's pictures: the buildings as the engine renders them, the units as axonometric line drawings in
     // the look's own inks, with the player's side on their markings.
+    // A building's card shows it in the player's age, and G.picAge says which age that was.
     let renders = null;
     function pictures() {
       if (!renders) return;
       const scheme = world.look !== 'ink' ? 'daylight' : document.body.dataset.scheme === 'dark' ? 'dark' : 'light';
-      hud.setCameos(Object.assign({}, renders, Axo.pictures(scheme, SLOT_CSS[Math.max(0, G.team || 0)])));
+      const P = G.S && G.S.P[Math.max(0, G.team || 0)], age = P ? P.tech : 5, own = {};
+      for (const k in Rules.BUILDINGS) own[k] = renders[world.ageKey(k, age)] || renders[k];
+      G.picAge = age;
+      hud.setCameos(Object.assign({}, renders, own, Axo.pictures(scheme, SLOT_CSS[Math.max(0, G.team || 0)])));
     }
     function applyScheme() {
       const dark = scheme === 'dark' || (scheme === 'auto' && !!darkQ && darkQ.matches);
@@ -806,6 +810,7 @@ const Game = (() => {
       probe();
       const list = [
         ...Object.keys(Rules.BUILDINGS).filter(k => k !== 'hq').map(k => ({ kind: k, b: true })), { kind: 'hq', b: true },
+        ...world.buildingKeys.filter(k => k.includes('@')).map(k => ({ kind: k, b: true })),
         ...Object.keys(Rules.UNITS).filter(k => !Rules.UNITS[k].men).map(k => ({ kind: k })),
         ...Object.keys(Rules.UNITS).filter(k => Rules.UNITS[k].men).map(k => ({ kind: k, man: true })),
       ];

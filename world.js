@@ -42,6 +42,10 @@ const World = (() => {
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     renderer.info.autoReset = true;
     const MODELS = Models.make(THREE);
+    // Each building's model in each age, by kind and then age, so a base is drawn in its owner's age.
+    const AGE_KEYS = {};
+    for (const k in BUILDINGS) AGE_KEYS[k] = [0, 1, 2, 3, 4, 5, 6].map(a => MODELS.ageKey(k, a));
+    const ageKey = (kind, age) => (AGE_KEYS[kind] && AGE_KEYS[kind][age]) || kind;
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(26, 1, 2, 500);
     const cam = { x: 40, y: 40, dist: 92, yaw: Math.PI / 4, pitch: 0.98, shake: 0, minD: 30, maxD: 190 };
@@ -1774,7 +1778,7 @@ const World = (() => {
           const age = (S.tick - e.born) / HZ, up = clamp(age / 2.2, 0, 1), ease = 1 - (1 - up) ** 3;
           compose(m1, e.x, r.y0 - (1 - ease) * 2.4, e.y, r.yaw, 0, 0);
           if (up < 1) { m3.makeScale(1, 0.4 + 0.6 * ease, 1); m1.multiply(m3); r.dust -= dt; if (r.dust <= 0) { r.dust = 0.05; const a = Math.random() * 6.28, q = Math.max(e.w, e.h) * 0.6; dustPuff(e.x + Math.cos(a) * q, r.y0 + 0.1, e.y + Math.sin(a) * q, 1.4); } }
-          drawParts(sets[e.kind], m1, color, e, r, now);
+          drawParts(sets[bkey(e.kind, e.team)], m1, color, e, r, now);
           // Damage shows as smoke, then fire.
           const f = e.hp / e.max;
           if (f < 0.55 && VIS(e.x, e.y)) {
@@ -1873,7 +1877,7 @@ const World = (() => {
         const shake = k < 0.3 ? (Math.random() - 0.5) * 0.12 : 0, fall = Math.max(0, k - 0.12) / 0.88, g2 = fall * fall;
         compose(m1, f.x + shake, f.y0 - g2 * 2.6, f.z + shake, f.yaw, f.dir * 0.32 * g2, f.dir * 0.12 * g2);
         m3.makeScale(1, 1 - 0.55 * g2, 1); m1.multiply(m3);
-        const fr = f.r || (f.r = { alpha: 1, yaw: f.yaw }), fe = f.e || (f.e = { pta: 0, ta: 0, fired: -1e9, d: BUILDINGS[f.kind], charge: 0, cargo: 0 });
+        const fr = f.r || (f.r = { alpha: 1, yaw: f.yaw }), fe = f.e || (f.e = { pta: 0, ta: 0, fired: -1e9, d: BUILDINGS[f.base], charge: 0, cargo: 0 });
         drawParts(set, m1, colA.copy(teamCol[f.team]).lerp(burnt, Math.min(1, k * 1.4)), fe, fr, now);
         f.dust -= dt;
         if (f.dust <= 0 && fall > 0) {
@@ -1908,8 +1912,9 @@ const World = (() => {
         if (w.smoke <= 0 && w.t < 26 && VIS(w.x, w.z)) { w.smoke = 0.14 + w.t * 0.012; burn(w.x, w.y + 0.5, w.z, 0.9 + (w.rubble ? 0.4 : 0), w.t < 10); }
       }
 
+      // An empty set is hidden, so the many models nobody draws this frame cost no draw calls.
       for (const k in sets) for (const p of sets[k]) {
-        p.mesh.count = p.n;
+        p.mesh.count = p.n; p.mesh.visible = p.n > 0;
         if (p.n) { p.mesh.instanceMatrix.needsUpdate = true; p.mesh.instanceColor.needsUpdate = true; }
       }
     }
@@ -2198,8 +2203,10 @@ const World = (() => {
       if (!VIS(e.x, e.y) && !(e.b && r && r.seen)) return;
       const y = e.b ? terrainAt(M, e.x, e.y) : heightAt(M, e.x, e.y);
       if (e.b) {
-        if (r && r.y0 !== undefined) falls.push({ kind: e.kind, x: e.x, y0: r.y0, z: e.y, yaw: r.yaw, team: e.team, t: 0, dir: Math.random() < 0.5 ? -1 : 1, w: e.w, h: e.h, dust: 0 });
-        pastBoxes.push({ x: e.cx, y: e.cy, w: e.w, h: e.h, ht: bHeight(e.kind), t: 0, life: 60 });
+        // It falls as it stood, in its owner's age.
+        const key = bkey(e.kind, e.team);
+        if (r && r.y0 !== undefined) falls.push({ kind: key, base: e.kind, x: e.x, y0: r.y0, z: e.y, yaw: r.yaw, team: e.team, t: 0, dir: Math.random() < 0.5 ? -1 : 1, w: e.w, h: e.h, dust: 0 });
+        pastBoxes.push({ x: e.cx, y: e.cy, w: e.w, h: e.h, ht: topOf(key), t: 0, life: 60 });
         splatter(e.x, e.y, Math.max(e.w, e.h) * 0.6);
         scorch(e.x, e.y, Math.max(e.w, e.h) * 0.9, 1);
         const n = Math.max(e.w, e.h) + 2;
@@ -2307,16 +2314,19 @@ const World = (() => {
       pp.render();
     }
 
-    // A building's height, from the top of its model, for the ghost plan's wireframes.
+    // A building's model in its side's age. A side not playing, or no game, sees the modern one.
+    function bkey(kind, team) { const P = S && team >= 0 ? S.P[team] : null; return ageKey(kind, P ? P.tech : 5); }
+    // A model's height, from its top, for the ghost plan's wireframes. bHeight gives a kind's in the viewer's age.
     const tops = {};
-    function bHeight(kind) {
-      if (tops[kind] === undefined) {
+    function topOf(key) {
+      if (tops[key] === undefined) {
         let top = 1;
-        for (const p of MODELS.buildings[kind] || []) { p.geo.computeBoundingBox(); top = Math.max(top, p.geo.boundingBox.max.y + (p.pivot ? p.pivot[1] : 0)); }
-        tops[kind] = top;
+        for (const p of MODELS.buildings[key] || []) { p.geo.computeBoundingBox(); top = Math.max(top, p.geo.boundingBox.max.y + (p.pivot ? p.pivot[1] : 0)); }
+        tops[key] = top;
       }
-      return tops[kind];
+      return tops[key];
     }
+    const bHeight = kind => topOf(bkey(kind, viewTeam));
     // Buildings destroyed in sight, kept a minute as what was.
     const pastBoxes = [];
 
@@ -2342,11 +2352,12 @@ const World = (() => {
         ghostCells.setMatrixAt(n, m1); ghostCells.setColorAt(n, colA.set(ok ? 0x40ff80 : 0xff3030)); n++;
       }
       ghostCells.count = n; ghostCells.instanceMatrix.needsUpdate = true; ghostCells.instanceColor.needsUpdate = true;
-      if (!ghost || ghost.kind !== g.kind) {
+      const gk = bkey(g.kind, viewTeam);
+      if (!ghost || ghost.kind !== gk) {
         if (ghost) scene.remove(ghost);
-        ghost = new THREE.Group(); ghost.kind = g.kind;
+        ghost = new THREE.Group(); ghost.kind = gk;
         const mat = new THREE.MeshStandardMaterial({ vertexColors: true, transparent: true, opacity: 0.62, roughness: 0.6, emissive: 0x204060, emissiveIntensity: 0.5 });
-        for (const p of MODELS.buildings[g.kind]) { const m = new THREE.Mesh(p.geo, mat); if (p.pivot) m.position.set(...p.pivot); ghost.add(m); }
+        for (const p of MODELS.buildings[gk]) { const m = new THREE.Mesh(p.geo, mat); if (p.pivot) m.position.set(...p.pivot); ghost.add(m); }
         scene.add(ghost);
       }
       ghost.visible = true;
@@ -2470,6 +2481,8 @@ const World = (() => {
       get style() { return style; },
       cam, vw: 1, vh: 1, onScreen: [], load, frame, event, resize, pick, project, setGhost, cameos, renderer, camera, scene, place: placeCamera,
       teamCol, THEMES,
+      // A building's model key in an age, and every building model's key, for the sidebar's pictures.
+      ageKey, buildingKeys: Object.keys(MODELS.buildings),
       get baseImage() { return baseImage; },
       get viewTeam() { return viewTeam; },
       // Sees the whole map with no fog, as one watching a game does.

@@ -3855,6 +3855,19 @@ const Models = (() => {
         g.rotateX(-Math.PI / 2);
         return this.add(g, x, y, z, c, o);
       }
+      // Copies another builder's triangles in, scaled by s, turned by ry about y and moved to (x, y, z).
+      merge(src, x, y, z, ry = 0, s = 1) {
+        const c = Math.cos(ry), sn = Math.sin(ry), P = src.p, N = src.n;
+        for (let i = 0; i < P.length; i += 3) {
+          const px = P[i] * s, pz = P[i + 2] * s;
+          this.p.push(x + px * c + pz * sn, y + P[i + 1] * s, z - px * sn + pz * c);
+          this.n.push(N[i] * c + N[i + 2] * sn, N[i + 1], -N[i] * sn + N[i + 2] * c);
+        }
+        for (const v of src.c) this.c.push(v);
+        for (const v of src.t) this.t.push(v);
+        for (const v of src.g) this.g.push(v);
+        return this;
+      }
       finish() {
         const g = new THREE.BufferGeometry();
         g.setAttribute('position', new THREE.Float32BufferAttribute(this.p, 3));
@@ -4722,14 +4735,15 @@ const Models = (() => {
       }
     }
     const SHIELD = (g, c) => { g.cyl(0.075, 0.075, 0.014, 0.06, MAN_H * 0.62, 0.1, c, { axis: 'z', seg: 12, t: 0.45 }); g.sph(0.018, 0.06, MAN_H * 0.62, 0.11, A.bronze, { seg: 6, rings: 4 }); };
-    const soldier = (o) => {
+    const soldierGeo = (o) => {
       const b = body(Object.assign({ helmet: false, rifle: 0 }, o));
       hat(b, o.hat, o.crest);
       arms(b, o.arms);
       if (o.shield) SHIELD(b, o.shield);
       if (o.sash) b.box(0.02, 0.2, 0.16, 0.06, MAN_H * 0.5, 0, o.sash, { rx: 0.6 });
-      return [part('body', b), part('leg', legs(o.legs ?? o.cloth))];
+      return [b, legs(o.legs ?? o.cloth)];
     };
+    const soldier = (o) => { const [b, l] = soldierGeo(o); return [part('body', b), part('leg', l)]; };
     Object.assign(man, {
       spear: soldier({ cloth: A.tunic, vest: A.bronze, vestT: 0.4, hat: 'crest', arms: 'spear', shield: A.coatR }),
       pike: soldier({ cloth: A.tunic2, vest: A.mail, vestT: 0.3, hat: 'kettle', arms: 'pike' }),
@@ -5142,7 +5156,852 @@ const Models = (() => {
       units.stealth = [part('hull', b)];
     }
 
-    return { units, buildings, man, chute, scenery };
+    // ---- Buildings of the older ages ---------------------------------------------------------------------------
+    // Each age builds in its own stuff. The first builds in mud brick, timber and thatch, the second in stone with
+    // crenels, the third in brick and earthwork bastions, and the fourth in brick, slate and corrugated iron. The
+    // models keep the modern ones' footprints and moving parts, and are keyed kind@age. An age without a model of
+    // its own uses the modern one.
+    const B = {
+      earth: 0xa48c68, earthDk: 0x988468, mud: 0xc2a27c, mudDk: 0x9a7c5c, thatch: 0xc9a85e, thatchDk: 0x8f7442,
+      tile: 0xa65b3d, stone: 0xbcb5a7, stoneDk: 0x8a8478, stoneLt: 0xd8d1c3, plaster: 0xe6dcc6, slate: 0x50555c,
+      brick: 0x9c5940, brickDk: 0x6e3c2c, turf: 0x8c8a5a, gravel: 0x9c9586, iron: 0x868b8f, ironDk: 0x55595d,
+      cinder: 0x67635c, coal: 0x2a2826, fire: 0xffa040,
+    };
+    const R90 = Math.PI / 2, RT = Math.SQRT1_2;
+    const bset = (kind, age, parts) => { buildings[kind + '@' + age] = parts; };
+    // The ground a building stands on, its top at the pads' height.
+    const yard = (g, w, d, c) => g.box(w, 0.5, d, 0, -0.42, 0, c);
+    // A pitched roof h high over L by w, its ridge along x, or along z with o.alongZ.
+    const gable = (g, L, w, h, x, y, z, c, o = {}) => g.prism([[-w / 2, 0], [0, h], [w / 2, 0]], L, x, y, z, c, Object.assign({ ry: o.alongZ ? 0 : R90 }, o));
+    // Triangles given corner by corner, flat shaded.
+    const tris = v => { const g = new THREE.BufferGeometry(); g.setAttribute('position', new THREE.Float32BufferAttribute(v.flat(), 3)); g.computeVertexNormals(); return g; };
+    // A hipped roof h high over L by w with its ridge along x, a pyramid when L equals w.
+    function hipRoof(g, L, w, h, x, y, z, c, o) {
+      const r = Math.max(0, (L - w) / 2), a = [-L / 2, 0, -w / 2], b = [L / 2, 0, -w / 2], d = [L / 2, 0, w / 2], f = [-L / 2, 0, w / 2], r1 = [-r, h, 0], r2 = [r, h, 0];
+      return g.add(tris([a, r2, b, a, r1, r2, d, r1, f, d, r2, r1, b, r2, d, f, r1, a]), x, y, z, c, o);
+    }
+    // A square stack h high tapering from w0 to w1 on a side.
+    function stack(g, w0, w1, h, x, y, z, c, o) {
+      const s = new THREE.CylinderGeometry(w1 * RT, w0 * RT, h, 4, 1, false, Math.PI / 4).toNonIndexed();
+      s.computeVertexNormals();
+      return g.add(s, x, y + h / 2, z, c, o);
+    }
+    // A square strut t thick from point a to point b.
+    const qS = new THREE.Quaternion(), eS = new THREE.Euler(), yUp = new THREE.Vector3(0, 1, 0), dS = new THREE.Vector3();
+    function strut(g, a, b, t, c, o = {}) {
+      dS.set(b[0] - a[0], b[1] - a[1], b[2] - a[2]);
+      const L = dS.length();
+      qS.setFromUnitVectors(yUp, dS.normalize()); eS.setFromQuaternion(qS, 'XYZ');
+      return g.box(t, L, t, (a[0] + b[0]) / 2, (a[1] + b[1]) / 2 - L / 2, (a[2] + b[2]) / 2, c, Object.assign({ rx: eS.x, ry: eS.y, rz: eS.z }, o));
+    }
+    const along = (x0, z0, x1, z1) => -Math.atan2(z1 - z0, x1 - x0);
+    // A wall h high and t thick from (x0, z0) to (x1, z1).
+    const wall = (g, x0, z0, x1, z1, h, t, c, y = 0.08) => g.box(Math.hypot(x1 - x0, z1 - z0), h, t, (x0 + x1) / 2, y, (z0 + z1) / 2, c, { ry: along(x0, z0, x1, z1) });
+    // Merlons along a wall's top from y, s on a side.
+    function merlons(g, x0, z0, x1, z1, y, c, s = 0.14) {
+      const n = Math.max(2, Math.round(Math.hypot(x1 - x0, z1 - z0) / (s * 2))), ry = along(x0, z0, x1, z1);
+      for (let i = 0; i < n; i++) { const k = (i + 0.5) / n; g.box(s, s, s * 1.1, x0 + (x1 - x0) * k, y, z0 + (z1 - z0) * k, c, { ry }); }
+    }
+    // Merlons round a rectangle's top, and round a tower's.
+    function crenRect(g, x, z, w, d, y, c, s) {
+      const a = [x - w / 2, z - d / 2], b = [x + w / 2, z - d / 2], e2 = [x + w / 2, z + d / 2], f = [x - w / 2, z + d / 2];
+      for (const [p, q2] of [[a, b], [b, e2], [e2, f], [f, a]]) merlons(g, p[0], p[1], q2[0], q2[1], y, c, s);
+    }
+    function crenRing(g, x, z, r, y, c, n = 8, s = 0.13) {
+      for (let i = 0; i < n; i++) { const a = i / n * 6.283; g.box(s, s, s * 1.2, x + Math.cos(a) * r, y, z + Math.sin(a) * r, c, { ry: -a }); }
+    }
+    // A palisade of pointed stakes from (x0, z0) to (x1, z1), cut as one board.
+    function palisade(g, x0, z0, x1, z1, h = 0.56, c = A.wood) {
+      const L = Math.hypot(x1 - x0, z1 - z0), n = Math.max(2, Math.round(L / 0.13)), s = L / n, pts = [[-L / 2, 0], [L / 2, 0]];
+      for (let i = n; i > 0; i--) { const x = -L / 2 + i * s; pts.push([x, h], [x - s / 2, h + 0.11]); }
+      pts.push([-L / 2, h]);
+      g.prism(pts, 0.09, (x0 + x1) / 2, 0.04, (z0 + z1) / 2, c, { ry: along(x0, z0, x1, z1) });
+    }
+    // A post and rail fence.
+    function fence(g, x0, z0, x1, z1, h = 0.36, c = A.wood) {
+      const L = Math.hypot(x1 - x0, z1 - z0), n = Math.max(1, Math.round(L / 0.5)), ry = along(x0, z0, x1, z1);
+      for (let i = 0; i <= n; i++) g.box(0.05, h, 0.05, x0 + (x1 - x0) * i / n, 0.08, z0 + (z1 - z0) * i / n, c, { ry });
+      for (const k of [0.45, 0.85]) g.box(L, 0.035, 0.03, (x0 + x1) / 2, 0.08 + h * k, (z0 + z1) / 2, c, { ry });
+    }
+    // A pole with a pennant, or with a flag, in the side's colour, flying toward +x.
+    function pennant(g, x, y, z, h = 0.8, L = 0.36) {
+      g.cyl(0.013, 0.017, h, x, y + h / 2, z, A.woodDk, { seg: 5 });
+      g.prism([[0, -0.07], [L, 0], [0, 0.07]], 0.014, x, y + h - 0.09, z, P.white, TB);
+    }
+    function flagpole(g, x, y, z, h = 1.2, w = 0.46, fh = 0.3, pole = A.woodDk) {
+      g.cyl(0.014, 0.02, h, x, y + h / 2, z, pole, { seg: 5 });
+      g.box(w, fh, 0.014, x + w / 2 + 0.015, y + h - fh - 0.02, z, P.white, TB);
+    }
+    // A cloth in the side's colour hung flat on a wall facing +x, or +z with faceZ, its top at y.
+    const hang = (g, x, y, z, w, h, faceZ) => faceZ ? g.box(w, h, 0.016, x, y - h, z, P.white, TB) : g.box(0.016, h, w, x, y - h, z, P.white, TB);
+    // A row of n dark openings across w, along x on a face at z, or along z on a face at x with alongZ.
+    function slots(g, x, y, z, w, h, n, alongZ, ww = 0.1, c = B.coal) {
+      for (let i = 0; i < n; i++) { const u = ((i + 0.5) / n - 0.5) * w; if (alongZ) g.box(0.02, h, ww, x, y, z + u, c); else g.box(ww, h, 0.02, x + u, y, z, c); }
+    }
+    // Corrugation as ribs down both slopes of a gable roof, its ridge along x, or along z with alongZ.
+    function ribs(g, L, w, h, x, y, z, c, alongZ, step = 0.13) {
+      const a = Math.atan2(h, w / 2), s = Math.hypot(h, w / 2), n = Math.round(L / step);
+      for (let i = 0; i < n; i++) {
+        const u = -L / 2 + (i + 0.5) * L / n;
+        for (const k of [-1, 1]) {
+          if (alongZ) g.box(s, 0.022, 0.022, x + k * w / 4, y + h / 2 + 0.006, z + u, c, { rz: -k * a });
+          else g.box(0.022, 0.022, s, x + u, y + h / 2 + 0.006, z + k * w / 4, c, { rx: k * a });
+        }
+      }
+    }
+    // A half barrel of corrugated iron along x on the ground, with its hoops.
+    function ironHut(g, x, z, r, L, hoops = 6) {
+      g.add(new THREE.CylinderGeometry(r, r, L, 12, 1, false, 0, Math.PI), x, 0.08, z, B.iron, { rz: R90 });
+      for (let i = 0; i < hoops; i++) g.add(new THREE.TorusGeometry(r + 0.008, 0.012, 3, 10, Math.PI), x - L / 2 + 0.1 + i * (L - 0.2) / (hoops - 1), 0.08, z, B.ironDk, { ry: R90 });
+      g.box(0.02, r * 0.85, r * 0.7, x + L / 2 + 0.01, 0.08, z, A.woodDk);
+    }
+    // A water tower of four iron legs, a riveted tank and a shallow cone of a roof.
+    function waterTower(g, x, z, h = 1.3, r = 0.3) {
+      const q2 = r * 0.62;
+      for (const [dx, dz] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) g.box(0.05, h, 0.05, x + dx * q2, 0.08, z + dz * q2, B.ironDk);
+      for (const k of [-1, 1]) { g.box(q2 * 2, 0.03, 0.03, x, 0.08 + h * 0.5, z + k * q2, B.ironDk); g.box(0.03, 0.03, q2 * 2, x + k * q2, 0.08 + h * 0.5, z, B.ironDk); }
+      g.cyl(r, r, r * 1.3, x, 0.08 + h + r * 0.65, z, B.iron, { seg: 12 });
+      g.cyl(r * 1.03, r * 1.03, 0.03, x, 0.08 + h + r * 0.4, z, B.ironDk, { seg: 12 });
+      g.cyl(0, r * 1.08, r * 0.45, x, 0.08 + h + r * 1.3 + r * 0.225, z, B.ironDk, { seg: 12 });
+    }
+    // A round brick chimney h tall with a dark band at its head.
+    function chimney(g, x, z, h, r = 0.14, y = 0.08) {
+      g.cyl(r * 0.78, r, h, x, y + h / 2, z, B.brick, { seg: 10 });
+      g.cyl(r * 0.84, r * 0.84, 0.12, x, y + h - 0.1, z, B.coal, { seg: 10 });
+    }
+    // Wicker baskets of earth, along a line from (x0, z0) to (x1, z1).
+    function gabions(g, x0, z0, x1, z1, y, n) {
+      for (let i = 0; i < n; i++) { const k = (i + 0.5) / n; g.cyl(0.085, 0.085, 0.22, x0 + (x1 - x0) * k, y + 0.11, z0 + (z1 - z0) * k, B.thatchDk, { seg: 7 }); }
+    }
+    // A water wheel of two rims, spokes and paddles on an axle along z.
+    function waterWheel(r = 0.48, w = 0.16) {
+      const g = G();
+      for (const k of [-1, 1]) g.add(new THREE.TorusGeometry(r, 0.025, 4, 16), 0, 0, k * w / 2, A.woodDk);
+      for (let i = 0; i < 4; i++) g.box(r * 2, 0.03, w, 0, -0.015, 0, A.wood, { rz: i * Math.PI / 4 });
+      for (let i = 0; i < 12; i++) { const a = i / 12 * 6.283; g.box(0.16, 0.03, w + 0.04, Math.cos(a) * r, Math.sin(a) * r - 0.015, 0, A.wood, { rz: a }); }
+      g.cyl(0.05, 0.05, w + 0.16, 0, 0, 0, B.ironDk, { axis: 'z', seg: 8 });
+      return g;
+    }
+    // A soldier standing at (x, y, z) facing ry, at the units' scale.
+    function figureInto(g, o, x, y, z, ry = 0, s = 1.25) {
+      const [b, l] = soldierGeo(o), c = Math.cos(ry), sn = Math.sin(ry);
+      g.merge(b, x, y, z, ry, s);
+      for (const k of [-1, 1]) { const lz = k * 0.042 * s; g.merge(l, x + lz * sn, y + 0.31 * s, z + lz * c, ry, s); }
+    }
+    // A horse standing at (x, y, z) facing ry, in the side's saddle-cloth unless o.cloth is false.
+    function horseInto(g, x, y, z, ry, coat, o = {}) { const h = G(); horse(h, 0, 0, coat, o); g.merge(h, x, y, z, ry, 1.25); }
+    const ore = (g, list) => { for (const [x, z, r] of list) g.add(new THREE.DodecahedronGeometry(r, 0), x, 0.08 + r * 0.6, z, P.ore, { ry: x * 7 + z * 3, g: 0.12 }); };
+    const bolt = () => { const g = G(); g.cyl(0.012, 0.012, 0.7, 0.1, 0, 0, A.woodDk, { axis: 'x', seg: 5 }); g.cyl(0, 0.026, 0.09, 0.49, 0, 0, A.iron, { rz: -R90, seg: 5 }); g.box(0.1, 0.05, 0.005, -0.22, 0, 0, A.linen); return g; };
+
+    // Headquarters ----------------------------------------------------------------------------------------------
+    // Citadel, a mud-brick enceinte with stepped merlons and a gate between towers, a palace on its terrace under a
+    // tiled roof with a frieze in the side's colour, a tower over it with the standard, and two granaries.
+    {
+      const b = G();
+      yard(b, 5, 5, B.earth);
+      const E = 2.15, gt = 0.42;
+      for (const [x0, z0, x1, z1] of [[-E, -E, E, -E], [-E, E, E, E], [-E, -E, -E, E], [E, -E, E, -gt], [E, gt, E, E]]) { wall(b, x0, z0, x1, z1, 0.5, 0.18, B.mud); merlons(b, x0, z0, x1, z1, 0.58, B.mud, 0.15); }
+      for (const [x, z] of [[-E, -E], [E, -E], [E, E], [-E, E]]) { b.box(0.52, 0.8, 0.52, x, 0.08, z, B.mud); b.box(0.6, 0.06, 0.6, x, 0.88, z, B.mudDk); }
+      for (const k of [-1, 1]) { b.box(0.5, 1.0, 0.46, E, 0.08, k * (gt + 0.2), B.mud); b.box(0.56, 0.06, 0.52, E, 1.08, k * (gt + 0.2), B.mudDk); pennant(b, E + 0.1, 1.14, k * (gt + 0.2), 0.55, 0.3); }
+      b.box(0.26, 0.14, gt * 2 + 0.2, E, 0.7, 0, A.woodDk);
+      b.box(3.0, 0.34, 2.8, -0.45, 0.08, 0, B.mudDk);
+      b.prism([[0, 0], [0, 0.34], [0.5, 0]], 0.9, 1.05, 0.08, 0, B.mud);
+      b.box(2.0, 0.76, 1.8, -0.55, 0.42, 0, B.mud);
+      b.box(2.04, 0.1, 1.84, -0.55, 1.04, 0, P.white, TB);
+      for (let i = 0; i < 4; i++) b.cyl(0.05, 0.06, 0.76, 0.66, 0.8, -0.66 + i * 0.44, A.wood, { seg: 6 });
+      b.box(0.42, 0.06, 1.9, 0.66, 1.18, 0, A.woodDk);
+      b.box(0.03, 0.5, 0.36, 0.46, 0.42, 0, A.woodDk);
+      hipRoof(b, 2.5, 2.2, 0.55, -0.45, 1.18, 0, B.tile);
+      b.box(0.8, 1.9, 0.8, -1.55, 0.42, -1.05, B.mud);
+      crenRect(b, -1.55, -1.05, 0.8, 0.8, 2.32, B.mud, 0.14);
+      flagpole(b, -1.55, 2.32, -1.05, 0.8, 0.5, 0.3);
+      for (const z of [-1.35, 1.35]) { b.cyl(0.34, 0.36, 0.5, 1.35, 0.33, z, B.mud, { seg: 10 }); b.cyl(0, 0.46, 0.42, 1.35, 0.79, z, B.thatch, { seg: 10 }); }
+      bset('hq', 1, [part('body', b)]);
+    }
+    // Castle, crenellated curtain walls, round towers under conical roofs, a gatehouse, a keep with corner turrets
+    // hung with the side's banners, and a hall against the wall.
+    {
+      const b = G();
+      yard(b, 5, 5, B.earthDk);
+      const E = 2.0, gt = 0.5;
+      for (const [x0, z0, x1, z1] of [[-E, -E, E, -E], [-E, E, E, E], [-E, -E, -E, E], [E, -E, E, -gt], [E, gt, E, E]]) { wall(b, x0, z0, x1, z1, 0.8, 0.24, B.stone); merlons(b, x0, z0, x1, z1, 0.88, B.stone, 0.14); }
+      for (const [x, z] of [[-E, -E], [E, -E], [E, E], [-E, E]]) {
+        b.cyl(0.4, 0.44, 1.2, x, 0.68, z, B.stone, { seg: 12 });
+        b.cyl(0.47, 0.47, 0.08, x, 1.32, z, B.stoneDk, { seg: 12 });
+        b.cyl(0, 0.5, 0.9, x, 1.81, z, B.slate, { seg: 12 });
+      }
+      pennant(b, E, 2.2, E, 0.42, 0.3); pennant(b, -E, 2.2, -E, 0.42, 0.3);
+      b.box(0.8, 1.3, 1.5, E, 0.08, 0, B.stone);
+      crenRect(b, E, 0, 0.8, 1.5, 1.38, B.stone, 0.14);
+      b.box(0.03, 0.56, 0.5, E + 0.41, 0.08, 0, A.woodDk);
+      slots(b, E + 0.41, 0.85, 0, 1.0, 0.22, 2, true, 0.05);
+      const kx = -0.55, kz = -0.25, ks = 1.7, kh = 2.1;
+      b.box(ks, kh, ks, kx, 0.08, kz, B.stoneLt);
+      b.box(ks + 0.08, 0.08, ks + 0.08, kx, 0.08 + kh - 0.06, kz, B.stoneDk);
+      crenRect(b, kx, kz, ks, ks, 0.1 + kh, B.stoneLt, 0.15);
+      for (const [dx, dz] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
+        const x = kx + dx * ks / 2, z = kz + dz * ks / 2;
+        b.cyl(0.17, 0.17, 0.5, x, 0.08 + kh + 0.2, z, B.stoneLt, { seg: 8 });
+        b.cyl(0, 0.21, 0.5, x, 0.08 + kh + 0.7, z, B.slate, { seg: 8 });
+      }
+      for (const y of [0.7, 1.4]) { slots(b, kx + ks / 2 + 0.01, y, kz, 1.0, 0.24, 2, true, 0.05); slots(b, kx, y, kz + ks / 2 + 0.01, 1.0, 0.24, 2, false, 0.05); }
+      hang(b, kx + ks / 2 + 0.012, 1.9, kz, 0.34, 0.66); hang(b, kx, 1.9, kz + ks / 2 + 0.012, 0.34, 0.66, true);
+      flagpole(b, kx, 0.08 + kh, kz, 0.95, 0.56, 0.34);
+      b.box(2.3, 0.72, 0.8, 0.15, 0.08, 1.4, B.plaster);
+      for (let i = 0; i < 6; i++) b.box(0.05, 0.72, 0.02, -0.9 + i * 0.42, 0.08, 1.0, A.woodDk);
+      gable(b, 2.4, 1.0, 0.5, 0.15, 0.8, 1.4, B.slate);
+      bset('hq', 2, [part('body', b)]);
+    }
+    // Fort, a star of brick-faced ramparts with a bastion at each corner and a gun on each, a gate and its ramp,
+    // the commandant's house under slate, a vaulted magazine, and a tall flag.
+    {
+      const b = G();
+      yard(b, 5, 5, B.turf);
+      const q4 = [[1.4, 0.8], [1.7, 0.8], [2.36, 2.36], [0.8, 1.7], [0.8, 1.4]], star = [];
+      for (let k = 0; k < 4; k++) for (const [x, z] of q4) { let px = x, pz = z; for (let i = 0; i < k; i++) [px, pz] = [-pz, px]; star.push([px, pz]); }
+      b.plate(star, 0.42, 0, 0.08, 0, B.brick);
+      b.plate(star.map(([x, z]) => [x * 0.97, z * 0.97]), 0.06, 0, 0.5, 0, B.turf);
+      for (let i = 0; i < star.length; i++) { const [x0, z0] = star[i], [x1, z1] = star[(i + 1) % star.length]; wall(b, x0 * 0.92, z0 * 0.92, x1 * 0.92, z1 * 0.92, 0.14, 0.1, B.earth, 0.56); }
+      for (let k = 0; k < 4; k++) {
+        const a = Math.PI / 4 + k * R90, c = Math.cos(a), s2 = Math.sin(a);
+        b.box(0.3, 0.1, 0.22, c * 2.3, 0.56, s2 * 2.3, A.wood, { ry: -a });
+        b.cyl(0.065, 0.05, 0.5, c * 2.6, 0.72, s2 * 2.6, B.coal, { axis: 'x', seg: 8, ry: -a });
+      }
+      b.box(0.34, 0.64, 0.8, 1.42, 0.08, 0, B.brickDk);
+      b.box(0.03, 0.4, 0.4, 1.6, 0.08, 0, A.woodDk);
+      b.prism([[0, 0], [0, 0.42], [0.85, 0]], 0.56, 1.6, 0.08, 0, A.wood);
+      b.box(1.7, 0.66, 1.1, -0.35, 0.56, -0.2, B.plaster);
+      hipRoof(b, 1.86, 1.26, 0.45, -0.35, 1.22, -0.2, B.slate);
+      slots(b, 0.51, 0.84, -0.2, 0.8, 0.24, 3, true, 0.12);
+      slots(b, -0.35, 0.84, 0.36, 1.3, 0.24, 4, false, 0.12);
+      for (const x of [-0.85, 0.15]) b.box(0.14, 0.34, 0.2, x, 1.4, -0.2, B.brick);
+      b.box(0.8, 0.4, 0.6, -0.5, 0.56, 1.0, B.brick);
+      b.add(new THREE.CylinderGeometry(0.3, 0.3, 0.8, 10, 1, false, 0, Math.PI), -0.5, 0.96, 1.0, B.brick, { rz: R90 });
+      flagpole(b, 0.9, 0.56, -1.0, 1.7, 0.66, 0.4, B.stoneDk);
+      bset('hq', 3, [part('body', b)]);
+    }
+    // Headquarters of the first industrial wars, a brick block of two storeys under a hipped slate roof, a clock
+    // tower with the flag, a lower wing, chimneys and railings.
+    {
+      const b = G();
+      yard(b, 5, 5, B.cinder);
+      b.box(2.0, 1.26, 3.6, -0.5, 0.08, 0, B.brick);
+      b.box(2.06, 0.06, 3.66, -0.5, 0.68, 0, B.stoneLt);
+      b.box(2.1, 0.08, 3.7, -0.5, 1.3, 0, B.stoneLt);
+      for (const y of [0.22, 0.84]) {
+        windows(b, 0.51, y, 0, 3.3, 0.3, 8, 'z', { g: 0.35 });
+        for (const k of [-1, 1]) windows(b, -0.5, y, k * 1.81, 1.7, 0.3, 4, 'x', { g: 0.35 });
+      }
+      hipRoof(b, 3.8, 2.2, 0.62, -0.5, 1.38, 0, B.slate, { ry: R90 });
+      for (const z of [-1.3, 0, 1.3]) b.box(0.22, 0.6, 0.36, -0.5, 1.6, z, B.brickDk);
+      b.box(1.0, 0.72, 2.4, -1.95, 0.08, 0, B.brick);
+      gable(b, 2.5, 1.1, 0.4, -1.95, 0.8, 0, B.slate, { alongZ: true });
+      b.box(0.8, 2.3, 0.8, 0.72, 0.08, 0, B.brick);
+      b.box(0.86, 0.08, 0.86, 0.72, 2.38, 0, B.stoneLt);
+      b.cyl(0.24, 0.24, 0.03, 1.13, 1.95, 0, B.plaster, { axis: 'x', seg: 16 });
+      b.cyl(0.24, 0.24, 0.03, 0.72, 1.95, 0.41, B.plaster, { axis: 'z', seg: 16 });
+      hipRoof(b, 0.9, 0.9, 0.7, 0.72, 2.46, 0, B.slate);
+      flagpole(b, 0.72, 3.0, 0, 0.9, 0.6, 0.36, B.ironDk);
+      b.box(0.03, 0.62, 0.4, 1.13, 0.08, 0, A.woodDk);
+      b.box(0.03, 0.16, 0.62, 1.135, 0.8, 0, P.white, TB);
+      for (const k of [-1, 1]) {
+        b.box(0.03, 0.05, 1.8, 2.25, 0.42, k * 1.3, B.ironDk);
+        for (let i = 0; i < 7; i++) b.box(0.025, 0.4, 0.025, 2.25, 0.08, k * (0.5 + i * 0.27), B.ironDk);
+        b.box(0.16, 0.62, 0.16, 2.25, 0.08, k * 0.42, B.stoneLt);
+      }
+      bset('hq', 4, [part('body', b)]);
+    }
+
+    // Refineries ------------------------------------------------------------------------------------------------
+    // Smelter of the first ages, clay furnaces glowing at their mouths, a thatched shed on posts over the casting
+    // floor, a charcoal heap, and ore piled in the yard where the carts tip.
+    {
+      const b = G();
+      yard(b, 4, 4, B.earth);
+      for (const [x, z, s] of [[-1.2, -1.15, 1], [-0.35, -1.25, 0.8]]) {
+        b.cyl(0.18 * s, 0.34 * s, 0.95 * s, x, 0.08 + 0.475 * s, z, B.mud, { seg: 10 });
+        b.cyl(0.15 * s, 0.15 * s, 0.03, x, 0.08 + 0.95 * s, z, B.fire, { seg: 8, g: 1.6 });
+        b.box(0.06, 0.16 * s, 0.16 * s, x + 0.33 * s, 0.08, z, B.fire, { g: 2 });
+      }
+      for (const x of [-1.7, -0.75, 0.2]) for (const z of [0.15, 1.45]) b.cyl(0.04, 0.05, 0.9, x, 0.53, z, A.wood, { seg: 6 });
+      gable(b, 2.3, 1.7, 0.62, -0.75, 0.98, 0.8, B.thatch);
+      b.box(0.9, 0.3, 0.4, -1.0, 0.08, 0.8, A.woodDk);
+      for (let i = 0; i < 5; i++) b.box(0.12, 0.05, 0.22, -1.32 + i * 0.16, 0.38, 0.8, A.bronze);
+      wall(b, -1.9, -1.88, 0.5, -1.88, 0.36, 0.16, B.mud);
+      b.cyl(0, 0.46, 0.4, 0.95, 0.28, 1.3, B.coal, { seg: 10 });
+      ore(b, [[1.0, -1.0, 0.24], [1.3, -0.8, 0.2], [1.15, -1.3, 0.18], [0.75, -1.25, 0.16], [1.45, -1.2, 0.15]]);
+      flagpole(b, 0.5, 0.08, -1.7, 1.3, 0.44, 0.28);
+      pennant(b, -1.85, 1.6, 0.8, 0.5, 0.3);
+      bset('refinery', 1, [part('body', b)]);
+    }
+    // Medieval smelter, a stone furnace house under tiles with its stack, a water wheel that works the bellows, a
+    // timber-framed workshop under thatch, and the ore yard.
+    {
+      const b = G();
+      yard(b, 4, 4, B.earthDk);
+      b.box(1.7, 0.9, 1.3, -0.95, 0.08, -0.75, B.stone);
+      gable(b, 1.85, 1.5, 0.55, -0.95, 0.98, -0.75, B.tile);
+      stack(b, 0.62, 0.4, 1.95, -1.45, 0.08, -1.05, B.stoneDk);
+      b.box(0.04, 0.24, 0.28, -0.09, 0.08, -1.05, B.fire, { g: 2 });
+      b.box(0.04, 0.5, 0.34, -0.09, 0.08, -0.45, A.woodDk);
+      b.box(1.0, 0.1, 0.2, -1.5, 1.0, 0.08, A.wood);
+      b.box(0.08, 0.92, 0.08, -1.95, 0.08, 0.08, A.woodDk);
+      b.box(1.5, 0.62, 0.9, -0.9, 0.08, 1.25, B.plaster);
+      for (let i = 0; i < 5; i++) b.box(0.05, 0.62, 0.02, -1.6 + i * 0.35, 0.08, 0.79, A.woodDk);
+      b.box(1.5, 0.05, 0.02, -0.9, 0.38, 0.79, A.woodDk);
+      gable(b, 1.65, 1.1, 0.6, -0.9, 0.7, 1.25, B.thatch);
+      ore(b, [[1.0, -1.0, 0.24], [1.3, -0.75, 0.2], [1.2, -1.3, 0.18], [0.8, -1.3, 0.16]]);
+      b.cyl(0, 0.4, 0.36, 1.25, 0.26, 1.35, B.coal, { seg: 10 });
+      pennant(b, -0.95, 1.53, -0.15, 0.55, 0.32);
+      flagpole(b, 0.6, 0.08, 1.6, 1.3, 0.44, 0.28);
+      bset('refinery', 2, [part('body', b), part('wheel', waterWheel(0.48, 0.16), { pivot: [-1.0, 0.56, 0.08], spin: 'z', rate: 1.1 })]);
+    }
+    // Gunpowder smelter, a tapering stone blast furnace glowing at its throat, the charging bridge, a casting shed
+    // under tiles, a water wheel for the bellows, a charcoal barn and pigs of iron in the yard.
+    {
+      const b = G();
+      yard(b, 4, 4, B.gravel);
+      stack(b, 1.3, 0.8, 1.6, -1.0, 0.08, -0.75, B.stone);
+      b.box(0.86, 0.34, 0.86, -1.0, 1.68, -0.75, B.brick);
+      b.cyl(0.22, 0.22, 0.04, -1.0, 2.04, -0.75, B.fire, { seg: 8, g: 1.4 });
+      b.box(0.04, 0.32, 0.3, -0.33, 0.08, -0.75, B.fire, { g: 2 });
+      b.box(0.36, 0.08, 0.95, -1.0, 1.68, -1.6, A.wood);
+      for (const z of [-1.4, -1.85]) b.box(0.08, 1.6, 0.08, -1.0, 0.08, z, A.woodDk);
+      for (const [x, z] of [[-0.4, -1.4], [0.6, -1.4], [-0.4, -0.1], [0.6, -0.1]]) b.box(0.07, 0.72, 0.07, x, 0.08, z, A.woodDk);
+      gable(b, 1.5, 1.2, 0.42, 0.1, 0.8, -0.75, B.tile, { alongZ: true });
+      b.box(1.3, 0.55, 0.85, -0.9, 0.08, 1.35, B.plaster);
+      gable(b, 1.45, 1.05, 0.45, -0.9, 0.63, 1.35, B.tile);
+      b.box(0.9, 0.1, 0.2, -1.55, 0.98, 0.12, A.wood);
+      for (let i = 0; i < 3; i++) for (let j = 0; j < 4 - i; j++) b.box(0.42, 0.06, 0.08, 0.95, 0.08 + i * 0.06, 0.95 + j * 0.1 + i * 0.05, B.ironDk);
+      ore(b, [[1.15, -1.0, 0.22], [1.4, -0.75, 0.2], [1.3, -1.3, 0.17], [0.9, -1.35, 0.15]]);
+      flagpole(b, 1.6, 0.08, 1.6, 1.35, 0.46, 0.3);
+      bset('refinery', 3, [part('body', b), part('wheel', waterWheel(0.46, 0.16), { pivot: [-1.0, 0.54, 0.12], spin: 'z', rate: 1.2 })]);
+    }
+    // Industrial refinery, a brick crusher hall under corrugated iron with its name board, two tall chimneys, a
+    // riveted ore bin on legs, an incline down to the cobbled dock, and a water tower.
+    {
+      const b = G();
+      yard(b, 4, 4, B.cinder);
+      b.box(1.7, 1.1, 2.0, -0.8, 0.08, 0.4, B.brick);
+      gable(b, 2.1, 1.86, 0.5, -0.8, 1.18, 0.4, B.iron, { alongZ: true });
+      ribs(b, 2.1, 1.86, 0.5, -0.8, 1.18, 0.4, B.ironDk, true);
+      windows(b, 0.06, 0.5, 0.4, 1.7, 0.3, 5, 'z', { g: 0.3 });
+      b.box(0.03, 0.18, 1.1, 0.07, 0.88, 0.4, P.white, TB);
+      chimney(b, -1.5, -1.45, 2.8, 0.17); chimney(b, -0.95, -1.55, 2.2, 0.13);
+      for (const [dx, dz] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) b.box(0.06, 0.6, 0.06, 0.25 + dx * 0.3, 0.08, -1.2 + dz * 0.3, B.ironDk);
+      b.cyl(0.42, 0.42, 0.6, 0.25, 0.98, -1.2, B.iron, { seg: 12 });
+      b.cyl(0.42, 0.1, 0.3, 0.25, 0.53, -1.2, B.iron, { seg: 12 });
+      b.box(0.86, 0.03, 0.86, 0.25, 1.28, -1.2, B.ironDk);
+      b.box(1.8, 0.1, 0.5, 0.85, 0.8, 0.4, B.ironDk, { rz: -0.42 });
+      b.box(1.6, 0.03, 0.4, 0.85, 0.87, 0.4, P.ore, { rz: -0.42 });
+      for (const x of [0.5, 1.1]) b.box(0.08, 0.8 - x * 0.4, 0.08, x, 0.08, 0.4, A.woodDk);
+      b.box(1.2, 0.03, 1.5, 1.2, 0.08, 0.4, B.gravel);
+      waterTower(b, 1.4, -1.3, 1.1, 0.28);
+      bset('refinery', 4, [part('body', b)]);
+    }
+
+    // Barracks --------------------------------------------------------------------------------------------------
+    // Barracks of the first ages, a mud-brick longhouse under thatch hung with the side's shields, a palisaded
+    // drill yard with a spear rack and an archery butt, and a standard.
+    {
+      const b = G();
+      yard(b, 3, 3, B.earth);
+      b.box(2.3, 0.55, 1.1, -0.25, 0.08, -0.6, B.mud);
+      gable(b, 2.5, 1.4, 0.72, -0.25, 0.63, -0.6, B.thatch);
+      b.box(0.34, 0.44, 0.03, 0.15, 0.08, -0.04, A.woodDk);
+      for (const x of [-1.0, -0.55, 0.62]) b.cyl(0.11, 0.11, 0.02, x, 0.38, -0.04, P.white, { axis: 'z', seg: 10, t: 1 });
+      palisade(b, -1.4, 1.38, 1.0, 1.38); palisade(b, -1.4, 0.05, -1.4, 1.38);
+      for (const z of [0.5, 1.0]) b.box(0.05, 0.5, 0.05, 0.4, 0.08, z, A.woodDk);
+      b.box(0.04, 0.04, 0.56, 0.4, 0.5, 0.75, A.woodDk);
+      for (let i = 0; i < 4; i++) b.cyl(0.01, 0.012, 0.8, 0.33, 0.47, 0.56 + i * 0.13, A.wood, { seg: 4, rz: 0.15 });
+      for (const z of [0.66, 0.84]) b.box(0.04, 0.32, 0.04, 1.08, 0.08, z, A.woodDk);
+      b.cyl(0.2, 0.2, 0.14, 1.05, 0.48, 0.75, B.thatch, { axis: 'x', seg: 12 });
+      flagpole(b, 1.2, 0.08, -1.2, 1.35, 0.46, 0.3);
+      bset('barracks', 1, [part('body', b)]);
+    }
+    // Medieval barracks, a hall of stone below and timber frame above under a steep tiled roof, the side's
+    // banners on it, a tilting yard with a quintain, and a pennant.
+    {
+      const b = G();
+      yard(b, 3, 3, B.earthDk);
+      b.box(2.3, 0.45, 1.15, -0.2, 0.08, -0.65, B.stone);
+      b.box(2.42, 0.55, 1.27, -0.2, 0.53, -0.65, B.plaster);
+      for (let i = 0; i < 7; i++) b.box(0.05, 0.55, 0.02, -1.38 + i * 0.393, 0.53, -0.005, A.woodDk);
+      for (const k of [-1, 1]) b.box(0.05, 0.6, 0.02, -0.2 + k * 0.6, 0.5, -0.005, A.woodDk, { rz: k * 0.75 });
+      b.box(2.42, 0.05, 0.02, -0.2, 0.8, -0.005, A.woodDk);
+      gable(b, 2.62, 1.5, 0.85, -0.2, 1.08, -0.65, B.tile);
+      stack(b, 0.28, 0.26, 1.25, -1.15, 1.0, -0.65, B.stoneDk);
+      slots(b, -0.2, 0.2, -0.07, 1.6, 0.2, 4, false);
+      b.box(0.34, 0.42, 0.03, 0.75, 0.08, -0.06, A.woodDk);
+      hang(b, -0.85, 1.04, 0.0, 0.26, 0.42, true); hang(b, 0.45, 1.04, 0.0, 0.26, 0.42, true);
+      fence(b, -1.35, 1.35, 1.35, 1.35); fence(b, -1.35, 0.3, -1.35, 1.35);
+      b.box(0.07, 0.7, 0.07, 0.6, 0.08, 0.8, A.woodDk); b.box(0.6, 0.05, 0.05, 0.6, 0.72, 0.8, A.wood); b.box(0.04, 0.22, 0.14, 0.88, 0.5, 0.8, P.white, TB);
+      pennant(b, 1.2, 0.08, -1.2, 1.4, 0.42);
+      bset('barracks', 2, [part('body', b)]);
+    }
+    // Gunpowder barracks, a lime-washed block of two storeys under a hipped slate roof with a cupola, a parade
+    // ground with the flag, stacked muskets and a sentry box in the side's paint.
+    {
+      const b = G();
+      yard(b, 3, 3, B.gravel);
+      b.box(2.5, 1.0, 1.1, -0.15, 0.08, -0.7, B.plaster);
+      b.box(2.56, 0.06, 1.16, -0.15, 0.56, -0.7, B.stoneDk);
+      hipRoof(b, 2.7, 1.3, 0.5, -0.15, 1.08, -0.7, B.slate);
+      for (const y of [0.2, 0.68]) slots(b, -0.15, y, -0.14, 2.2, 0.26, 7, false, 0.14);
+      b.box(0.3, 0.44, 0.03, -0.15, 0.08, -0.13, A.woodDk);
+      b.box(0.22, 0.26, 0.22, -0.15, 1.4, -0.7, B.plaster);
+      b.cyl(0, 0.2, 0.24, -0.15, 1.78, -0.7, B.slate, { seg: 8 });
+      for (const x of [-1.1, 0.8]) b.box(0.16, 0.4, 0.22, x, 1.26, -0.7, B.brick);
+      flagpole(b, 0.95, 0.08, 0.85, 1.7, 0.6, 0.38, B.stoneDk);
+      for (const [x, z] of [[-0.9, 0.5], [-0.4, 0.5], [0.1, 0.5]]) for (let i = 0; i < 3; i++) { const a = i * 2.094; b.cyl(0.008, 0.012, 0.5, x + Math.cos(a) * 0.05, 0.31, z + Math.sin(a) * 0.05, A.woodDk, { seg: 4, rz: Math.cos(a) * 0.2, rx: -Math.sin(a) * 0.2 }); }
+      b.box(0.3, 0.6, 0.3, 1.15, 0.08, -0.2, P.white, { t: 0.6 });
+      b.box(0.02, 0.4, 0.2, 1.31, 0.12, -0.2, B.coal);
+      hipRoof(b, 0.38, 0.38, 0.2, 1.15, 0.68, -0.2, B.slate);
+      bset('barracks', 3, [part('body', b)]);
+    }
+    // Industrial barracks, a long brick block under slate with chimney stacks, a corrugated iron hut, and a flag.
+    {
+      const b = G();
+      yard(b, 3, 3, B.cinder);
+      b.box(2.5, 0.72, 1.0, -0.15, 0.08, -0.85, B.brick);
+      gable(b, 2.62, 1.2, 0.42, -0.15, 0.8, -0.85, B.slate);
+      windows(b, -0.15, 0.3, -0.34, 2.2, 0.28, 6, 'x', { g: 0.3 });
+      b.box(0.6, 0.14, 0.02, 0.75, 0.6, -0.33, P.white, TB);
+      for (const x of [-1.05, -0.15, 0.75]) b.box(0.14, 0.34, 0.2, x, 1.02, -0.85, B.brickDk);
+      ironHut(b, -0.3, 0.65, 0.46, 1.9, 7);
+      flagpole(b, 1.15, 0.08, 0.9, 1.6, 0.56, 0.34, B.ironDk);
+      bset('barracks', 4, [part('body', b)]);
+    }
+
+    // Factories -------------------------------------------------------------------------------------------------
+    // Stables of the first ages, a long mud and timber stable under thatch with open stalls on a fenced paddock,
+    // horses in the side's saddle-cloths, hay ricks and a trough.
+    {
+      const b = G();
+      yard(b, 4, 4, B.earth);
+      b.box(1.2, 0.68, 3.3, -1.25, 0.08, 0, B.mud);
+      gable(b, 3.5, 1.6, 0.72, -1.25, 0.76, 0, B.thatch, { alongZ: true });
+      for (let i = 0; i < 5; i++) b.box(0.03, 0.46, 0.4, -0.64, 0.08, -1.3 + i * 0.65, A.woodDk);
+      for (let i = 0; i < 6; i++) b.cyl(0.04, 0.05, 0.7, -0.5, 0.43, -1.62 + i * 0.65, A.wood, { seg: 6 });
+      fence(b, -0.35, -1.85, 1.85, -1.85); fence(b, 1.85, -1.85, 1.85, -0.6); fence(b, 1.85, 0.6, 1.85, 1.85); fence(b, -0.35, 1.85, 1.85, 1.85);
+      horseInto(b, 0.5, 0.08, -0.9, 0.5, 0x6b4a32); horseInto(b, 0.9, 0.08, 0.95, -2.3, 0x3a2a20);
+      b.sph(0.36, 1.3, 0.08, -1.3, B.thatch, { top: true, seg: 10, sy: 0.9 }); b.sph(0.28, 1.5, 0.08, -0.85, B.thatch, { top: true, seg: 10, sy: 0.9 });
+      b.box(0.7, 0.18, 0.22, 0.3, 0.08, 1.5, A.woodDk);
+      flagpole(b, -0.35, 0.08, 1.75, 1.4, 0.46, 0.3);
+      bset('factory', 1, [part('body', b)]);
+    }
+    // Medieval stables, a long stable of stone below and timber frame above under tiles, a smithy wing with its
+    // forge and stack, a fenced yard of knights' horses in the side's colours, and a pennant.
+    {
+      const b = G();
+      yard(b, 4, 4, B.earthDk);
+      b.box(1.1, 0.4, 3.4, -1.35, 0.08, 0, B.stone);
+      b.box(1.1, 0.4, 3.4, -1.35, 0.48, 0, B.plaster);
+      for (let i = 0; i < 8; i++) b.box(0.02, 0.4, 0.05, -0.79, 0.48, -1.6 + i * 0.457, A.woodDk);
+      gable(b, 3.6, 1.4, 0.8, -1.35, 0.88, 0, B.tile, { alongZ: true });
+      for (let i = 0; i < 4; i++) b.box(0.03, 0.36, 0.42, -0.79, 0.08, -1.2 + i * 0.8, A.woodDk);
+      b.box(1.7, 0.7, 0.9, 0.35, 0.08, -1.45, B.stone);
+      gable(b, 1.85, 1.1, 0.55, 0.35, 0.78, -1.45, B.tile);
+      stack(b, 0.34, 0.28, 1.6, 1.0, 0.08, -1.55, B.stoneDk);
+      b.box(0.26, 0.22, 0.03, 0.85, 0.12, -0.99, B.fire, { g: 2 });
+      fence(b, -0.7, 1.85, 1.85, 1.85); fence(b, 1.85, 1.85, 1.85, 0.55); fence(b, 1.85, -0.55, 1.85, -0.95);
+      horseInto(b, 0.4, 0.08, 0.9, 0.3, 0x5a4a3a, { armour: true }); horseInto(b, 0.95, 0.08, -0.25, -2.6, 0x8a6a4a, { armour: true });
+      pennant(b, -1.35, 1.66, 1.75, 0.5, 0.34);
+      flagpole(b, 1.75, 0.08, 1.75, 1.3, 0.44, 0.28);
+      bset('factory', 2, [part('body', b)]);
+    }
+    // Foundry, a brick casting hall under tiles with a louvred ridge and doors in the side's paint, a tall stack,
+    // cast barrels on skids, a pile of shot and the flag.
+    {
+      const b = G();
+      yard(b, 4, 4, B.gravel);
+      b.box(2.4, 1.1, 2.9, -0.7, 0.08, 0, B.brick);
+      gable(b, 2.6, 3.1, 0.85, -0.7, 1.18, 0, B.tile);
+      b.box(1.2, 0.22, 0.4, -0.7, 1.95, 0, B.brickDk);
+      gable(b, 1.3, 0.56, 0.18, -0.7, 2.17, 0, B.tile);
+      b.box(0.04, 0.82, 1.3, 0.51, 0.08, 0, A.woodDk, T);
+      slots(b, -0.7, 0.5, 1.46, 1.8, 0.34, 4, false, 0.2);
+      slots(b, -0.7, 0.5, -1.46, 1.8, 0.34, 4, false, 0.2);
+      stack(b, 0.6, 0.42, 3.0, -1.55, 0.08, -1.2, B.brick);
+      for (const x of [0.95, 1.6]) b.box(0.08, 0.06, 1.0, x, 0.08, -1.0, A.wood);
+      for (const z of [-1.3, -1.0, -0.7]) b.cyl(0.09, 0.07, 0.95, 1.27, 0.23, z, B.coal, { axis: 'x', seg: 10 });
+      for (const [x, z, y] of [[1.15, 1.2, 0], [1.31, 1.2, 0], [1.47, 1.2, 0], [1.23, 1.34, 0], [1.39, 1.34, 0], [1.31, 1.27, 0.12]]) b.sph(0.08, x, 0.16 + y, z, B.coal, { seg: 8, rings: 6 });
+      for (const k of [-1, 1]) strut(b, [1.0, 0.08, 0.35 + k * 0.3], [1.3, 1.3, 0.35], 0.05, A.woodDk);
+      strut(b, [1.75, 0.08, 0.35], [1.3, 1.3, 0.35], 0.05, A.woodDk);
+      flagpole(b, 1.7, 0.08, 1.7, 1.5, 0.5, 0.32);
+      bset('factory', 3, [part('body', b)]);
+    }
+    // Industrial factory, a brick hall under a sawtooth roof of iron and north lights, a big door in the side's
+    // paint under its name board, a tall chimney and a water tower.
+    {
+      const b = G();
+      yard(b, 4, 4, B.cinder);
+      b.box(3.0, 1.0, 3.2, -0.4, 0.08, 0, B.brick);
+      for (let i = 0; i < 4; i++) {
+        const x = -1.9 + i * 0.75;
+        b.prism([[0, 1.08], [0.75, 1.08], [0, 1.52]], 3.24, x, 0, 0, B.iron);
+        b.box(0.02, 0.38, 3.1, x - 0.01, 1.1, 0, P.glass, { g: 0.4 });
+      }
+      b.box(0.04, 0.8, 1.6, 1.11, 0.08, 0, B.ironDk, T);
+      for (let i = 0; i < 6; i++) b.box(0.03, 0.03, 1.6, 1.13, 0.2 + i * 0.12, 0, B.iron);
+      b.box(0.03, 0.2, 2.6, 1.12, 0.92, 0, P.white, TB);
+      for (const k of [-1, 1]) windows(b, -0.4, 0.4, k * 1.61, 2.6, 0.36, 6, 'x', { g: 0.3 });
+      chimney(b, -1.55, 1.55, 3.2, 0.2);
+      waterTower(b, 1.5, -1.45, 1.1, 0.28);
+      bset('factory', 4, [part('body', b)]);
+    }
+
+    // Lookouts and signals -------------------------------------------------------------------------------------
+    // Watchtower of the first ages, a tall timber tower on splayed, braced legs, a lookout under its thatched roof, a
+    // beacon basket, and a mud-brick hut at its foot.
+    {
+      const b = G();
+      yard(b, 3, 3, B.earth);
+      const tx = -0.45, tz = -0.45, H = 2.1, C4 = [[-1, -1], [1, -1], [1, 1], [-1, 1]];
+      for (const [dx, dz] of C4) strut(b, [tx + dx * 0.44, 0.06, tz + dz * 0.44], [tx + dx * 0.34, H + 0.06, tz + dz * 0.34], 0.08, A.wood);
+      for (let i = 0; i < 4; i++) {
+        const [ax, az] = C4[i], [bx, bz] = C4[(i + 1) % 4];
+        strut(b, [tx + ax * 0.41, 0.5, tz + az * 0.41], [tx + bx * 0.37, 1.5, tz + bz * 0.37], 0.04, A.woodDk);
+        strut(b, [tx + bx * 0.41, 0.5, tz + bz * 0.41], [tx + ax * 0.37, 1.5, tz + az * 0.37], 0.04, A.woodDk);
+      }
+      b.box(0.9, 0.08, 0.9, tx, H, tz, A.wood);
+      for (const [dx, dz] of C4) b.box(0.05, 0.9, 0.05, tx + dx * 0.4, H + 0.08, tz + dz * 0.4, A.woodDk);
+      for (let i = 0; i < 4; i++) { const [ax, az] = C4[i], [bx, bz] = C4[(i + 1) % 4]; wall(b, tx + ax * 0.4, tz + az * 0.4, tx + bx * 0.4, tz + bz * 0.4, 0.04, 0.04, A.wood, H + 0.4); }
+      hipRoof(b, 1.1, 1.1, 0.5, tx, H + 0.98, tz, B.thatch);
+      figureInto(b, { cloth: A.tunic, vest: A.bronze, vestT: 0.5, hat: 'crest', arms: 'spear' }, tx, H + 0.08, tz, 0.6);
+      pennant(b, tx, H + 1.46, tz, 0.45, 0.3);
+      strut(b, [tx + 0.4, H + 0.3, tz + 0.4], [tx + 0.62, H + 0.55, tz + 0.62], 0.04, A.woodDk);
+      b.cyl(0.11, 0.07, 0.14, tx + 0.64, H + 0.62, tz + 0.64, B.ironDk, { seg: 8, open: true });
+      b.sph(0.09, tx + 0.64, H + 0.68, tz + 0.64, B.fire, { seg: 8, rings: 5, g: 2 });
+      b.box(0.9, 0.5, 0.8, 0.6, 0.08, 0.65, B.mud);
+      b.box(0.96, 0.05, 0.86, 0.6, 0.58, 0.65, B.mudDk);
+      b.box(0.03, 0.38, 0.26, 1.06, 0.08, 0.65, A.woodDk);
+      bset('radar', 1, [part('body', b)]);
+    }
+    // Medieval watchtower, a tall round tower of stone with slits, a corbelled crenellated top and a beacon
+    // burning on it, a pennant, and a guardhouse under slate.
+    {
+      const b = G();
+      yard(b, 3, 3, B.earthDk);
+      const tx = -0.4, tz = -0.4;
+      b.cyl(0.48, 0.56, 2.3, tx, 1.23, tz, B.stone, { seg: 12 });
+      b.cyl(0.6, 0.5, 0.2, tx, 2.48, tz, B.stoneDk, { seg: 12 });
+      crenRing(b, tx, tz, 0.54, 2.58, B.stone, 10, 0.15);
+      b.cyl(0.14, 0.08, 0.16, tx, 2.66, tz, B.ironDk, { seg: 8 });
+      b.sph(0.11, tx, 2.78, tz, B.fire, { seg: 8, rings: 5, g: 2 });
+      pennant(b, tx + 0.3, 2.58, tz + 0.3, 0.75, 0.36);
+      for (const [a, y] of [[0, 0.8], [0, 1.7], [-R90, 1.25], [-0.8, 2.0]]) b.box(0.05, 0.28, 0.06, tx + Math.cos(a) * 0.52, y, tz - Math.sin(a) * 0.52, B.coal, { ry: a });
+      b.box(0.05, 0.5, 0.3, tx + 0.55, 0.08, tz, A.woodDk);
+      b.box(1.1, 0.6, 0.8, 0.6, 0.08, 0.7, B.stone);
+      gable(b, 1.2, 1.0, 0.45, 0.6, 0.68, 0.7, B.slate);
+      b.box(0.03, 0.42, 0.26, 1.16, 0.08, 0.7, A.woodDk);
+      hang(b, 0.6, 0.62, 1.11, 0.3, 0.36, true);
+      bset('radar', 2, [part('body', b)]);
+    }
+    // Signal tower, a plastered tower under a low roof carrying a semaphore mast whose regulator and arms rock as
+    // it signals, the keeper's house, and the flag.
+    {
+      const b = G();
+      yard(b, 3, 3, B.gravel);
+      const tx = -0.45, tz = -0.45;
+      b.box(1.0, 1.5, 1.0, tx, 0.08, tz, B.plaster);
+      b.box(1.06, 0.06, 1.06, tx, 1.58, tz, B.stoneDk);
+      hipRoof(b, 1.16, 1.16, 0.3, tx, 1.64, tz, B.slate);
+      slots(b, tx + 0.51, 0.95, tz, 0.5, 0.3, 2, true, 0.14); slots(b, tx, 0.95, tz + 0.51, 0.5, 0.3, 2, false, 0.14);
+      b.box(0.03, 0.5, 0.3, tx + 0.51, 0.08, tz, A.woodDk);
+      b.box(0.07, 1.3, 0.07, tx, 1.7, tz, A.woodDk);
+      for (const k of [-1, 1]) strut(b, [tx + k * 0.3, 1.86, tz], [tx, 2.5, tz], 0.03, A.woodDk);
+      const s = G();
+      s.box(1.1, 0.08, 0.04, 0, -0.04, 0, B.coal, T);
+      for (const k of [-1, 1]) s.box(0.05, 0.38, 0.035, k * 0.6, -0.04, 0.035, B.coal, { rz: k * 0.6 });
+      s.box(0.07, 0.07, 0.12, 0, -0.035, 0, B.ironDk);
+      b.box(1.1, 0.55, 0.8, 0.65, 0.08, 0.65, B.plaster);
+      gable(b, 1.2, 0.96, 0.4, 0.65, 0.63, 0.65, B.tile);
+      b.box(0.03, 0.4, 0.24, 1.21, 0.08, 0.65, A.woodDk);
+      flagpole(b, 1.25, 0.08, -0.9, 1.3, 0.46, 0.3);
+      bset('radar', 3, [part('body', b), part('arm', s, { pivot: [tx, 2.86, tz + 0.06], nod: true })]);
+    }
+    // Radio station, a guyed lattice mast with a lamp at its head, a short mast with the aerial strung between
+    // them, and a brick wireless hut with a direction-finding loop turning on its roof.
+    {
+      const b = G();
+      yard(b, 3, 3, B.cinder);
+      const mx = -0.75, mz = -0.75, H = 3.0, r0 = 0.28, r1 = 0.05, n = 6, C4 = [[-1, -1], [1, -1], [1, 1], [-1, 1]];
+      const at = (i, [dx, dz]) => { const r = r0 + (r1 - r0) * i / n; return [mx + dx * r, 0.08 + H * i / n, mz + dz * r]; };
+      for (const c of C4) strut(b, at(0, c), at(n, c), 0.035, B.ironDk);
+      for (let i = 1; i <= n; i++) for (let k = 0; k < 4; k++) {
+        if (i < n) strut(b, at(i, C4[k]), at(i, C4[(k + 1) % 4]), 0.02, B.ironDk);
+        strut(b, at(i - 1, C4[k]), at(i, C4[(k + 1) % 4]), 0.016, B.ironDk);
+      }
+      b.sph(0.05, mx, 0.08 + H + 0.05, mz, P.red, { seg: 6, rings: 4, g: 4 });
+      for (const [x, z] of [[1.35, -1.35], [-1.35, 1.35], [-1.4, -1.4]]) strut(b, [mx, 0.08 + H * 0.68, mz], [x, 0.08, z], 0.01, B.coal);
+      b.cyl(0.03, 0.045, 2.0, 1.1, 1.08, -1.1, A.woodDk, { seg: 6 });
+      strut(b, [mx, 0.08 + H * 0.93, mz], [1.1, 2.04, -1.1], 0.01, B.coal);
+      strut(b, [0.2, 2.45, -0.93], [0.4, 0.62, 0.24], 0.01, B.coal);
+      b.box(1.2, 0.6, 0.9, 0.45, 0.08, 0.7, B.brick);
+      gable(b, 1.32, 1.06, 0.38, 0.45, 0.68, 0.7, B.slate);
+      windows(b, 0.45, 0.32, 1.16, 1.0, 0.24, 3, 'x', { g: 0.3 });
+      b.box(0.03, 0.44, 0.26, 1.06, 0.08, 0.7, A.woodDk);
+      b.box(0.03, 0.14, 0.5, 1.065, 0.52, 0.7, P.white, TB);
+      flagpole(b, -1.25, 0.08, 1.15, 1.3, 0.46, 0.3, B.ironDk);
+      const d = G();
+      d.cyl(0.02, 0.02, 0.24, 0, 0.12, 0, B.ironDk, { seg: 5 });
+      for (const [w, h, y, z] of [[0.04, 0.4, 0.24, 0.2], [0.04, 0.4, 0.24, -0.2], [0.04, 0.04, 0.64, 0], [0.04, 0.04, 0.24, 0]]) d.box(w, h, w === h ? 0.44 : 0.04, 0, y, z, B.ironDk);
+      bset('radar', 4, [part('body', b), part('dish', d, { pivot: [0.6, 1.0, 0.7], spin: 'y', rate: 0.8 })]);
+    }
+
+    // Forward bases --------------------------------------------------------------------------------------------
+    // Outpost, a palisade round a little motte with a timber tower and its hoarding, a pavilion tent peaked in the
+    // side's colour, and a pennant.
+    {
+      const b = G();
+      yard(b, 3, 3, B.earthDk);
+      const E = 1.32;
+      palisade(b, -E, -E, E, -E); palisade(b, -E, E, E, E); palisade(b, -E, -E, -E, E); palisade(b, E, -E, E, -0.35); palisade(b, E, 0.35, E, E);
+      for (const k of [-1, 1]) b.box(0.1, 0.85, 0.1, E, 0.04, k * 0.38, A.woodDk);
+      b.cyl(0.42, 0.8, 0.42, -0.45, 0.29, -0.45, B.turf, { seg: 12 });
+      b.box(0.6, 0.75, 0.6, -0.45, 0.5, -0.45, A.wood);
+      b.box(0.72, 0.06, 0.72, -0.45, 1.25, -0.45, A.woodDk);
+      crenRect(b, -0.45, -0.45, 0.68, 0.68, 1.31, A.wood, 0.12);
+      pennant(b, -0.45, 1.31, -0.45, 0.8, 0.4);
+      b.cyl(0.42, 0.42, 0.45, 0.6, 0.305, 0.6, A.canvas, { seg: 10 });
+      b.cyl(0, 0.5, 0.42, 0.6, 0.74, 0.6, P.white, { seg: 10, t: 1 });
+      b.cyl(0.012, 0.012, 0.3, 0.6, 1.04, 0.6, A.woodDk, { seg: 4 });
+      b.cyl(0.14, 0.16, 0.06, 0.5, 0.11, -0.6, B.stoneDk, { seg: 8 });
+      bset('fob', 2, [part('body', b)]);
+    }
+    // Redoubt, a square of earth ramparts with gabions along their crests, a gun at two corners, a wall tent and the
+    // flag.
+    {
+      const b = G();
+      yard(b, 3, 3, B.turf);
+      const E = 1.12, prof = [[-0.3, 0], [0.32, 0], [0.12, 0.42], [-0.18, 0.42]];
+      b.prism(prof, 2 * E + 0.62, -E, 0.08, 0, B.earth, { ry: Math.PI });
+      b.prism(prof, 2 * E + 0.62, 0, 0.08, E, B.earth, { ry: -R90 });
+      b.prism(prof, 2 * E + 0.62, 0, 0.08, -E, B.earth, { ry: R90 });
+      for (const k of [-1, 1]) b.prism(prof, E - 0.3 + 0.31, E, 0.08, k * (E + 0.31 + 0.3) / 2, B.earth);
+      gabions(b, -E - 0.02, -E, -E - 0.02, E, 0.5, 8); gabions(b, -E, E + 0.02, E, E + 0.02, 0.5, 8); gabions(b, -E, -E - 0.02, E, -E - 0.02, 0.5, 8);
+      for (const k of [-1, 1]) gabions(b, E + 0.02, k * 0.36, E + 0.02, k * E, 0.5, 3);
+      for (const [x, z, a] of [[E - 0.15, -E + 0.15, -Math.PI / 4], [-E + 0.15, E - 0.15, Math.PI * 0.75]]) {
+        b.box(0.3, 0.1, 0.2, x, 0.5, z, A.wood, { ry: -a });
+        b.cyl(0.06, 0.045, 0.5, x + Math.cos(a) * 0.3, 0.66, z + Math.sin(a) * 0.3, B.coal, { axis: 'x', seg: 8, ry: -a });
+      }
+      b.box(0.62, 0.26, 0.5, -0.3, 0.08, -0.25, A.canvas);
+      gable(b, 0.66, 0.56, 0.3, -0.3, 0.34, -0.25, A.canvas);
+      for (const [x, z] of [[0.15, -0.55], [0.3, -0.48]]) b.cyl(0.08, 0.08, 0.18, x, 0.17, z, A.woodDk, { seg: 8 });
+      flagpole(b, 0.3, 0.08, 0.4, 1.6, 0.56, 0.34);
+      bset('fob', 3, [part('body', b)]);
+    }
+    // Forward base of the first motors, a sandbag ring, a corrugated iron hut, a bell tent, crates, a telephone pole
+    // and the flag.
+    {
+      const b = G();
+      yard(b, 3, 3, B.earth);
+      sand(b, 0, 0, 2.6, 2.6, 2);
+      ironHut(b, -0.35, -0.5, 0.42, 1.3, 5);
+      b.cyl(0, 0.44, 0.72, 0.55, 0.44, 0.55, A.canvas, { seg: 10 });
+      b.cyl(0.01, 0.01, 0.16, 0.55, 0.86, 0.55, A.woodDk, { seg: 4 });
+      for (const [x, z, y] of [[0.75, -0.6, 0], [0.75, -0.95, 0], [0.75, -0.78, 0.2]]) b.box(0.3, 0.2, 0.3, x, 0.08 + y, z, A.wood);
+      b.cyl(0.025, 0.035, 1.9, 1.0, 1.03, 0.9, A.woodDk, { seg: 5 });
+      b.box(0.04, 0.04, 0.42, 1.0, 1.82, 0.9, A.woodDk);
+      flagpole(b, -0.9, 0.08, 0.85, 1.5, 0.54, 0.34, B.ironDk);
+      bset('fob', 4, [part('body', b)]);
+    }
+
+    // Defences --------------------------------------------------------------------------------------------------
+    // Archer tower of the first ages, a battered mud-brick tower with a timber gallery and stepped merlons, the
+    // side's cloths on its faces, and an archer on top who turns to his mark.
+    {
+      const b = G();
+      yard(b, 2, 2, B.earth);
+      stack(b, 1.2, 1.0, 1.1, 0, 0.08, 0, B.mud);
+      b.box(1.16, 0.06, 1.16, 0, 1.18, 0, A.woodDk);
+      crenRect(b, 0, 0, 1.06, 1.06, 1.24, B.mud, 0.14);
+      for (let i = 0; i < 4; i++) { b.box(0.12, 0.06, 0.06, 0.58, 1.08, -0.36 + i * 0.24, A.woodDk); b.box(0.06, 0.06, 0.12, -0.36 + i * 0.24, 1.08, 0.58, A.woodDk); }
+      hang(b, 0.57, 1.02, 0.14, 0.26, 0.46); hang(b, 0.14, 1.02, 0.57, 0.26, 0.46, true);
+      b.box(0.03, 0.4, 0.24, 0.6, 0.08, -0.25, A.woodDk);
+      const t = G();
+      figureInto(t, { cloth: A.linen, vest: A.tunic2, vestT: 0.6, hat: 'crest', crest: A.tunic2, arms: 'bow' }, 0, 0, 0);
+      bset('bunker', 1, [part('body', b), part('turret', t, { pivot: [0, 1.24, 0], aim: true })]);
+    }
+    // Medieval archer tower, a round stone tower with slits, a corbelled crenellated top, a pennant, and a
+    // longbowman on top who turns to his mark.
+    {
+      const b = G();
+      yard(b, 2, 2, B.earthDk);
+      b.cyl(0.54, 0.62, 1.2, 0, 0.68, 0, B.stone, { seg: 12 });
+      b.cyl(0.66, 0.56, 0.14, 0, 1.35, 0, B.stoneDk, { seg: 12 });
+      crenRing(b, 0, 0, 0.6, 1.42, B.stone, 10, 0.15);
+      for (const [a, y] of [[0.3, 0.75], [-R90 - 0.3, 0.75], [-0.6, 0.95], [-1.0, 0.55]]) b.box(0.05, 0.26, 0.06, Math.cos(a) * 0.6, y, -Math.sin(a) * 0.6, B.coal, { ry: a });
+      b.box(0.05, 0.44, 0.26, 0.6, 0.08, 0, A.woodDk);
+      pennant(b, -0.42, 1.42, -0.42, 0.7, 0.36);
+      const t = G();
+      figureInto(t, { cloth: A.coatG, vest: A.tunic2, vestT: 0.6, hat: false, hair: 0x5a4632, arms: 'longbow' }, 0, 0, 0);
+      bset('bunker', 2, [part('body', b), part('turret', t, { pivot: [0, 1.42, 0], aim: true })]);
+    }
+    // Musket redoubt, a low eight-sided earthwork crowned with gabions, a firing step of planks, the flag, and two
+    // musketeers who turn to their mark.
+    {
+      const b = G();
+      yard(b, 2, 2, B.turf);
+      b.cyl(0.72, 0.94, 0.42, 0, 0.29, 0, B.earth, { seg: 8 });
+      b.cyl(0.62, 0.62, 0.05, 0, 0.5, 0, A.wood, { seg: 8 });
+      for (let i = 0; i < 9; i++) { const a = i / 9 * 6.283 + 0.35; b.cyl(0.085, 0.085, 0.22, Math.cos(a) * 0.7, 0.61, Math.sin(a) * 0.7, B.thatchDk, { seg: 7 }); }
+      flagpole(b, -0.5, 0.5, -0.5, 1.1, 0.4, 0.26);
+      const t = G();
+      for (const z of [-0.14, 0.14]) figureInto(t, { cloth: A.coatR, vest: A.white, vestT: 0.6, hat: 'tricorne', arms: 'musket', legs: A.white }, 0, 0, z);
+      bset('bunker', 3, [part('body', b), part('turret', t, { pivot: [0, 0.53, 0], aim: true })]);
+    }
+    // Machine-gun nest, a ring of sandbags on duckboards with a sheet of corrugated iron over the back, and a
+    // water-cooled gun on its pedestal with the gunner behind it.
+    {
+      const b = G();
+      yard(b, 2, 2, B.earth);
+      sand(b, 0, 0, 1.5, 1.5, 3);
+      b.box(1.3, 0.04, 1.3, 0, 0.08, 0, A.wood);
+      for (const z of [-0.62, 0.62]) b.box(0.06, 0.92, 0.06, -0.66, 0.08, z, A.woodDk);
+      b.box(0.36, 0.03, 1.4, -0.6, 0.96, 0, B.iron, { rz: 0.15 });
+      pennant(b, 0.55, 0.38, -0.55, 0.5, 0.26);
+      const t = G();
+      t.cyl(0.03, 0.04, 0.4, 0, 0.2, 0, B.ironDk, { seg: 6 });
+      for (let i = 0; i < 3; i++) { const a = i * 2.094; strut(t, [0, 0.16, 0], [Math.cos(a) * 0.2, 0, Math.sin(a) * 0.2], 0.022, B.ironDk); }
+      figureInto(t, { cloth: A.khaki, vest: A.field, vestT: 0.5, hat: 'brodie', legs: A.khaki, pack: A.field }, -0.34, 0, 0);
+      const gn = G();
+      gn.cyl(0.05, 0.05, 0.4, 0.2, 0, 0, A.field, { axis: 'x', seg: 10 });
+      gn.cyl(0.014, 0.014, 0.12, 0.45, 0, 0, B.coal, { axis: 'x', seg: 5 });
+      gn.box(0.2, 0.09, 0.08, -0.08, -0.045, 0, B.ironDk);
+      gn.box(0.1, 0.07, 0.08, -0.06, -0.09, 0.09, A.wood);
+      bset('bunker', 4, [part('body', b), part('turret', t, { pivot: [0, 0.1, 0], aim: true }), part('gun', gn, { parent: 'turret', pivot: [0.02, 0.46, 0], recoil: 0.04 })]);
+    }
+    // Ballista, a mud-brick platform with a timber deck and a rack of bolts, and a bolt-thrower on a post that
+    // turns, its arms drawn back on twisted sinew.
+    {
+      const b = G();
+      yard(b, 2, 2, B.earth);
+      b.box(1.5, 0.26, 1.5, 0, 0.08, 0, B.mud);
+      b.box(1.4, 0.03, 1.4, 0, 0.34, 0, A.wood);
+      for (let i = 0; i < 4; i++) b.cyl(0.012, 0.012, 0.6, -0.5, 0.42 + i * 0.03, -0.45 + i * 0.05, A.woodDk, { axis: 'x', seg: 4 });
+      pennant(b, -0.62, 0.37, 0.62, 0.75, 0.32);
+      const t = G();
+      t.cyl(0.07, 0.09, 0.3, 0, 0.15, 0, A.woodDk, { seg: 6 });
+      t.box(0.95, 0.07, 0.12, 0.05, 0.3, 0, A.wood, T);
+      t.box(0.08, 0.22, 0.36, 0.38, 0.22, 0, A.woodDk);
+      for (const k of [-1, 1]) {
+        t.cyl(0.05, 0.05, 0.26, 0.38, 0.33, k * 0.13, A.rope, { seg: 8 });
+        strut(t, [0.38, 0.38, k * 0.13], [0.16, 0.38, k * 0.48], 0.035, A.woodDk);
+        strut(t, [0.16, 0.38, k * 0.48], [-0.32, 0.38, 0], 0.008, A.linen);
+      }
+      bset('atgun', 1, [part('body', b), part('turret', t, { pivot: [0, 0.37, 0], aim: true }), part('gun', bolt(), { parent: 'turret', pivot: [0, 0.39, 0], recoil: 0.16 })]);
+    }
+    // Springald, a crenellated stone platform and a timber frame that turns, two skeins of rope with arms drawn
+    // back between them, and the bolt in its trough.
+    {
+      const b = G();
+      yard(b, 2, 2, B.earthDk);
+      b.box(1.6, 0.34, 1.6, 0, 0.08, 0, B.stone);
+      crenRect(b, 0, 0, 1.5, 1.5, 0.42, B.stone, 0.14);
+      pennant(b, -0.66, 0.42, -0.66, 0.8, 0.34);
+      const t = G();
+      t.box(0.5, 0.06, 0.5, 0, 0, 0, A.woodDk);
+      for (const k of [-1, 1]) {
+        t.box(0.07, 0.5, 0.07, 0.1, 0.06, k * 0.22, A.wood, T);
+        t.cyl(0.055, 0.055, 0.42, 0.1, 0.33, k * 0.13, A.rope, { seg: 8 });
+        strut(t, [0.1, 0.44, k * 0.13], [-0.16, 0.5, k * 0.36], 0.04, A.woodDk);
+        strut(t, [-0.16, 0.5, k * 0.36], [-0.36, 0.36, 0], 0.008, A.linen);
+      }
+      for (const y of [0.06, 0.56]) t.box(0.1, 0.06, 0.52, 0.1, y, 0, A.wood);
+      t.box(0.9, 0.06, 0.1, 0.0, 0.3, 0, A.wood, T);
+      bset('atgun', 2, [part('body', b), part('turret', t, { pivot: [0, 0.42, 0], aim: true }), part('gun', bolt(), { parent: 'turret', pivot: [0.05, 0.37, 0], recoil: 0.16 })]);
+    }
+    // Cannon battery, a plank platform in a ring of gabions with powder barrels, the flag, and a gun on its
+    // wheeled carriage that turns and runs back as it fires.
+    {
+      const b = G();
+      yard(b, 2, 2, B.turf);
+      b.box(1.3, 0.05, 1.3, 0, 0.08, 0, A.wood);
+      for (let i = 0; i < 12; i++) { const a = i / 12 * 6.283; b.cyl(0.085, 0.085, 0.22, Math.cos(a) * 0.82, 0.19, Math.sin(a) * 0.82, B.thatchDk, { seg: 7 }); }
+      for (const [x, z] of [[-0.45, 0.45], [-0.3, 0.55]]) b.cyl(0.08, 0.08, 0.18, x, 0.22, z, A.woodDk, { seg: 8 });
+      flagpole(b, -0.6, 0.08, -0.6, 1.3, 0.42, 0.26);
+      const t = G();
+      for (const k of [-1, 1]) { t.box(0.62, 0.18, 0.05, -0.05, 0.04, k * 0.11, A.wood, T); cartWheel(t, 0.06, k * 0.22, 0.17, 0.04); }
+      t.cyl(0.03, 0.03, 0.5, 0.06, 0.17, 0, A.iron, { axis: 'z', seg: 6 });
+      t.box(0.5, 0.06, 0.14, -0.42, 0.02, 0, A.wood, Object.assign({ rz: 0.25 }, T));
+      const gn = G();
+      gn.cyl(0.085, 0.065, 0.85, 0.3, 0, 0, B.coal, { axis: 'x', seg: 12 });
+      gn.cyl(0.08, 0.08, 0.05, 0.7, 0, 0, B.coal, { axis: 'x', seg: 12 });
+      gn.sph(0.06, -0.15, 0, 0, B.coal, { seg: 8, rings: 6 });
+      bset('atgun', 3, [part('body', b), part('turret', t, { pivot: [0, 0.13, 0], aim: true }), part('gun', gn, { parent: 'turret', pivot: [0, 0.3, 0], recoil: 0.16 })]);
+    }
+    // Field gun, a sandbagged pit with ammunition boxes, and a gun behind its shield on two wheels with a split
+    // trail, its long barrel over a recuperator.
+    {
+      const b = G();
+      yard(b, 2, 2, B.earth);
+      sand(b, 0, 0, 1.6, 1.6, 2);
+      for (const [x, z] of [[-0.5, 0.45], [-0.5, 0.25]]) b.box(0.3, 0.14, 0.17, x, 0.08, z, A.wood);
+      const t = G();
+      for (const k of [-1, 1]) {
+        t.cyl(0.18, 0.18, 0.05, 0.02, 0.18, k * 0.27, B.coal, { axis: 'z', seg: 12 });
+        t.cyl(0.07, 0.07, 0.06, 0.02, 0.18, k * 0.27, A.iron, { axis: 'z', seg: 8 });
+        strut(t, [-0.05, 0.16, k * 0.1], [-0.72, 0.02, k * 0.26], 0.05, A.field, T);
+      }
+      t.cyl(0.025, 0.025, 0.54, 0.02, 0.18, 0, A.iron, { axis: 'z', seg: 6 });
+      t.box(0.04, 0.36, 0.52, 0.17, 0.12, 0, A.field, T);
+      t.box(0.24, 0.12, 0.16, 0.0, 0.16, 0, A.field, T);
+      const gn = G();
+      gn.cyl(0.035, 0.045, 1.0, 0.45, 0, 0, 0x3a3e42, { axis: 'x', seg: 10 });
+      gn.cyl(0.03, 0.03, 0.5, 0.15, -0.06, 0, A.field, { axis: 'x', seg: 8 });
+      gn.box(0.16, 0.1, 0.1, -0.06, -0.05, 0, A.iron);
+      bset('atgun', 4, [part('body', b), part('turret', t, { pivot: [0, 0.1, 0], aim: true }), part('gun', gn, { parent: 'turret', pivot: [0.05, 0.3, 0], recoil: 0.16 })]);
+    }
+
+    // The future's buildings are the modern models refitted in pale composite and gunmetal, with blue glass, hazard
+    // bands lit softly in the future's blue, and the side's markings, lamps and ore kept. The larger ones gain slim
+    // light pylons at their corners, the command post a ringed spire, the sensors a ringed mast and the fabricator
+    // a gantry over its yard.
+    {
+      const lin = hex => new THREE.Color(hex), near = (v, k) => Math.abs(v[0] - k.r) + Math.abs(v[1] - k.g) + Math.abs(v[2] - k.b) < 0.02;
+      const GLASS = lin(P.glass), YEL = lin(P.yellow), KEEP = [lin(P.ore), lin(P.red)], GL = lin(A.glow), BLUE = lin(0x1d4660), LT = lin(0xd6dadf), DK = lin(0x343a42);
+      const FOOT = { hq: 5, power: 3, refinery: 4, barracks: 3, factory: 4, radar: 3, airfield: [6, 4], fob: 3, silo: 3 }, LIT = { g: 0.8 };
+      const rings = (g, x, y0, z, h, rs) => rs.forEach((r, i) => g.add(new THREE.TorusGeometry(r, 0.018, 4, 18), x, y0 + h * (i + 1) / (rs.length + 1), z, A.glow, { rx: R90, g: 0.4 }));
+      const SIGN = {
+        hq: g => { g.cyl(0.02, 0.13, 1.6, -0.5, 2.72, 0.1, A.exo, { seg: 8 }); rings(g, -0.5, 1.92, 0.1, 1.4, [0.34, 0.24, 0.15]); },
+        radar: g => { g.cyl(0.025, 0.04, 1.1, 0.6, 1.73, 0.5, A.exoDk, { seg: 6 }); rings(g, 0.6, 1.18, 0.5, 1.1, [0.22, 0.16, 0.1]); },
+        factory: g => { for (const s2 of [-1, 1]) g.box(0.1, 1.6, 0.1, 1.85, 0.08, s2 * 1.25, A.exoDk); g.box(0.14, 0.12, 2.6, 1.85, 1.68, 0, A.exo); g.box(0.15, 0.03, 2.4, 1.85, 1.66, 0, A.glow, LIT); },
+      };
+      const NAMES = ['position', 'normal', 'color', 'aTeam', 'aGlow'];
+      const concat = (a, b) => {
+        const g = new THREE.BufferGeometry();
+        for (const n of NAMES) { const x = a.attributes[n].array, y = b.attributes[n].array, arr = new Float32Array(x.length + y.length); arr.set(x); arr.set(y, x.length); g.setAttribute(n, new THREE.Float32BufferAttribute(arr, a.attributes[n].itemSize)); }
+        return g;
+      };
+      for (const k of ['hq', 'power', 'refinery', 'barracks', 'factory', 'radar', 'airfield', 'fob', 'derrick', 'silo', 'bunker', 'atgun', 'sam']) {
+        buildings[k + '@6'] = buildings[k].map(p => {
+          let g = p.geo.clone();
+          const c = g.attributes.color, gl = g.attributes.aGlow, tm = g.attributes.aTeam, v = [0, 0, 0];
+          for (let j = 0; j < c.count; j++) {
+            v[0] = c.getX(j); v[1] = c.getY(j); v[2] = c.getZ(j);
+            if (tm.getX(j) > 0.9 || gl.getX(j) > 1 || KEEP.some(q2 => near(v, q2))) continue;
+            if (near(v, GLASS)) { c.setXYZ(j, BLUE.r, BLUE.g, BLUE.b); continue; }
+            if (near(v, YEL)) { c.setXYZ(j, GL.r, GL.g, GL.b); gl.setX(j, 0.35); continue; }
+            const l = Math.min(1, Math.pow(0.2126 * v[0] + 0.7152 * v[1] + 0.0722 * v[2], 0.55) * 1.1);
+            c.setXYZ(j, DK.r + (LT.r - DK.r) * l, DK.g + (LT.g - DK.g) * l, DK.b + (LT.b - DK.b) * l);
+          }
+          if (p.id === 'body' && FOOT[k]) {
+            const [w, d] = [].concat(FOOT[k], FOOT[k]), add = G();
+            for (const [sx, sz] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) { const x = sx * (w / 2 - 0.12), z = sz * (d / 2 - 0.12); add.box(0.07, 0.62, 0.07, x, 0.08, z, A.exoDk); add.box(0.09, 0.05, 0.09, x, 0.7, z, A.glow, LIT); }
+            if (SIGN[k]) SIGN[k](add);
+            g = concat(g, add.finish());
+          }
+          return Object.assign({}, p, { geo: g });
+        });
+      }
+    }
+
+    // A building's model in an age is its own for that age if it has one, else the modern one.
+    const ageKey = (kind, age) => buildings[kind + '@' + age] ? kind + '@' + age : kind;
+
+    return { units, buildings, man, chute, scenery, ageKey };
   }
 
   return { make, P };
@@ -6053,6 +6912,10 @@ const World = (() => {
     renderer.shadowMap.type = THREE.PCFSoftShadowMap;
     renderer.info.autoReset = true;
     const MODELS = Models.make(THREE);
+    // Each building's model in each age, by kind and then age, so a base is drawn in its owner's age.
+    const AGE_KEYS = {};
+    for (const k in BUILDINGS) AGE_KEYS[k] = [0, 1, 2, 3, 4, 5, 6].map(a => MODELS.ageKey(k, a));
+    const ageKey = (kind, age) => (AGE_KEYS[kind] && AGE_KEYS[kind][age]) || kind;
     const scene = new THREE.Scene();
     const camera = new THREE.PerspectiveCamera(26, 1, 2, 500);
     const cam = { x: 40, y: 40, dist: 92, yaw: Math.PI / 4, pitch: 0.98, shake: 0, minD: 30, maxD: 190 };
@@ -7785,7 +8648,7 @@ const World = (() => {
           const age = (S.tick - e.born) / HZ, up = clamp(age / 2.2, 0, 1), ease = 1 - (1 - up) ** 3;
           compose(m1, e.x, r.y0 - (1 - ease) * 2.4, e.y, r.yaw, 0, 0);
           if (up < 1) { m3.makeScale(1, 0.4 + 0.6 * ease, 1); m1.multiply(m3); r.dust -= dt; if (r.dust <= 0) { r.dust = 0.05; const a = Math.random() * 6.28, q = Math.max(e.w, e.h) * 0.6; dustPuff(e.x + Math.cos(a) * q, r.y0 + 0.1, e.y + Math.sin(a) * q, 1.4); } }
-          drawParts(sets[e.kind], m1, color, e, r, now);
+          drawParts(sets[bkey(e.kind, e.team)], m1, color, e, r, now);
           // Damage shows as smoke, then fire.
           const f = e.hp / e.max;
           if (f < 0.55 && VIS(e.x, e.y)) {
@@ -7884,7 +8747,7 @@ const World = (() => {
         const shake = k < 0.3 ? (Math.random() - 0.5) * 0.12 : 0, fall = Math.max(0, k - 0.12) / 0.88, g2 = fall * fall;
         compose(m1, f.x + shake, f.y0 - g2 * 2.6, f.z + shake, f.yaw, f.dir * 0.32 * g2, f.dir * 0.12 * g2);
         m3.makeScale(1, 1 - 0.55 * g2, 1); m1.multiply(m3);
-        const fr = f.r || (f.r = { alpha: 1, yaw: f.yaw }), fe = f.e || (f.e = { pta: 0, ta: 0, fired: -1e9, d: BUILDINGS[f.kind], charge: 0, cargo: 0 });
+        const fr = f.r || (f.r = { alpha: 1, yaw: f.yaw }), fe = f.e || (f.e = { pta: 0, ta: 0, fired: -1e9, d: BUILDINGS[f.base], charge: 0, cargo: 0 });
         drawParts(set, m1, colA.copy(teamCol[f.team]).lerp(burnt, Math.min(1, k * 1.4)), fe, fr, now);
         f.dust -= dt;
         if (f.dust <= 0 && fall > 0) {
@@ -7919,8 +8782,9 @@ const World = (() => {
         if (w.smoke <= 0 && w.t < 26 && VIS(w.x, w.z)) { w.smoke = 0.14 + w.t * 0.012; burn(w.x, w.y + 0.5, w.z, 0.9 + (w.rubble ? 0.4 : 0), w.t < 10); }
       }
 
+      // An empty set is hidden, so the many models nobody draws this frame cost no draw calls.
       for (const k in sets) for (const p of sets[k]) {
-        p.mesh.count = p.n;
+        p.mesh.count = p.n; p.mesh.visible = p.n > 0;
         if (p.n) { p.mesh.instanceMatrix.needsUpdate = true; p.mesh.instanceColor.needsUpdate = true; }
       }
     }
@@ -8209,8 +9073,10 @@ const World = (() => {
       if (!VIS(e.x, e.y) && !(e.b && r && r.seen)) return;
       const y = e.b ? terrainAt(M, e.x, e.y) : heightAt(M, e.x, e.y);
       if (e.b) {
-        if (r && r.y0 !== undefined) falls.push({ kind: e.kind, x: e.x, y0: r.y0, z: e.y, yaw: r.yaw, team: e.team, t: 0, dir: Math.random() < 0.5 ? -1 : 1, w: e.w, h: e.h, dust: 0 });
-        pastBoxes.push({ x: e.cx, y: e.cy, w: e.w, h: e.h, ht: bHeight(e.kind), t: 0, life: 60 });
+        // It falls as it stood, in its owner's age.
+        const key = bkey(e.kind, e.team);
+        if (r && r.y0 !== undefined) falls.push({ kind: key, base: e.kind, x: e.x, y0: r.y0, z: e.y, yaw: r.yaw, team: e.team, t: 0, dir: Math.random() < 0.5 ? -1 : 1, w: e.w, h: e.h, dust: 0 });
+        pastBoxes.push({ x: e.cx, y: e.cy, w: e.w, h: e.h, ht: topOf(key), t: 0, life: 60 });
         splatter(e.x, e.y, Math.max(e.w, e.h) * 0.6);
         scorch(e.x, e.y, Math.max(e.w, e.h) * 0.9, 1);
         const n = Math.max(e.w, e.h) + 2;
@@ -8318,16 +9184,19 @@ const World = (() => {
       pp.render();
     }
 
-    // A building's height, from the top of its model, for the ghost plan's wireframes.
+    // A building's model in its side's age. A side not playing, or no game, sees the modern one.
+    function bkey(kind, team) { const P = S && team >= 0 ? S.P[team] : null; return ageKey(kind, P ? P.tech : 5); }
+    // A model's height, from its top, for the ghost plan's wireframes. bHeight gives a kind's in the viewer's age.
     const tops = {};
-    function bHeight(kind) {
-      if (tops[kind] === undefined) {
+    function topOf(key) {
+      if (tops[key] === undefined) {
         let top = 1;
-        for (const p of MODELS.buildings[kind] || []) { p.geo.computeBoundingBox(); top = Math.max(top, p.geo.boundingBox.max.y + (p.pivot ? p.pivot[1] : 0)); }
-        tops[kind] = top;
+        for (const p of MODELS.buildings[key] || []) { p.geo.computeBoundingBox(); top = Math.max(top, p.geo.boundingBox.max.y + (p.pivot ? p.pivot[1] : 0)); }
+        tops[key] = top;
       }
-      return tops[kind];
+      return tops[key];
     }
+    const bHeight = kind => topOf(bkey(kind, viewTeam));
     // Buildings destroyed in sight, kept a minute as what was.
     const pastBoxes = [];
 
@@ -8353,11 +9222,12 @@ const World = (() => {
         ghostCells.setMatrixAt(n, m1); ghostCells.setColorAt(n, colA.set(ok ? 0x40ff80 : 0xff3030)); n++;
       }
       ghostCells.count = n; ghostCells.instanceMatrix.needsUpdate = true; ghostCells.instanceColor.needsUpdate = true;
-      if (!ghost || ghost.kind !== g.kind) {
+      const gk = bkey(g.kind, viewTeam);
+      if (!ghost || ghost.kind !== gk) {
         if (ghost) scene.remove(ghost);
-        ghost = new THREE.Group(); ghost.kind = g.kind;
+        ghost = new THREE.Group(); ghost.kind = gk;
         const mat = new THREE.MeshStandardMaterial({ vertexColors: true, transparent: true, opacity: 0.62, roughness: 0.6, emissive: 0x204060, emissiveIntensity: 0.5 });
-        for (const p of MODELS.buildings[g.kind]) { const m = new THREE.Mesh(p.geo, mat); if (p.pivot) m.position.set(...p.pivot); ghost.add(m); }
+        for (const p of MODELS.buildings[gk]) { const m = new THREE.Mesh(p.geo, mat); if (p.pivot) m.position.set(...p.pivot); ghost.add(m); }
         scene.add(ghost);
       }
       ghost.visible = true;
@@ -8481,6 +9351,8 @@ const World = (() => {
       get style() { return style; },
       cam, vw: 1, vh: 1, onScreen: [], load, frame, event, resize, pick, project, setGhost, cameos, renderer, camera, scene, place: placeCamera,
       teamCol, THEMES,
+      // A building's model key in an age, and every building model's key, for the sidebar's pictures.
+      ageKey, buildingKeys: Object.keys(MODELS.buildings),
       get baseImage() { return baseImage; },
       get viewTeam() { return viewTeam; },
       // Sees the whole map with no fog, as one watching a game does.
@@ -8653,6 +9525,8 @@ const Hud = (() => {
     }
 
     const axoImg = k => (state.cameos[k] || '').startsWith('data:image/svg') ? ' class="axo"' : '';
+    // A building's picture in its owner's age, anything else's by its kind.
+    const picKey = e => { const P = e.b && game.S.P[e.team], k = P ? world.ageKey(e.kind, P.tech) : e.kind; return state.cameos[k] ? k : e.kind; };
     function buildCams() {
       const box = $('cams');
       box.textContent = '';
@@ -9883,8 +10757,9 @@ const Hud = (() => {
       const sec = s.tick / HZ | 0;
       $('clock').textContent = `${String(sec / 60 | 0).padStart(2, '0')}:${String(sec % 60).padStart(2, '0')}`;
       $('techlv').textContent = Rules.AGES[p.tech].name;
-      // A new age brings the lines' new forms to the cards, and power to run short of.
-      if (p.tech !== listAge) { lineLists(p.tech); buildCams(); }
+      // A new age brings the lines' new forms to the cards, its buildings' pictures, and power to run short of.
+      const picStale = !!game.pictures && p.tech !== game.picAge;
+      if (p.tech !== listAge || picStale) { lineLists(p.tech); if (picStale) game.pictures(); else buildCams(); }
       $('pwr').parentElement.classList.toggle('off', p.tech < Rules.POWER_AGE);
       if (p.tech < Rules.POWER_AGE) $('pwr').textContent = '—';
       const towns = s.towns.filter(t => t.owner === team()).length;
@@ -9905,9 +10780,9 @@ const Hud = (() => {
           const kinds = Object.keys(groups), first = list[0], mine = first.team === team();
           let html = '<div class="who">';
           if (kinds.length === 1 && list.length === 1) {
-            html += `<div class="one"><img src="${state.cameos[first.kind] || ''}"${axoImg(first.kind)} alt=""><div><h3>${first.d.name}</h3><div class="hp"><i id="hp1"></i></div><p id="stat1"></p></div></div>`;
+            html += `<div class="one"><img src="${state.cameos[picKey(first)] || ''}"${axoImg(first.kind)} alt=""><div><h3>${first.d.name}</h3><div class="hp"><i id="hp1"></i></div><p id="stat1"></p></div></div>`;
           } else {
-            html += '<div class="many">' + kinds.map(k => `<button data-k="${k}"><img src="${state.cameos[k] || ''}"${axoImg(k)} alt=""><b>${groups[k].length}</b></button>`).join('') + '</div>';
+            html += '<div class="many">' + kinds.map(k => `<button data-k="${k}"><img src="${state.cameos[picKey(groups[k][0])] || ''}"${axoImg(k)} alt=""><b>${groups[k].length}</b></button>`).join('') + '</div>';
           }
           html += '</div><div class="acts">';
           if (mine) {
@@ -11166,11 +12041,15 @@ const Game = (() => {
     let scheme = store.get('dg-scheme', 'auto');
     // The sidebar's pictures: the buildings as the engine renders them, the units as axonometric line drawings in
     // the look's own inks, with the player's side on their markings.
+    // A building's card shows it in the player's age, and G.picAge says which age that was.
     let renders = null;
     function pictures() {
       if (!renders) return;
       const scheme = world.look !== 'ink' ? 'daylight' : document.body.dataset.scheme === 'dark' ? 'dark' : 'light';
-      hud.setCameos(Object.assign({}, renders, Axo.pictures(scheme, SLOT_CSS[Math.max(0, G.team || 0)])));
+      const P = G.S && G.S.P[Math.max(0, G.team || 0)], age = P ? P.tech : 5, own = {};
+      for (const k in Rules.BUILDINGS) own[k] = renders[world.ageKey(k, age)] || renders[k];
+      G.picAge = age;
+      hud.setCameos(Object.assign({}, renders, own, Axo.pictures(scheme, SLOT_CSS[Math.max(0, G.team || 0)])));
     }
     function applyScheme() {
       const dark = scheme === 'dark' || (scheme === 'auto' && !!darkQ && darkQ.matches);
@@ -11609,6 +12488,7 @@ const Game = (() => {
       probe();
       const list = [
         ...Object.keys(Rules.BUILDINGS).filter(k => k !== 'hq').map(k => ({ kind: k, b: true })), { kind: 'hq', b: true },
+        ...world.buildingKeys.filter(k => k.includes('@')).map(k => ({ kind: k, b: true })),
         ...Object.keys(Rules.UNITS).filter(k => !Rules.UNITS[k].men).map(k => ({ kind: k })),
         ...Object.keys(Rules.UNITS).filter(k => Rules.UNITS[k].men).map(k => ({ kind: k, man: true })),
       ];
