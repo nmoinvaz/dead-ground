@@ -123,6 +123,13 @@ body[data-look="ink"][data-scheme="dark"] #end, body[data-look="ink"][data-schem
 #sel .acts button { padding: 2px 8px; min-height: 24px; background: #191b13; border: 1px solid #000; font: 600 13px var(--ui); letter-spacing: .03em; white-space: nowrap; text-align: left; }
 #sel .acts button:hover { color: var(--amber); }
 #sel .acts button.on { color: var(--amber); border-color: var(--amber-dim); }
+#sel .forms { display: flex; flex-direction: column; gap: 3px; justify-content: center; }
+#sel .forms h4 { margin: 0; font: 600 12px var(--ui); letter-spacing: .03em; color: var(--dim); white-space: nowrap; }
+#sel .forms > div { display: grid; grid-template-columns: repeat(3, 32px); gap: 3px; }
+#sel .forms button { height: 24px; padding: 0; background: #191b13; border: 1px solid #000; color: #b9b8a2; display: grid; place-items: center; }
+#sel .forms button:hover { color: var(--amber); }
+#sel .forms button.on { color: var(--amber); border-color: var(--amber-dim); }
+#sel .forms svg { width: 24px; height: 16px; fill: currentColor; }
 
 /* The sidebar. */
 #side { flex: 0 0 var(--side); width: var(--side); display: flex; flex-direction: column; gap: 6px; padding: 8px; padding-top: calc(8px + env(safe-area-inset-top, 0px)); padding-right: max(8px, env(safe-area-inset-right, 0px)); padding-bottom: calc(8px + env(safe-area-inset-bottom, 0px)); box-sizing: border-box; background: repeating-linear-gradient(90deg, #0000 0 3px, rgba(255,255,255,.012) 3px 4px), linear-gradient(180deg, var(--steel), #2f3328 60%, #272a21); border-left: 2px solid var(--edge); box-shadow: inset 1px 0 0 var(--steel-hi); min-height: 0; overflow: hidden; }
@@ -341,6 +348,10 @@ body[data-look="ink"] #sel img { filter: grayscale(1) contrast(1.45) brightness(
 body[data-look="ink"] #sel .hp { background: var(--paper-hi); border-color: var(--ink); }
 body[data-look="ink"] #sel .acts button { background: var(--paper-hi); border: 1px solid var(--ink); }
 body[data-look="ink"] #sel .acts button.on { color: var(--paper); background: var(--ink); }
+body[data-look="ink"] #sel .forms h4 { color: var(--ink-dim); font-family: var(--display); font-weight: 400; font-size: 14px; letter-spacing: .02em; }
+body[data-look="ink"] #sel .forms button { background: var(--paper-hi); border: 1px solid var(--ink); color: var(--ink); }
+body[data-look="ink"] #sel .forms button:hover { color: var(--redink); }
+body[data-look="ink"] #sel .forms button.on { color: var(--paper); background: var(--ink); }
 body[data-look="ink"] #sel .many b { color: var(--redink); text-shadow: 0 0 2px var(--paper), 0 0 2px var(--paper); }
 body[data-look="ink"] #stats { color: var(--ink-dim); }
 body[data-look="ink"] #stats b { color: var(--redink); }
@@ -552,6 +563,7 @@ body[data-look="ink"] .sheet { box-shadow: 4px 4px 0 var(--ink); }
         <dt>Right</dt><dd>Move, take a town, mine ore, or mark an enemy and all near it</dd>
         <dt>Alt</dt><dd>With right-click, attack the one enemy alone</dd>
         <dt>A / S</dt><dd>Attack-move, stop</dd>
+        <dt>D</dt><dd>Next formation for the selected units: line, block, column, wedge, square, loose</dd>
         <dt>Ctrl 1-9</dt><dd>Set a group, then 1-9 picks it</dd>
         <dt>Arrows</dt><dd>Move the view; on a trackpad swipe to move and pinch to zoom</dd>
         <dt>L / K</dt><dd>Next look, or in pen and ink another pen technique</dd>

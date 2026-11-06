@@ -708,6 +708,12 @@ const Hud = (() => {
       if (slot !== undefined) { const c = LISTS[state.tab][slot]; if (c) camClick(c, e.shiftKey ? 5 : 1); return; }
       if (k === 'KeyA') { if (orderIds().length) enter({ type: 'amove' }), showBanner('Attack-move: click a spot', true); return; }
       if (k === 'KeyS') { const ids = orderIds(); if (ids.length) game.order(s, t, { c: 'stop', ids }); return; }
+      // D steps through the formations, Shift+D back.
+      if (k === 'KeyD') {
+        const us = formUnits(), F = Rules.FORMS;
+        if (us.length > 1) setForm(F[(F.indexOf(Rules.formOfGroup(us)) + (e.shiftKey ? F.length - 1 : 1)) % F.length]);
+        return;
+      }
       if (k === 'KeyG') { const b = state.sel.find(q => alive(q) && q.b); if (b) game.order(s, t, { c: 'repair', id: b.id }); return; }
       if (k === 'Delete') { const b = state.sel.find(q => alive(q) && q.b); if (b) game.order(s, t, { c: 'sell', id: b.id }); return; }
       if (k === 'Space') { e.preventDefault(); const a = state.lastAlert; if (a) world.focus(a.x, a.y); return; }
@@ -1690,9 +1696,29 @@ const Hud = (() => {
       setTimeout(() => { for (const n of document.querySelectorAll('#cams .new')) n.remove(); }, 9000);
     }
 
+    // The formations, drawn as the places they lay out, front at the top.
+    const FORM_NAME = { line: 'Line', block: 'Block', column: 'Column', wedge: 'Wedge', square: 'Square', loose: 'Loose order' };
+    const dots = pts => `<svg viewBox="0 0 24 16" aria-hidden="true">${pts.map(([x, y]) => `<circle cx="${x}" cy="${y}" r="1.7"/>`).join('')}</svg>`;
+    const FORM_ICON = {
+      line: dots([[3, 6], [7.5, 6], [12, 6], [16.5, 6], [21, 6], [3, 11], [7.5, 11], [12, 11], [16.5, 11], [21, 11]]),
+      block: dots([[7, 3], [12, 3], [17, 3], [7, 8], [12, 8], [17, 8], [7, 13], [12, 13], [17, 13]]),
+      column: dots([[9.5, 2], [14.5, 2], [9.5, 6], [14.5, 6], [9.5, 10], [14.5, 10], [9.5, 14], [14.5, 14]]),
+      wedge: dots([[12, 2.5], [9, 7], [15, 7], [6, 11.5], [12, 11.5], [18, 11.5]]),
+      square: dots([[6, 3], [12, 3], [18, 3], [6, 8], [18, 8], [6, 13], [12, 13], [18, 13]]).replace('</svg>', '<circle cx="12" cy="8" r="1.4" fill="none" stroke="currentColor" stroke-width="1"/></svg>'),
+      loose: dots([[3, 3], [12, 2.5], [21, 3.5], [7, 8.5], [17, 8], [3, 13.5], [12, 13], [21, 13.5]]),
+    };
+    // The selected units a formation takes in: the player's own, on the ground.
+    const formUnits = () => state.sel.filter(e => alive(e) && !e.b && e.team === team() && !Rules.isAir(e));
+    function setForm(f) {
+      const us = formUnits();
+      if (us.length < 2) return;
+      game.order(S(), team(), { c: 'form', ids: us.map(u => u.id), f });
+      say(`${FORM_NAME[f]} formation.`);
+    }
     function updateSelPanel() {
       state.sel = state.sel.filter(alive);
-      const box = $('sel'), list = state.sel, key = list.map(e => e.id).join() + (list[0] ? (list[0].repairing ? 'r' : '') + (list[0].team) : '');
+      const fu = formUnits(), form = fu.length > 1 ? Rules.formOfGroup(fu) : '';
+      const box = $('sel'), list = state.sel, key = list.map(e => e.id).join() + (list[0] ? (list[0].repairing ? 'r' : '') + (list[0].team) : '') + form;
       if (key !== state.selKey) {
         state.selKey = key;
         box.hidden = !list.length;
@@ -1717,7 +1743,9 @@ const Hud = (() => {
             html += '<button id="a-clear">Clear</button>';
           }
           html += '</div>';
+          if (form) html += `<div class="forms"><h4>Formation <kbd>D</kbd></h4><div>${Rules.FORMS.map(f => `<button data-f="${f}" class="${f === form ? 'on' : ''}" title="${FORM_NAME[f]}" aria-label="${FORM_NAME[f]}">${FORM_ICON[f]}</button>`).join('')}</div></div>`;
           box.innerHTML = html;
+          box.querySelectorAll('.forms button').forEach(b => b.addEventListener('click', () => setForm(b.dataset.f)));
           box.querySelectorAll('.many button').forEach(b => b.addEventListener('click', () => select(state.sel.filter(e => e.kind === b.dataset.k))));
           const on = (id, fn) => { const b = document.getElementById(id); if (b) b.addEventListener('click', fn); };
           on('a-rep', () => game.order(S(), team(), { c: 'repair', id: first.id }));
