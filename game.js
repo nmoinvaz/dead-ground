@@ -116,14 +116,19 @@ const Game = (() => {
     const audio = G.audio = makeAudio(typeof SOUNDS === 'object' ? SOUNDS : {}, world);
     const hud = Hud.create(world, G);
 
-    let dpr = 1;
-    function fit() {
-      const r = view.getBoundingClientRect();
-      dpr = Math.min(devicePixelRatio || 1, 2) * scale;
-      world.resize(Math.max(2, r.width | 0), Math.max(2, r.height | 0), dpr);
+    // A resize clears the canvas, so a size is only applied at the top of a frame, just before it is drawn, and never
+    // when nothing has changed. Shown between a resize and a draw, the cleared canvas flashes.
+    let scale = 1, fitDue = true, fitKey = '';
+    function fit() { fitDue = true; }
+    function applyFit() {
+      fitDue = false;
+      const r = view.getBoundingClientRect(), w = Math.max(2, r.width | 0), h = Math.max(2, r.height | 0);
+      const pr = Math.min(devicePixelRatio || 1, 2) * scale, key = `${w}x${h}@${pr.toFixed(3)}`;
+      if (key === fitKey) return;
+      fitKey = key;
+      world.resize(w, h, pr);
       hud.layoutMini();
     }
-    let scale = 1;
     window.addEventListener('resize', fit);
     new ResizeObserver(fit).observe(view);
 
@@ -325,6 +330,7 @@ const Game = (() => {
       requestAnimationFrame(loop);
       const dt = Math.min(0.1, (now - last) / 1000 || 0.016);
       last = now;
+      if (fitDue) applyFit();
       const S = G.S;
       if (S && G.online) {
         // Steps as they come from the server, keeping a step or two in hand, and catching up when behind.
