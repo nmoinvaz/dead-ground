@@ -1627,7 +1627,11 @@ const Rules = (() => {
     t.hp -= dmg;
     t.under = S.tick;
     const P = S.P[t.team];
-    if (t.b && t.team !== team) { ownEvent(S, t.team, 'baseattack'); S.ev.push({ t: 'alert', team: t.team, x: t.x, y: t.y }); }
+    if (t.b && t.team !== team) {
+      ownEvent(S, t.team, 'baseattack'); S.ev.push({ t: 'alert', team: t.team, x: t.x, y: t.y });
+      // The raid on the base, so units made while it lasts go to meet it.
+      if (P && team >= 0) P.raid = { tick: S.tick, by: by || 0, x: t.x, y: t.y };
+    }
     else if (!t.b && t.d.cargo) { ownEvent(S, t.team, 'truckattack'); S.ev.push({ t: 'alert', team: t.team, x: t.x, y: t.y }); }
     // A unit under fire with nothing better to do answers it.
     if (!t.b && by && !t.ord && !t.tgt && armed(t)) t.tgt = by;
@@ -2498,8 +2502,12 @@ const Rules = (() => {
     ownEvent(S, P.team, 'unitready');
     if (u.d.move === 'jet') { u.ord = null; return; }
     if (!u.d.cargo) {
-      const r = best.rally;
-      if (r) orderMove(S, [u], r[0], r[1], false);
+      const r = best.rally, raid = P.raid && S.tick - P.raid.tick < 12 * HZ ? P.raid : null;
+      // While the base is under attack, an armed unit goes straight out to meet the attackers, hunting on its way.
+      if (raid && armed(u) && !u.d.engineer) {
+        const a = raid.by && S.byId.get(raid.by), at = a && a.hp > 0 && mhypot(a.x - raid.x, a.y - raid.y) < 20 ? a : raid;
+        orderMove(S, [u], at.x, at.y, true);
+      } else if (r) orderMove(S, [u], r[0], r[1], false);
       else {
         const dx = x - best.x, dy = y - best.y, m = mhypot(dx, dy) || 1;
         orderMove(S, [u], x + dx / m * 3 + (S.rand() - 0.5) * 3, y + dy / m * 3 + (S.rand() - 0.5) * 3, false);
