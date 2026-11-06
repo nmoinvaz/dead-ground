@@ -277,7 +277,7 @@ const Rules = (() => {
   const WEAR = { foot: 5, wheel: 10, track: 14 }, TRACK_AT = [30, 75, 140], TRACK_GO = [1, 1.04, 1.08, 1.12];
   // Roads are quicker going, wheels most. A way costs the time it takes, and a known way, a road or a worn track,
   // a little less again, as drivers and marchers keep to the ways they know.
-  const ROAD_GO = { foot: 1.15, wheel: 1.3, track: 1.2 }, HABIT = [1, 0.92, 0.88, 0.85], ROAD_HABIT = 0.88;
+  const ROAD_GO = { foot: 1.15, wheel: 1.3, track: 1.2 }, HABIT = [1, 0.88, 0.8, 0.74], ROAD_HABIT = 0.75;
   const ROAD_COST = { foot: Math.fround(ROAD_HABIT / ROAD_GO.foot), veh: Math.fround(ROAD_HABIT / ROAD_GO.wheel), track: Math.fround(ROAD_HABIT / ROAD_GO.track) };
   // Each change of a track makes the shared ways be worked out again, so tracks change only every 45 seconds.
   const TRACK_COST = TRACK_GO.map((g, i) => Math.fround(HABIT[i] / g)), TRACK_EVERY = 45 * HZ;
@@ -1849,6 +1849,16 @@ const Rules = (() => {
       const ox = u.x - o.x, oy = u.y - o.y, gapD = mhypot(ox, oy) || 0.01, reach = u.d.r + o.d.r + 0.25;
       if (gapD < reach) { const k = (reach - gapD) / reach; sx += ox / gapD * k; sy += oy / gapD * k; }
     });
+    // On a road a unit keeps to the carriageway when its way runs on along it. Neighbours push it along the road
+    // rather than off it, and it drifts back toward the middle line, so a group marches as a column.
+    const rd0 = roadDistAt(S.map, u.x, u.y);
+    if (rd0 < 1.6 && roadDistAt(S.map, wx, wy) < 1.3) {
+      const gx = roadDistAt(S.map, u.x + 0.5, u.y) - roadDistAt(S.map, u.x - 0.5, u.y), gy = roadDistAt(S.map, u.x, u.y + 0.5) - roadDistAt(S.map, u.x, u.y - 0.5), gm = mhypot(gx, gy);
+      if (gm > 1e-3) {
+        const nx = gx / gm, ny = gy / gm, across = sx * nx + sy * ny, pull = Math.max(0, rd0 - 0.35) * 0.5;
+        sx -= nx * (across * 0.75 + pull); sy -= ny * (across * 0.75 + pull);
+      }
+    }
     dx += sx * 1.6; dy += sy * 1.6;
     const mag = mhypot(dx, dy) || 1;
     dx /= mag; dy /= mag;
