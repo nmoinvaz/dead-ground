@@ -621,6 +621,9 @@
               vec3 bodyC = sideBody(aw0), nU = texture2D(tNorm, uv).xyz * 2.0 - 1.0;
               vec3 shadeB = dot(nU, uUpV) > 0.6 ? mix(bodyC, vec3(0.949, 0.910, 0.824), 0.38) : nU.x < 0.0 ? bodyC : bodyC * 0.74;
               shadeB = mix(shadeB, bodyC * 0.5, 1.0 - smoothstep(0.05, 0.13, L(uv)));
+              // A wreck has lost its side's colour and is drawn charred, its faces in shades of soot.
+              float charred = 1.0 - smoothstep(0.08, 0.15, aw0.w);
+              shadeB = mix(shadeB, vec3(0.4, 0.37, 0.34) * (dot(nU, uUpV) > 0.6 ? 1.2 : nU.x < 0.0 ? 0.95 : 0.75), charred);
               // Every part of the unit takes the tint and the line, marked or not, so no part is left as bare
               // paper beside its tinted neighbours.
               col *= mix(vec3(1.0), shadeB / vec3(0.949, 0.910, 0.824), smoothstep(0.85, 0.95, s0));
