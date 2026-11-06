@@ -383,11 +383,23 @@ const Hud = (() => {
 
     function entAt(px, py) {
       let best = null, bd = 1e9;
+      // Pulled far back a unit is a few pixels across, so it is found within a wider reach.
+      const reach = state.plates && state.plates.length ? 18 : 13;
       for (const o of world.onScreen) {
-        const r = Math.max(13, o.r * 1.15), d = Math.hypot(o.x - px, o.y - py);
+        const r = Math.max(reach, o.r * 1.15), d = Math.hypot(o.x - px, o.y - py);
         if (!o.e.b && d < r && d < bd) { bd = d; best = o.e; }
       }
       if (best) return best;
+      // A click on a group's plate is a click on the unit of that group nearest it, the chosen plates drawn last
+      // and so on top checked first.
+      const H = (state.plateH || 12) / 2 + 2;
+      for (let i = (state.plates || []).length - 1; i >= 0; i--) {
+        const q = state.plates[i];
+        if (Math.abs(px - q.x) > q.w / 2 + 3 || Math.abs(py - q.y) > H) continue;
+        let near = null, nd = 1e9;
+        for (const o of q.ents) { const d = Math.hypot(o.x - px, o.y - py); if (o.e.hp > 0 && d < nd) { nd = d; near = o.e; } }
+        if (near) return near;
+      }
       const p = world.pick(px, py);
       if (!p) return null;
       const c = Rules.cellOf(p.x, p.y), id = S().occ[c], e = id ? S().byId.get(id) : null;
@@ -1292,8 +1304,8 @@ const Hud = (() => {
           const ax = o.x, ay = o.y - (1 - big) * (o.r + sz * 1.6), key = e.team * 2 + (on ? 1 : 0);
           let q = null;
           for (const g of groups) if (g.key === key && Math.abs(g.x - ax) < sz * 2.6 && Math.abs(g.y - ay) < sz * 1.9) { q = g; break; }
-          if (!q) groups.push(q = { key, team: e.team, on, x: ax, y: ay, n: 0, sx: 0, sy: 0, kinds: {} });
-          q.n++; q.sx += ax; q.sy += ay; q.x = q.sx / q.n; q.y = q.sy / q.n;
+          if (!q) groups.push(q = { key, team: e.team, on, x: ax, y: ay, n: 0, sx: 0, sy: 0, kinds: {}, ents: [] });
+          q.n++; q.sx += ax; q.sy += ay; q.x = q.sx / q.n; q.y = q.sy / q.n; q.ents.push(o);
           const k = picOf(e); q.kinds[k] = (q.kinds[k] || 0) + 1;
         }
         if (tag > 0 && e.b) labels.push(o);
@@ -1333,6 +1345,7 @@ const Hud = (() => {
         if (e.b && e.c4) { og.fillStyle = '#ff5040'; og.font = '700 12px "Share Tech Mono", monospace'; og.textAlign = 'center'; og.fillText(Math.ceil((e.c4 - s.tick) / HZ) + '', o.x, o.y - 18); }
       }
 
+      state.plates = [];
       if (tag > 0) {
         // Buildings first, the headquarters and the largest ahead, each mark left out where it would cover one
         // already made. In pen and ink a mark is lettered on the paper and underlined in the side's colour.
@@ -1372,13 +1385,16 @@ const Hud = (() => {
           for (let i = 0; i < groups.length; i++) for (let j = i + 1; j < groups.length;) {
             const p = groups[i], q = groups[j];
             if (p.key !== q.key || !touch(p, q)) { j++; continue; }
-            p.sx += q.sx; p.sy += q.sy; p.n += q.n; p.x = p.sx / p.n; p.y = p.sy / p.n;
+            p.sx += q.sx; p.sy += q.sy; p.n += q.n; p.x = p.sx / p.n; p.y = p.sy / p.n; p.ents.push(...q.ents);
             for (const k in q.kinds) p.kinds[k] = (p.kinds[k] || 0) + q.kinds[k];
             size(p); groups.splice(j, 1); j = i + 1; merged = true;
           }
         }
         groups.sort((a, b) => (a.team === t) - (b.team === t) || a.on - b.on);
         const plates = [];
+        // Where each plate stands, so a click on a plate is a click on its units.
+        state.plates = tag > 0.3 ? plates : [];
+        state.plateH = ht;
         for (const q of groups) {
           for (let pass = 0; pass < 3; pass++) for (const p of plates) if (touch(p, q)) q.y = p.y + (q.y >= p.y ? 1 : -1) * (ht + 2);
           plates.push(q);
