@@ -548,9 +548,9 @@
               if (float(i) == whoB) { otI = dk ? uSideD[i] : uSideL[i]; otT = uSideB[i]; }
             }
             float bOn = clamp(isG + isW, 0.0, 1.0);
-            float lnA = 1.0 - smoothstep(0.9 * uK, 1.8 * uK, abs(tvB.x) / twB.x), lnB = 1.0 - smoothstep(0.9 * uK, 1.8 * uK, abs(tvB.y) / twB.y);
+            float lnA = 1.0 - smoothstep(0.35 * uK, 0.95 * uK, abs(tvB.x) / twB.x), lnB = 1.0 - smoothstep(0.35 * uK, 0.95 * uK, abs(tvB.y) / twB.y);
             float rbA = step(0.0, tvB.x) * (1.0 - smoothstep(0.0, 1.8, tvB.x)), rbB = step(0.0, tvB.y) * (1.0 - smoothstep(0.0, 1.8, tvB.y));
-            brdL = max(lnA, lnB) * bOn * 0.85; brdLC = lnA >= lnB ? meI : otI;
+            brdL = max(lnA, lnB) * bOn * (dk ? 1.0 : 0.85); brdLC = lnA >= lnB ? meI : otI;
             brdW = max(rbA, rbB) * bOn * min(1.0, 0.5 * uBorder);
             brdWC = dk ? (rbA >= rbB ? meI : otI) : (rbA >= rbB ? meT : otT) / PAPER;
             // Inks by what is drawn: 0 black throughout; 1 survey inks, sepia land and roads, Prussian blue water,
