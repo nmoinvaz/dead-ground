@@ -8,6 +8,13 @@ const Game = (() => {
     towntaken: ['Town captured', 'good'], townlost: ['Town lost', 'bad'], captured: ['Building captured', 'good'], lostbuilding: ['Building lost', 'bad'],
     siloready: ['Missile ready', 'good'], missile: ['Warning, missile launch detected', 'bad'],
   };
+  // The same calls before the Industrial Age, as a herald or a captain would give them, so the early ages do not
+  // speak like a radio.
+  const VOICE_OLD = {
+    buildready: ['The work is done', ''], unitready: ['At your command', ''], baseattack: ['To arms, we are attacked', 'bad'],
+    truckattack: ['Our carts are attacked', 'bad'], nosupply: ['We lack the supplies', 'bad'], newtech: ['New learning is ours', ''],
+    towntaken: ['The town is ours', 'good'], townlost: ['The town is lost', 'bad'], captured: ['It is ours now', 'good'], lostbuilding: ['A building has fallen', 'bad'],
+  };
   // What each turn of the weather means, written and spoken.
   const SKY_SAY = {
     rain: ['Rain. Wheeled vehicles bog down off the roads.', '', 'Rain'], storm: ['Storm. All aircraft are grounded.', 'bad', 'Storm. Aircraft grounded'],
@@ -20,6 +27,22 @@ const Game = (() => {
   const SKY_OF = { desert: 'Dust storms, little rain and no snow.', steppe: 'Rain, thunderstorms and fog, with a little snow.', winter: 'Deep snow and fog, and no rain.' };
   const WEATHER_OF = { random: 'In their usual measure.', mild: 'Mostly fair, with no storms of any kind.', harsh: 'Often, and the storms come hard.' };
   const weatherNote = (theme, w) => w === 'off' ? 'Fair skies all game.' : `${SKY_OF[theme] || ''} ${WEATHER_OF[w] || ''}`;
+
+  function bestVoice(vs) {
+    const score = v => {
+      const n = v.name;
+      if (!/^en/i.test(v.lang || '')) return -99;
+      let s = /en[-_](GB|US)/i.test(v.lang) ? 1 : 0;
+      if (/Natural|Neural|Online|Premium|Enhanced/i.test(n)) s += 6;
+      if (/Google/i.test(n)) s += 4;
+      if (/Samantha|Ava|Allison|Susan|Serena|Daniel|Karen|Moira|Tessa|Aria|Jenny|Libby|Sonia|Guy|Ryan/i.test(n)) s += 2;
+      if (/Desktop|Compact|eSpeak|Zarvox|Trinoids|Whisper|Bells|Boing|Bubbles|Cellos|Organ|Jester|Wobble|Bahh|Albert|Fred|Ralph|Junior|Superstar|Bad News|Good News|Grandma|Grandpa|Rocko|Shelley|Flo|Eddy|Reed|Sandy/i.test(n)) s -= 10;
+      return s;
+    };
+    let best = null, bs = -99;
+    for (const v of vs) { const s = score(v); if (s > bs) { bs = s; best = v; } }
+    return best;
+  }
 
   // Sound. Effects are decoded once and played with a little pan and pitch from where they happen. A browser driven
   // by a test harness stays silent, sound and voice alike.
@@ -63,14 +86,20 @@ const Game = (() => {
         a.play(name, Object.assign({}, o, { gain: (o.gain ?? 1) * k * k * Rules.clamp(50 / c.dist, 0.45, 1.1), pan }));
       },
       ui(n) { a.play(n === 'click' ? 'click' : n === 'deny' ? 'deny' : 'place', { gain: 0.5, gap: 0.03 }); },
-      // Status calls in the browser's own voice, one at a time.
-      voice(k, text) {
+      // Status calls, one at a time. A call recorded by voices.py is played as it is: a herald's before the
+      // Industrial Age (old) and a radio operator's after. Any other is spoken in the browser's own voice at its own
+      // pitch and pace, the most natural English voice the machine has: a neural, online or premium one first, and
+      // never a novelty or an old desktop voice, which sound robotic.
+      voice(k, text, old) {
         const sp = window.speechSynthesis, now = performance.now();
-        if (!sp || robot || a.muted || !text || now < voiceT) return;
+        if (robot || a.muted || !text || now < voiceT) return;
+        const clip = `v_${old ? 'h' : 'r'}_${text.toLowerCase().replace(/[^a-z]+/g, '_').replace(/^_|_$/g, '')}`;
+        if (ctx && bank[clip]) { a.play(clip, { gain: 0.9, gap: 0 }); voiceT = now + 1800; return; }
+        if (!sp) return;
         try {
-          const u = new SpeechSynthesisUtterance(text), vs = sp.getVoices();
-          u.voice = vs.find(v => /Samantha|Google UK English Female|Zira|Karen|Moira/.test(v.name)) || vs.find(v => /^en/.test(v.lang)) || null;
-          u.rate = 1.06; u.pitch = 0.82; u.volume = 0.85;
+          const u = new SpeechSynthesisUtterance(text);
+          u.voice = bestVoice(sp.getVoices());
+          u.rate = 1; u.pitch = 1; u.volume = 0.85;
           sp.cancel(); sp.speak(u);
           voiceT = now + 1800;
         } catch (e) { /* no voice here */ }
@@ -284,6 +313,8 @@ const Game = (() => {
 
     // Hands what the rules did to the picture, the sound and the reports.
     const WSND = { rifle: ['rifle', 0.34, 0.04], hmg: ['hmg', 0.4, 0.06], auto: ['auto', 0.5, 0.08], cannon: ['cannon', 0.8, 0.06], flak: ['flak', 0.45, 0.08], missile: ['missile', 0.6, 0.1], rocket: ['rocket', 0.5, 0.05], rail: ['rail', 0.9, 0.1], sniper: ['sniper', 0.7, 0.1], bow: ['bow', 0.45, 0.05], xbow: ['xbow', 0.45, 0.06], longbow: ['longbow', 0.45, 0.06], clash: ['clash', 0.35, 0.06], musket: ['musket', 0.55, 0.05], catapult: ['catapult', 0.7, 0.1], pulse: ['pulse', 0.35, 0.04] };
+    // Whether the player's side is still before the Industrial Age, when the calls come from a herald, not a radio.
+    const oldAge = () => !!(G.S && G.S.P[Math.max(0, G.team)] && G.S.P[Math.max(0, G.team)].tech < Rules.POWER_AGE);
     function drain() {
       const S = G.S, ev = S.ev;
       for (const e of ev) {
@@ -300,8 +331,8 @@ const Game = (() => {
           case 'die': if (heard) audio.at(e.b ? 'boom_l' : Rules.UNITS[e.kind]?.men ? 'scream' : 'boom_m', e.x, e.y, { gain: Rules.UNITS[e.kind]?.men ? 0.3 : 0.9, gap: 0.08, vary: 0.2 }); break;
           case 'say':
             // A new age has its own card, so its call names the age and leaves no line in the log.
-            if (G.playing && e.team === G.team && e.line === 'newtech') audio.voice(e.line, `The ${Rules.AGES[S.P[e.team].tech].name} Age`);
-            else if (G.playing && e.team === G.team) { const v = VOICE[e.line]; if (v) { hud.say(v[0] + '.', v[1]); audio.voice(e.line, v[0]); } }
+            if (G.playing && e.team === G.team && e.line === 'newtech') audio.voice(e.line, `The ${Rules.AGES[S.P[e.team].tech].name} Age`, oldAge());
+            else if (G.playing && e.team === G.team) { const v = (oldAge() && VOICE_OLD[e.line]) || VOICE[e.line]; if (v) { hud.say(v[0] + '.', v[1]); audio.voice(e.line, v[0], oldAge()); } }
             break;
           case 'alert': if (G.playing && e.team === G.team) hud.alert(e.x, e.y); break;
           case 'trade': if (G.playing && e.team === G.team) hud.pop(e.x, e.y, '+' + e.n); break;
@@ -314,9 +345,9 @@ const Game = (() => {
             else if (G.playing && G.names[e.team]) hud.say(`${G.names[e.team]} is out.`, 'good');
             drawRoster();
             break;
-          case 'weather': if (G.playing) { const v = SKY_SAY[e.kind]; if (v && !(e.kind === 'cloud' && e.was === 'clear')) { hud.say(v[0], v[1]); if (v[2]) audio.voice('sky', v[2]); } } break;
+          case 'weather': if (G.playing) { const v = SKY_SAY[e.kind]; if (v && !(e.kind === 'cloud' && e.was === 'clear')) { hud.say(v[0], v[1]); if (v[2]) audio.voice('sky', v[2], oldAge()); } } break;
           case 'flood': if (G.playing) hud.say(e.on ? 'The rivers are up. The fords are closed.' : 'The rivers are down. The fords are open again.', e.on ? 'bad' : 'good'); break;
-          case 'bridge': if (G.playing && G.team >= 0 && G.S.P[G.team].seen[Rules.cellOf(e.x, e.y)]) { hud.say(e.down ? 'A bridge is down.' : 'A bridge is open again.', e.down ? 'bad' : 'good'); if (e.down) audio.voice('bridge', 'Bridge destroyed'); } break;
+          case 'bridge': if (G.playing && G.team >= 0 && G.S.P[G.team].seen[Rules.cellOf(e.x, e.y)]) { hud.say(e.down ? 'A bridge is down.' : 'A bridge is open again.', e.down ? 'bad' : 'good'); if (e.down) audio.voice('bridge', 'Bridge destroyed', oldAge()); } break;
           case 'wave': if (G.playing && e.team !== G.team) hud.say('Radar shows the enemy massing to attack.', 'bad'); break;
         }
       }
