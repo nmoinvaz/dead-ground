@@ -2097,7 +2097,7 @@ const Rules = (() => {
     if (rk > 0) going = lerp(going, ROAD_GO[d.move], rk);
     if (here & 16) going *= 0.5;
     if ((here & 8) && d.move === 'foot') going *= 0.75;
-    const top = d.speed * speedScale * going;
+    const top = (u.ord && u.ord.pace ? Math.min(d.speed, u.ord.pace) : d.speed) * speedScale * going;
     const want = matan2(dy, dx), diff = angleTo(u.a, want);
     if (d.move === 'foot') {
       u.a += clamp(diff, -6 * DT * 2, 6 * DT * 2);
@@ -2822,24 +2822,101 @@ const Rules = (() => {
     }
   }
 
-  // Goal slots around a point, so a group ends up as a block and not a pile.
-  function orderMove(S, units, x, y, attack) {
+  // The formations a group can keep, as the selection panel offers them. Block is the one a group falls into of
+  // itself; the others the player picks, and each unit keeps its own until told otherwise.
+  const FORMS = ['line', 'block', 'column', 'wedge', 'square', 'loose'];
+  // A unit's place from front to back: 0 in front for melee and heavy armour, 2 behind, or inside a square, for
+  // the unarmed, artillery and the long-ranged, and 1 between.
+  function rankOf(u) {
+    const ws = (u.d.weapons || []).map(n => WEAPONS[n]).filter(Boolean);
+    if (!ws.length || ws.some(w => w.indirect || w.min || w.r >= 12)) return 2;
+    return u.d.armor === 'heavy' || ws.some(w => w.r <= 2.5) ? 0 : 1;
+  }
+  // The formation a group keeps: the one most of its units were set to, and Block where none was.
+  function formOfGroup(units) {
+    const n = {};
+    let best = 'block', most = 0;
+    for (const u of units) if (u.form) { n[u.form] = (n[u.form] || 0) + 1; if (n[u.form] > most) { most = n[u.form]; best = u.form; } }
+    return best;
+  }
+  // A formation's places in rows from the front, each place across and back from the front in spacings.
+  function formRows(form, n) {
+    const rows = [];
+    const row = (k, back, gap) => { const r = []; for (let j = 0; j < k; j++) r.push([(j - (k - 1) / 2) * gap, back]); rows.push(r); };
+    if (form === 'wedge') {
+      // An arrowhead, one at its point and one more in each row back.
+      for (let r = 0, left = n; left > 0; r++) { const k = Math.min(r + 1, left); row(k, r * 0.85, 1.1); left -= k; }
+      return rows;
+    }
+    // A line is one to three deep, a column two abreast, and loose order the block's grid spread wide apart.
+    const wide = form === 'line' ? Math.ceil(n / (n <= 6 ? 1 : n <= 24 ? 2 : 3)) : form === 'column' ? (n <= 3 ? 1 : 2) : Math.ceil(Math.sqrt(n * 1.4));
+    const gap = form === 'loose' ? 2.2 : 1;
+    for (let r = 0, left = n; left > 0; r++, left -= wide) row(Math.min(wide, left), r * gap, gap);
+    return rows;
+  }
+  // A hollow square: the front and middle ranks round its edge, the back rank in the middle, the edge as small as
+  // holds them all. The places round the edge are taken evenly and in order round it.
+  function squareSlots(nOut, nIn) {
+    let k = 2;
+    while (4 * (k - 1) < nOut || (k - 2) * (k - 2) < nIn) k++;
+    const h = (k - 1) / 2, ring = [], inner = [];
+    for (let i = 0; i < k; i++) for (let j = 0; j < k; j++) (i === 0 || j === 0 || i === k - 1 || j === k - 1 ? ring : inner).push([i - h, j - h]);
+    const ang = p => matan2(p[1], p[0]);
+    ring.sort((p, q) => ang(p) - ang(q));
+    inner.sort((p, q) => (p[0] * p[0] + p[1] * p[1]) - (q[0] * q[0] + q[1] * q[1]) || ang(p) - ang(q));
+    const out = [];
+    for (let m = 0; m < nOut; m++) out.push(ring[Math.floor(m * ring.length / nOut)]);
+    return { out, inner: inner.slice(0, nIn) };
+  }
+  // Goal slots around a point, so a group ends up in its formation and not a pile. face turns the formation to a
+  // heading of its own, as when it forms up where it stands.
+  function orderMove(S, units, x, y, attack, face) {
     const n = units.length;
     let cx = 0, cy = 0;
     for (const u of units) { cx += u.x; cy += u.y; }
     cx /= n; cy /= n;
-    const a = matan2(y - cy, x - cx), fx = mcos(a), fy = msin(a), sx = -fy, sy = fx;
+    const a = face ?? matan2(y - cy, x - cx), fx = mcos(a), fy = msin(a), sx = -fy, sy = fx;
     const air = units.filter(isAir), land = units.filter(u => !isAir(u));
     const spacing = Math.max(1.5, ...land.map(u => u.d.r * 2 + 0.5)), per = Math.ceil(Math.sqrt(land.length * 1.4));
-    land.sort((p, q) => ((p.x - cx) * sx + (p.y - cy) * sy) - ((q.x - cx) * sx + (q.y - cy) * sy));
-    const rows = Math.ceil(land.length / per), cover = coverPoints(S.map), given = new Set();
-    land.forEach((u, i) => {
-      const row = i % rows, col = i / rows | 0;
-      const ox = (col - (Math.ceil(land.length / rows) - 1) / 2) * spacing, oy = -(row - (rows - 1) / 2) * spacing;
+    const across = u => (u.x - cx) * sx + (u.y - cy) * sy;
+    const form = land.length > 1 ? formOfGroup(land) : 'block', slot = new Map();
+    if (form === 'block') {
+      land.sort((p, q) => ((p.x - cx) * sx + (p.y - cy) * sy) - ((q.x - cx) * sx + (q.y - cy) * sy));
+      const rows = Math.ceil(land.length / per);
+      land.forEach((u, i) => {
+        const row = i % rows, col = i / rows | 0;
+        slot.set(u, [(col - (Math.ceil(land.length / rows) - 1) / 2) * spacing, -(row - (rows - 1) / 2) * spacing]);
+      });
+    } else {
+      // Places are filled front to back by rank, and within a row from side to side as the units stand, so no
+      // two cross on their way. The formation is centred on the point.
+      const ranked = land.slice().sort((p, q) => rankOf(p) - rankOf(q) || across(p) - across(q)), put = [];
+      const fill = (us, ps) => { us.sort((p, q) => across(p) - across(q)); ps = ps.slice().sort((p, q) => p[0] - q[0]); us.forEach((u, i) => put.push([u, ps[i]])); };
+      if (form === 'square') {
+        const back = ranked.filter(u => rankOf(u) === 2), edge = ranked.filter(u => rankOf(u) !== 2), sq = squareSlots(edge.length, back.length);
+        // Round the edge in the order the units stand round their middle, from the same starting angle.
+        const turn = u => matan2(-((u.x - cx) * fx + (u.y - cy) * fy), across(u));
+        edge.sort((p, q) => turn(p) - turn(q)).forEach((u, i) => put.push([u, [sq.out[i][0], sq.out[i][1]]]));
+        fill(back, sq.inner);
+      } else {
+        let i = 0;
+        for (const r of formRows(form, land.length)) { fill(ranked.slice(i, i + r.length), r); i += r.length; }
+      }
+      let mx = 0, my = 0;
+      for (const [, p] of put) { mx += p[0]; my += p[1]; }
+      mx /= put.length; my /= put.length;
+      for (const [u, p] of put) slot.set(u, [(p[0] - mx) * spacing, -(p[1] - my) * spacing]);
+    }
+    // A formation marches at its slowest unit's pace, so it holds together on the way.
+    const pace = form === 'block' ? 0 : Math.min(...land.map(u => u.d.speed));
+    const cover = coverPoints(S.map), given = new Set();
+    for (const u of land) {
+      const [ox, oy] = slot.get(u);
       let px = x + sx * ox + fx * oy, py = y + sy * ox + fy * oy;
       const cls = clsOf(u);
       // A squad whose place falls by a cover point is sent to the point itself, so an order to a point is enough.
-      let ci = u.d.men ? coverNear(S.map, px, py, 1.5, given) : -1;
+      // A picked formation keeps its shape instead.
+      let ci = u.d.men && form === 'block' ? coverNear(S.map, px, py, 1.5, given) : -1;
       if (ci >= 0 && blocked(S, cls, cellOf(cover[ci].x, cover[ci].y))) ci = -1;
       if (ci >= 0) { given.add(ci); px = cover[ci].x; py = cover[ci].y; }
       else if (blocked(S, cls, cellOf(px, py))) {
@@ -2848,9 +2925,10 @@ const Rules = (() => {
       }
       u.ord = { t: attack ? 'amove' : 'move', x: px, y: py };
       if (ci >= 0) { u.ord.cov = ci; u.ord.stop = 0.15; }
+      if (pace) u.ord.pace = pace;
       u.home = null; u.stuck = 0; u.wpT = 0;
       if (!attack) u.tgt = 0;
-    });
+    }
     air.forEach((u, i) => {
       const a2 = i * 2.4, r = 1.2 * Math.sqrt(i);
       u.ord = u.d.move === 'jet' ? (u.ammo > 0 ? { t: 'attack', id: 0, x, y } : u.ord) : { t: attack ? 'amove' : 'move', x: x + mcos(a2) * r, y: y + msin(a2) * r };
@@ -2895,6 +2973,20 @@ const Rules = (() => {
       if (us.length) {
         for (const u of us) if (u.d.cargo && u.ord && u.ord.t === 'harvest') u.ord = null;
         orderMove(S, us, c.x, c.y, !!c.a);
+      }
+    } else if (c.c === 'form') {
+      // A formation for the units, which those standing or on the move take up at once: where they stand, facing
+      // as they face, or where they were going.
+      if (!FORMS.includes(c.f)) return;
+      const us = unitsOf(S, team, c.ids).filter(u => !isAir(u));
+      for (const u of us) u.form = c.f;
+      const free = us.filter(u => !u.d.cargo && (!u.ord || u.ord.t === 'move' || u.ord.t === 'amove'));
+      if (free.length > 1) {
+        const going = free.filter(u => u.ord);
+        let tx = 0, ty = 0, hx = 0, hy = 0;
+        for (const u of going.length ? going : free) { tx += going.length ? u.ord.x : u.x; ty += going.length ? u.ord.y : u.y; hx += mcos(u.a); hy += msin(u.a); }
+        tx /= going.length || free.length; ty /= going.length || free.length;
+        orderMove(S, free, tx, ty, going.some(u => u.ord.t === 'amove'), going.length ? undefined : matan2(hy, hx));
       }
     } else if (c.c === 'attack') {
       const t = S.byId.get(c.id);
@@ -3221,7 +3313,7 @@ const Rules = (() => {
     mulberry, noiser, clamp, lerp, smooth, angleTo, toXY, toUV, gap, setSize, save, load, hashOf, restartSlot, razeSlot, makeMap, mapFor, layoutFor,
     msin, mcos, matan2, mhypot,
     BRIDGE_HP, SPELL, SKIES, WEATHERS, nightAt, skyOf, offGoing, route, weatherAt, sky, dayAt, spellOf, bridgeAt, clsOf, houseHp, hurtBridge, ignite, shielded,
-    coverPoints, coverNear, COVER_R, COVER_ARC,
+    coverPoints, coverNear, COVER_R, COVER_ARC, FORMS, formOfGroup,
   };
 })();
 if (typeof module !== 'undefined') module.exports = Rules;
