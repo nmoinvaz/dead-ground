@@ -510,6 +510,13 @@
               float aN = max(a, max(max(aR, aL), max(aT, aB)));
               vec4 an = texture2D(tAnc, vUv);
               vec4 anN = max(max(texture2D(tAnc, vUv + k * vec2(1.2, 0)), texture2D(tAnc, vUv - k * vec2(1.2, 0))), max(texture2D(tAnc, vUv + k * vec2(0, 1.2)), texture2D(tAnc, vUv - k * vec2(0, 1.2))));
+              // A unit's outline swells up to three px out on its side away from the sun, past these taps, so its ink is
+              // looked for a little wider. Otherwise that rim took the land's ink and mixed with the side's.
+              if (aN <= 0.9 && a < 0.6) {
+                vec2 o1 = k * vec2(2.6, 0.0), o2 = k * vec2(0.0, 2.6), o3 = uSun2 * k * 3.4;
+                float aW = max(max(A(uv + o1), A(uv - o1)), max(max(A(uv + o2), A(uv - o2)), A(uv + o3)));
+                if (aW > 0.9) { aN = aW; anN = max(max(texture2D(tAnc, vUv + o1), texture2D(tAnc, vUv - o1)), max(max(texture2D(tAnc, vUv + o2), texture2D(tAnc, vUv - o2)), texture2D(tAnc, vUv + o3))); }
+              }
               vec4 aw = a > 0.9 ? an : anN;
               vec3 uInk = sideInk(aw, dk);
               // The same inks on dark paper, each as pale as the light scheme's is deep.
@@ -519,6 +526,8 @@
               vec3 bldI = uInks == 1 ? (dk ? vec3(0.86, 0.8, 0.7) : vec3(0.22, 0.16, 0.12)) : landI;
               float tN = 1.0 - smoothstep(0.012, 0.025, abs(aN - 0.459));
               inkC = aN > 0.9 ? uInk : aN > 0.62 ? bldI : tN > 0.5 ? treeI : isW > 0.5 ? waterI : landI;
+              // On light paper a close unit's hatching is the side's ink darkened halfway to black, as below.
+              if (!dk && a > 0.9) inkC = mix(mix(uInk, mix(uInk, INK, 0.5), 1.0 - zU), uInk, clamp(lineK / max(cover, 1e-3), 0.0, 1.0));
             }
             // On dark paper hatching is laid in a light grey, and only the outlines keep the inks. Units keep their
             // side's ink throughout.
@@ -573,7 +582,13 @@
           float wash = smoothstep(0.12, 0.25, mkx) * (1.0 - smoothstep(0.62, 0.8, mkx));
           // Each side's units drawn in its own ink (1), or their marks laid solid on a black body (2).
           float nearU = smoothstep(0.85, 0.95, max(max(A(uv + k * vec2(2.4, 0.0)), A(uv - k * vec2(2.4, 0.0))), max(max(A(uv + k * vec2(0.0, 2.4)), A(uv - k * vec2(0.0, 2.4))), s0)));
-          if (uUnits == 1) { vec3 tInk = sideInk(texture2D(tAnc, vUv), dk); col = mix(col, tInk, nearU * smoothstep(0.25, 0.6, cover) * step(0.05, mkx)); mark = 0.0; wash = 0.0; }
+          if (uUnits == 1) {
+            // Lines take the side's ink. On light paper a close unit's hatching takes it darkened halfway to black,
+            // since fine hatching in red mixes to pink by eye. A far unit's solid shade keeps the ink.
+            vec3 sI = sideInk(texture2D(tAnc, vUv), dk), hI = dk ? sI : mix(sI, mix(sI, INK, 0.5), 1.0 - smoothstep(1.2, 1.9, uLev));
+            vec3 tInk = mix(hI, sI, clamp(lineK / max(cover, 1e-3), 0.0, 1.0));
+            col = mix(col, tInk, nearU * smoothstep(0.25, 0.6, cover) * step(0.05, mkx)); mark = 0.0; wash = 0.0;
+          }
           if (uUnits == 2) { col = mix(col, hue * 0.85, mark * nearU); mark = 0.0; wash = 0.0; }
           // Line, hatch and stipple units keep their bodies paper, the side shown by its marks alone.
           if (uUnits >= 3 && uUnits <= 5) wash = 0.0;

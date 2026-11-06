@@ -37,7 +37,7 @@ const World = (() => {
   // vermilion, so its soft edges on cream stay red, and on dark paper it keeps a middle lightness, since a light red
   // is pink. The nearest two inks on either paper are about 0.1 apart in OKLab.
   const SLOT_INKS = {
-    light: ['#1d4fc4', '#a82a0a', '#1e7a32', '#6a2fb0', '#c85c06', '#0a7480', '#7f7c00', '#6a4020'],
+    light: ['#1d4fc4', '#ac3204', '#1e7a32', '#6a2fb0', '#bc6400', '#0a7480', '#7f7c00', '#6a4020'],
     dark: ['#68a8ff', '#ee3a22', '#56cc6c', '#b088f2', '#ff7a1a', '#3fd0cc', '#cdf044', '#a8805a'],
   };
 
