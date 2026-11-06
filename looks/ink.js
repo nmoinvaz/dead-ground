@@ -368,6 +368,9 @@
             // shape. On dark paper it is a tint of the side's ink. On light paper it is the ink laid solid, as a pen
             // fills a small shape, since a pale tint of red is pink.
             else uC = max(mix(hatch(p, 45.0, 3.2, 1.0, seedU, 0.04) * smoothstep(0.42, 0.46, dens), dk ? smoothstep(0.4, 0.72, dens) * 0.4 : smoothstep(0.5, 0.56, dens), zU), smoothstep(0.8, 0.84, dens));
+            // On light paper a unit's form comes from its faces' shades of its side's colour, so it is not hatched,
+            // which at dusk covered a whole unit; only its blackest shadow is laid solid in a deep tone.
+            if (!dk && uUnits == 1) uC = smoothstep(0.88, 0.94, dens) * 0.8;
             cover = isG * gC + isW * wC + isS * sC + isT * tC + isB * bC + isU * uC + isBr * brC + isO * oC + isL * smoothstep(0.88, 0.92, dens);
             // The bank drawn once, heavy, on whichever side of it the pixel lies.
             float bankL = 1.0 - smoothstep(0.7 * uK, 1.6 * uK, abs(dep - 0.03) / max(fwidth(dep), 1e-4));
@@ -617,11 +620,13 @@
               // pales to a light terracotta and never to pink.
               vec3 bodyC = sideBody(aw0), nU = texture2D(tNorm, uv).xyz * 2.0 - 1.0;
               vec3 shadeB = dot(nU, uUpV) > 0.6 ? mix(bodyC, vec3(0.949, 0.910, 0.824), 0.38) : nU.x < 0.0 ? bodyC : bodyC * 0.74;
-              shadeB = mix(shadeB, bodyC * 0.5, 1.0 - smoothstep(0.1, 0.24, L(uv)));
-              col *= mix(vec3(1.0), shadeB / vec3(0.949, 0.910, 0.824), smoothstep(0.85, 0.95, s0) * step(0.05, mkx));
+              shadeB = mix(shadeB, bodyC * 0.5, 1.0 - smoothstep(0.05, 0.13, L(uv)));
+              // Every part of the unit takes the tint and the line, marked or not, so no part is left as bare
+              // paper beside its tinted neighbours.
+              col *= mix(vec3(1.0), shadeB / vec3(0.949, 0.910, 0.824), smoothstep(0.85, 0.95, s0));
               tInk = mix(bodyC * 0.5, mix(sI, INK, 0.6), lk);
             }
-            col = mix(col, tInk, nearU * smoothstep(0.25, 0.6, cover) * step(0.05, mkx)); mark = 0.0; wash = 0.0;
+            col = mix(col, tInk, nearU * smoothstep(0.25, 0.6, cover) * (dk ? step(0.05, mkx) : 1.0)); mark = 0.0; wash = 0.0;
           }
           if (uUnits == 2) { col = mix(col, hue * 0.85, mark * nearU); mark = 0.0; wash = 0.0; }
           // Line, hatch and stipple units keep their bodies paper, the side shown by its marks alone.
