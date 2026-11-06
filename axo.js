@@ -883,8 +883,22 @@ const Axo = (() => {
     dark: { ink: '#e8e0cf', hull: '#3b362c', dark: '#2b2823', metal: '#35322c', glass: '#2b3739', ore: '#6f5322', cloth: '#3a3a2c', skin: '#4c3e33', polo: '#4a4538', denim: '#2e3a4a', wood: '#4a3a25', hide: '#433a30', glow: '#2b4a54', mix: [35, 32, 27], mixK: 0.6 },
     daylight: { ink: '#e6e2c8', hull: '#4a4c3c', dark: '#2a2b22', metal: '#3c3e33', glass: '#33424a', ore: '#8a6422', cloth: '#454a34', skin: '#5e4a3a', polo: '#5a5646', denim: '#33465c', wood: '#5c472c', hide: '#544739', glow: '#36606c', mix: [30, 33, 25], mixK: 0.5 },
   };
-  // A side's colour as a wash for its markings, let down toward the paper.
-  const wash = (hex, pal) => { const c = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16)), m = pal.mix, k = pal.mixK; return '#' + c.map((v, i) => Math.round(v + (m[i] - v) * k).toString(16).padStart(2, '0')).join(''); };
+  // Whether a colour reads pink: a light red or magenta, by its hue, saturation and lightness.
+  const pinkish = c => {
+    const [r, g, b] = c.map(v => v / 255), mx = Math.max(r, g, b), mn = Math.min(r, g, b), l = (mx + mn) / 2, d = mx - mn;
+    if (d < 1e-6) return false;
+    const s = d / (1 - Math.abs(2 * l - 1)), h = (mx === r ? ((g - b) / d + 6) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4) * 60;
+    return (h >= 300 || h <= 15) && s > 0.25 && l > 0.55;
+  };
+  // A side's colour as a wash for its markings, let down toward the paper. A red let down toward light paper turns
+  // pink, so its share of paper shrinks until it reads red. A wash the dark scheme's filter will turn over goes dark
+  // there, so with `turned` it is let down the whole way.
+  const wash = (hex, pal, turned = false) => {
+    const c = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16)), m = pal.mix;
+    let w = c;
+    for (let k = pal.mixK; k > -0.01; k -= 0.05) { w = c.map((v, i) => Math.round(v + (m[i] - v) * Math.max(0, k))); if (turned || !pinkish(w)) break; }
+    return '#' + w.map(v => v.toString(16).padStart(2, '0')).join('');
+  };
   // Every unit's picture for the sidebar, as image URLs, in a palette with the side's colour on the markings. The
   // brackets and quotes are escaped too, as the sidebar sets them in an unquoted CSS url(). Each set is drawn once.
   const drawn = new Map();
@@ -899,6 +913,6 @@ const Axo = (() => {
     return out;
   }
 
-  return { UNITS, VIEWS, draw, patterns, css, pictures, PALETTES };
+  return { UNITS, VIEWS, draw, patterns, css, pictures, PALETTES, wash };
 })();
 if (typeof module !== 'undefined') module.exports = Axo;

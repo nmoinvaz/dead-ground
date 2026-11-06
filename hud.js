@@ -5,8 +5,8 @@ const Hud = (() => {
   // The map's size is read from the world being shown, since a duel and the shared world differ.
   let W = 128, H = 128;
   // Each slot's colour on the overlay and its plate behind a pictogram, light enough to read on dark ground.
-  const SLOT_CSS = ['#6fb0ff', '#ff7a60', '#6fd47f', '#b98af0', '#ffae52', '#4fd8d4', '#ff7ac0', '#c99a6c'];
-  const SLOT_PLATE = ['#2f6fd6', '#c8402f', '#2f9a48', '#7a48c8', '#d8781a', '#1c9a98', '#c83c8a', '#7a5230'];
+  const SLOT_CSS = ['#6fb0ff', '#ee3a22', '#6fd47f', '#b98af0', '#ffae52', '#4fd8d4', '#cdf044', '#c99a6c'];
+  const SLOT_PLATE = ['#2f6fd6', '#c8402f', '#2f9a48', '#7a48c8', '#d8781a', '#1c9a98', '#9a9612', '#7a5230'];
   const $ = id => document.getElementById(id);
   const fmt = n => Math.floor(n).toLocaleString('en-US');
 
@@ -1028,9 +1028,10 @@ const Hud = (() => {
       og.restore();
     }
     const smoothstepJS = (a, b, v) => { const x = clamp((v - a) / (b - a), 0, 1); return x * x * (3 - 2 * x); };
-    // The overlay's ink, and a side's colour let down toward the paper as a wash. The dark scheme turns the whole
-    // overlay over with a filter, so these are always the light paper's.
-    const INK = '#1f1a16', washOf = team => { const c = SLOT_CSS[team] || '#d9d4c3', m = [250, 244, 228]; return '#' + [1, 3, 5].map((i, j) => Math.round(parseInt(c.slice(i, i + 2), 16) * 0.55 + m[j] * 0.45).toString(16).padStart(2, '0')).join(''); };
+    // The overlay's ink, and a side's colour let down toward the paper as a wash, never so far that a red turns pink.
+    // The dark scheme turns the whole overlay over with a filter, so these are always the light paper's, and there a
+    // pale red wash turns dark red, so it is let down the whole way.
+    const INK = '#1f1a16', washOf = team => Axo.wash(SLOT_CSS[team] || '#d9d4c3', { mix: [250, 244, 228], mixK: 0.45 }, Looks.dark);
     const onView = (x, y, m = 80) => x > -m && y > -m && x < world.vw + m && y < world.vh + m;
     // Lamps at night: warm light round lived-in houses and every building in sight, and cars' headlights.
     function drawLamps(s) {

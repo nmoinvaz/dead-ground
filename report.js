@@ -4,8 +4,8 @@
 const Report = (() => {
   const { HZ } = Rules;
   // The slots' colours, as on the map. Light paper takes the deeper plate colours so lines stand off it.
-  const SLOT_CSS = ['#6fb0ff', '#ff7a60', '#6fd47f', '#b98af0', '#ffae52', '#4fd8d4', '#ff7ac0', '#c99a6c'];
-  const SLOT_PLATE = ['#2f6fd6', '#c8402f', '#2f9a48', '#7a48c8', '#d8781a', '#1c9a98', '#c83c8a', '#7a5230'];
+  const SLOT_CSS = ['#6fb0ff', '#ee3a22', '#6fd47f', '#b98af0', '#ffae52', '#4fd8d4', '#cdf044', '#c99a6c'];
+  const SLOT_PLATE = ['#2f6fd6', '#c8402f', '#2f9a48', '#7a48c8', '#d8781a', '#1c9a98', '#9a9612', '#7a5230'];
   const TABS = [['sum', 'Summary'], ['time', 'Timeline'], ['graph', 'Graphs'], ['mil', 'Military'], ['eco', 'Economy']];
   const SERIES = [
     { k: 'sc', name: 'Score', y: 'Score (points)' },
