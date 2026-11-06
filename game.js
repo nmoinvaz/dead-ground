@@ -126,7 +126,7 @@ const Game = (() => {
       const pr = Math.min(devicePixelRatio || 1, 2) * scale, key = `${w}x${h}@${pr.toFixed(3)}`;
       if (key === fitKey) return;
       fitKey = key;
-      world.resize(w, h, pr);
+      world.resize(w, h, pr, scale);
       hud.layoutMini();
     }
     window.addEventListener('resize', fit);
@@ -325,10 +325,30 @@ const Game = (() => {
       c.dist += (64 - c.dist) * dt * 0.12;
     }
 
-    let last = 0, acc = 0, slow = 0, frames = 0;
+    // The picture's resolution follows the machine. Slow frames are taken as held up by drawing, so the picture gives
+    // up pixels in proportion; frames that keep pace win them back a step at a time, up to just under the size found
+    // too slow, and a while later past it. Frames filled by the page's own work are a slow processor's, and fewer
+    // pixels would not help it.
+    const RES = { ft: 1 / 60, wk: 0, t: 0, ceil: 1, calm: 0 };
+    function tune(dt, work) {
+      if (dt > 0.5 || document.hidden) return;
+      RES.ft += (dt - RES.ft) * 0.05; RES.wk += (work - RES.wk) * 0.05;
+      RES.t += dt; RES.calm += dt;
+      if (RES.calm > 45 && RES.ceil < 1) { RES.ceil = Math.min(1, RES.ceil + 0.1); RES.calm = 0; }
+      // Two seconds after a change, so the averages hold the new size.
+      if (RES.t < 2) return;
+      const lo = Math.max(0.4, 0.6 / Math.min(devicePixelRatio || 1, 2)), was = scale;
+      if (RES.ft > 0.026 && RES.wk < RES.ft * 0.85 && scale > lo) {
+        scale = Math.max(lo, Math.round(scale * Math.max(0.7, Math.sqrt(0.02 / RES.ft)) * 20) / 20);
+        RES.ceil = Math.max(lo, was - 0.05); RES.calm = 0;
+      } else if (RES.ft < 0.0185 && scale < RES.ceil) scale = Math.min(RES.ceil, scale + 0.1);
+      if (scale !== was) { RES.t = 0; fit(); }
+    }
+
+    let last = 0, acc = 0;
     function loop(now) {
       requestAnimationFrame(loop);
-      const dt = Math.min(0.1, (now - last) / 1000 || 0.016);
+      const t0 = performance.now(), dt = Math.min(0.1, (now - last) / 1000 || 0.016), gap = (now - last) / 1000;
       last = now;
       if (fitDue) applyFit();
       const S = G.S;
@@ -354,12 +374,7 @@ const Game = (() => {
       if (S) world.frame(Math.min(1, acc / Rules.DT), G.paused ? 0 : dt, now / 1000);
       hud.frame(dt);
       if (G.S) audio.weather(world.sky);
-      // A slow machine gives up pixels before it gives up frames. Hitches and fast-forwards do not count.
-      if (dt < 0.09 && !document.hidden) {
-        frames++;
-        slow += (dt - slow) * 0.02;
-        if (frames > 240 && slow > 0.028 && scale > (mobile ? 0.6 : 0.75)) { scale -= 0.1; frames = 0; slow = 0.016; fit(); }
-      }
+      if (gap > 0) tune(gap, (performance.now() - t0) / 1000);
     }
 
     // ---- The menus ----------------------------------------------------------------------------------------
