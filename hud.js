@@ -1028,9 +1028,10 @@ const Hud = (() => {
       og.restore();
     }
     const smoothstepJS = (a, b, v) => { const x = clamp((v - a) / (b - a), 0, 1); return x * x * (3 - 2 * x); };
-    // The overlay's ink, and a side's colour let down toward the paper as a wash. The dark scheme turns the whole
-    // overlay over with a filter, so these are always the light paper's.
-    const INK = '#1f1a16', washOf = team => { const c = SLOT_CSS[team] || '#d9d4c3', m = [250, 244, 228]; return '#' + [1, 3, 5].map((i, j) => Math.round(parseInt(c.slice(i, i + 2), 16) * 0.55 + m[j] * 0.45).toString(16).padStart(2, '0')).join(''); };
+    // The overlay's ink, and a side's colour let down toward the paper as a wash, never so far that a red turns pink.
+    // The dark scheme turns the whole overlay over with a filter, so these are always the light paper's, and there a
+    // pale red wash turns dark red, so it is let down the whole way.
+    const INK = '#1f1a16', washOf = team => Axo.wash(SLOT_CSS[team] || '#d9d4c3', { mix: [250, 244, 228], mixK: 0.45 }, Looks.dark);
     const onView = (x, y, m = 80) => x > -m && y > -m && x < world.vw + m && y < world.vh + m;
     // Lamps at night: warm light round lived-in houses and every building in sight, and cars' headlights.
     function drawLamps(s) {

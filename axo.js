@@ -891,11 +891,12 @@ const Axo = (() => {
     return (h >= 300 || h <= 15) && s > 0.25 && l > 0.55;
   };
   // A side's colour as a wash for its markings, let down toward the paper. A red let down toward light paper turns
-  // pink, so its share of paper shrinks until it reads red.
-  const wash = (hex, pal) => {
+  // pink, so its share of paper shrinks until it reads red. A wash the dark scheme's filter will turn over goes dark
+  // there, so with `turned` it is let down the whole way.
+  const wash = (hex, pal, turned = false) => {
     const c = [1, 3, 5].map(i => parseInt(hex.slice(i, i + 2), 16)), m = pal.mix;
     let w = c;
-    for (let k = pal.mixK; k > -0.01; k -= 0.05) { w = c.map((v, i) => Math.round(v + (m[i] - v) * Math.max(0, k))); if (!pinkish(w)) break; }
+    for (let k = pal.mixK; k > -0.01; k -= 0.05) { w = c.map((v, i) => Math.round(v + (m[i] - v) * Math.max(0, k))); if (turned || !pinkish(w)) break; }
     return '#' + w.map(v => v.toString(16).padStart(2, '0')).join('');
   };
   // Every unit's picture for the sidebar, as image URLs, in a palette with the side's colour on the markings. The
