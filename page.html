@@ -178,7 +178,10 @@ body[data-look="ink"][data-scheme="dark"] #end, body[data-look="ink"][data-schem
 .help dt { color: var(--amber); font-family: var(--mono); font-size: 12px; align-self: center; }
 .help dd { margin: 0; }
 #credit { font: 12px var(--mono); color: #8d8c78; }
-#loading { position: absolute; inset: 0; z-index: 20; background: #0a0b07; display: flex; align-items: center; justify-content: center; font: 22px var(--display); letter-spacing: .08em; color: var(--amber); }
+/* The boot screen shows before the page knows its look, so it is drawn as the pen and ink look a game opens in:
+   Jost on paper, light or dark as the system is. */
+#loading { position: absolute; inset: 0; z-index: 20; background: #f2e8d2; display: flex; align-items: center; justify-content: center; font: 500 20px "Jost", "Futura", "Trebuchet MS", sans-serif; letter-spacing: .32em; color: #1f1a16; }
+@media (prefers-color-scheme: dark) { #loading { background: #23201b; color: #e8e0cf; } }
 body.ready #loading { display: none; }
 
 #end { background: rgba(5,6,3,.76); align-items: center; justify-content: center; }
