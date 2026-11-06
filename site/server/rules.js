@@ -407,6 +407,9 @@ const Rules = (() => {
 
   // Where everything goes on a kind of map. syms are the turns that carry the map onto itself. Each
   // feature is listed with all of its images in a row, so one town's images sit side by side.
+  // How wooded a map is beyond the usual: the woods' patches grow wider, start on lower ground and stand thicker.
+  // Maps not named keep the usual woods.
+  const WOODS = { quad: 0.7, pass: 1, lakes: 1 };
   function layoutFor(kind) {
     const L = { kind, roads: [], bridges: [], towns: [], ore: [], wells: [], bases: [], fords: [] };
     const all = (list, p, extra = []) => { for (const T of L.syms) { const q = T(p); list.push([q[0], q[1], ...extra]); } };
@@ -655,6 +658,13 @@ const Rules = (() => {
       if (keyB.has(k)) continue;
       keyB.add(k); addBridge(a, b);
     }
+    // A road is never under water away from a bridge or a ford. Where its carriageway dips into the water, as a
+    // shore road round a lake can, it is carried on a low causeway.
+    for (let c = 0; c < h.length; c++) {
+      if (roadDist[c] > 2.1 || deck[c] > 0 || h[c] >= water + 0.25) continue;
+      if (fordK((c % VW) / RES, (c / VW | 0) / RES) > 0) continue;
+      h[c] = water + 0.25;
+    }
 
     // Towns, ore and wells.
     L.towns.forEach(p => towns.push({ x: p[0], y: p[1], owner: -1, cap: 0, capTeam: -1, r: 14 }));
@@ -686,6 +696,8 @@ const Rules = (() => {
       }
       if (lo < water + 0.1) return fordK(x + 0.5, y + 0.5) > 0.85 ? 4 | 16 : 7;
       const slope = hi - lo;
+      // A road's carriageway is never too steep to use, however hard it climbs. It is only kept free of building.
+      if (roadDist[clamp(Math.round((y + 0.5) * RES), 0, VH - 1) * VW + clamp(Math.round((x + 0.5) * RES), 0, VW - 1)] <= 1.2) return slope > 0.5 ? 4 : 0;
       let bits = 0;
       if (slope > 0.95) bits |= 1 | 4;
       if (slope > 1.4) bits |= 2;
@@ -720,7 +732,7 @@ const Rules = (() => {
     };
     for (let y = 2; y < H - 2; y++) for (let x = 2; x < W - 2; x++) {
       if (!L.domain(x, y)) continue;
-      const wood = sym(x, y, 0.06, 3), r = rand();
+      const wk = WOODS[kind] || 0, wood = sym(x, y, wk ? 0.06 / (1 + 0.6 * wk) : 0.06, 3), r = rand();
       const place = (k, s) => {
         const px = x + 0.25 + rand() * 0.5, py = y + 0.25 + rand() * 0.5;
         for (const T of L.syms) {
@@ -730,7 +742,8 @@ const Rules = (() => {
         }
       };
       if (!keep(x, y)) continue;
-      if (wood > 0.58 && r < smooth(0.58, 0.68, wood) * 0.5) place('tree', 0.7 + rand() * 0.7);
+      const w0 = wk ? 0.58 - 0.07 * wk : 0.58;
+      if (wood > w0 && r < (wk ? smooth(w0, w0 + 0.1, wood) * (0.5 + 0.35 * wk) : smooth(0.58, 0.68, wood) * 0.5)) place('tree', 0.7 + rand() * 0.7);
       else if (r < 0.006) place('rock', 0.5 + rand() * 0.9);
     }
 

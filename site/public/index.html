@@ -535,10 +535,9 @@ body[data-look="ink"] .sheet { box-shadow: 4px 4px 0 var(--ink); }
     </div>
     <div id="notes"><div id="objective" hidden></div><div id="log"></div></div>
     <div id="settings" hidden role="dialog" aria-label="Settings">
-      <div class="choice"><h2>Look</h2><div id="s-look" class="two"></div></div>
       <div class="choice"><h2>Paper</h2><div id="s-scheme"><button data-v="light">Light</button><button data-v="dark">Dark</button><button data-v="auto">As the system</button></div></div>
       <div class="choice"><h2>Picture</h2><div id="s-pic" class="two"><button data-v="sharp">Sharp</button><button data-v="fast">Faster</button></div><p id="s-pic-note"></p></div>
-      <p id="build">Build 71db4e3 2026-11-06 13:08</p>
+      <p id="build">Build a5ad8f6 2026-11-06 14:03</p>
     </div>
     <div id="banner" hidden></div>
     <button id="update" hidden>A new version of Dead Ground is out. <b>Reload</b></button>
@@ -573,7 +572,7 @@ body[data-look="ink"] .sheet { box-shadow: 4px 4px 0 var(--ink); }
         <dt>D</dt><dd>Next formation for the selected units: line, block, column, wedge, square, loose</dd>
         <dt>Ctrl 1-9</dt><dd>Set a group, then 1-9 picks it</dd>
         <dt>Arrows</dt><dd>Move the view; on a trackpad swipe to move and pinch to zoom</dd>
-        <dt>L / K</dt><dd>Next look, or in pen and ink another pen technique</dd>
+        <dt>K</dt><dd>Another pen technique</dd>
       </dl>
       <div id="credit">x.com/nmnvzr &middot; Opus 5.5</div>
     </div>
@@ -1046,6 +1045,9 @@ const Rules = (() => {
 
   // Where everything goes on a kind of map. syms are the turns that carry the map onto itself. Each
   // feature is listed with all of its images in a row, so one town's images sit side by side.
+  // How wooded a map is beyond the usual: the woods' patches grow wider, start on lower ground and stand thicker.
+  // Maps not named keep the usual woods.
+  const WOODS = { quad: 0.7, pass: 1, lakes: 1 };
   function layoutFor(kind) {
     const L = { kind, roads: [], bridges: [], towns: [], ore: [], wells: [], bases: [], fords: [] };
     const all = (list, p, extra = []) => { for (const T of L.syms) { const q = T(p); list.push([q[0], q[1], ...extra]); } };
@@ -1294,6 +1296,13 @@ const Rules = (() => {
       if (keyB.has(k)) continue;
       keyB.add(k); addBridge(a, b);
     }
+    // A road is never under water away from a bridge or a ford. Where its carriageway dips into the water, as a
+    // shore road round a lake can, it is carried on a low causeway.
+    for (let c = 0; c < h.length; c++) {
+      if (roadDist[c] > 2.1 || deck[c] > 0 || h[c] >= water + 0.25) continue;
+      if (fordK((c % VW) / RES, (c / VW | 0) / RES) > 0) continue;
+      h[c] = water + 0.25;
+    }
 
     // Towns, ore and wells.
     L.towns.forEach(p => towns.push({ x: p[0], y: p[1], owner: -1, cap: 0, capTeam: -1, r: 14 }));
@@ -1325,6 +1334,8 @@ const Rules = (() => {
       }
       if (lo < water + 0.1) return fordK(x + 0.5, y + 0.5) > 0.85 ? 4 | 16 : 7;
       const slope = hi - lo;
+      // A road's carriageway is never too steep to use, however hard it climbs. It is only kept free of building.
+      if (roadDist[clamp(Math.round((y + 0.5) * RES), 0, VH - 1) * VW + clamp(Math.round((x + 0.5) * RES), 0, VW - 1)] <= 1.2) return slope > 0.5 ? 4 : 0;
       let bits = 0;
       if (slope > 0.95) bits |= 1 | 4;
       if (slope > 1.4) bits |= 2;
@@ -1359,7 +1370,7 @@ const Rules = (() => {
     };
     for (let y = 2; y < H - 2; y++) for (let x = 2; x < W - 2; x++) {
       if (!L.domain(x, y)) continue;
-      const wood = sym(x, y, 0.06, 3), r = rand();
+      const wk = WOODS[kind] || 0, wood = sym(x, y, wk ? 0.06 / (1 + 0.6 * wk) : 0.06, 3), r = rand();
       const place = (k, s) => {
         const px = x + 0.25 + rand() * 0.5, py = y + 0.25 + rand() * 0.5;
         for (const T of L.syms) {
@@ -1369,7 +1380,8 @@ const Rules = (() => {
         }
       };
       if (!keep(x, y)) continue;
-      if (wood > 0.58 && r < smooth(0.58, 0.68, wood) * 0.5) place('tree', 0.7 + rand() * 0.7);
+      const w0 = wk ? 0.58 - 0.07 * wk : 0.58;
+      if (wood > w0 && r < (wk ? smooth(w0, w0 + 0.1, wood) * (0.5 + 0.35 * wk) : smooth(0.58, 0.68, wood) * 0.5)) place('tree', 0.7 + rand() * 0.7);
       else if (r < 0.006) place('rock', 0.5 + rand() * 0.9);
     }
 
@@ -7061,11 +7073,12 @@ if (typeof module !== 'undefined') module.exports = Looks;
         uWindS: { value: new THREE.Vector2() }, uView: { value: new THREE.Vector2(1, 0) }, tFx: { value: null }, tAnc: { value: null }, uDark: { value: 0 }, uInks: { value: 0 }, uFxs: { value: 0 }, uFire: { value: 0 }, uUnits: { value: 0 }, tH: SH.tH, uHSize: { value: new THREE.Vector2(1, 1) }, uHScale: { value: 1 }, uRain: { value: 0 }, uStorm: { value: 0 }, uSnowF: { value: 0 }, uSnowC: SH.uSnowC, uFog: { value: 0 }, uMist: { value: 0 }, uNight: { value: 0 }, uWet: { value: 0 },
         uDayMul: { value: new THREE.Vector3(1, 1, 1) }, uDayAdd: { value: new THREE.Vector3() }, uWaterL: { value: -0.15 }, uCloudK: SH.uCloudK, tMarks: SH.tMarks, uMap: SH.uMap,
         uCloud: SH.uCloud, uCloudT: SH.uCloudT, uSunW: SH.uSunDir, uCloudA: { value: 0 }, uCloudG: { value: 0 }, uRayK: { value: 0 }, uSand: { value: 0 },
-        uInvVP: { value: new THREE.Matrix4() }, uW2S: { value: new THREE.Vector4(1, 0, 0, 1) }, uLev: { value: 1 },
+        uInvVP: { value: new THREE.Matrix4() }, uW2S: { value: new THREE.Vector4(1, 0, 0, 1) }, uLev: { value: 1 }, tTerr: SH.tTerr, uBorder: SH.uBorder, uMe: { value: 0 },
         // Each side's colour as the anchor pass keeps it, its hue and how coloured it is, and its inks on either paper.
         uSideKey: { value: [...Array(8)].map(() => new THREE.Vector2()) }, uSideL: { value: [...Array(8)].map(() => new THREE.Vector3()) }, uSideD: { value: [...Array(8)].map(() => new THREE.Vector3()) }, uSideB: { value: [...Array(8)].map(() => new THREE.Vector3()) } }, vertexShader: vs, depthTest: false, depthWrite: false, fragmentShader: `
         varying vec2 vUv; uniform sampler2D t, tSubj, tHeat, tPaper, tNorm, tFogS, tLand, tMarks; uniform float uMap; uniform vec2 res, uOff, uSun2, uWindS, uView, uHSize; uniform float uHScale, uFxs, uFire; uniform int uUnits, uInks; uniform float uDark; uniform sampler2D tH, tFx, tAnc; uniform vec3 uUpV, uDayMul, uDayAdd; uniform float uTime, uK, uRain, uStorm, uSnowF, uSnowC, uFog, uMist, uNight, uWet, uWaterL, uCloudK, uMarks; uniform int uStyle, uRoad, uOre;
         uniform vec2 uSideKey[8]; uniform vec3 uSideL[8], uSideD[8], uSideB[8];
+        uniform sampler2D tTerr; uniform float uBorder, uMe;
         uniform vec2 uCloud; uniform vec3 uSunW; uniform float uCloudT, uCloudA, uCloudG, uRayK, uSand;
         // The clouds float at CLOUD_H over the land. cloudAt gives the cloud over a point of the land at that height,
         // taken from the same field the land pass casts their shadows with, shifted along the sun, so each cloud
@@ -7211,6 +7224,9 @@ if (typeof module !== 'undefined') module.exports = Looks;
           float cover = 0.0;
           vec3 paperC = dk ? DPAPER : PAPER, inkC = dk ? DINK : INK;
           bool inverse = false;
+          // A side's border: its line's ink and weight, and its ribbon's tint and weight, laid in by the mixture.
+          vec3 brdLC = vec3(0.0), brdWC = vec3(1.0);
+          float brdL = 0.0, brdW = 0.0;
           float waterK = 0.0;
           // The mixture's washes under its ink, and its lines alone, for the remembered past.
           vec3 baseC = paperC;
@@ -7453,22 +7469,26 @@ if (typeof module !== 'undefined') module.exports = Looks;
             lineK = max(max(heavy, swell * (1.0 - step(0.6, a))), max(detail, max(edge * 0.55 * (1.0 - bankZone) * isG, max(rEdge * 0.9 * isG, bankL * step(0.001, dep + 0.05) * (isG + isW)))));
             // The washes: the land green, roads and bridge decks pink, water lilac with white ripples, canopies in
             // three greens, roofs cream and walls warm grey by which way they face.
-            vec3 base = mix(paperC, dk ? vec3(0.2, 0.2, 0.195) : SOFT_G, isG);
+            vec3 base = mix(paperC, dk ? vec3(0.13, 0.19, 0.125) : SOFT_G, isG);
             // Layer tints by height, pale green lowland to cream to tan upland, the slopes away from the light shaded
             // in a cool sepia and the slopes toward it lifted a little, and the contours in sepia. On dark paper the
             // tints are greys, near black in the lowland to a mid grey upland, mottled in broad patches.
             vec3 tint = hyps < 0.5 ? mix(vec3(0.84, 0.90, 0.80), vec3(0.94, 0.93, 0.82), hyps * 2.0) : mix(vec3(0.94, 0.93, 0.82), vec3(0.88, 0.80, 0.64), hyps * 2.0 - 1.0);
             if (dk) {
-              tint = hyps < 0.5 ? mix(vec3(0.15, 0.155, 0.15), vec3(0.225, 0.225, 0.215), hyps * 2.0) : mix(vec3(0.225, 0.225, 0.215), vec3(0.34, 0.33, 0.31), hyps * 2.0 - 1.0);
-              tint *= 0.86 + 0.28 * (noise(Wl * 0.055) * 0.65 + noise(Wl * 0.16 + 5.0) * 0.35);
+              // The light paper's layers in the dark: its pale green as a deep green in the lowland, lighter green
+              // and olive up the slopes, and its tan as a warm earth on the heights, each rise its own shade.
+              tint = hyps < 0.33 ? mix(vec3(0.1, 0.16, 0.1), vec3(0.16, 0.235, 0.145), hyps / 0.33)
+                : hyps < 0.66 ? mix(vec3(0.16, 0.235, 0.145), vec3(0.27, 0.29, 0.18), (hyps - 0.33) / 0.33)
+                : mix(vec3(0.27, 0.29, 0.18), vec3(0.45, 0.4, 0.29), (hyps - 0.66) / 0.34);
+              tint *= 0.92 + 0.16 * (noise(Wl * 0.055) * 0.65 + noise(Wl * 0.16 + 5.0) * 0.35);
             }
             vec3 CONT = dk ? vec3(0.52, 0.5, 0.47) : vec3(0.42, 0.33, 0.24);
             // A road takes a third of the tint and the contours cross it faint, so it climbs and falls with the land
             // rather than lying flat over it.
             base = mix(base, tint, isG * (1.0 - onRoad * 0.65));
             // On dark paper a shaded slope sinks toward black and a lit one rises toward mid grey.
-            base = mix(base, base * (dk ? vec3(0.42) : vec3(0.72, 0.70, 0.68)), rfDark * (dk ? 0.8 : 0.65) * isG);
-            base = mix(base, dk ? base + vec3(0.2, 0.2, 0.19) : min(base * 1.05 + 0.03, vec3(1.0)), rfLight * 0.6 * isG);
+            base = mix(base, base * (dk ? vec3(0.36, 0.37, 0.44) : vec3(0.72, 0.70, 0.68)), rfDark * (dk ? 0.95 : 0.65) * isG);
+            base = mix(base, dk ? base + vec3(0.3, 0.27, 0.21) : min(base * 1.05 + 0.03, vec3(1.0)), rfLight * (dk ? 0.85 : 0.6) * isG);
             base = mix(base, CONT, contour * isG * (1.0 - onRoad * 0.55) * (1.0 - wet));
             base = mix(base, base * vec3(0.9, 0.93, 0.97), uWet * isG * 0.7);
             // A raised road's shadow, a narrow band beyond its edge away from the light; none beside a cutting.
@@ -7568,6 +7588,22 @@ if (typeof module !== 'undefined') module.exports = Looks;
               base = mix(base, mix(base, OCH, dk ? 0.3 : 0.4), pat * zo * isG * (1.0 - isO));
             }
             baseC = base;
+            // The sides' borders as an old map colours them: a firm line in the side's ink along the edge, and a
+            // ribbon of its colour washed along the inside, for the viewer's own side and the strongest other.
+            // Read from the reach on the land under the pixel, so the line keeps its place and weight at any zoom.
+            vec2 tvB = (texture2D(tTerr, Wl / uMap).rg - 0.5) * 16.0, twB = max(fwidth(tvB), vec2(1e-4));
+            float whoB = floor(texture2D(tTerr, (floor(Wl) + 0.5) / uMap).b * 8.0 + 0.5);
+            vec3 meI = INK, otI = INK, meT = PAPER, otT = PAPER;
+            for (int i = 0; i < 8; i++) {
+              if (float(i) == uMe) { meI = dk ? uSideD[i] : uSideL[i]; meT = uSideB[i]; }
+              if (float(i) == whoB) { otI = dk ? uSideD[i] : uSideL[i]; otT = uSideB[i]; }
+            }
+            float bOn = clamp(isG + isW, 0.0, 1.0);
+            float lnA = 1.0 - smoothstep(0.9 * uK, 1.8 * uK, abs(tvB.x) / twB.x), lnB = 1.0 - smoothstep(0.9 * uK, 1.8 * uK, abs(tvB.y) / twB.y);
+            float rbA = step(0.0, tvB.x) * (1.0 - smoothstep(0.0, 1.8, tvB.x)), rbB = step(0.0, tvB.y) * (1.0 - smoothstep(0.0, 1.8, tvB.y));
+            brdL = max(lnA, lnB) * bOn * 0.85; brdLC = lnA >= lnB ? meI : otI;
+            brdW = max(rbA, rbB) * bOn * min(1.0, 0.5 * uBorder);
+            brdWC = dk ? (rbA >= rbB ? meI : otI) : (rbA >= rbB ? meT : otT) / PAPER;
             // Inks by what is drawn: 0 black throughout; 1 survey inks, sepia land and roads, Prussian blue water,
             // green trees, umber buildings and each side's units in its own ink; 2 sepia throughout with blue water
             // and the sides' inks; 3 blue-black iron gall throughout with the sides' inks. A line takes the ink of the
@@ -7625,6 +7661,8 @@ if (typeof module !== 'undefined') module.exports = Looks;
           else { cover *= 1.0 - lit; cover = max(cover, rim); }
           if (uFxs > 0.5 && uFxs < 1.5) cover *= 1.0 - fxSmk * 0.9;
           vec3 col = mix(uStyle == 8 ? baseC : paperC, inkC, clamp(cover, 0.0, 1.0));
+          col = dk ? mix(col, col + brdWC * 0.14, brdW) : col * mix(vec3(1.0), brdWC, brdW);
+          col = mix(col, brdLC, brdL);
           // A flash is bare paper on light paper, and a warm glow on dark as it heats, never a white-out.
           vec3 flashC = dk ? mix(baseC, vec3(0.72, 0.6, 0.42), smoothstep(0.45, 1.0, hn) * 0.85) : paperC;
           // Smoke as a grey wash and fire as a warm wash round a bare-paper core, for the washed effects.
@@ -7766,8 +7804,8 @@ if (typeof module !== 'undefined') module.exports = Looks;
             vec2 gd = vec2(A(vUv + k * vec2(2.5, 0)) - A(vUv - k * vec2(2.5, 0)), A(vUv + k * vec2(0, 2.5)) - A(vUv - k * vec2(0, 2.5)));
             if (length(gd) < 0.04) gd = e1;
             float dash = length(gd) > 0.02 ? step(0.42, fract(dot(p, normalize(vec2(-gd.y, gd.x))) / (6.5 * uK))) : step(0.35, hash(floor(p / (5.0 * uK)) + 17.0));
-            // On dark paper what was keeps its grey a little dimmed, so it does not sink to black.
-            vec3 past = dk ? mix(vec3(dot(baseC, vec3(0.3, 0.59, 0.11))), baseC, 0.3) * 0.85 : mix(paperC, baseC, 0.4);
+            // On dark paper what was is drawn toward the light charcoal of ground not yet seen, so its shades hold.
+            vec3 past = dk ? mix(vec3(0.245, 0.23, 0.205), baseC, 0.5) : mix(paperC, baseC, 0.4);
             // Remembered ore is the brightest thing on dark paper, so it is sunk toward the paper there, and its many
             // small rings are dashed lightly on either paper.
             float oreP = max(max(oA(vUv + k * vec2(1.6, 0)), oA(vUv - k * vec2(1.6, 0))), max(max(oA(vUv + k * vec2(0, 1.6)), oA(vUv - k * vec2(0, 1.6))), oA(vUv)));
@@ -7789,7 +7827,9 @@ if (typeof module !== 'undefined') module.exports = Looks;
             float cont = (1.0 - smoothstep(0.4 * uK, 1.2 * uK, min(hf, 1.0 - hf) * 0.8 / hw)) * step(0.3, mix(noise(pL * 0.04 / uK + 3.0), noise(pL2 * 0.04 / uK + 5.0), gLf)) * onMap;
             float guide = mix(hatch(pL, 18.0, 70.0, 0.7, 3.0, 0.55) + hatch(pL, 104.0, 95.0, 0.6, 8.0, 0.6), hatch(pL2, 18.0, 70.0, 0.7, 3.0, 0.55) + hatch(pL2, 104.0, 95.0, 0.6, 8.0, 0.6), gLf);
             float rP = (1.0 - smoothstep(0.4 * uK, 1.0 * uK, abs(rdS - 1.3) / rdW)) * onMap;
-            vec3 sketch = mix(paperC, dk ? vec3(0.4, 0.39, 0.37) : vec3(0.5, 0.49, 0.47), clamp(cont * 0.42 + guide * 0.14 + rP * 0.4, 0.0, 1.0));
+            // On dark paper the ground not yet seen is a lighter charcoal than the paper, so it does not sink to black.
+            vec3 skP = dk ? vec3(0.245, 0.23, 0.205) : paperC;
+            vec3 sketch = mix(skP, dk ? vec3(0.5, 0.48, 0.44) : vec3(0.5, 0.49, 0.47), clamp(cont * 0.42 + guide * 0.14 + rP * 0.4, 0.0, 1.0));
             col = mix(sketch, col, seenE);
           }
           // Weather over everything. Fog and morning mist lie in the low ground and drift in banks, and the fog of
@@ -7923,24 +7963,11 @@ if (typeof module !== 'undefined') module.exports = Looks;
           C.uSand.value = sky.sand || 0; C.uCloudA.value = sky.cloudA || 0; C.uCloudG.value = sky.cloudG || 0; C.uRayK.value = sky.rayK || 0;
           C.uNight.value = sky.night; C.uWet.value = sky.wet; C.uDayMul.value.set(...sky.mul); C.uDayAdd.value.set(...sky.add);
           C.uWaterL.value = K.waterLevel; C.uWindS.value.set(sky.windS, 0);
-          C.uView.value.set(Math.cos(K.cam.yaw), Math.sin(K.cam.yaw)); C.uHSize.value.set(Rules.VW, Rules.VH); C.uHScale.value = Rules.RES;
+          C.uMe.value = Math.max(0, K.viewTeam); C.uView.value.set(Math.cos(K.cam.yaw), Math.sin(K.cam.yaw)); C.uHSize.value.set(Rules.VW, Rules.VH); C.uHScale.value = Rules.RES;
           K.run(ink, null);
         },
       };
     },
-  });
-})();
-
-</script>
-<script>
-// Daylight: a clear afternoon under a blue sky, in full colour with a firm contrast, and no pass of its own.
-(() => {
-  Looks.add({
-    name: 'daylight', title: 'Daylight', said: 'Daylight.', vivid: 1, hidden: true,
-    light: (th, SUN) => Object.assign({}, th, {
-      name: th.name + ' day', sun: SUN(-0.62, 0.82), sunColor: 0xfff2dc, sunPower: 3.2, hemi: [0x8db4ee, 0x6a5a46, 1.1],
-      env: [0x4f7fb2, 0xc2d6ea, 0x584a3a], haze: 0xc4d8ee, hazeK: 0.0035,
-    }),
   });
 })();
 
@@ -8021,133 +8048,6 @@ if (typeof module !== 'undefined') module.exports = Looks;
       };
     },
   });
-})();
-
-</script>
-<script>
-// Pixel art: the graded picture drawn again at a low resolution, each pixel a block of the screen, its colour
-// snapped to a palette, with ordered dither on the land, banded light on what stands on it, and outlines round
-// units and buildings. Four variants, from 1990s VGA to a modern hi-bit, chosen by `px` on the look.
-(() => {
-  const MAXP = 128;
-  const hex = s => s.match(/../g).map(h => parseInt(h, 16) / 255);
-  const rgbOf = n => [(n >> 16 & 255) / 255, (n >> 8 & 255) / 255, (n & 255) / 255];
-  const hslOf = ([r, g, b]) => {
-    const mx = Math.max(r, g, b), mn = Math.min(r, g, b), l = (mx + mn) / 2, d = mx - mn;
-    if (!d) return [0, 0, l];
-    const s = d / (1 - Math.abs(2 * l - 1)), h = mx === r ? ((g - b) / d + 6) % 6 : mx === g ? (b - r) / d + 2 : (r - g) / d + 4;
-    return [h * 60, s, l];
-  };
-  const hsl = (h, s, l) => { const k = n => (n + h / 30) % 12, a = s * Math.min(l, 1 - l); return [0, 8, 4].map(n => l - a * Math.max(-1, Math.min(k(n) - 3, 9 - k(n), 1))); };
-  const toward = (h, to, t) => { const d = ((to - h + 540) % 360) - 180; return (h + d * t + 360) % 360; };
-  // A ramp of n shades through a colour, as pixel artists build one: darker shades turn toward blue-violet and
-  // lighter ones toward a warm yellow, most saturated in the middle.
-  function ramp(c, n, lo = 0.12, hi = 0.9) {
-    const [h, s] = hslOf(rgbOf(c)), out = [];
-    for (let i = 0; i < n; i++) {
-      const t = i / (n - 1), hh = t < 0.5 ? toward(h, 250, (0.5 - t) * 0.4) : toward(h, 55, (t - 0.5) * 0.3);
-      out.push(hsl(hh, Math.min(1, s * (1.15 - Math.abs(t - 0.5) * 0.9)), lo + (hi - lo) * t));
-    }
-    return out;
-  }
-  // The palette of a theatre: ramps through its ground, rocks, banks, roads, water and leaves, three shades of each
-  // side's colour, fire, and a few greys. A few-colour palette keeps four ramps, two shades a side and four greys.
-  function paletteOf(th, sides, n, few) {
-    const out = [], land = few ? [th.ground[0], th.road, th.water[0], th.leaf[0]] : [th.ground[0], th.ground[1], th.patch, th.rock, th.bank, th.road, th.stain, th.water[0], th.water[1], th.leaf[0], th.leaf[1]];
-    for (const c of land) out.push(...ramp(c, n));
-    for (const c of sides) out.push(...(few ? ramp(c, 2, 0.3, 0.62) : ramp(c, 3, 0.25, 0.7)));
-    out.push(...ramp(0xf08a1c, few ? 2 : 3, 0.4, 0.85));
-    out.push(...(few ? [[0.06, 0.05, 0.08], [0.36, 0.36, 0.39], [0.66, 0.66, 0.68], [0.95, 0.94, 0.91]] : [[0.06, 0.05, 0.08], [0.28, 0.28, 0.31], [0.52, 0.52, 0.55], [0.76, 0.76, 0.78], [0.96, 0.95, 0.92]]));
-    return out.slice(0, MAXP);
-  }
-  // The variants. P is the size of a pixel in screen pixels at 1080 lines; shades is the length of each ramp of the
-  // theatre's palette, or pal a fixed palette; out is 1 for black outlines and 2 for outlines in a darker shade of
-  // the thing itself; outMin the least line category outlined (units 1, buildings 0.75, trees 0.46); few keeps the
-  // palette to about thirty colours.
-  const VARIANTS = [
-    { name: 'VGA 1996', P: 3, shades: 7, dith: 0.06, bands: 0, sat: 0.95, out: 1, outMin: 0.7 },
-    { name: '16-bit', P: 4, shades: 4, dith: 0.1, bands: 4, sat: 1.15, out: 1, outMin: 0.4 },
-    { name: 'Hi-bit', P: 2, shades: 6, dith: 0.04, bands: 5, sat: 1.08, out: 2, outMin: 0.4 },
-    { name: '8-bit', P: 5, shades: 3, few: true, dith: 0.16, bands: 3, sat: 1.2, out: 1, outMin: 0.7 },
-  ];
-  const def = {
-    name: 'pixel', title: 'Pixel', said: 'Pixel art.', vivid: 1, hidden: true, px: 1, variants: VARIANTS.map(v => v.name),
-    // The pen and ink look's camera, so only the drawing changes.
-    camera: (c, smooth) => Looks.get('ink').camera(c, smooth),
-    // A clear day, as the painted Daylight, so the palette has full colour to snap.
-    light: (th, SUN) => Object.assign({}, th, {
-      name: th.name + ' day', sun: SUN(-0.62, 0.82), sunColor: 0xfff2dc, sunPower: 3.2, hemi: [0x8db4ee, 0x6a5a46, 1.1],
-      env: [0x4f7fb2, 0xc2d6ea, 0x584a3a], haze: 0xc4d8ee, hazeK: 0.0035,
-    }),
-    create(K) {
-      const { THREE, vs } = K;
-      const pal = Array.from({ length: MAXP }, () => new THREE.Vector3());
-      const low = new THREE.ShaderMaterial({ vertexShader: vs, depthTest: false, depthWrite: false, uniforms: {
-        t: { value: null }, tM: { value: null }, lo: { value: new THREE.Vector2(1, 1) }, hi: { value: new THREE.Vector2(1, 1) }, P: { value: 3 },
-        pal: { value: pal }, uN: { value: 0 }, uDith: { value: 0 }, uBands: { value: 0 }, uSat: { value: 1 },
-        uOut: { value: 1 }, uOutMin: { value: 0.7 },
-      }, fragmentShader: `
-        varying vec2 vUv; uniform sampler2D t, tM; uniform vec2 lo, hi; uniform float P, uDith, uBands, uSat, uOutMin; uniform vec3 pal[${MAXP}]; uniform int uN, uOut;
-        float luma(vec3 c) { return dot(c, vec3(0.299, 0.587, 0.114)); }
-        // The 4 by 4 ordered dither threshold of a pixel.
-        float bayer2(vec2 a) { a = floor(a); return fract(a.x / 2.0 + a.y * a.y * 0.75); }
-        float bayer4(vec2 a) { return bayer2(0.5 * a) * 0.25 + bayer2(a); }
-        // The nearest palette colour, by a distance weighted as the eye weighs the channels.
-        vec3 snap(vec3 c) {
-          float bd = 1e9; vec3 b = c;
-          for (int i = 0; i < ${MAXP}; i++) { if (i >= uN) break; vec3 d = c - pal[i]; float e = dot(d * d, vec3(2.0, 4.0, 3.0)); if (e < bd) { bd = e; b = pal[i]; } }
-          return b;
-        }
-        void main() {
-          vec2 cell = floor(vUv * lo), suv = (cell + 0.5) * P / hi, o = 0.25 * P / hi, s = vec2(P) / hi;
-          // The block's colour, from four taps of the linear picture, near enough its average.
-          vec3 c = (texture2D(t, suv + vec2(-o.x, -o.y)).rgb + texture2D(t, suv + vec2(o.x, -o.y)).rgb + texture2D(t, suv + vec2(-o.x, o.y)).rgb + texture2D(t, suv + vec2(o.x, o.y)).rgb) * 0.25;
-          float a = texture2D(tM, suv).a;
-          float n4 = min(min(texture2D(tM, suv - vec2(s.x, 0.0)).a, texture2D(tM, suv + vec2(s.x, 0.0)).a), min(texture2D(tM, suv - vec2(0.0, s.y)).a, texture2D(tM, suv + vec2(0.0, s.y)).a));
-          float obj = step(uOutMin, a), edge = obj * step(0.08, a - n4);
-          float l = luma(c);
-          c = clamp(mix(vec3(l), c, uSat), 0.0, 1.0);
-          // What stands on the land is lit in a few flat bands, and the land is dithered between its colours.
-          if (uBands > 0.0 && a > 0.4) { float lb = max(floor(l * uBands + 0.5) / uBands, 0.5 / uBands); c = clamp(c * lb / max(l, 0.03), 0.0, 1.0); }
-          else c = clamp(c + (bayer4(cell) - 0.5) * uDith, 0.0, 1.0);
-          c = snap(c);
-          // Outlines on the edge pixels of units and buildings: black, or a dark shade of the thing's own colour.
-          if (edge > 0.5) c = uOut == 1 ? vec3(0.06, 0.05, 0.08) : snap(c * 0.42 + vec3(0.0, 0.0, 0.04));
-          gl_FragColor = vec4(c, 1.0);
-        }` });
-      const up = new THREE.ShaderMaterial({ vertexShader: vs, depthTest: false, depthWrite: false, uniforms: {
-        tL: { value: null }, lo: { value: new THREE.Vector2(1, 1) }, hi: { value: new THREE.Vector2(1, 1) }, P: { value: 3 },
-      }, fragmentShader: `
-        varying vec2 vUv; uniform sampler2D tL; uniform vec2 lo, hi; uniform float P;
-        void main() { gl_FragColor = texture2D(tL, (floor(vUv * hi / P) + 0.5) / lo); }` });
-      let rt = null, shown = '';
-      return {
-        render(K) {
-          const n = Looks.get('pixel').px, v = VARIANTS[n] || VARIANTS[1], P = Math.max(1, Math.round(v.P * K.h / 1080)), lw = Math.ceil(K.w / P), lh = Math.ceil(K.h / P);
-          if (!rt || rt.width !== lw || rt.height !== lh) {
-            if (rt) rt.dispose();
-            rt = new THREE.WebGLRenderTarget(lw, lh, { minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter, depthBuffer: false });
-          }
-          const L = low.uniforms;
-          // The palette is made again when the variant, the theatre or a side's colour changes.
-          const sides = K.sides, key = n + ' ' + (K.theme && K.theme.name) + ' ' + sides.join();
-          if (shown !== key && K.theme) {
-            shown = key;
-            const p = paletteOf(K.theme, sides, v.shades, v.few);
-            p.forEach((c, i) => pal[i].set(c[0], c[1], c[2]));
-            L.uN.value = p.length;
-            L.uDith.value = v.dith; L.uBands.value = v.bands; L.uSat.value = v.sat; L.uOut.value = v.out; L.uOutMin.value = v.outMin;
-          }
-          L.t.value = K.ldr.texture; L.tM.value = K.mask(); L.lo.value.set(lw, lh); L.hi.value.set(K.w, K.h); L.P.value = P;
-          K.run(low, rt);
-          const U = up.uniforms;
-          U.tL.value = rt.texture; U.lo.value.set(lw, lh); U.hi.value.set(K.w, K.h); U.P.value = P;
-          K.run(up, null);
-        },
-      };
-    },
-  };
-  Looks.add(def);
 })();
 
 </script>
@@ -8372,7 +8272,7 @@ const World = (() => {
     }
     SH.tDetail.value = makeDetail();
 
-    let style = Looks.get('daylight'), inkStyle = 8, roadStyle = 3, oreStyle = 4;
+    let style = Looks.get('ink'), inkStyle = 8, roadStyle = 3, oreStyle = 4;
     // The kind of thing being drawn into the line passes, shared with the pass's material, and whether it sways.
     const catU = { value: 1 }, catRef = { mat: null, norm: null }, swayU = { value: 0 };
     const maskMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
@@ -8574,7 +8474,7 @@ const World = (() => {
         THREE, SH, vs, renderer, run, blur: pass,
         get w() { return w; }, get h() { return h; }, get ldr() { return ldr; }, get a0() { return a0; }, get a1() { return a1; },
         get time() { return SH.uTime.value; }, get camera() { return camera; }, get cam() { return cam; }, get sky() { return sky; },
-        get theme() { return theme; }, get center() { return [CX, CY]; }, get waterLevel() { return (M ? M.water : -0.15) + waterRise.value; },
+        get theme() { return theme; }, get viewTeam() { return viewTeam; }, get center() { return [CX, CY]; }, get waterLevel() { return (M ? M.water : -0.15) + waterRise.value; },
         get opts() { return { ink: inkStyle, road: roadStyle, ore: oreStyle }; },
         // Each side's colour, as numbers.
         get sides() { return teamCol.map(c => c.getHex()); },
@@ -9463,7 +9363,7 @@ const World = (() => {
         }
       }
       const CARS = [0xb8402e, 0x2f5a8a, 0xe8e0cc, 0x5d7a46, 0x3a3a3a, 0xe0b040], long = life.roads.filter(r => r.len > 14);
-      for (let i = 0; i < Math.min(long.length, Math.round(8 * scale)); i++) { const r = long[(i * 7) % long.length]; life.cars.push({ r, s: R() * r.len, dir: R() < 0.5 ? 1 : -1, v: 0, wait: R() * 3, col: CARS[i % CARS.length], x: r.pts[0][0], y: r.pts[0][1], a: 0, turn: false }); }
+      for (let i = 0; i < Math.min(long.length, Math.round(8 * scale)); i++) { const r = long[(i * 7) % long.length]; life.cars.push({ r, s: R() * r.len, dir: R() < 0.5 ? 1 : -1, v: 0, wait: R() * 3, col: CARS[i % CARS.length], x: r.pts[0][0], y: r.pts[0][1], a: 0, turn: false, careless: R() < 0.3 }); }
       const SHIRTS = [0xf4f0e4, 0xc84a3a, 0x5a7ab0, 0xe0c060, 0x7a9a5a, 0xd8a0a0];
       M.towns.forEach((t, ti) => { for (let k = 0; k < 5; k++) life.folk.push({ town: ti, x: t.x + (R() - 0.5) * 5, y: t.y + (R() - 0.5) * 5, tx: t.x, ty: t.y, v: 0, wait: R() * 4, hide: 0, col: SHIRTS[(ti * 5 + k) % SHIRTS.length], a: R() * 6.28, ph: R() * 6 }); });
       for (let tries = 0; life.boats.length < Math.round(2 * scale) && tries < 4000; tries++) {
@@ -9478,6 +9378,55 @@ const World = (() => {
       for (const f of life.flocks) { const d = Math.hypot(f.x - x, f.y - y); if (d < r + 10 && f.fly <= 0) { f.fly = 5 + Math.random() * 2; f.go = false; f.vx = (f.x - x) / (d || 1) * 8; f.vy = (f.y - y) / (d || 1) * 8; } }
       for (const c of life.cars) if (Math.hypot(c.x - x, c.y - y) < r + 7 && Math.cos(c.a) * (x - c.x) + Math.sin(c.a) * (y - c.y) > 0) c.turn = true;
       if (life.alarm.length < 60) life.alarm.push({ x, y, r: r + 6, t: 10 });
+    }
+    // Two cars meet: both slew round and stop in a cloud of dust and sparks, one now and then on fire, and the
+    // drivers of a car that is not burning often get out and fight it out between the wrecks.
+    const DRIVER_SHIRTS = [0xf4f0e4, 0x3a3a3a, 0x5a7ab0, 0xc84a3a, 0x8a6a4c];
+    function crash(c, o) {
+      const burn = Math.random() < 0.25, R = Math.random;
+      for (const [k, q] of [[1, c], [-1, o]]) { q.crash = { t: 22 + R() * 14, spin: k * (0.45 + R() * 0.7), roll: (R() - 0.5) * 0.3, burn: burn && q === c, smokeT: 0 }; q.v = 0; }
+      const mx = (c.x + o.x) / 2, my = (c.y + o.y) / 2, g = heightAt(M, mx, my);
+      if (VIS(mx, my)) {
+        dustBurst(mx, g, my, 0.55);
+        for (let i = 0; i < 10; i++) { const a = R() * 6.28, sp = 2 + R() * 3; glow.add(mx, g + 0.4, my, Math.cos(a) * sp, 1.5 + R() * 3, Math.sin(a) * sp, 0.35 + R() * 0.3, 0.06, 0.03, [10, 6, 2, 1], [5, 1.2, 0.1, 0], 9, { grav: -12, drag: 0.8 }); }
+      }
+      if (burn || R() > 0.7) return;
+      const fs = [c, o].map(q => {
+        const sd = Math.random() < 0.5 ? 1 : -1, x = q.x - Math.sin(q.a) * 1.1 * sd, y = q.y + Math.cos(q.a) * 1.1 * sd;
+        const f = { town: -1, driver: true, x, y, tx: x, ty: y, v: 0, wait: 0, hide: 0, a: q.a, ph: 0, life: 6 + R() * 4, col: DRIVER_SHIRTS[R() * DRIVER_SHIRTS.length | 0] };
+        life.folk.push(f);
+        return f;
+      });
+      startBrawl(fs[0], fs[1], 1.2);
+    }
+    // Two people come to blows: they close, square up and trade swings for a few seconds, until one goes down.
+    function startBrawl(a, b, delay = 0) {
+      const t = 4 + Math.random() * 4;
+      a.brawl = { foe: b, t, ph: 0, lead: true, on: false, delay };
+      b.brawl = { foe: a, t, ph: 0, lead: false, on: false, delay };
+    }
+    function stepBrawl(f, dt) {
+      const b = f.brawl, o = b.foe;
+      if (!o.brawl || o.brawl.foe !== f) { f.brawl = null; return; }
+      if (b.delay > 0) { b.delay -= dt; f.v = 0; return; }
+      const dx = o.x - f.x, dy = o.y - f.y, d = Math.hypot(dx, dy) || 1e-3;
+      f.a = Math.atan2(dy, dx);
+      if (!b.on) {
+        if (d > 0.8) {
+          f.v = 1.8; f.ph += dt * 13;
+          const nx = f.x + dx / d * f.v * dt, ny = f.y + dy / d * f.v * dt;
+          if (openAt(nx, ny) || f.driver) { f.x = nx; f.y = ny; }
+          return;
+        }
+        b.on = o.brawl.on = true;
+      }
+      f.v = 0; b.ph += dt;
+      if (Math.random() < dt * 2.5 && VIS(f.x, f.y)) { const d2 = dustC(); smoke.add(f.x, heightAt(M, f.x, f.y) + 0.05, f.y, (Math.random() - 0.5) * 0.8, 0.3, (Math.random() - 0.5) * 0.8, 0.8, 0.2, 0.6, [d2[0], d2[1], d2[2], 0.45], [d2[0], d2[1], d2[2], 0], Math.random() * 4 | 0, { drag: 2 }); }
+      if (b.lead && (b.t -= dt) <= 0) {
+        const lose = Math.random() < 0.5 ? f : o, win = lose === f ? o : f;
+        lose.down = 2.5 + Math.random() * 2.5; win.wait = 1.5 + Math.random() * 2;
+        f.brawl = o.brawl = null;
+      }
     }
     function roadAt(r, s) {
       s = clamp(s, 0, r.len);
@@ -9516,6 +9465,17 @@ const World = (() => {
           const ax = c.x + Math.cos(c.a) * 7, ay = c.y + Math.sin(c.a) * 7;
           Rules.near(S, ax, ay, 9, e => { if (e.hp > 0 && (e.b || e.tgt) && Rules.gap(ax, ay, e) < 8) c.turn = true; });
         }
+        // Now and then two townsfolk fall out and come to blows, and those near by stop to watch.
+        if (night < 0.6 && storm < 0.5) M.towns.forEach((t, ti) => {
+          if (L.danger[ti] || Math.random() > 0.4 / 80) return;
+          const out = L.folk.filter(f => f.town === ti && !f.brawl && !(f.down > 0) && !(f.hide > 0));
+          if (out.length < 2) return;
+          const a = out[Math.random() * out.length | 0], rest = out.filter(f => f !== a);
+          rest.sort((p, q) => Math.hypot(p.x - a.x, p.y - a.y) - Math.hypot(q.x - a.x, q.y - a.y));
+          const b = rest[0];
+          startBrawl(a, b);
+          for (const f of rest.slice(1)) if (Math.hypot(f.x - a.x, f.y - a.y) < 7) { f.watch = 9; f.watchAt = [(a.x + b.x) / 2, (a.y + b.y) / 2]; }
+        });
       }
       // Deer graze, wander a little, and bolt from trouble.
       for (const h of L.herds) {
@@ -9544,7 +9504,38 @@ const World = (() => {
       }
       // Cars run up and down the roads, stop for what is in the way, and turn back from fighting and broken bridges.
       // On a bridge a car drives on to the end rather than turning, and one blocked for long turns back.
+      // A car coming up behind a slower one brakes for it, and a careless driver runs into it. Two passing head on
+      // now and then swerve into each other. A wreck stands a while, smoking if it burns, and is then towed away.
       for (const c of L.cars) {
+        if (c.crash || c.wait > 0 || !(c.v > 0.5)) continue;
+        for (const o of L.cars) {
+          if (o === c) continue;
+          const dx = o.x - c.x, dy = o.y - c.y, d = Math.hypot(dx, dy);
+          if (d > 2.4 || d < 1e-3 || (dx * Math.cos(c.a) + dy * Math.sin(c.a)) / d < 0.6) continue;
+          const same = Math.cos(o.a - c.a);
+          if (same > 0.5) { if (d < 1.3 && c.v > 1.2 && c.careless) crash(c, o); else c.brake = true; }
+          else if (same < -0.5 && d < 1.5 && !o.crash && !(c.met && c.met.get(o) > SH.uTime.value - 5)) {
+            (c.met || (c.met = new Map())).set(o, SH.uTime.value); (o.met || (o.met = new Map())).set(c, SH.uTime.value);
+            if (Math.random() < 0.12) crash(c, o);
+          }
+          if (c.crash) break;
+        }
+      }
+      for (const c of L.cars) {
+        if (c.crash) {
+          const k = c.crash; k.t -= dt; c.v = 0;
+          if (k.burn && VIS(c.x, c.y) && (k.smokeT -= dt) <= 0) {
+            k.smokeT = 0.22;
+            const g = heightAt(M, c.x, c.y), R = Math.random;
+            glow.add(c.x + (R() - 0.5) * 0.4, g + 0.35, c.y + (R() - 0.5) * 0.4, (R() - 0.5) * 0.3, 1.1, (R() - 0.5) * 0.3, 0.55, 0.35, 0.9, [4, 1.7, 0.35, 1], [1.2, 0.25, 0.03, 0], 8, { drag: 1 });
+            smoke.add(c.x, g + 0.6, c.y, 0.2 + (R() - 0.5) * 0.3, 0.9 + R() * 0.5, (R() - 0.5) * 0.3, 2.6, 0.4, 1.6, [0.1, 0.09, 0.08, 0.7], [0.3, 0.29, 0.28, 0], R() * 4 | 0, { drag: 0.4 });
+          }
+          if (k.t <= 0) {
+            const rs = L.roads.filter(q => q.len > 14), r = rs[Math.floor(Math.random() * rs.length)], s2 = Math.random() * r.len, [rx, ry] = roadAt(r, s2);
+            Object.assign(c, { r, s: s2, x: rx, y: ry, dir: Math.random() < 0.5 ? 1 : -1, v: 0, wait: 15 + Math.random() * 20, turn: false, held: 0, crash: null });
+          }
+          continue;
+        }
         if (c.wait > 0) { c.wait -= dt; c.v = 0; continue; }
         const [x, y, a] = roadAt(c.r, c.s), ah = c.dir > 0 ? a : a + Math.PI;
         c.x = x + Math.sin(ah) * 0.55; c.y = y - Math.cos(ah) * 0.55; c.a = ah;
@@ -9560,6 +9551,7 @@ const World = (() => {
         let block = false;
         const bx = c.x + Math.cos(ah) * 2, by = c.y + Math.sin(ah) * 2;
         Rules.near(S, bx, by, 2.6, u => { if (u.hp > 0 && !u.b && !Rules.isAir(u) && Math.hypot(u.x - bx, u.y - by) < 2.2) block = true; });
+        if (c.brake) { block = true; c.brake = false; }
         c.held = block ? (c.held || 0) + dt : 0;
         if (c.held > 6 && !onBridge) { c.held = 0; c.dir *= -1; c.wait = 1 + Math.random() * 2; continue; }
         c.v += ((block ? 0 : worldAge() < MOTOR_AGE ? 1.6 : 3.4) - c.v) * Math.min(1, dt * (block ? 6 : 1.4));
@@ -9573,8 +9565,16 @@ const World = (() => {
       }
       // Townsfolk stroll between the houses and go indoors when soldiers come, at night and in a storm.
       for (const f of L.folk) {
-        const t = M.towns[f.town], inside = L.danger[f.town] || night > 0.6 || storm > 0.5;
-        if (f.hide > 0 || inside) { f.hide = inside ? Math.max(f.hide, 4) : f.hide - dt; continue; }
+        if (!f.driver) {
+          const inside = L.danger[f.town] || night > 0.6 || storm > 0.5;
+          if (f.hide > 0 || inside) { f.hide = inside ? Math.max(f.hide, 4) : f.hide - dt; f.brawl = null; f.down = 0; f.watch = 0; continue; }
+        }
+        if (f.down > 0) { f.down -= dt; f.v = 0; continue; }
+        if (f.brawl) { stepBrawl(f, dt); continue; }
+        // A driver stands by the wreck a little after the fight, then is gone with it.
+        if (f.driver) { f.v = 0; if ((f.life -= dt) <= 0) f.gone = true; continue; }
+        if (f.watch > 0) { f.watch -= dt; f.v = 0; f.a = Math.atan2(f.watchAt[1] - f.y, f.watchAt[0] - f.x); continue; }
+        const t = M.towns[f.town];
         if (f.wait > 0) { f.wait -= dt; f.v = 0; continue; }
         const dx = f.tx - f.x, dy = f.ty - f.y, d = Math.hypot(dx, dy);
         if (d < 0.3) {
@@ -9586,6 +9586,7 @@ const World = (() => {
         const nx = f.x + dx / d * f.v * dt, ny = f.y + dy / d * f.v * dt;
         if (openAt(nx, ny)) { f.x = nx; f.y = ny; } else { f.tx = f.x; f.ty = f.y; }
       }
+      if (L.folk.some(f => f.gone)) L.folk = L.folk.filter(f => !f.gone);
       // Boats keep to deep water, turning from the shallows, the fords and the banks.
       for (const b of L.boats) {
         const ahead = da => terrainAt(M, b.x + Math.cos(b.a + da) * 2.2, b.y + Math.sin(b.a + da) * 2.2);
@@ -9636,15 +9637,26 @@ const World = (() => {
       const motor = worldAge() >= MOTOR_AGE, CM = motor ? L.carM : L.cartM;
       for (const c of L.cars) {
         if (n >= 32 || !VIS(c.x, c.y)) continue;
-        compose(m1, c.x, heightAt(M, c.x, c.y) + 0.02, c.y, -c.a, 0, 0, 0.9);
-        CM.setMatrixAt(n, m1); CM.setColorAt(n, motor ? colA.set(c.col) : colA.set(0xffffff)); n++;
+        const k = c.crash;
+        compose(m1, c.x, heightAt(M, c.x, c.y) + 0.02, c.y, -(c.a + (k ? k.spin : 0)), 0, k ? k.roll : 0, 0.9);
+        colA.set(motor ? c.col : 0xffffff);
+        if (k && k.burn) colA.multiplyScalar(0.3);
+        CM.setMatrixAt(n, m1); CM.setColorAt(n, colA); n++;
       }
       CM.count = n; dirty(CM);
       (motor ? L.cartM : L.carM).count = 0;
       n = 0;
       for (const f of L.folk) {
         if (n >= 200 || f.hide > 0 || L.danger[f.town] || !VIS(f.x, f.y)) continue;
-        compose(m1, f.x, heightAt(M, f.x, f.y) + (f.v > 0 ? Math.abs(Math.sin(f.ph)) * 0.03 : 0), f.y, -f.a, 0, 0, 1);
+        let px = f.x, py = f.y, lean = 0, roll = 0, hop = f.v > 0 ? Math.abs(Math.sin(f.ph)) * 0.03 : 0;
+        // A swing throws the body forward and back, with a little bounce on the feet.
+        if (f.brawl && f.brawl.on) {
+          const k = Math.max(0, Math.sin(f.brawl.ph * 7 + (f.brawl.lead ? 0 : 2.2)));
+          px += Math.cos(f.a) * k * 0.14; py += Math.sin(f.a) * k * 0.14; lean = -k * 0.4; hop = Math.abs(Math.sin(f.brawl.ph * 5)) * 0.04;
+        }
+        // Down on the ground, and getting up in the last half second.
+        if (f.down > 0) roll = 1.45 * Math.min(1, f.down / 0.5);
+        compose(m1, px, heightAt(M, px, py) + hop, py, -f.a, lean, roll, 1);
         L.folkM.setMatrixAt(n, m1); L.folkM.setColorAt(n, colA.set(f.col)); n++;
       }
       L.folkM.count = n; dirty(L.folkM);
@@ -11838,12 +11850,6 @@ const Hud = (() => {
         game.look = 'ink'; world.setLook('ink'); world.setInk(game.inkStyle);
         say(names[game.inkStyle] + '.');
         return;
-      }
-      if (k === 'KeyL') {
-        const order = Looks.list(), next = order[(order.findIndex(l => l.name === world.look) + 1) % order.length];
-        game.look = next.name; world.setLook(game.look); if (game.pictures) game.pictures();
-        try { localStorage.setItem('dg-look', game.look); } catch (e) { /* no store */ }
-        say(next.said); return;
       }
       if (k === 'Equal' || k === 'NumpadAdd') { game.setSpeed(1); return; }
       if (k === 'Minus' || k === 'NumpadSubtract') { game.setSpeed(-1); return; }
@@ -14383,6 +14389,13 @@ const Game = (() => {
     towntaken: ['Town captured', 'good'], townlost: ['Town lost', 'bad'], captured: ['Building captured', 'good'], lostbuilding: ['Building lost', 'bad'],
     siloready: ['Missile ready', 'good'], missile: ['Warning, missile launch detected', 'bad'],
   };
+  // The same calls before the Industrial Age, as a herald or a captain would give them, so the early ages do not
+  // speak like a radio.
+  const VOICE_OLD = {
+    buildready: ['The work is done', ''], unitready: ['At your command', ''], baseattack: ['To arms, we are attacked', 'bad'],
+    truckattack: ['Our carts are attacked', 'bad'], nosupply: ['We lack the supplies', 'bad'], newtech: ['New learning is ours', ''],
+    towntaken: ['The town is ours', 'good'], townlost: ['The town is lost', 'bad'], captured: ['It is ours now', 'good'], lostbuilding: ['A building has fallen', 'bad'],
+  };
   // What each turn of the weather means, written and spoken.
   const SKY_SAY = {
     rain: ['Rain. Wheeled vehicles bog down off the roads.', '', 'Rain'], storm: ['Storm. All aircraft are grounded.', 'bad', 'Storm. Aircraft grounded'],
@@ -14395,6 +14408,22 @@ const Game = (() => {
   const SKY_OF = { desert: 'Dust storms, little rain and no snow.', steppe: 'Rain, thunderstorms and fog, with a little snow.', winter: 'Deep snow and fog, and no rain.' };
   const WEATHER_OF = { random: 'In their usual measure.', mild: 'Mostly fair, with no storms of any kind.', harsh: 'Often, and the storms come hard.' };
   const weatherNote = (theme, w) => w === 'off' ? 'Fair skies all game.' : `${SKY_OF[theme] || ''} ${WEATHER_OF[w] || ''}`;
+
+  function bestVoice(vs) {
+    const score = v => {
+      const n = v.name;
+      if (!/^en/i.test(v.lang || '')) return -99;
+      let s = /en[-_](GB|US)/i.test(v.lang) ? 1 : 0;
+      if (/Natural|Neural|Online|Premium|Enhanced/i.test(n)) s += 6;
+      if (/Google/i.test(n)) s += 4;
+      if (/Samantha|Ava|Allison|Susan|Serena|Daniel|Karen|Moira|Tessa|Aria|Jenny|Libby|Sonia|Guy|Ryan/i.test(n)) s += 2;
+      if (/Desktop|Compact|eSpeak|Zarvox|Trinoids|Whisper|Bells|Boing|Bubbles|Cellos|Organ|Jester|Wobble|Bahh|Albert|Fred|Ralph|Junior|Superstar|Bad News|Good News|Grandma|Grandpa|Rocko|Shelley|Flo|Eddy|Reed|Sandy/i.test(n)) s -= 10;
+      return s;
+    };
+    let best = null, bs = -99;
+    for (const v of vs) { const s = score(v); if (s > bs) { bs = s; best = v; } }
+    return best;
+  }
 
   // Sound. Effects are decoded once and played with a little pan and pitch from where they happen. A browser driven
   // by a test harness stays silent, sound and voice alike.
@@ -14438,14 +14467,20 @@ const Game = (() => {
         a.play(name, Object.assign({}, o, { gain: (o.gain ?? 1) * k * k * Rules.clamp(50 / c.dist, 0.45, 1.1), pan }));
       },
       ui(n) { a.play(n === 'click' ? 'click' : n === 'deny' ? 'deny' : 'place', { gain: 0.5, gap: 0.03 }); },
-      // Status calls in the browser's own voice, one at a time.
-      voice(k, text) {
+      // Status calls, one at a time. A call recorded by voices.py is played as it is: a herald's before the
+      // Industrial Age (old) and a radio operator's after. Any other is spoken in the browser's own voice at its own
+      // pitch and pace, the most natural English voice the machine has: a neural, online or premium one first, and
+      // never a novelty or an old desktop voice, which sound robotic.
+      voice(k, text, old) {
         const sp = window.speechSynthesis, now = performance.now();
-        if (!sp || robot || a.muted || !text || now < voiceT) return;
+        if (robot || a.muted || !text || now < voiceT) return;
+        const clip = `v_${old ? 'h' : 'r'}_${text.toLowerCase().replace(/[^a-z]+/g, '_').replace(/^_|_$/g, '')}`;
+        if (ctx && bank[clip]) { a.play(clip, { gain: 0.9, gap: 0 }); voiceT = now + 1800; return; }
+        if (!sp) return;
         try {
-          const u = new SpeechSynthesisUtterance(text), vs = sp.getVoices();
-          u.voice = vs.find(v => /Samantha|Google UK English Female|Zira|Karen|Moira/.test(v.name)) || vs.find(v => /^en/.test(v.lang)) || null;
-          u.rate = 1.06; u.pitch = 0.82; u.volume = 0.85;
+          const u = new SpeechSynthesisUtterance(text);
+          u.voice = bestVoice(sp.getVoices());
+          u.rate = 1; u.pitch = 1; u.volume = 0.85;
           sp.cancel(); sp.speak(u);
           voiceT = now + 1800;
         } catch (e) { /* no voice here */ }
@@ -14659,6 +14694,8 @@ const Game = (() => {
 
     // Hands what the rules did to the picture, the sound and the reports.
     const WSND = { rifle: ['rifle', 0.34, 0.04], hmg: ['hmg', 0.4, 0.06], auto: ['auto', 0.5, 0.08], cannon: ['cannon', 0.8, 0.06], flak: ['flak', 0.45, 0.08], missile: ['missile', 0.6, 0.1], rocket: ['rocket', 0.5, 0.05], rail: ['rail', 0.9, 0.1], sniper: ['sniper', 0.7, 0.1], bow: ['bow', 0.45, 0.05], xbow: ['xbow', 0.45, 0.06], longbow: ['longbow', 0.45, 0.06], clash: ['clash', 0.35, 0.06], musket: ['musket', 0.55, 0.05], catapult: ['catapult', 0.7, 0.1], pulse: ['pulse', 0.35, 0.04] };
+    // Whether the player's side is still before the Industrial Age, when the calls come from a herald, not a radio.
+    const oldAge = () => !!(G.S && G.S.P[Math.max(0, G.team)] && G.S.P[Math.max(0, G.team)].tech < Rules.POWER_AGE);
     function drain() {
       const S = G.S, ev = S.ev;
       for (const e of ev) {
@@ -14675,8 +14712,8 @@ const Game = (() => {
           case 'die': if (heard) audio.at(e.b ? 'boom_l' : Rules.UNITS[e.kind]?.men ? 'scream' : 'boom_m', e.x, e.y, { gain: Rules.UNITS[e.kind]?.men ? 0.3 : 0.9, gap: 0.08, vary: 0.2 }); break;
           case 'say':
             // A new age has its own card, so its call names the age and leaves no line in the log.
-            if (G.playing && e.team === G.team && e.line === 'newtech') audio.voice(e.line, `The ${Rules.AGES[S.P[e.team].tech].name} Age`);
-            else if (G.playing && e.team === G.team) { const v = VOICE[e.line]; if (v) { hud.say(v[0] + '.', v[1]); audio.voice(e.line, v[0]); } }
+            if (G.playing && e.team === G.team && e.line === 'newtech') audio.voice(e.line, `The ${Rules.AGES[S.P[e.team].tech].name} Age`, oldAge());
+            else if (G.playing && e.team === G.team) { const v = (oldAge() && VOICE_OLD[e.line]) || VOICE[e.line]; if (v) { hud.say(v[0] + '.', v[1]); audio.voice(e.line, v[0], oldAge()); } }
             break;
           case 'alert': if (G.playing && e.team === G.team) hud.alert(e.x, e.y); break;
           case 'trade': if (G.playing && e.team === G.team) hud.pop(e.x, e.y, '+' + e.n); break;
@@ -14689,9 +14726,9 @@ const Game = (() => {
             else if (G.playing && G.names[e.team]) hud.say(`${G.names[e.team]} is out.`, 'good');
             drawRoster();
             break;
-          case 'weather': if (G.playing) { const v = SKY_SAY[e.kind]; if (v && !(e.kind === 'cloud' && e.was === 'clear')) { hud.say(v[0], v[1]); if (v[2]) audio.voice('sky', v[2]); } } break;
+          case 'weather': if (G.playing) { const v = SKY_SAY[e.kind]; if (v && !(e.kind === 'cloud' && e.was === 'clear')) { hud.say(v[0], v[1]); if (v[2]) audio.voice('sky', v[2], oldAge()); } } break;
           case 'flood': if (G.playing) hud.say(e.on ? 'The rivers are up. The fords are closed.' : 'The rivers are down. The fords are open again.', e.on ? 'bad' : 'good'); break;
-          case 'bridge': if (G.playing && G.team >= 0 && G.S.P[G.team].seen[Rules.cellOf(e.x, e.y)]) { hud.say(e.down ? 'A bridge is down.' : 'A bridge is open again.', e.down ? 'bad' : 'good'); if (e.down) audio.voice('bridge', 'Bridge destroyed'); } break;
+          case 'bridge': if (G.playing && G.team >= 0 && G.S.P[G.team].seen[Rules.cellOf(e.x, e.y)]) { hud.say(e.down ? 'A bridge is down.' : 'A bridge is open again.', e.down ? 'bad' : 'good'); if (e.down) audio.voice('bridge', 'Bridge destroyed', oldAge()); } break;
           case 'wave': if (G.playing && e.team !== G.team) hud.say('Radar shows the enemy massing to attack.', 'bad'); break;
         }
       }
@@ -14814,13 +14851,7 @@ const Game = (() => {
       pictures();
     }
     darkQ?.addEventListener?.('change', applyScheme);
-    // The settings panel, from the gear at the top right: the look, Daylight among them, and the paper's scheme.
-    $('s-look').innerHTML = Looks.all().map(l => `<button data-v="${l.name}">${l.title}</button>`).join('');
-    const markLook = () => $('s-look').querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.v === world.look));
-    $('s-look').querySelectorAll('button').forEach(b => b.addEventListener('click', () => {
-      G.look = b.dataset.v; world.setLook(G.look); markLook(); pictures(); audio.ui('click');
-      store.set('dg-look', G.look);
-    }));
+    // The settings panel, from the gear at the top right: the paper's scheme and the picture's size.
     $('s-scheme').querySelectorAll('button').forEach(b => b.addEventListener('click', () => {
       scheme = b.dataset.v; applyScheme(); audio.ui('click');
       store.set('dg-paper', scheme);
@@ -14845,7 +14876,7 @@ const Game = (() => {
     setInterval(checkUpdate, 60000);
     document.addEventListener('visibilitychange', () => { if (!document.hidden) checkUpdate(); });
     setTimeout(checkUpdate, 5000);
-    const setOpen = open => { $('settings').hidden = !open; $('b-set').setAttribute('aria-expanded', String(open)); if (open) markLook(); };
+    const setOpen = open => { $('settings').hidden = !open; $('b-set').setAttribute('aria-expanded', String(open)); };
     $('b-set').addEventListener('click', e => { e.stopPropagation(); setOpen($('settings').hidden); audio.ui('click'); });
     document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('settings').hidden) setOpen(false); });
     document.addEventListener('pointerdown', e => { if (!$('settings').hidden && !$('settings').contains(e.target) && e.target !== $('b-set')) setOpen(false); });
