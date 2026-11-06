@@ -6,7 +6,7 @@ const Report = (() => {
   // The slots' colours, as on the map. Light paper takes the deeper plate colours so lines stand off it.
   const SLOT_CSS = ['#6fb0ff', '#ee3a22', '#6fd47f', '#b98af0', '#ffae52', '#4fd8d4', '#cdf044', '#c99a6c'];
   const SLOT_PLATE = ['#2f6fd6', '#c8402f', '#2f9a48', '#7a48c8', '#d8781a', '#1c9a98', '#9a9612', '#7a5230'];
-  const TABS = [['sum', 'Summary'], ['time', 'Timeline'], ['graph', 'Graphs'], ['mil', 'Military'], ['eco', 'Economy']];
+  const TABS = [['sum', 'Summary'], ['war', 'War map'], ['time', 'Timeline'], ['graph', 'Graphs'], ['mil', 'Military'], ['eco', 'Economy']];
   const SERIES = [
     { k: 'sc', name: 'Score', y: 'Score (points)' },
     { k: 'ar', name: 'Army', y: 'Army worth (supply)' },
@@ -325,6 +325,87 @@ const Report = (() => {
     return box;
   }
 
+  // ---- The war map -----------------------------------------------------------------------------------------
+
+  // The field drawn as a plan, as a history's battle map is: each side's main army as its line of march through the
+  // game, heavier where it was stronger, with arrows along it and a ring where it ended, and the game's great
+  // battles marked with crossed swords, the nearest town and the minute.
+  function warMap(c, tip, pane, o, list) {
+    const S = o.S, h = S.hist, M = S.map, MW = M.W, MH = M.H, I = inks();
+    const side = Math.min(pane.clientWidth || 600, 640);
+    c.style.height = side + 'px'; c.style.width = side + 'px'; c.style.maxWidth = '100%';
+    const { g, w } = fit(c), sc = w / MW, P = (x, y) => [x * sc, y * sc];
+    // The land: water washed, woods stippled, high ground a shade deeper, the paper left bare elsewhere.
+    g.fillStyle = I.ground; g.fillRect(0, 0, w, w);
+    const water = I.light || !I.ink ? '#bccbd6' : '#2f3a44', wood = I.light || !I.ink ? 'rgba(80,110,70,0.35)' : 'rgba(150,180,140,0.3)';
+    for (let y = 0; y < MH; y++) for (let x = 0; x < MW; x++) {
+      const gb = M.ground[y * MW + x], ht = Rules.terrainAt(M, x + 0.5, y + 0.5);
+      if ((gb & 7) === 7 && ht < 0.2) { g.fillStyle = water; g.fillRect(x * sc, y * sc, sc + 0.6, sc + 0.6); continue; }
+      if (ht > 1.2) { g.fillStyle = `rgba(90,70,50,${Math.min(0.16, (ht - 1.2) * 0.03)})`; g.fillRect(x * sc, y * sc, sc + 0.6, sc + 0.6); }
+      if ((gb & 8) && (x + y) % 2 === 0) { g.fillStyle = wood; g.fillRect((x + 0.3) * sc, (y + 0.3) * sc, Math.max(1, sc * 0.4), Math.max(1, sc * 0.4)); }
+    }
+    g.strokeStyle = I.light || !I.ink ? 'rgba(110,90,70,0.55)' : 'rgba(200,190,170,0.45)'; g.lineWidth = 1;
+    for (const r of M.roads || []) { g.beginPath(); r.forEach(([x, y], i) => i ? g.lineTo(x * sc, y * sc) : g.moveTo(x * sc, y * sc)); g.stroke(); }
+    g.font = `11px ${I.font}`; g.textAlign = 'center'; g.textBaseline = 'top';
+    const towns = S.towns.map(t => ({ x: t.x, y: t.y, name: `Town ${String.fromCharCode(65 + t.id)}` }));
+    for (const t of towns) { const [x, y] = P(t.x, t.y); g.fillStyle = I.dim; g.fillRect(x - 3, y - 3, 6, 6); g.fillText(t.name, x, y + 5); }
+    // The bases, each a square in its side's ink.
+    for (const x of list) { const b = S.bases[x.t]; if (!b) continue; const [bx, by] = P(b[0], b[1]); g.fillStyle = I.line(x.t); g.fillRect(bx - 5, by - 5, 10, 10); }
+    const pos = h.pos || [], ts = h.t.map(t => t / HZ);
+    let top = 1;
+    for (const p of pos) if (p) for (const q of p) if (q) top = Math.max(top, q[2]);
+    // Each side's march, smoothed over three samples, drawn a leg at a time so its weight follows its strength.
+    for (const x of list) {
+      const pts = pos.map((p, j) => p && p[x.t] ? { x: p[x.t][0], y: p[x.t][1], v: p[x.t][2], j } : null);
+      const sm = pts.map((q, j) => { if (!q) return null; let sx = 0, sy = 0, n = 0; for (let k = j - 1; k <= j + 1; k++) if (pts[k]) { sx += pts[k].x; sy += pts[k].y; n++; } return { x: sx / n, y: sy / n, v: q.v, j }; });
+      g.strokeStyle = I.line(x.t); g.fillStyle = I.line(x.t); g.lineCap = 'round'; g.lineJoin = 'round';
+      let last = null, since = 0;
+      for (const q of sm) {
+        if (!q) { last = null; continue; }
+        // A leap across the map is the main body changing from one group to another, not a march, so the line breaks.
+        if (last && Math.hypot(q.x - last.x, q.y - last.y) > 18) last = null;
+        if (last) {
+          const [ax, ay] = P(last.x, last.y), [bx, by] = P(q.x, q.y);
+          g.globalAlpha = 0.85; g.lineWidth = 1.4 + 4.6 * Math.sqrt(q.v / top);
+          g.beginPath(); g.moveTo(ax, ay); g.lineTo(bx, by); g.stroke();
+          since += Math.hypot(bx - ax, by - ay);
+          // An arrowhead every so far along the line, pointing the way it went.
+          if (since > 46 && Math.hypot(bx - ax, by - ay) > 2) {
+            since = 0; const an = Math.atan2(by - ay, bx - ax), s = 4 + g.lineWidth;
+            g.beginPath(); g.moveTo(bx, by); g.lineTo(bx - Math.cos(an - 0.45) * s, by - Math.sin(an - 0.45) * s); g.lineTo(bx - Math.cos(an + 0.45) * s, by - Math.sin(an + 0.45) * s); g.closePath(); g.fill();
+          }
+        }
+        last = q;
+      }
+      g.globalAlpha = 1;
+      const end = [...sm].reverse().find(Boolean);
+      if (end) { const [ex, ey] = P(end.x, end.y); g.lineWidth = 2; g.beginPath(); g.arc(ex, ey, 6, 0, 6.283); g.stroke(); }
+    }
+    // The battles: the fighting of samples near in place and time gathered into one, the greatest six marked.
+    const raw = [];
+    (h.fight || []).forEach((f, j) => { if (f) raw.push({ x: f[0], y: f[1], d: f[2], t: ts[j] || 0 }); });
+    raw.sort((a, b) => b.d - a.d);
+    const battles = [];
+    for (const f of raw) {
+      const b = battles.find(q => Math.hypot(q.x - f.x, q.y - f.y) < 14 && Math.abs(q.t - f.t) < 120);
+      if (b) b.d += f.d; else battles.push({ x: f.x, y: f.y, t: f.t, d: f.d });
+    }
+    battles.sort((a, b) => b.d - a.d);
+    const big = battles.slice(0, 6), most = big.length ? big[0].d : 1;
+    g.font = `italic 12px ${I.font}`; g.textAlign = 'left'; g.textBaseline = 'middle';
+    for (const b of big) {
+      const [x, y] = P(b.x, b.y), s = 5 + 7 * Math.sqrt(b.d / most);
+      g.strokeStyle = I.light || !I.ink ? '#2a221b' : '#e8e0cf'; g.lineWidth = 2; g.lineCap = 'round';
+      g.beginPath(); g.moveTo(x - s, y - s); g.lineTo(x + s, y + s); g.moveTo(x + s, y - s); g.lineTo(x - s, y + s); g.stroke();
+      g.lineWidth = 1.4; g.beginPath(); g.moveTo(x - s * 0.55, y - s * 0.05); g.lineTo(x - s * 0.05, y - s * 0.55); g.moveTo(x + s * 0.55, y - s * 0.05); g.lineTo(x + s * 0.05, y - s * 0.55); g.stroke();
+      const near = towns.reduce((a, t) => !a || Math.hypot(t.x - b.x, t.y - b.y) < Math.hypot(a.x - b.x, a.y - b.y) ? t : a, null);
+      const where = near && Math.hypot(near.x - b.x, near.y - b.y) < 26 ? `near ${near.name}` : 'in the open';
+      const label = `${where} · ${clock(b.t)}`, lw = g.measureText(label).width, lx = x + s + 5 + lw > w ? x - s - 5 - lw : x + s + 5;
+      g.lineWidth = 3; g.strokeStyle = I.ground; g.strokeText(label, lx, y); g.fillStyle = I.text; g.fillText(label, lx, y);
+    }
+    g.lineCap = 'butt';
+  }
+
   // ---- The report -----------------------------------------------------------------------------------------
 
   // Fills root with the tabs and the chosen pane. o has the game S and name(t), a side's name.
@@ -358,6 +439,10 @@ const Report = (() => {
         }
       } else if (!charted) {
         pane.appendChild(el('p', 'rkey', 'The game was too short to chart.'));
+      } else if (k === 'war') {
+        const c = el('canvas', 'rchart rmap'); pane.append(c);
+        pane.appendChild(el('p', 'rkey', h && h.pos ? "Each side's main army as its line of march through the game, heavier where it was stronger, with a ring where it ended. Crossed swords mark the six greatest battles, with the nearest town and the minute." : 'This game was begun before armies were tracked, so there is no war map for it.'));
+        if (h && h.pos) cur.redraw = () => warMap(c, tip, pane, o, list);
       } else if (k === 'time') {
         const c = el('canvas', 'rchart'); pane.append(c, tip);
         const key = el('p', 'rkey', 'Lines across the bands are fighting between two sides, in the colour of the side that did more harm. Tags name the age a side reached, triangles mark missile launches and crosses the end of a side.');
