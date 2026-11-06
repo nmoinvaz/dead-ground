@@ -407,6 +407,9 @@ const Rules = (() => {
 
   // Where everything goes on a kind of map. syms are the turns that carry the map onto itself. Each
   // feature is listed with all of its images in a row, so one town's images sit side by side.
+  // How wooded a map is beyond the usual: the woods' patches grow wider, start on lower ground and stand thicker.
+  // Maps not named keep the usual woods.
+  const WOODS = { quad: 0.7, pass: 1, lakes: 1 };
   function layoutFor(kind) {
     const L = { kind, roads: [], bridges: [], towns: [], ore: [], wells: [], bases: [], fords: [] };
     const all = (list, p, extra = []) => { for (const T of L.syms) { const q = T(p); list.push([q[0], q[1], ...extra]); } };
@@ -720,7 +723,7 @@ const Rules = (() => {
     };
     for (let y = 2; y < H - 2; y++) for (let x = 2; x < W - 2; x++) {
       if (!L.domain(x, y)) continue;
-      const wood = sym(x, y, 0.06, 3), r = rand();
+      const wk = WOODS[kind] || 0, wood = sym(x, y, wk ? 0.06 / (1 + 0.6 * wk) : 0.06, 3), r = rand();
       const place = (k, s) => {
         const px = x + 0.25 + rand() * 0.5, py = y + 0.25 + rand() * 0.5;
         for (const T of L.syms) {
@@ -730,7 +733,8 @@ const Rules = (() => {
         }
       };
       if (!keep(x, y)) continue;
-      if (wood > 0.58 && r < smooth(0.58, 0.68, wood) * 0.5) place('tree', 0.7 + rand() * 0.7);
+      const w0 = wk ? 0.58 - 0.07 * wk : 0.58;
+      if (wood > w0 && r < (wk ? smooth(w0, w0 + 0.1, wood) * (0.5 + 0.35 * wk) : smooth(0.58, 0.68, wood) * 0.5)) place('tree', 0.7 + rand() * 0.7);
       else if (r < 0.006) place('rock', 0.5 + rand() * 0.9);
     }
 
