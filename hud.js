@@ -1014,6 +1014,9 @@ const Hud = (() => {
     // Each chosen unit's way to its goal, traced from the rules' own pathing, kept a quarter second at a time and
     // traced again sooner when the goal moves.
     const routes = new Map();
+    // The routes are drawn on a sheet of their own, and every unit on screen is cut out of it before it is laid on
+    // the overlay, so a route passes under the units it crosses and not over them.
+    let planC = null, pg = null;
     function routeOf(s, e, tx, ty) {
       const now = performance.now(), key = `${tx.toFixed(1)},${ty.toFixed(1)}`, r = routes.get(e.id);
       if (r && r.key === key && now - r.at < 250) return r.pts;
@@ -1031,9 +1034,12 @@ const Hud = (() => {
       // What is planned: the building being placed, and where the chosen units are bound.
       const g = world.ghostState;
       if (g) { og.strokeStyle = g.ok ? PLAN : PLAN_BAD; dotted(); const d = BUILDINGS[g.kind]; box3(s, g.x, g.y, d.w, d.h, world.bHeight(g.kind)); }
+      if (!planC || planC.width !== ov.width || planC.height !== ov.height) { planC = planC || document.createElement('canvas'); planC.width = ov.width; planC.height = ov.height; pg = planC.getContext('2d'); }
+      pg.setTransform(1, 0, 0, 1, 0, 0); pg.clearRect(0, 0, planC.width, planC.height); pg.setTransform(og.getTransform());
+      pg.strokeStyle = PLAN; pg.setLineDash([0.5, 3.6]); pg.lineCap = 'round'; pg.lineWidth = 2.1;
       og.strokeStyle = PLAN; dotted();
       const ends = [], shared = new Set();
-      let byId = null;
+      let byId = null, drawn = 0;
       for (const e of selected) {
         if (!e || e.b || e.team !== t || e.hp <= 0 || !e.ord) continue;
         const o = e.ord;
@@ -1049,19 +1055,28 @@ const Hud = (() => {
         const air = Rules.isAir(e);
         const [ax, ay] = world.project(e.x, Rules.heightAt(s.map, clamp(e.x, 0, W), clamp(e.y, 0, H)) + (air ? e.z : 0.2), e.y);
         const [bx, by] = world.project(tx, Rules.heightAt(s.map, tx, ty) + 0.2, ty);
-        og.beginPath(); og.moveTo(ax, ay);
+        pg.beginPath(); pg.moveTo(ax, ay); drawn++;
         // A ground unit's line follows the way it will take, roads and tracks and all; an aircraft's flies straight.
         // A stretch that units share is drawn once, so a column's lines stay one dotted line, not a solid stripe.
+        // Stretches are matched to the half cell, either way along, so near and reversed copies count as shared.
         if (!air) {
           let px0 = e.x, py0 = e.y;
+          const hc = v => Math.round(v * 2);
           for (const [px, py] of routeOf(s, e, tx, ty).slice(1)) {
-            const k = `${px0.toFixed(1)},${py0.toFixed(1)}>${px.toFixed(1)},${py.toFixed(1)}`, [qx, qy] = world.project(px, Rules.heightAt(s.map, px, py) + 0.2, py);
-            if (shared.has(k)) og.moveTo(qx, qy); else { shared.add(k); og.lineTo(qx, qy); }
+            const a = `${hc(px0)},${hc(py0)}`, b = `${hc(px)},${hc(py)}`, k = a < b ? a + '>' + b : b + '>' + a;
+            const [qx, qy] = world.project(px, Rules.heightAt(s.map, px, py) + 0.2, py);
+            if (shared.has(k) || a === b) pg.moveTo(qx, qy); else { shared.add(k); pg.lineTo(qx, qy); }
             px0 = px; py0 = py;
           }
         }
-        og.lineTo(bx, by); og.stroke();
+        pg.lineTo(bx, by); pg.stroke();
         if (!ends.some(p => Math.abs(p[0] - bx) < 8 && Math.abs(p[1] - by) < 8)) ends.push([bx, by]);
+      }
+      if (drawn) {
+        pg.globalCompositeOperation = 'destination-out'; pg.setLineDash([]);
+        for (const o of world.onScreen) { if (o.e.b) continue; pg.beginPath(); pg.arc(o.x, o.y, Math.max(4, o.r * 1.15), 0, 6.3); pg.fill(); }
+        pg.globalCompositeOperation = 'source-over';
+        og.save(); og.setTransform(1, 0, 0, 1, 0, 0); og.globalAlpha = 1; og.drawImage(planC, 0, 0); og.restore();
       }
       for (const [x, y] of ends) { og.beginPath(); og.ellipse(x, y, 9, 5.5, 0, 0, 6.3); og.stroke(); }
       og.restore();
