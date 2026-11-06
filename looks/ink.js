@@ -4,9 +4,8 @@
   const GL = Looks.GL;
   Looks.add({
     name: 'ink', title: 'Pen and ink', said: 'Pen and ink.', panels: 'ink', hud: 'ink', sceneFog: false, ghost3d: false,
-    // Blasts: flames as flicks of line, fire left white and scorch hatched in the pass, and the drawn burst lives long
-    // enough to be seen. Each kind of thing has its own drawing, set in world.js.
-    fx: 1, fxs: 2, burstLife: 2.5,
+    // Blasts: no burst drawn over the scene, fire in bands of coloured ink, and scorch hatched in the pass.
+    fx: 4, fxs: 2, fire: 0, burstLife: 2.5,
     // Survey inks, each family of things in its own colour, and units drawn in their side's ink on bare paper.
     inks: 1, units: 1,
     // The lens stands back as far again as frames the same ground, so everything sized by cam.dist holds.
@@ -18,13 +17,13 @@
       // 45 and 135 degrees, then flat and upright lines for the darkest, each line a little uneven with small gaps.
       // The ground's hatching is pinned to the map so it pans with it, the units' redraws a few times a second.
       const ink = new THREE.ShaderMaterial({ uniforms: { t: { value: null }, tSubj: { value: null }, tHeat: { value: null }, tPaper: { value: null }, res: { value: new THREE.Vector2(1, 1) }, uTime: { value: 0 }, uK: { value: 1 }, uOff: { value: new THREE.Vector2() }, uStyle: { value: 8 }, tNorm: { value: null }, tFogS: { value: null }, tLand: { value: null }, uSun2: { value: new THREE.Vector2(-1, 0) }, uUpV: { value: new THREE.Vector3(0, 1, 0) }, uRoad: { value: 0 }, uOre: { value: 0 }, uMarks: { value: 1 },
-        uWindS: { value: new THREE.Vector2() }, uView: { value: new THREE.Vector2(1, 0) }, tFx: { value: null }, tAnc: { value: null }, uDark: { value: 0 }, uInks: { value: 0 }, uFxs: { value: 0 }, uUnits: { value: 0 }, tH: SH.tH, uHSize: { value: new THREE.Vector2(1, 1) }, uHScale: { value: 1 }, uRain: { value: 0 }, uStorm: { value: 0 }, uSnowF: { value: 0 }, uSnowC: SH.uSnowC, uFog: { value: 0 }, uMist: { value: 0 }, uNight: { value: 0 }, uWet: { value: 0 },
+        uWindS: { value: new THREE.Vector2() }, uView: { value: new THREE.Vector2(1, 0) }, tFx: { value: null }, tAnc: { value: null }, uDark: { value: 0 }, uInks: { value: 0 }, uFxs: { value: 0 }, uFire: { value: 0 }, uUnits: { value: 0 }, tH: SH.tH, uHSize: { value: new THREE.Vector2(1, 1) }, uHScale: { value: 1 }, uRain: { value: 0 }, uStorm: { value: 0 }, uSnowF: { value: 0 }, uSnowC: SH.uSnowC, uFog: { value: 0 }, uMist: { value: 0 }, uNight: { value: 0 }, uWet: { value: 0 },
         uDayMul: { value: new THREE.Vector3(1, 1, 1) }, uDayAdd: { value: new THREE.Vector3() }, uWaterL: { value: -0.15 }, uCloudK: SH.uCloudK, tMarks: SH.tMarks, uMap: SH.uMap,
         uCloud: SH.uCloud, uCloudT: SH.uCloudT, uSunW: SH.uSunDir, uCloudA: { value: 0 }, uCloudG: { value: 0 }, uRayK: { value: 0 }, uSand: { value: 0 },
         uInvVP: { value: new THREE.Matrix4() }, uW2S: { value: new THREE.Vector4(1, 0, 0, 1) }, uLev: { value: 1 },
         // Each side's colour as the anchor pass keeps it, its hue and how coloured it is, and its inks on either paper.
         uSideKey: { value: [...Array(8)].map(() => new THREE.Vector2()) }, uSideL: { value: [...Array(8)].map(() => new THREE.Vector3()) }, uSideD: { value: [...Array(8)].map(() => new THREE.Vector3()) }, uSideB: { value: [...Array(8)].map(() => new THREE.Vector3()) } }, vertexShader: vs, depthTest: false, depthWrite: false, fragmentShader: `
-        varying vec2 vUv; uniform sampler2D t, tSubj, tHeat, tPaper, tNorm, tFogS, tLand, tMarks; uniform float uMap; uniform vec2 res, uOff, uSun2, uWindS, uView, uHSize; uniform float uHScale, uFxs; uniform int uUnits, uInks; uniform float uDark; uniform sampler2D tH, tFx, tAnc; uniform vec3 uUpV, uDayMul, uDayAdd; uniform float uTime, uK, uRain, uStorm, uSnowF, uSnowC, uFog, uMist, uNight, uWet, uWaterL, uCloudK, uMarks; uniform int uStyle, uRoad, uOre;
+        varying vec2 vUv; uniform sampler2D t, tSubj, tHeat, tPaper, tNorm, tFogS, tLand, tMarks; uniform float uMap; uniform vec2 res, uOff, uSun2, uWindS, uView, uHSize; uniform float uHScale, uFxs, uFire; uniform int uUnits, uInks; uniform float uDark; uniform sampler2D tH, tFx, tAnc; uniform vec3 uUpV, uDayMul, uDayAdd; uniform float uTime, uK, uRain, uStorm, uSnowF, uSnowC, uFog, uMist, uNight, uWet, uWaterL, uCloudK, uMarks; uniform int uStyle, uRoad, uOre;
         uniform vec2 uSideKey[8]; uniform vec3 uSideL[8], uSideD[8], uSideB[8];
         uniform vec2 uCloud; uniform vec3 uSunW; uniform float uCloudT, uCloudA, uCloudG, uRayK, uSand;
         // The clouds float at CLOUD_H over the land. cloudAt gives the cloud over a point of the land at that height,
@@ -667,18 +666,19 @@
           // Fire in flat bands of coloured ink, red, orange, yellow and a pale core, inside a black boiling outline.
           vec3 c1 = vec3(0.8, 0.17, 0.09), c2 = vec3(0.98, 0.47, 0.1), c3 = vec3(1.0, 0.82, 0.24), c4 = vec3(1.0, 0.97, 0.84);
           if (hz.b > hz.r * 1.1) { c1 = vec3(0.13, 0.33, 0.8); c2 = vec3(0.3, 0.6, 0.95); c3 = vec3(0.65, 0.86, 1.0); c4 = vec3(0.93, 0.97, 1.0); }
-          // Fire as the bands (uFxs 0), as a warm wash round a paper core with no outline (1), or as bare paper
-          // with one thin outline and a halo of hatching, as an engraver leaves a flash white (2).
+          // Fire as the bands (uFire 0), as a warm wash round a paper core with no outline (1), or as bare paper
+          // with one thin outline and a halo of hatching, as an engraver leaves a flash white (2). The bands are
+          // edged in a dark red, not black, so the fire reads as colour and never as a blot of ink.
           vec3 fc = hn < 0.62 ? c1 : hn < 1.35 ? c2 : hn < 2.7 ? c3 : c4;
-          if (uFxs < 0.5) fc = mix(fc, c1 * 0.5, hatch(px, 45.0, 3.4, 1.0, 91.0 + boil, 0.05) * step(hn, 0.62) * 0.65);
-          else if (uFxs < 1.5) fc = mix(vec3(1.0, 0.76, 0.42), c4, smoothstep(0.8, 2.2, hn));
+          if (uFire < 0.5) fc = mix(hn < 2.7 ? fc : vec3(1.0, 0.91, 0.55), c1 * 0.5, hatch(px, 45.0, 3.4, 1.0, 91.0 + boil, 0.05) * step(hn, 0.62) * 0.65);
+          else if (uFire < 1.5) fc = mix(vec3(1.0, 0.76, 0.42), c4, smoothstep(0.8, 2.2, hn));
           else fc = flashC;
           col = mix(col, fc, lit);
-          if (uFxs > 1.5) col = mix(col, inkC, hatch(px, 60.0, 3.0, 0.9, 5.0 + boil, 0.3) * smoothstep(0.08, 0.26, hr0) * (1.0 - lit) * 0.7);
-          float fw = max(fwidth(hn), 1e-4), fxO = uFxs < 0.5 ? 1.0 : uFxs < 1.5 ? 0.0 : 0.7;
-          float o1 = (1.0 - smoothstep(1.0 * uK, 2.3 * uK, abs(hn - 0.26) / fw)) * step(0.12, hr0) * fxO;
-          float o2 = max(1.0 - smoothstep(0.5 * uK, 1.4 * uK, abs(hn - 0.62) / fw), 1.0 - smoothstep(0.5 * uK, 1.4 * uK, abs(hn - 1.35) / fw)) * step(uFxs, 0.5);
-          col = mix(col, inkC, o1);
+          if (uFire > 1.5) col = mix(col, inkC, hatch(px, 60.0, 3.0, 0.9, 5.0 + boil, 0.3) * smoothstep(0.08, 0.26, hr0) * (1.0 - lit) * 0.7);
+          float fw = max(fwidth(hn), 1e-4), fxO = uFire < 0.5 ? 0.85 : uFire < 1.5 ? 0.0 : 0.7;
+          float o1 = (1.0 - smoothstep(0.7 * uK, 1.8 * uK, abs(hn - 0.26) / fw)) * step(0.12, hr0) * fxO;
+          float o2 = max(1.0 - smoothstep(0.5 * uK, 1.4 * uK, abs(hn - 0.62) / fw), 1.0 - smoothstep(0.5 * uK, 1.4 * uK, abs(hn - 1.35) / fw)) * step(uFire, 0.5);
+          col = mix(col, uFire < 0.5 ? c1 * 0.42 : inkC, o1);
           col = mix(col, c1 * 0.45, o2 * lit * 0.85);
           // Cloud shadows passing over what is seen now, as a cool wash.
           vec4 LND = texture2D(tLand, vUv);
@@ -827,7 +827,7 @@
           if (!C.tPaper.value) C.tPaper.value = K.paper();
           if (!sides) setSides(C);
           C.t.value = K.ldr.texture; C.tSubj.value = K.mask(); C.tNorm.value = K.norm(); C.tHeat.value = K.a0.texture;
-          C.tFx.value = K.fx(); C.uFxs.value = look.fxs || 0; C.uUnits.value = look.units || 0; C.tAnc.value = K.anchor(); C.uDark.value = Looks.dark ? 1 : 0; C.uInks.value = look.inks || 0;
+          C.tFx.value = K.fx(); C.uFxs.value = look.fxs || 0; C.uFire.value = look.fire ?? (look.fxs || 0); C.uUnits.value = look.units || 0; C.tAnc.value = K.anchor(); C.uDark.value = Looks.dark ? 1 : 0; C.uInks.value = look.inks || 0;
           C.res.value.set(w, h); C.uTime.value = K.time; C.uK.value = h / 1080;
           C.tFogS.value = K.fog();
           // Distance to the nearest road, per pixel of the land.

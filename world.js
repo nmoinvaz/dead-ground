@@ -2208,6 +2208,12 @@ const World = (() => {
       const smoke1 = [sm[0] * 1.6, sm[1] * 1.5, sm[2] * 1.5, 0.82], smoke0 = [sm[0] * 3.4, sm[1] * 3.2, sm[2] * 3.1, 0];
       // The flash, white at its heart.
       glow.add(x, y + 0.4 * size, z, 0, 0, 0, 0.1, size * 2.6, size * 4.6, [7, 5, 3, 0.9], [3, 1.2, 0.2, 0], 8);
+      // Where the look draws fire in bands of coloured ink, a fireball that swells and burns down from yellow through
+      // orange to red over half a second, so the blast is seen in colour with nothing drawn over it.
+      if (style.fire === 0) for (let i = 0; i < 3; i++) {
+        glow.add(x + (R() - 0.5) * size * 0.7, y + 0.3 * size + R() * 0.4 * size, z + (R() - 0.5) * size * 0.7, 0, 0.9 * size, 0,
+          0.45 + R() * 0.25, size * 1.1, size * (2.2 + R()), [6, 3.4, 1.2, 1], [2, 0.45, 0.08, 0], 8, { rot: R() * 6 });
+      }
       glow.add(x, y + 0.2, z, 0, 0, 0, 0.06, size * 1.4, size * 1.8, [9, 7, 4.5, 1], [4, 2, 0.6, 0], 12, { rot: R() * 6 });
       // The fireball: puffs that leave hot, swell and roll upward, and cool to brown smoke.
       for (let i = 0; i < n; i++) {

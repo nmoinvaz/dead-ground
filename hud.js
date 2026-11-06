@@ -908,8 +908,8 @@ const Hud = (() => {
       PAPER_C = blastDark ? 'rgba(0,0,0,0)' : '#f3ecdc';
       const INKC = '#1a1512', PAPERC = PAPER_C;
       for (const f of world.inkFx) {
-        // A burst carries the style of what went up; a muzzle flash is always a few rays.
-        const fx = f.k === 'star' ? 1 : f.fx !== undefined ? f.fx : (world.style.fx || 0);
+        // A burst carries the style of what went up, unless the look draws none; a muzzle flash is always a few rays.
+        const fx = f.k === 'star' ? 1 : world.style.fx === 4 ? 4 : f.fx !== undefined ? f.fx : (world.style.fx || 0);
         if (fx === 4) continue;
         const [x, y] = world.project(f.x, f.y, f.z);
         if (x < -60 || y < -60 || x > world.vw + 60 || y > world.vh + 60) continue;
