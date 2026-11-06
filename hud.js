@@ -983,6 +983,17 @@ const Hud = (() => {
       }
       og.stroke();
     }
+    // Each chosen unit's way to its goal, traced from the rules' own pathing, kept a quarter second at a time and
+    // traced again sooner when the goal moves.
+    const routes = new Map();
+    function routeOf(s, e, tx, ty) {
+      const now = performance.now(), key = `${tx.toFixed(1)},${ty.toFixed(1)}`, r = routes.get(e.id);
+      if (r && r.key === key && now - r.at < 250) return r.pts;
+      const pts = Rules.route(s, e, tx, ty);
+      routes.set(e.id, { key, at: now, pts });
+      if (routes.size > 400) for (const id of routes.keys()) { routes.delete(id); if (routes.size <= 200) break; }
+      return pts;
+    }
     function drawGhostPlan(s, t, selected) {
       og.save();
       // What was: a building destroyed in sight stays a minute as its dashed outline.
@@ -1010,7 +1021,10 @@ const Hud = (() => {
         const air = Rules.isAir(e);
         const [ax, ay] = world.project(e.x, Rules.heightAt(s.map, clamp(e.x, 0, W), clamp(e.y, 0, H)) + (air ? e.z : 0.2), e.y);
         const [bx, by] = world.project(tx, Rules.heightAt(s.map, tx, ty) + 0.2, ty);
-        og.beginPath(); og.moveTo(ax, ay); og.lineTo(bx, by); og.stroke();
+        og.beginPath(); og.moveTo(ax, ay);
+        // A ground unit's line follows the way it will take, roads and tracks and all; an aircraft's flies straight.
+        if (!air) for (const [px, py] of routeOf(s, e, tx, ty).slice(1)) { const [qx, qy] = world.project(px, Rules.heightAt(s.map, px, py) + 0.2, py); og.lineTo(qx, qy); }
+        og.lineTo(bx, by); og.stroke();
         if (!ends.some(p => Math.abs(p[0] - bx) < 8 && Math.abs(p[1] - by) < 8)) ends.push([bx, by]);
       }
       for (const [x, y] of ends) { og.beginPath(); og.ellipse(x, y, 9, 5.5, 0, 0, 6.3); og.stroke(); }
