@@ -8,7 +8,7 @@ const puppeteer = require('/Users/nathan/Source/film-studio/node_modules/puppete
 const url = process.argv[2] || 'http://localhost:8799', out = process.argv[3] || '';
 const wait = ms => new Promise(r => setTimeout(r, ms));
 (async () => {
-  const b = await puppeteer.launch({ headless: 'new', executablePath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', args: ['--mute-audio', '--use-angle=metal'] });
+  const b = await puppeteer.launch({ headless: 'new', executablePath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', args: ['--mute-audio', '--disable-speech-api', '--disable-speech-synthesis-api', '--use-angle=metal'] });
   const page = async (name, id) => {
     const ctx = await b.createBrowserContext(), p = await ctx.newPage();
     await p.setViewport({ width: 1280, height: 800 });

@@ -8,7 +8,7 @@ const path = require('path');
   const steps = process.argv[4] ? require(path.resolve(process.argv[4])) : [{ wait: 2500, name: 'title' }];
   // Headless on the GPU, so no window opens on the desktop. SHOW=1 opens a visible one, for timing frames.
   const show = !!process.env.SHOW;
-  const b = await puppeteer.launch({ headless: show ? false : 'new', executablePath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', args: ['--mute-audio', '--window-size=1500,960', '--enable-gpu', '--ignore-gpu-blocklist', '--use-angle=metal', '--enable-unsafe-swiftshader', '--no-first-run', '--no-default-browser-check'], defaultViewport: null });
+  const b = await puppeteer.launch({ headless: show ? false : 'new', executablePath: '/Applications/Google Chrome.app/Contents/MacOS/Google Chrome', args: ['--mute-audio', '--disable-speech-api', '--disable-speech-synthesis-api', '--window-size=1500,960', '--enable-gpu', '--ignore-gpu-blocklist', '--use-angle=metal', '--enable-unsafe-swiftshader', '--no-first-run', '--no-default-browser-check'], defaultViewport: null });
   const p = (await b.pages())[0];
   await p.setViewport({ width: 1440, height: 860, deviceScaleFactor: 2 });
   const errs = [];

@@ -66,7 +66,7 @@ const World = (() => {
       uTeam0: { value: new THREE.Color(0x3f8cff) }, uTeams: { value: SLOT_COLORS.map(c => new THREE.Color(c).offsetHSL(0, 0, 0.06)) }, uFogOn: { value: 1 }, uBorder: { value: 1 }, uMap: { value: 128 },
       uHaze: { value: new THREE.Color(0xf29a5e) }, uHazeK: { value: 0.012 }, uHazeFrom: { value: 80 }, uShroud: { value: new THREE.Color(0x120907) }, uSunDir: { value: new THREE.Vector3(1, 0.3, 0) },
       // The wind on the ground, how far it has carried the clouds, how overcast it is, and lying snow.
-      uWind: { value: new THREE.Vector2(0.3, 0.1) }, uCloud: { value: new THREE.Vector2() }, uCloudK: { value: 0.2 }, uSnowC: { value: 0 },
+      uWind: { value: new THREE.Vector2(0.3, 0.1) }, uCloud: { value: new THREE.Vector2() }, uCloudK: { value: 0.2 }, uCloudT: { value: 0.3 }, uSnowC: { value: 0 },
       // How hard the track worn into each cell has become, in red.
       tTrail: { value: black },
     };
@@ -331,12 +331,12 @@ const World = (() => {
       // The land alone again, for the distance to the nearest road.
       // Green is the shadow of a passing cloud and blue the banks fog drifts in, both carried on the wind. Alpha is
       // how hard the track worn there has become.
-      const landMat = new THREE.ShaderMaterial({ uniforms: { tDetail: SH.tDetail, uCloud: SH.uCloud, tTrail: SH.tTrail, uMap: SH.uMap }, vertexShader: `
+      const landMat = new THREE.ShaderMaterial({ uniforms: { tDetail: SH.tDetail, uCloud: SH.uCloud, uCloudT: SH.uCloudT, tTrail: SH.tTrail, uMap: SH.uMap }, vertexShader: `
         attribute float aRoad; varying float vR; varying vec3 vW;
         void main() { vR = aRoad; vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }`, fragmentShader: `
-        uniform sampler2D tDetail, tTrail; uniform vec2 uCloud; uniform float uMap; varying float vR; varying vec3 vW;
+        uniform sampler2D tDetail, tTrail; uniform vec2 uCloud; uniform float uMap, uCloudT; varying float vR; varying vec3 vW;
         void main() {
-          float cl = 1.0 - smoothstep(0.3, 0.62, texture2D(tDetail, vW.xz * 0.006 + uCloud).r);
+          float cl = 1.0 - smoothstep(uCloudT, uCloudT + 0.32, texture2D(tDetail, vW.xz * 0.006 + uCloud).r);
           float fb = texture2D(tDetail, vW.xz * 0.013 + uCloud * 0.7 + 0.37).g;
           gl_FragColor = vec4(min(vR, 20.0), cl, fb, texture2D(tTrail, vW.xz / uMap).r);
         }` });
@@ -1493,7 +1493,7 @@ const World = (() => {
     }
 
     // The sky: weather from the rules, eased so a change comes over a few seconds, and the hour.
-    const sky = { rain: 0, storm: 0, fog: 0, snow: 0, cloud: 0, cover: 0, flood: 0, wet: 0, night: 0, mist: 0, day: 0.3, kind: 'clear', windS: 0, sun: [0, 1, 0], mul: [1, 1, 1], add: [0, 0, 0] };
+    const sky = { clear: 1, rain: 0, storm: 0, fog: 0, snow: 0, sand: 0, blizzard: 0, cloud: 0, cover: 0, flood: 0, wet: 0, cloudA: 0, cloudG: 0, rayK: 0, night: 0, mist: 0, day: 0.3, kind: 'clear', windS: 0, sun: [0, 1, 0], mul: [1, 1, 1], add: [0, 0, 0] };
     const DAY = [
       // time of day, colour multiplied, colour added, night
       [0.00, [1.0, 0.92, 0.93], [0.02, 0.0, 0.02], 0.2],
@@ -1518,14 +1518,16 @@ const World = (() => {
     function updateSky(dt) {
       if (!S) return;
       const w = studySky ? Object.assign({}, Rules.sky(S), studySky) : Rules.sky(S), k = studySky ? 1 : 1 - Math.exp(-dt * 0.8);
-      for (const key of ['rain', 'storm', 'fog', 'snow', 'cloud', 'cover', 'flood']) sky[key] += (w[key] - sky[key]) * k;
+      for (const key of ['clear', 'rain', 'storm', 'fog', 'snow', 'sand', 'blizzard', 'cloud', 'cover', 'flood']) sky[key] += (w[key] - sky[key]) * k;
       sky.kind = w.kind;
       // The ground stays wet a while after the rain.
       sky.wet += ((w.rain > 0.2 ? 1 : 0) - sky.wet) * (studySky ? 1 : 1 - Math.exp(-dt * (w.rain > 0.2 ? 0.15 : 0.012)));
       const U = SH.uWind.value;
       U.x += (w.wind[0] - U.x) * k; U.y += (w.wind[1] - U.y) * k;
       SH.uCloud.value.x += (U.x * 0.008 + 0.0004) * dt; SH.uCloud.value.y += U.y * 0.008 * dt;
-      SH.uCloudK.value = clamp(0.2 + 0.55 * sky.cloud + 0.6 * sky.rain + 0.2 * sky.fog + 0.3 * sky.snow, 0, 1);
+      SH.uCloudK.value = clamp(0.2 + 0.55 * sky.cloud + 0.6 * sky.rain + 0.2 * sky.fog + 0.3 * sky.snow + 0.2 * sky.sand + 0.6 * sky.blizzard, 0, 1);
+      // How much of the sky the clouds cover: a few in fair weather, broken cloud when overcast, a lid in rain.
+      SH.uCloudT.value = clamp(0.2 + 0.18 * sky.cloud + 0.3 * sky.rain + 0.1 * sky.fog + 0.22 * sky.snow + 0.05 * sky.sand + 0.3 * sky.blizzard, 0.15, 0.55);
       SH.uSnowC.value = sky.cover;
       waterRise.value = Math.min(1.25, sky.flood) * 0.26;
       right3.setFromMatrixColumn(camera.matrixWorld, 0);
@@ -1541,6 +1543,12 @@ const World = (() => {
       sky.mist = Math.max(1 - smooth(0.05, 0.17, d), smooth(0.9, 1.0, d) * 0.6) * (1 - 0.7 * sky.rain) * (1 - 0.4 * Math.min(1, Math.hypot(U.x, U.y)));
       // The look's own sun, or its light's, or the hour's.
       sky.sun = style.sun ? style.sun({ cam, day: d, light, SUN, sunAt }) : light ? light.sun : sunAt(d);
+      // The clouds as seen from above, see-through, greyer as the weather worsens and hidden in fog or blown sand.
+      sky.cloudA = clamp(0.3 + 0.2 * sky.cloud + 0.15 * sky.rain + 0.1 * sky.snow + 0.15 * sky.blizzard - 0.35 * sky.fog - 0.3 * sky.sand, 0, 0.5) * (1 - 0.5 * sky.night);
+      sky.cloudG = clamp(sky.rain + 0.5 * sky.storm + 0.6 * sky.blizzard + 0.3 * sky.snow, 0, 1);
+      // Shafts of sun through gaps in broken cloud, longest and strongest with the sun low, none by night.
+      const up = sky.sun[1] / Math.hypot(...sky.sun), sunUp = clamp(up * 4, 0, 1) * (1 - 0.45 * smooth(0.55, 0.9, up)) * (1 - sky.night);
+      sky.rayK = sunUp * clamp(0.5 * sky.clear + sky.cloud + 0.25 * sky.rain - 0.8 * sky.fog - 0.8 * sky.sand - 0.5 * sky.blizzard - 0.3 * sky.storm, 0, 1);
     }
 
     function buildSets() {
