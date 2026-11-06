@@ -148,6 +148,14 @@ const Rules = (() => {
     oxcart: ride({ name: 'Ox Cart', sym: 'sup', cost: 350, hp: 300, speed: 1.9, sight: 6, r: 0.9, cargo: 300, note: 'Hauls ore to the smelter.' }),
     wagon: ride({ name: 'Ore Wagon', sym: 'sup', cost: 420, time: 8, hp: 380, speed: 2.2, sight: 6, r: 0.9, cargo: 350, note: 'Hauls ore to the smelter.' }),
     lorry: ride({ name: 'Steam Lorry', sym: 'sup', cost: 550, time: 9, hp: 500, armor: 'heavy', speed: 2.4, sight: 7, r: 0.95, cargo: 420, note: 'Mines ore and hauls it to a refinery.' }),
+    // Trade caravans: they run goods between their side's headquarters and the towns it holds, and are paid at
+    // each post by the length of the leg they ran.
+    tradecart: ride({ name: 'Trade Cart', sym: 'trade', cost: 200, time: 7, hp: 220, speed: 2.1, sight: 6, r: 0.85, trade: 1, limit: 8, note: 'Carries goods between your towns. Paid each trip, more the farther it goes.' }),
+    caravan: ride({ name: 'Caravan', sym: 'trade', cost: 220, time: 7, hp: 260, speed: 2.3, sight: 6, r: 0.9, trade: 1, limit: 8, note: 'Carries goods between your towns. Paid each trip, more the farther it goes.' }),
+    tradewagon: ride({ name: 'Trade Wagon', sym: 'trade', cost: 240, time: 7, hp: 300, speed: 2.5, sight: 6, r: 0.9, trade: 1, limit: 8, note: 'Carries goods between your towns. Paid each trip, more the farther it goes.' }),
+    freightlorry: ride({ name: 'Freight Lorry', sym: 'trade', cost: 280, time: 8, hp: 360, armor: 'heavy', speed: 3, sight: 7, r: 0.95, trade: 1, limit: 8, note: 'Carries goods between your towns. Paid each trip, more the farther it goes.' }),
+    freighter: ride({ name: 'Freight Truck', sym: 'trade', cost: 320, time: 8, hp: 420, armor: 'heavy', speed: 3.6, sight: 7, r: 0.95, trade: 1, limit: 8, note: 'Carries goods between your towns. Paid each trip, more the farther it goes.' }),
+    hovfreight: ride({ name: 'Hover Freighter', sym: 'trade', cost: 360, time: 8, hp: 480, armor: 'heavy', speed: 4.2, sight: 8, r: 0.95, trade: 1, limit: 8, note: 'Carries goods between your towns. Paid each trip, more the farther it goes.' }),
     hauler: ride({ name: 'Hauler', sym: 'sup', cost: 800, time: 10, hp: 760, armor: 'heavy', speed: 3, sight: 8, r: 0.95, cargo: 600, note: 'Hover hauler. Mines ore fast.' }),
     outrider: ride({ name: 'Outriders', sym: 'rec', cost: 140, time: 5, hp: 110, speed: 4.6, sight: 13, r: 0.6, move: 'foot', weapons: ['horsebow'], note: 'Horse archers. Fast, and see far.' }),
     dragoon: ride({ name: 'Dragoons', sym: 'rec', cost: 180, time: 5, hp: 140, speed: 4.6, sight: 13, r: 0.6, move: 'foot', weapons: ['carbine'], note: 'Mounted carbines. Fast, and see far.' }),
@@ -187,6 +195,7 @@ const Rules = (() => {
     eng: ['engineer'],
     hero: [null, 'hero'],
     truck: ['oxcart', 'wagon', null, 'lorry', 'truck', 'hauler'],
+    trade: ['tradecart', 'caravan', 'tradewagon', 'freightlorry', 'freighter', 'hovfreight'],
     rec: ['outrider', null, 'dragoon', 'motorbike', 'humvee', 'hoverscout'],
     mount: ['chariot', 'knight', 'cuirassier', 'armcar', 'tank', 'mech'],
     ifv: [null, null, null, 'halftrack', 'ifv', 'hoverapc'],
@@ -199,7 +208,7 @@ const Rules = (() => {
     jet: [null, null, null, 'biplane', 'jet', 'stealth'],
   };
   // The sidebar's lines, by the building that trains them.
-  const LINE_ORDER = { inf: ['inf', 'at', 'eng', 'snp', 'hero'], veh: ['truck', 'rec', 'mount', 'ifv', 'aa', 'sup', 'siege', 'heavy'], air: ['fpv', 'heli', 'jet'] };
+  const LINE_ORDER = { inf: ['inf', 'at', 'eng', 'snp', 'hero'], veh: ['truck', 'trade', 'rec', 'mount', 'ifv', 'aa', 'sup', 'siege', 'heavy'], air: ['fpv', 'heli', 'jet'] };
   function formOf(line, age) {
     const L = LINES[line];
     if (!L) return null;
@@ -993,13 +1002,44 @@ const Rules = (() => {
     const war = [];
     for (const k in h.acc) if (h.acc[k] >= 1) war.push(k / n | 0, k % n, Math.round(h.acc[k]));
     h.war.push(war); h.acc = {};
+    // For the war map: where each side's main army stood, as the middle of its units around the densest worth of
+    // them, and where the fighting fell. A record made before these were kept is padded to match.
+    h.pos = h.pos || []; h.fight = h.fight || [];
+    while (h.pos.length < h.t.length - 1) h.pos.push(null);
+    while (h.fight.length < h.t.length - 1) h.fight.push(null);
+    const pos = [], bins = new Map();
+    for (const e of S.ents) {
+      if (e.b || e.hp <= 0 || e.team < 0 || e.team >= n || e.d.cargo || e.d.trade || !armed(e)) continue;
+      const k = e.team * 4096 + ((e.y / 12) | 0) * 64 + ((e.x / 12) | 0), v = worth(e.d);
+      bins.set(k, (bins.get(k) || 0) + v);
+    }
+    for (let t = 0; t < n; t++) {
+      let best = -1, bw = 0;
+      for (const [k, v] of bins) if ((k / 4096 | 0) === t && v > bw) { bw = v; best = k; }
+      if (best < 0 || bw < 300) { pos.push(null); continue; }
+      const bx = (best % 64) * 12 + 6, by = ((best % 4096) / 64 | 0) * 12 + 6;
+      let sx = 0, sy = 0, sw = 0;
+      for (const e of S.ents) {
+        if (e.b || e.hp <= 0 || e.team !== t || e.d.cargo || e.d.trade || !armed(e) || mhypot(e.x - bx, e.y - by) > 16) continue;
+        const v = worth(e.d); sx += e.x * v; sy += e.y * v; sw += v;
+      }
+      pos.push(sw ? [Math.round(sx / sw * 2) / 2, Math.round(sy / sw * 2) / 2, Math.round(sw)] : null);
+    }
+    h.pos.push(pos);
+    const fa = h.fa || [0, 0, 0];
+    h.fight.push(fa[2] >= 60 ? [Math.round(fa[0] / fa[2] * 2) / 2, Math.round(fa[1] / fa[2] * 2) / 2, Math.round(fa[2])] : null);
+    h.fa = [0, 0, 0];
     // Past the most samples, every other one goes, its fighting folded into the next one kept.
     if (h.t.length >= HIST_MAX) {
       const L = h.t.length, kept = i => i % 2 === 0 || i === L - 1, keep = a => a.filter((_, i) => kept(i));
       const war2 = [];
       let carry = [];
       for (let i = 0; i < h.war.length; i++) if (kept(i)) { war2.push(carry.concat(h.war[i])); carry = []; } else carry.push(...h.war[i]);
-      h.t = keep(h.t); h.war = war2;
+      // A dropped sample's fighting goes to the kept one after it, the larger of the two standing for both.
+      const f2 = [];
+      let cf = null;
+      for (let i = 0; i < h.fight.length; i++) { const f = h.fight[i], big = !cf ? f : !f ? cf : cf[2] > f[2] ? [cf[0], cf[1], cf[2] + f[2]] : [f[0], f[1], cf[2] + f[2]]; if (kept(i)) { f2.push(big); cf = null; } else cf = big; }
+      h.t = keep(h.t); h.war = war2; h.pos = keep(h.pos); h.fight = f2;
       for (const a of h.P) if (a) for (const k of SERIES) a[k] = keep(a[k]);
       h.every *= 2;
     }
@@ -1149,6 +1189,7 @@ const Rules = (() => {
     S.ents.push(u); S.byId.set(u.id, u);
     Object.assign(u, o);
     if (d.cargo) u.ord = { t: 'harvest' };
+    if (d.trade) u.ord = { t: 'trade' };
     return u;
   }
 
@@ -1674,6 +1715,8 @@ const Rules = (() => {
     if (team >= 0 && atPeace(S, team, t.team)) return;
     dmg *= coverScale(S, t, by);
     t.hp -= dmg;
+    // Where the harm between sides falls, gathered for the war map's battles.
+    if (S.hist && team >= 0 && team !== t.team) { const f = S.hist.fa || (S.hist.fa = [0, 0, 0]); f[0] += t.x * dmg; f[1] += t.y * dmg; f[2] += dmg; }
     t.under = S.tick;
     const P = S.P[t.team];
     if (t.b && t.team !== team) {
@@ -2243,6 +2286,8 @@ const Rules = (() => {
     }
 
     if (d.cargo && u.ord && u.ord.t === 'harvest') { truckTick(S, u); return; }
+    // A caravan with nothing else to do trades.
+    if (d.trade && (!u.ord || u.ord.t === 'trade')) { tradeTick(S, u); return; }
     if (u.ord && u.ord.t === 'bridge') return bridgeGo(S, u, u.ord);
     if (u.ord && u.ord.t === 'mend') return mendGo(S, u, u.ord);
 
@@ -2479,6 +2524,35 @@ const Rules = (() => {
       }
     }
     if (changed) territory(S);
+  }
+
+  // Trade. A caravan runs goods between its side's posts, the headquarters and the towns it holds, always on to the
+  // post farthest from where it stands, and is paid at each by the length of the leg it ran. A post lost on the
+  // way sends it to the next.
+  const TRADE_K = 0.9;
+  function postsOf(S, team) {
+    const out = [];
+    for (const e of S.ents) if (e.b && e.team === team && e.hp > 0 && (e.kind === 'hq' || e.kind === 'fob')) out.push([e.x, e.y]);
+    for (const t of S.towns) if (t.owner === team) out.push([t.x, t.y]);
+    return out;
+  }
+  function tradeTick(S, u) {
+    let o = u.ord;
+    if (!o || o.t !== 'trade') o = u.ord = { t: 'trade' };
+    if (o.x === undefined || (S.tick % HZ === u.id % HZ && !postsOf(S, u.team).some(p => mhypot(p[0] - o.x, p[1] - o.y) < 0.5))) {
+      const posts = postsOf(S, u.team);
+      o.x = undefined;
+      if (posts.length < 2) { u.v = 0; return; }
+      let far = null, fd = -1, near = null, nd = 1e9;
+      for (const p of posts) { const d = mhypot(p[0] - u.x, p[1] - u.y); if (d > fd) { fd = d; far = p; } if (d < nd) { nd = d; near = p; } }
+      o.x = far[0]; o.y = far[1];
+      if (o.fx === undefined) { o.fx = near[0]; o.fy = near[1]; }
+    }
+    if (drive(S, u, o.x, o.y, 3.5)) {
+      const P = S.P[u.team], pay = Math.round(TRADE_K * mhypot(o.x - o.fx, o.y - o.fy) * P.income);
+      if (pay > 0) { P.supply += pay; P.stats.townIn += pay; S.ev.push({ t: 'trade', team: u.team, x: u.x, y: u.y, n: pay }); }
+      o.fx = o.x; o.fy = o.y; o.x = undefined;
+    }
   }
 
   function stepEconomy(S) {

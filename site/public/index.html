@@ -525,7 +525,7 @@ body[data-look="ink"] .sheet { box-shadow: 4px 4px 0 var(--ink); }
     <div id="settings" hidden role="dialog" aria-label="Settings">
       <div class="choice"><h2>Look</h2><div id="s-look" class="two"></div></div>
       <div class="choice"><h2>Paper</h2><div id="s-scheme"><button data-v="light">Light</button><button data-v="dark">Dark</button><button data-v="auto">As the system</button></div></div>
-      <p id="build">Build dd4f165 2026-11-05 18:37</p>
+      <p id="build">Build 1ac866a 2026-11-05 18:49</p>
     </div>
     <div id="banner" hidden></div>
     <button id="update" hidden>A new version of Dead Ground is out. <b>Reload</b></button>
@@ -773,6 +773,14 @@ const Rules = (() => {
     oxcart: ride({ name: 'Ox Cart', sym: 'sup', cost: 350, hp: 300, speed: 1.9, sight: 6, r: 0.9, cargo: 300, note: 'Hauls ore to the smelter.' }),
     wagon: ride({ name: 'Ore Wagon', sym: 'sup', cost: 420, time: 8, hp: 380, speed: 2.2, sight: 6, r: 0.9, cargo: 350, note: 'Hauls ore to the smelter.' }),
     lorry: ride({ name: 'Steam Lorry', sym: 'sup', cost: 550, time: 9, hp: 500, armor: 'heavy', speed: 2.4, sight: 7, r: 0.95, cargo: 420, note: 'Mines ore and hauls it to a refinery.' }),
+    // Trade caravans: they run goods between their side's headquarters and the towns it holds, and are paid at
+    // each post by the length of the leg they ran.
+    tradecart: ride({ name: 'Trade Cart', sym: 'trade', cost: 200, time: 7, hp: 220, speed: 2.1, sight: 6, r: 0.85, trade: 1, limit: 8, note: 'Carries goods between your towns. Paid each trip, more the farther it goes.' }),
+    caravan: ride({ name: 'Caravan', sym: 'trade', cost: 220, time: 7, hp: 260, speed: 2.3, sight: 6, r: 0.9, trade: 1, limit: 8, note: 'Carries goods between your towns. Paid each trip, more the farther it goes.' }),
+    tradewagon: ride({ name: 'Trade Wagon', sym: 'trade', cost: 240, time: 7, hp: 300, speed: 2.5, sight: 6, r: 0.9, trade: 1, limit: 8, note: 'Carries goods between your towns. Paid each trip, more the farther it goes.' }),
+    freightlorry: ride({ name: 'Freight Lorry', sym: 'trade', cost: 280, time: 8, hp: 360, armor: 'heavy', speed: 3, sight: 7, r: 0.95, trade: 1, limit: 8, note: 'Carries goods between your towns. Paid each trip, more the farther it goes.' }),
+    freighter: ride({ name: 'Freight Truck', sym: 'trade', cost: 320, time: 8, hp: 420, armor: 'heavy', speed: 3.6, sight: 7, r: 0.95, trade: 1, limit: 8, note: 'Carries goods between your towns. Paid each trip, more the farther it goes.' }),
+    hovfreight: ride({ name: 'Hover Freighter', sym: 'trade', cost: 360, time: 8, hp: 480, armor: 'heavy', speed: 4.2, sight: 8, r: 0.95, trade: 1, limit: 8, note: 'Carries goods between your towns. Paid each trip, more the farther it goes.' }),
     hauler: ride({ name: 'Hauler', sym: 'sup', cost: 800, time: 10, hp: 760, armor: 'heavy', speed: 3, sight: 8, r: 0.95, cargo: 600, note: 'Hover hauler. Mines ore fast.' }),
     outrider: ride({ name: 'Outriders', sym: 'rec', cost: 140, time: 5, hp: 110, speed: 4.6, sight: 13, r: 0.6, move: 'foot', weapons: ['horsebow'], note: 'Horse archers. Fast, and see far.' }),
     dragoon: ride({ name: 'Dragoons', sym: 'rec', cost: 180, time: 5, hp: 140, speed: 4.6, sight: 13, r: 0.6, move: 'foot', weapons: ['carbine'], note: 'Mounted carbines. Fast, and see far.' }),
@@ -812,6 +820,7 @@ const Rules = (() => {
     eng: ['engineer'],
     hero: [null, 'hero'],
     truck: ['oxcart', 'wagon', null, 'lorry', 'truck', 'hauler'],
+    trade: ['tradecart', 'caravan', 'tradewagon', 'freightlorry', 'freighter', 'hovfreight'],
     rec: ['outrider', null, 'dragoon', 'motorbike', 'humvee', 'hoverscout'],
     mount: ['chariot', 'knight', 'cuirassier', 'armcar', 'tank', 'mech'],
     ifv: [null, null, null, 'halftrack', 'ifv', 'hoverapc'],
@@ -824,7 +833,7 @@ const Rules = (() => {
     jet: [null, null, null, 'biplane', 'jet', 'stealth'],
   };
   // The sidebar's lines, by the building that trains them.
-  const LINE_ORDER = { inf: ['inf', 'at', 'eng', 'snp', 'hero'], veh: ['truck', 'rec', 'mount', 'ifv', 'aa', 'sup', 'siege', 'heavy'], air: ['fpv', 'heli', 'jet'] };
+  const LINE_ORDER = { inf: ['inf', 'at', 'eng', 'snp', 'hero'], veh: ['truck', 'trade', 'rec', 'mount', 'ifv', 'aa', 'sup', 'siege', 'heavy'], air: ['fpv', 'heli', 'jet'] };
   function formOf(line, age) {
     const L = LINES[line];
     if (!L) return null;
@@ -1618,13 +1627,44 @@ const Rules = (() => {
     const war = [];
     for (const k in h.acc) if (h.acc[k] >= 1) war.push(k / n | 0, k % n, Math.round(h.acc[k]));
     h.war.push(war); h.acc = {};
+    // For the war map: where each side's main army stood, as the middle of its units around the densest worth of
+    // them, and where the fighting fell. A record made before these were kept is padded to match.
+    h.pos = h.pos || []; h.fight = h.fight || [];
+    while (h.pos.length < h.t.length - 1) h.pos.push(null);
+    while (h.fight.length < h.t.length - 1) h.fight.push(null);
+    const pos = [], bins = new Map();
+    for (const e of S.ents) {
+      if (e.b || e.hp <= 0 || e.team < 0 || e.team >= n || e.d.cargo || e.d.trade || !armed(e)) continue;
+      const k = e.team * 4096 + ((e.y / 12) | 0) * 64 + ((e.x / 12) | 0), v = worth(e.d);
+      bins.set(k, (bins.get(k) || 0) + v);
+    }
+    for (let t = 0; t < n; t++) {
+      let best = -1, bw = 0;
+      for (const [k, v] of bins) if ((k / 4096 | 0) === t && v > bw) { bw = v; best = k; }
+      if (best < 0 || bw < 300) { pos.push(null); continue; }
+      const bx = (best % 64) * 12 + 6, by = ((best % 4096) / 64 | 0) * 12 + 6;
+      let sx = 0, sy = 0, sw = 0;
+      for (const e of S.ents) {
+        if (e.b || e.hp <= 0 || e.team !== t || e.d.cargo || e.d.trade || !armed(e) || mhypot(e.x - bx, e.y - by) > 16) continue;
+        const v = worth(e.d); sx += e.x * v; sy += e.y * v; sw += v;
+      }
+      pos.push(sw ? [Math.round(sx / sw * 2) / 2, Math.round(sy / sw * 2) / 2, Math.round(sw)] : null);
+    }
+    h.pos.push(pos);
+    const fa = h.fa || [0, 0, 0];
+    h.fight.push(fa[2] >= 60 ? [Math.round(fa[0] / fa[2] * 2) / 2, Math.round(fa[1] / fa[2] * 2) / 2, Math.round(fa[2])] : null);
+    h.fa = [0, 0, 0];
     // Past the most samples, every other one goes, its fighting folded into the next one kept.
     if (h.t.length >= HIST_MAX) {
       const L = h.t.length, kept = i => i % 2 === 0 || i === L - 1, keep = a => a.filter((_, i) => kept(i));
       const war2 = [];
       let carry = [];
       for (let i = 0; i < h.war.length; i++) if (kept(i)) { war2.push(carry.concat(h.war[i])); carry = []; } else carry.push(...h.war[i]);
-      h.t = keep(h.t); h.war = war2;
+      // A dropped sample's fighting goes to the kept one after it, the larger of the two standing for both.
+      const f2 = [];
+      let cf = null;
+      for (let i = 0; i < h.fight.length; i++) { const f = h.fight[i], big = !cf ? f : !f ? cf : cf[2] > f[2] ? [cf[0], cf[1], cf[2] + f[2]] : [f[0], f[1], cf[2] + f[2]]; if (kept(i)) { f2.push(big); cf = null; } else cf = big; }
+      h.t = keep(h.t); h.war = war2; h.pos = keep(h.pos); h.fight = f2;
       for (const a of h.P) if (a) for (const k of SERIES) a[k] = keep(a[k]);
       h.every *= 2;
     }
@@ -1774,6 +1814,7 @@ const Rules = (() => {
     S.ents.push(u); S.byId.set(u.id, u);
     Object.assign(u, o);
     if (d.cargo) u.ord = { t: 'harvest' };
+    if (d.trade) u.ord = { t: 'trade' };
     return u;
   }
 
@@ -2299,6 +2340,8 @@ const Rules = (() => {
     if (team >= 0 && atPeace(S, team, t.team)) return;
     dmg *= coverScale(S, t, by);
     t.hp -= dmg;
+    // Where the harm between sides falls, gathered for the war map's battles.
+    if (S.hist && team >= 0 && team !== t.team) { const f = S.hist.fa || (S.hist.fa = [0, 0, 0]); f[0] += t.x * dmg; f[1] += t.y * dmg; f[2] += dmg; }
     t.under = S.tick;
     const P = S.P[t.team];
     if (t.b && t.team !== team) {
@@ -2868,6 +2911,8 @@ const Rules = (() => {
     }
 
     if (d.cargo && u.ord && u.ord.t === 'harvest') { truckTick(S, u); return; }
+    // A caravan with nothing else to do trades.
+    if (d.trade && (!u.ord || u.ord.t === 'trade')) { tradeTick(S, u); return; }
     if (u.ord && u.ord.t === 'bridge') return bridgeGo(S, u, u.ord);
     if (u.ord && u.ord.t === 'mend') return mendGo(S, u, u.ord);
 
@@ -3104,6 +3149,35 @@ const Rules = (() => {
       }
     }
     if (changed) territory(S);
+  }
+
+  // Trade. A caravan runs goods between its side's posts, the headquarters and the towns it holds, always on to the
+  // post farthest from where it stands, and is paid at each by the length of the leg it ran. A post lost on the
+  // way sends it to the next.
+  const TRADE_K = 0.9;
+  function postsOf(S, team) {
+    const out = [];
+    for (const e of S.ents) if (e.b && e.team === team && e.hp > 0 && (e.kind === 'hq' || e.kind === 'fob')) out.push([e.x, e.y]);
+    for (const t of S.towns) if (t.owner === team) out.push([t.x, t.y]);
+    return out;
+  }
+  function tradeTick(S, u) {
+    let o = u.ord;
+    if (!o || o.t !== 'trade') o = u.ord = { t: 'trade' };
+    if (o.x === undefined || (S.tick % HZ === u.id % HZ && !postsOf(S, u.team).some(p => mhypot(p[0] - o.x, p[1] - o.y) < 0.5))) {
+      const posts = postsOf(S, u.team);
+      o.x = undefined;
+      if (posts.length < 2) { u.v = 0; return; }
+      let far = null, fd = -1, near = null, nd = 1e9;
+      for (const p of posts) { const d = mhypot(p[0] - u.x, p[1] - u.y); if (d > fd) { fd = d; far = p; } if (d < nd) { nd = d; near = p; } }
+      o.x = far[0]; o.y = far[1];
+      if (o.fx === undefined) { o.fx = near[0]; o.fy = near[1]; }
+    }
+    if (drive(S, u, o.x, o.y, 3.5)) {
+      const P = S.P[u.team], pay = Math.round(TRADE_K * mhypot(o.x - o.fx, o.y - o.fy) * P.income);
+      if (pay > 0) { P.supply += pay; P.stats.townIn += pay; S.ev.push({ t: 'trade', team: u.team, x: u.x, y: u.y, n: pay }); }
+      o.fx = o.x; o.fy = o.y; o.x = undefined;
+    }
   }
 
   function stepEconomy(S) {
@@ -3730,7 +3804,10 @@ const AI = (() => {
     const buy = k => R.push(S, me.team, { c: 'train', kind: k });
     if (has(P, 'factory') && P.q.veh.length < 2) {
       const truck = R.formOf('truck', P.tech);
+      // Caravans once there are two posts to run between, a few more for a stronger commander.
+      const trade = R.formOf('trade', P.tech), posts = 1 + S.towns.filter(t => t.owner === me.team).length, want = me.level === 'veteran' ? 4 : me.level === 'regular' ? 3 : 2;
       if (trucks < Math.min(refs * 2, 6) && !queuedIn(P, 'veh', truck)) R.push(S, me.team, { c: 'train', kind: truck });
+      else if (trade && posts >= 2 && R.lineCount(P, 'trade') < want && !queuedIn(P, 'veh', trade) && P.supply > 500) R.push(S, me.team, { c: 'train', kind: trade });
       else if (ready('veh')) {
         const mix = forms(P, P.supply > 3000 ? RICH : VEH_MIX[P.tech]);
         const k = mix[me.plan++ % mix.length];
@@ -5327,6 +5404,55 @@ const Models = (() => {
       for (const s of [-1, 1]) { b.box(0.06, 0.22, 0.01, -0.36, 0.42, s * 0.305, P.red, TB); b.box(0.22, 0.06, 0.01, -0.36, 0.5, s * 0.305, P.red, TB); }
       units.ambulance = [part('hull', b)];
     }
+    // Trade caravans, which run goods between a side's towns: a cart, a wagon train and a covered wagon of crates,
+    // bales and casks, then a lorry under a canvas tilt and a box truck. Each carries the side's mark.
+    const goods = (g, x, y) => {
+      g.box(0.2, 0.16, 0.18, x - 0.14, y + 0.08, -0.11, A.wood, T); g.box(0.18, 0.14, 0.16, x + 0.1, y + 0.07, 0.11, A.woodDk, T);
+      g.cyl(0.08, 0.08, 0.32, x + 0.02, y + 0.2, 0, A.canvas, { axis: 'z', seg: 8 });
+      g.cyl(0.07, 0.07, 0.14, x + 0.2, y + 0.08, -0.12, A.woodDk, { seg: 8 });
+    };
+    {
+      const b = G(), hips = [], wh = [];
+      horse(b, 0.55, 0, 0x8a6a4a, { cloth: false, rig: hips });
+      for (const s of [-1, 1]) cartWheel(b, -0.3, s * 0.27, 0.2, 0.04, wh);
+      b.box(0.66, 0.06, 0.46, -0.3, 0.28, 0, A.wood);
+      goods(b, -0.32, 0.31); mark(b, 0.14, 0.2, -0.62, 0.42, 0);
+      units.tradecart = [part('hull', b), ...horseLegs(0x8a6a4a, hips), wheelPart(wh)];
+      units.tradecart.gait = GAIT.horse;
+    }
+    {
+      const b = G(), h1 = [], h2 = [], wh = [];
+      horse(b, 0.62, 0.12, 0x6b4a32, { cloth: false, rig: h1 }); horse(b, 0.62, -0.12, 0x3a2a20, { cloth: false, rig: h2, off: 0.5 });
+      for (const x of [-0.08, -0.62]) for (const s of [-1, 1]) cartWheel(b, x, s * 0.3, 0.17, 0.04, wh);
+      b.box(0.8, 0.06, 0.5, -0.35, 0.3, 0, A.wood, T);
+      goods(b, -0.2, 0.33); goods(b, -0.52, 0.33); mark(b, 0.14, 0.2, -0.76, 0.45, 0);
+      units.caravan = [part('hull', b), ...horseLegs(0x6b4a32, h1), ...horseLegs(0x3a2a20, h2), wheelPart(wh)];
+      units.caravan.gait = GAIT.horse;
+    }
+    {
+      const b = G(), hips = [], wh = [];
+      horse(b, 0.55, 0, 0x6b4a32, { cloth: false, rig: hips });
+      for (const s of [-1, 1]) cartWheel(b, -0.3, s * 0.27, 0.2, 0.04, wh);
+      b.box(0.66, 0.06, 0.46, -0.3, 0.28, 0, A.wood);
+      b.cyl(0.23, 0.23, 0.62, -0.3, 0.36, 0, A.canvas, { axis: 'x', seg: 12, sy: 1.15 });
+      b.cyl(0.07, 0.07, 0.14, -0.68, 0.36, 0.12, A.woodDk, { seg: 8 }); mark(b, 0.12, 0.18, -0.3, 0.6, 0);
+      units.tradewagon = [part('hull', b), ...horseLegs(0x6b4a32, hips), wheelPart(wh)];
+      units.tradewagon.gait = GAIT.horse;
+    }
+    {
+      const b = G();
+      lorry(b, A.field);
+      b.box(0.74, 0.34, 0.6, -0.36, 0.38, 0, A.canvas, T); b.cyl(0.3, 0.3, 0.74, -0.36, 0.52, 0, A.canvas, { axis: 'x', seg: 12, sy: 0.45 });
+      mark(b, 0.2, 0.3, -0.36, 0.67, 0);
+      units.freightlorry = [part('hull', b)];
+    }
+    {
+      const b = G();
+      lorry(b, A.khaki);
+      b.box(0.8, 0.5, 0.62, -0.38, 0.4, 0, A.white, T); b.box(0.82, 0.08, 0.64, -0.38, 0.36, 0, A.khaki);
+      mark(b, 0.3, 0.3, -0.38, 0.655, 0);
+      units.freighter = [part('hull', b)];
+    }
     // AA lorry: twin guns on a pedestal in its bed.
     {
       const b = G();
@@ -5482,6 +5608,9 @@ const Models = (() => {
       b.prism([[-0.86, 0.4], [-0.9, 0.86], [0.36, 0.86], [0.36, 0.4]], 0.86, 0, 0, 0, A.exo, T);
       mark(b, 0.3, 0.6, 0.56, 0.865, 0);
       units.hauler = [part('hull', b), part('load', oreLoad([[-0.6, 0.12, 0.17], [-0.3, -0.14, 0.2], [-0.04, 0.12, 0.16], [-0.42, -0.2, 0.13]], 0.86), { pivot: [0, 0, 0], load: true })];
+      // Hover freighter: the hauler's barge with a sealed cargo pod on its bin.
+      const c = G(); c.box(1.1, 0.36, 0.7, -0.3, 1.04, 0, A.exo, T); c.box(1.12, 0.04, 0.72, -0.3, 1.0, 0, A.glow, GLOW); mark(c, 0.3, 0.4, -0.3, 1.225, 0);
+      units.hovfreight = [part('hull', b), part('pod', c)];
     }
     // Rail artillery: a hover sled with a long rail on a turntable.
     {
@@ -10479,6 +10608,7 @@ const Hud = (() => {
       case 'eng': g.moveTo(-a, -b * 0.4); g.lineTo(a, -b * 0.4); g.moveTo(-a, -b * 0.4); g.lineTo(-a, b); g.moveTo(0, -b * 0.4); g.lineTo(0, b); g.moveTo(a, -b * 0.4); g.lineTo(a, b); break;
       case 'snp': cross(); dot(b * 0.3); break;
       case 'hero': g.moveTo(-a * 0.3, -b); g.lineTo(a * 0.5, -b * 0.1); g.lineTo(-a * 0.1, b * 0.1); g.lineTo(a * 0.3, b); break;
+      case 'trade': g.rect(-a * 0.7, -b * 0.4, a * 1.4, b * 0.9); g.moveTo(-a * 0.7, -b * 0.4); g.lineTo(a * 0.7, b * 0.5); g.moveTo(a * 0.7, -b * 0.4); g.lineTo(-a * 0.7, b * 0.5); break;
       case 'sup': case 'sup2': g.moveTo(-a, b * 0.5); g.lineTo(a, b * 0.5); if (sym === 'sup2') { g.moveTo(0, -b); g.lineTo(0, b * 0.2); g.moveTo(-a * 0.4, -b * 0.4); g.lineTo(a * 0.4, -b * 0.4); } break;
       case 'rec': g.moveTo(-a, b); g.lineTo(a, -b); break;
       case 'ifv': oval(); g.moveTo(-a * 0.7, 0); g.lineTo(a * 0.7, 0); break;
@@ -10527,6 +10657,7 @@ const Hud = (() => {
       case 'chariot': beast(3.4, 0.2, 2.6, 1.4); box(-7.2, -2.2, 5.4, 3); ring(-4.6, 3, 2.4); ln([[-1.8, -0.6], [1, -0.2]]); dot(-4.6, -4.8, 1.3); ln([[-4.6, -3.5], [-4.6, -2.2]]); break;
       case 'elephant': g.beginPath(); g.ellipse(-1.5, -0.4, 5.6, 3.4, 0, 0, 6.3); g.fill(); for (const x of [-5.4, -2.2, 1.4]) box(x, 1.5, 2.2, 4.3); dot(4.6, -1.4, 2.8); g.lineWidth = 1.8; ln([[6.8, -0.4], [7.8, 2.6], [7.2, 5.4]]); g.lineWidth = 1.1; ln([[5.6, 1.2], [8.2, 1.6]]); box(-4, -6.6, 4.8, 2.2); break;
       case 'cart': case 'cart2': beast(4.2, 0, 2.4, 1.3); box(-7.6, -2.6, 7.2, 3.6); ring(-4, 3, 2.4); ln([[-0.4, -0.6], [2, -0.6]]); if (sym === 'cart2') { g.fillStyle = bg; box(-5.4, -1.3, 3, 1); box(-4.4, -2.3, 1, 3); } break;
+      case 'trade': box(-7, -3, 6, 5); box(0, -1.5, 5, 3.5); dot(-4.5, 3.5, 1.6); dot(2.5, 3.5, 1.6); ln([[5.5, 0], [8, 0]]); break;
       case 'sup': box(-7, -3, 9, 5); box(2.5, -1, 4.5, 3); dot(-4.5, 3.5, 1.6); dot(4, 3.5, 1.6); break;
       case 'sup2': box(-7, -3, 9, 5); box(2.5, -1, 4.5, 3); dot(-4.5, 3.5, 1.6); dot(4, 3.5, 1.6); g.fillStyle = bg; box(-4, -2.4, 3, 0.9); box(-3, -3.4, 0.9, 3); break;
       case 'rec': box(-6, -1.5, 12, 4); box(-2.5, -4, 4, 2.5); ln([[0, -3], [6, -4]]); dot(-3.5, 3.5, 1.5); dot(3.5, 3.5, 1.5); break;
@@ -10881,6 +11012,8 @@ const Hud = (() => {
 
     function orderIds() { return state.sel.filter(e => alive(e) && !e.b && e.team === team()).map(e => e.id); }
     function marker(x, y, color) { state.marks.push({ x, y, t: 0, color }); }
+    // A sum that rises from where it was earned, as a caravan's pay at a post.
+    function pop(x, y, text) { (state.pops || (state.pops = [])).push({ x, y, text, t: 0 }); }
 
     function smart(px, py, forceAttack) {
       const s = S(), t = team();
@@ -11904,6 +12037,15 @@ const Hud = (() => {
       drawNight(s, t); drawBridges(s, t); drawWires(); drawFires(); drawBirds(); drawLightning(dt);
       if (game.playing) { drawSkyNote(s); drawGroundTip(s, dt); }
 
+      for (let i = (state.pops || []).length - 1; i >= 0; i--) {
+        const q = state.pops[i];
+        q.t += dt;
+        if (q.t > 1.8) { state.pops.splice(i, 1); continue; }
+        const [x, y] = world.project(q.x, Rules.heightAt(s.map, q.x, q.y) + 1.5, q.y), ink = inked();
+        og.save(); og.globalAlpha = Math.min(1, (1.8 - q.t) / 0.5); og.textAlign = 'center'; og.font = ink ? `600 15px ${labelFont()}` : '700 15px "Barlow Condensed", system-ui, sans-serif';
+        og.lineWidth = 3; og.strokeStyle = ink ? 'rgba(250,244,228,0.95)' : 'rgba(0,0,0,0.7)'; og.strokeText(q.text, x, y - q.t * 18);
+        og.fillStyle = ink ? '#1f6b34' : '#7fe0a0'; og.fillText(q.text, x, y - q.t * 18); og.restore();
+      }
       for (let i = state.marks.length - 1; i >= 0; i--) {
         const m = state.marks[i];
         m.t += dt;
@@ -12171,7 +12313,7 @@ const Hud = (() => {
     }
 
     return {
-      state, pickTab, say, symbol, enter, leave, select, layoutMini,
+      state, pickTab, say, symbol, enter, leave, select, layoutMini, pop,
       reset() {
         state.sel = []; state.groups = {}; state.mode = null; state.marks = []; state.alerts = []; state.lastAlert = null; state.selKey = null; state.fogC = null; ro = { sup: -1, oil: -1 };
         world.setGhost(null); showBanner(''); $('log').textContent = '';
@@ -12209,7 +12351,7 @@ const Report = (() => {
   // The slots' colours, as on the map. Light paper takes the deeper plate colours so lines stand off it.
   const SLOT_CSS = ['#6fb0ff', '#ee3a22', '#6fd47f', '#b98af0', '#ffae52', '#4fd8d4', '#cdf044', '#c99a6c'];
   const SLOT_PLATE = ['#2f6fd6', '#c8402f', '#2f9a48', '#7a48c8', '#d8781a', '#1c9a98', '#9a9612', '#7a5230'];
-  const TABS = [['sum', 'Summary'], ['time', 'Timeline'], ['graph', 'Graphs'], ['mil', 'Military'], ['eco', 'Economy']];
+  const TABS = [['sum', 'Summary'], ['war', 'War map'], ['time', 'Timeline'], ['graph', 'Graphs'], ['mil', 'Military'], ['eco', 'Economy']];
   const SERIES = [
     { k: 'sc', name: 'Score', y: 'Score (points)' },
     { k: 'ar', name: 'Army', y: 'Army worth (supply)' },
@@ -12528,6 +12670,87 @@ const Report = (() => {
     return box;
   }
 
+  // ---- The war map -----------------------------------------------------------------------------------------
+
+  // The field drawn as a plan, as a history's battle map is: each side's main army as its line of march through the
+  // game, heavier where it was stronger, with arrows along it and a ring where it ended, and the game's great
+  // battles marked with crossed swords, the nearest town and the minute.
+  function warMap(c, tip, pane, o, list) {
+    const S = o.S, h = S.hist, M = S.map, MW = M.W, MH = M.H, I = inks();
+    const side = Math.min(pane.clientWidth || 600, 640);
+    c.style.height = side + 'px'; c.style.width = side + 'px'; c.style.maxWidth = '100%';
+    const { g, w } = fit(c), sc = w / MW, P = (x, y) => [x * sc, y * sc];
+    // The land: water washed, woods stippled, high ground a shade deeper, the paper left bare elsewhere.
+    g.fillStyle = I.ground; g.fillRect(0, 0, w, w);
+    const water = I.light || !I.ink ? '#bccbd6' : '#2f3a44', wood = I.light || !I.ink ? 'rgba(80,110,70,0.35)' : 'rgba(150,180,140,0.3)';
+    for (let y = 0; y < MH; y++) for (let x = 0; x < MW; x++) {
+      const gb = M.ground[y * MW + x], ht = Rules.terrainAt(M, x + 0.5, y + 0.5);
+      if ((gb & 7) === 7 && ht < 0.2) { g.fillStyle = water; g.fillRect(x * sc, y * sc, sc + 0.6, sc + 0.6); continue; }
+      if (ht > 1.2) { g.fillStyle = `rgba(90,70,50,${Math.min(0.16, (ht - 1.2) * 0.03)})`; g.fillRect(x * sc, y * sc, sc + 0.6, sc + 0.6); }
+      if ((gb & 8) && (x + y) % 2 === 0) { g.fillStyle = wood; g.fillRect((x + 0.3) * sc, (y + 0.3) * sc, Math.max(1, sc * 0.4), Math.max(1, sc * 0.4)); }
+    }
+    g.strokeStyle = I.light || !I.ink ? 'rgba(110,90,70,0.55)' : 'rgba(200,190,170,0.45)'; g.lineWidth = 1;
+    for (const r of M.roads || []) { g.beginPath(); r.forEach(([x, y], i) => i ? g.lineTo(x * sc, y * sc) : g.moveTo(x * sc, y * sc)); g.stroke(); }
+    g.font = `11px ${I.font}`; g.textAlign = 'center'; g.textBaseline = 'top';
+    const towns = S.towns.map(t => ({ x: t.x, y: t.y, name: `Town ${String.fromCharCode(65 + t.id)}` }));
+    for (const t of towns) { const [x, y] = P(t.x, t.y); g.fillStyle = I.dim; g.fillRect(x - 3, y - 3, 6, 6); g.fillText(t.name, x, y + 5); }
+    // The bases, each a square in its side's ink.
+    for (const x of list) { const b = S.bases[x.t]; if (!b) continue; const [bx, by] = P(b[0], b[1]); g.fillStyle = I.line(x.t); g.fillRect(bx - 5, by - 5, 10, 10); }
+    const pos = h.pos || [], ts = h.t.map(t => t / HZ);
+    let top = 1;
+    for (const p of pos) if (p) for (const q of p) if (q) top = Math.max(top, q[2]);
+    // Each side's march, smoothed over three samples, drawn a leg at a time so its weight follows its strength.
+    for (const x of list) {
+      const pts = pos.map((p, j) => p && p[x.t] ? { x: p[x.t][0], y: p[x.t][1], v: p[x.t][2], j } : null);
+      const sm = pts.map((q, j) => { if (!q) return null; let sx = 0, sy = 0, n = 0; for (let k = j - 1; k <= j + 1; k++) if (pts[k]) { sx += pts[k].x; sy += pts[k].y; n++; } return { x: sx / n, y: sy / n, v: q.v, j }; });
+      g.strokeStyle = I.line(x.t); g.fillStyle = I.line(x.t); g.lineCap = 'round'; g.lineJoin = 'round';
+      let last = null, since = 0;
+      for (const q of sm) {
+        if (!q) { last = null; continue; }
+        // A leap across the map is the main body changing from one group to another, not a march, so the line breaks.
+        if (last && Math.hypot(q.x - last.x, q.y - last.y) > 18) last = null;
+        if (last) {
+          const [ax, ay] = P(last.x, last.y), [bx, by] = P(q.x, q.y);
+          g.globalAlpha = 0.85; g.lineWidth = 1.4 + 4.6 * Math.sqrt(q.v / top);
+          g.beginPath(); g.moveTo(ax, ay); g.lineTo(bx, by); g.stroke();
+          since += Math.hypot(bx - ax, by - ay);
+          // An arrowhead every so far along the line, pointing the way it went.
+          if (since > 46 && Math.hypot(bx - ax, by - ay) > 2) {
+            since = 0; const an = Math.atan2(by - ay, bx - ax), s = 4 + g.lineWidth;
+            g.beginPath(); g.moveTo(bx, by); g.lineTo(bx - Math.cos(an - 0.45) * s, by - Math.sin(an - 0.45) * s); g.lineTo(bx - Math.cos(an + 0.45) * s, by - Math.sin(an + 0.45) * s); g.closePath(); g.fill();
+          }
+        }
+        last = q;
+      }
+      g.globalAlpha = 1;
+      const end = [...sm].reverse().find(Boolean);
+      if (end) { const [ex, ey] = P(end.x, end.y); g.lineWidth = 2; g.beginPath(); g.arc(ex, ey, 6, 0, 6.283); g.stroke(); }
+    }
+    // The battles: the fighting of samples near in place and time gathered into one, the greatest six marked.
+    const raw = [];
+    (h.fight || []).forEach((f, j) => { if (f) raw.push({ x: f[0], y: f[1], d: f[2], t: ts[j] || 0 }); });
+    raw.sort((a, b) => b.d - a.d);
+    const battles = [];
+    for (const f of raw) {
+      const b = battles.find(q => Math.hypot(q.x - f.x, q.y - f.y) < 14 && Math.abs(q.t - f.t) < 120);
+      if (b) b.d += f.d; else battles.push({ x: f.x, y: f.y, t: f.t, d: f.d });
+    }
+    battles.sort((a, b) => b.d - a.d);
+    const big = battles.slice(0, 6), most = big.length ? big[0].d : 1;
+    g.font = `italic 12px ${I.font}`; g.textAlign = 'left'; g.textBaseline = 'middle';
+    for (const b of big) {
+      const [x, y] = P(b.x, b.y), s = 5 + 7 * Math.sqrt(b.d / most);
+      g.strokeStyle = I.light || !I.ink ? '#2a221b' : '#e8e0cf'; g.lineWidth = 2; g.lineCap = 'round';
+      g.beginPath(); g.moveTo(x - s, y - s); g.lineTo(x + s, y + s); g.moveTo(x + s, y - s); g.lineTo(x - s, y + s); g.stroke();
+      g.lineWidth = 1.4; g.beginPath(); g.moveTo(x - s * 0.55, y - s * 0.05); g.lineTo(x - s * 0.05, y - s * 0.55); g.moveTo(x + s * 0.55, y - s * 0.05); g.lineTo(x + s * 0.05, y - s * 0.55); g.stroke();
+      const near = towns.reduce((a, t) => !a || Math.hypot(t.x - b.x, t.y - b.y) < Math.hypot(a.x - b.x, a.y - b.y) ? t : a, null);
+      const where = near && Math.hypot(near.x - b.x, near.y - b.y) < 26 ? `near ${near.name}` : 'in the open';
+      const label = `${where} · ${clock(b.t)}`, lw = g.measureText(label).width, lx = x + s + 5 + lw > w ? x - s - 5 - lw : x + s + 5;
+      g.lineWidth = 3; g.strokeStyle = I.ground; g.strokeText(label, lx, y); g.fillStyle = I.text; g.fillText(label, lx, y);
+    }
+    g.lineCap = 'butt';
+  }
+
   // ---- The report -----------------------------------------------------------------------------------------
 
   // Fills root with the tabs and the chosen pane. o has the game S and name(t), a side's name.
@@ -12561,6 +12784,10 @@ const Report = (() => {
         }
       } else if (!charted) {
         pane.appendChild(el('p', 'rkey', 'The game was too short to chart.'));
+      } else if (k === 'war') {
+        const c = el('canvas', 'rchart rmap'); pane.append(c);
+        pane.appendChild(el('p', 'rkey', h && h.pos ? "Each side's main army as its line of march through the game, heavier where it was stronger, with a ring where it ended. Crossed swords mark the six greatest battles, with the nearest town and the minute." : 'This game was begun before armies were tracked, so there is no war map for it.'));
+        if (h && h.pos) cur.redraw = () => warMap(c, tip, pane, o, list);
       } else if (k === 'time') {
         const c = el('canvas', 'rchart'); pane.append(c, tip);
         const key = el('p', 'rkey', 'Lines across the bands are fighting between two sides, in the colour of the side that did more harm. Tags name the age a side reached, triangles mark missile launches and crosses the end of a side.');
@@ -13178,6 +13405,48 @@ const Axo = (() => {
         ...chassis('hull'), box(-2.45, 0.38, -0.88, 0.88, 0.78, 2.25, 'polo'),
         box(-1.33, -1.07, -0.9, -0.88, 1.05, 1.95, 'mark', { b: 0.05 }), box(-1.65, -0.75, -0.9, -0.88, 1.37, 1.63, 'mark', { b: 0.05 }),
       ];
+    } },
+    tradecart: { name: 'Trade Cart', ruler: 2, build() {
+      // A horse before a cart of crates, a bale and a cask.
+      const c = [
+        ...spoked(-1.3, 0.85, 0.6, 0.1), ...spoked(-1.3, -0.85, 0.6, 0.1),
+        rod([0.55, 0.4, 1.2], [-0.4, 0.4, 0.8], 0.04, 'wood'), rod([0.55, -0.4, 1.2], [-0.4, -0.4, 0.8], 0.04, 'wood'),
+        box(-2.3, -0.35, -0.72, 0.72, 0.66, 1.0, 'wood'),
+        box(-2.2, -1.5, -0.6, 0.05, 1.0, 1.55, 'wood'), box(-1.4, -0.6, 0.0, 0.62, 1.0, 1.45, 'wood'),
+        cyl('y', [-1.2, 0, 1.85], 0.3, 1.3, 'cloth', 10), box(-0.6, -0.4, -0.66, -0.3, 1.0, 1.7, 'mark', { b: 0.04 }),
+      ];
+      return [...at(grp(horse({ cloth: false, saddle: false })), 1.3, 0), ...grp(c)];
+    } },
+    caravan: { name: 'Caravan', ruler: 2, build() {
+      // Two horses before a long wagon of crates and bales.
+      const team = [...at(grp(horse({ cloth: false, saddle: false })), 1.6, 0.42), ...at(grp(horse({ cloth: false, saddle: false, stride: -0.1 })), 1.6, -0.42)];
+      const c = [
+        ...spoked(-0.6, 0.85, 0.5, 0.1), ...spoked(-0.6, -0.85, 0.5, 0.1), ...spoked(-2.4, 0.85, 0.5, 0.1), ...spoked(-2.4, -0.85, 0.5, 0.1),
+        box(-2.9, 0.1, -0.76, 0.76, 0.74, 1.05, 'wood'),
+        box(-2.8, -2.0, -0.6, 0.05, 1.05, 1.6, 'wood'), box(-1.9, -1.1, 0.0, 0.62, 1.05, 1.5, 'wood'), box(-1.0, -0.2, -0.62, 0.0, 1.05, 1.45, 'wood'),
+        cyl('y', [-0.5, 0.3, 1.75], 0.28, 0.6, 'cloth', 10), box(-2.95, -2.75, -0.7, -0.3, 0.9, 1.6, 'mark', { b: 0.04 }),
+      ];
+      return [...team, ...grp(c)];
+    } },
+    tradewagon: { name: 'Trade Wagon', ruler: 2, build() {
+      // A covered wagon of goods with a cask lashed behind and the side's pennant.
+      const c = [
+        ...spoked(-1.3, 0.85, 0.6, 0.1), ...spoked(-1.3, -0.85, 0.6, 0.1),
+        rod([0.55, 0.4, 1.2], [-0.4, 0.4, 0.8], 0.04, 'wood'), rod([0.55, -0.4, 1.2], [-0.4, -0.4, 0.8], 0.04, 'wood'),
+        box(-2.3, -0.35, -0.72, 0.72, 0.66, 1.0, 'wood'),
+        box(-2.25, -0.4, -0.74, 0.74, 1.0, 1.5, 'cloth'), arch(-2.25, -0.4, 0.74, 1.5, 'cloth'),
+        cyl('z', [-2.55, 0.4, 1.0], 0.22, 0.4, 'wood', 10), ...flag(-2.4, -0.7, 1.5, 0.9, 0.5),
+      ];
+      return [...at(grp(horse({ cloth: false, saddle: false })), 1.3, 0), ...grp(c)];
+    } },
+    freightlorry: { name: 'Freight Lorry', ruler: 2, build() {
+      return [...chassis('cloth'), box(-2.45, 0.38, -0.88, 0.88, 0.78, 1.9, 'cloth'), arch(-2.45, 0.38, 0.88, 1.9, 'cloth'), box(-1.4, -0.7, -0.9, -0.88, 1.1, 1.6, 'mark', { b: 0.05 })];
+    } },
+    freighter: { name: 'Freight Truck', ruler: 2, build() {
+      return [...chassis('hull'), box(-2.55, 0.38, -0.9, 0.9, 0.78, 2.45, 'polo'), box(-2.5, 0.3, -0.92, -0.9, 1.6, 1.9, 'mark', { b: 0.05 })];
+    } },
+    hovfreight: { name: 'Hover Freighter', ruler: 2, build() {
+      return [...chassis('hull'), box(-2.55, 0.38, -0.9, 0.9, 0.78, 2.2, 'hull'), box(-2.5, 0.3, -0.92, -0.9, 1.5, 1.8, 'mark', { b: 0.05 })];
     } },
     aalorry: { name: 'AA Lorry', ruler: 2, build() {
       // Twin guns raised on a pedestal in the bed.
@@ -13798,6 +14067,7 @@ const Game = (() => {
             else if (G.playing && e.team === G.team) { const v = VOICE[e.line]; if (v) { hud.say(v[0] + '.', v[1]); audio.voice(e.line, v[0]); } }
             break;
           case 'alert': if (G.playing && e.team === G.team) hud.alert(e.x, e.y); break;
+          case 'trade': if (G.playing && e.team === G.team) hud.pop(e.x, e.y, '+' + e.n); break;
           case 'hint': if (G.playing && e.team === G.team && e.hint === 'attrition') hud.say('Attrition: troops wear down abroad. A Support Truck stops it.', 'bad'); break;
           case 'launch': if (G.playing && e.team === G.team) audio.play('launch', { gain: 0.9 }); break;
           case 'placed': if (G.playing && e.team === G.team) audio.at('place', e.x, e.y, { gain: 0.8 }); break;
