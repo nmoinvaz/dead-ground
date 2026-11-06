@@ -183,10 +183,11 @@ body[data-look="ink"][data-scheme="dark"] #end, body[data-look="ink"][data-schem
 .help dt { color: var(--amber); font-family: var(--mono); font-size: 12px; align-self: center; }
 .help dd { margin: 0; }
 #credit { font: 12px var(--mono); color: #8d8c78; }
+/* Which build this page is, from the source commit it was made from. */
+#build { margin: 10px 0 0; font: 12px var(--mono); opacity: .7; }
 /* The boot screen shows before the page knows its look, so it is drawn as the pen and ink look a game opens in:
-   Jost on paper, light or dark as the system is. */
+   Jost on light paper. */
 #loading { position: absolute; inset: 0; z-index: 20; background: #f2e8d2; display: flex; align-items: center; justify-content: center; font: 500 20px "Jost", "Futura", "Trebuchet MS", sans-serif; letter-spacing: .32em; color: #1f1a16; }
-@media (prefers-color-scheme: dark) { #loading { background: #23201b; color: #e8e0cf; } }
 body.ready #loading { display: none; }
 
 #end { background: rgba(5,6,3,.76); align-items: center; justify-content: center; }
@@ -347,8 +348,10 @@ body[data-look="ink"] .tab:hover { color: var(--ink); }
 body[data-look="ink"] .tab.on { background: var(--ink); color: var(--paper); border-color: var(--ink); }
 body[data-look="ink"] .tab.lit i { background: var(--redink); box-shadow: none; }
 body[data-look="ink"] .cam { background: var(--paper-hi); border: 1.5px solid var(--ink); box-shadow: none; }
-body[data-look="ink"] .cam::before { content: ""; position: absolute; inset: 0; background: var(--img) center 34% / 100% auto no-repeat; filter: grayscale(1) contrast(1.5) brightness(1.08); mix-blend-mode: multiply; pointer-events: none; }
-body[data-look="ink"] .cam.axo::before, body[data-look="ink"][data-scheme="dark"] .cam.axo::before { filter: none; mix-blend-mode: normal; }
+/* On light paper the pictures keep their colour, a little richer, printed into the paper. */
+body[data-look="ink"] .cam::before { content: ""; position: absolute; inset: 0; background: var(--img) center 34% / 100% auto no-repeat; filter: saturate(1.35) contrast(1.15); mix-blend-mode: multiply; pointer-events: none; }
+body[data-look="ink"] .cam.axo::before { filter: saturate(1.45) contrast(1.06); mix-blend-mode: multiply; }
+body[data-look="ink"][data-scheme="dark"] .cam.axo::before { filter: none; mix-blend-mode: normal; }
 body[data-look="ink"] #sel img.axo, body[data-look="ink"][data-scheme="dark"] #sel img.axo { filter: none; mix-blend-mode: normal; background: var(--paper-hi); border-color: var(--ink); }
 body[data-look="ink"] .cam:hover { box-shadow: inset 0 0 0 1.5px var(--redink); }
 body[data-look="ink"] .cam .nm { color: var(--ink); text-shadow: 0 0 3px var(--paper-hi), 0 0 2px var(--paper-hi), 0 0 1px var(--paper-hi); font-family: var(--display); font-weight: 400; font-size: 14px; }
@@ -357,7 +360,7 @@ body[data-look="ink"] .cam .key { color: var(--ink-dim); }
 body[data-look="ink"] .cam .state { color: var(--ink); text-shadow: 0 0 3px var(--paper-hi), 0 0 3px var(--paper-hi); }
 body[data-look="ink"] .cam.busy::after { background: conic-gradient(rgba(0,0,0,0) var(--p), rgba(242,232,210,.72) var(--p)); }
 /* A card that cannot be had is hatched across in ink, its picture and name still readable under it. */
-body[data-look="ink"] .cam.off { filter: none; opacity: .66; }
+body[data-look="ink"] .cam.off { filter: none; opacity: .8; }
 body[data-look="ink"] .cam.off:not(.busy)::after { content: ""; position: absolute; inset: 0; pointer-events: none; background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--ink) 22%, transparent) 0 1px, transparent 1px 6px); }
 body[data-look="ink"] .cam.off .nm, body[data-look="ink"] .cam.off .ct { color: var(--ink-dim); }
 body[data-look="ink"] .cam.ready { box-shadow: inset 0 0 0 2px var(--redink); animation: none; }
@@ -516,7 +519,8 @@ body[data-look="ink"] .sheet { box-shadow: 4px 4px 0 var(--ink); }
     <div id="notes"><div id="objective" hidden></div><div id="log"></div></div>
     <div id="settings" hidden role="dialog" aria-label="Settings">
       <div class="choice"><h2>Look</h2><div id="s-look" class="two"></div></div>
-      <div class="choice"><h2>Paper</h2><div id="s-scheme"><button data-v="auto">As the system</button><button data-v="light">Light</button><button data-v="dark">Dark</button></div></div>
+      <div class="choice"><h2>Paper</h2><div id="s-scheme"><button data-v="light">Light</button><button data-v="dark">Dark</button><button data-v="auto">As the system</button></div></div>
+      <p id="build">Build 1148f68 2026-11-05 17:08</p>
     </div>
     <div id="banner" hidden></div>
     <div id="agecard" hidden aria-live="polite"></div>
@@ -892,7 +896,7 @@ const Rules = (() => {
   const WEAR = { foot: 5, wheel: 10, track: 14 }, TRACK_AT = [30, 75, 140], TRACK_GO = [1, 1.04, 1.08, 1.12];
   // Roads are quicker going, wheels most. A way costs the time it takes, and a known way, a road or a worn track,
   // a little less again, as drivers and marchers keep to the ways they know.
-  const ROAD_GO = { foot: 1.15, wheel: 1.3, track: 1.2 }, HABIT = [1, 0.92, 0.88, 0.85], ROAD_HABIT = 0.88;
+  const ROAD_GO = { foot: 1.15, wheel: 1.3, track: 1.2 }, HABIT = [1, 0.88, 0.8, 0.74], ROAD_HABIT = 0.75;
   const ROAD_COST = { foot: Math.fround(ROAD_HABIT / ROAD_GO.foot), veh: Math.fround(ROAD_HABIT / ROAD_GO.wheel), track: Math.fround(ROAD_HABIT / ROAD_GO.track) };
   // Each change of a track makes the shared ways be worked out again, so tracks change only every 45 seconds.
   const TRACK_COST = TRACK_GO.map((g, i) => Math.fround(HABIT[i] / g)), TRACK_EVERY = 45 * HZ;
@@ -2242,7 +2246,11 @@ const Rules = (() => {
     t.hp -= dmg;
     t.under = S.tick;
     const P = S.P[t.team];
-    if (t.b && t.team !== team) { ownEvent(S, t.team, 'baseattack'); S.ev.push({ t: 'alert', team: t.team, x: t.x, y: t.y }); }
+    if (t.b && t.team !== team) {
+      ownEvent(S, t.team, 'baseattack'); S.ev.push({ t: 'alert', team: t.team, x: t.x, y: t.y });
+      // The raid on the base, so units made while it lasts go to meet it.
+      if (P && team >= 0) P.raid = { tick: S.tick, by: by || 0, x: t.x, y: t.y };
+    }
     else if (!t.b && t.d.cargo) { ownEvent(S, t.team, 'truckattack'); S.ev.push({ t: 'alert', team: t.team, x: t.x, y: t.y }); }
     // A unit under fire with nothing better to do answers it.
     if (!t.b && by && !t.ord && !t.tgt && armed(t)) t.tgt = by;
@@ -2464,6 +2472,16 @@ const Rules = (() => {
       const ox = u.x - o.x, oy = u.y - o.y, gapD = mhypot(ox, oy) || 0.01, reach = u.d.r + o.d.r + 0.25;
       if (gapD < reach) { const k = (reach - gapD) / reach; sx += ox / gapD * k; sy += oy / gapD * k; }
     });
+    // On a road a unit keeps to the carriageway when its way runs on along it. Neighbours push it along the road
+    // rather than off it, and it drifts back toward the middle line, so a group marches as a column.
+    const rd0 = roadDistAt(S.map, u.x, u.y);
+    if (rd0 < 1.6 && roadDistAt(S.map, wx, wy) < 1.3) {
+      const gx = roadDistAt(S.map, u.x + 0.5, u.y) - roadDistAt(S.map, u.x - 0.5, u.y), gy = roadDistAt(S.map, u.x, u.y + 0.5) - roadDistAt(S.map, u.x, u.y - 0.5), gm = mhypot(gx, gy);
+      if (gm > 1e-3) {
+        const nx = gx / gm, ny = gy / gm, across = sx * nx + sy * ny, pull = Math.max(0, rd0 - 0.35) * 0.5;
+        sx -= nx * (across * 0.75 + pull); sy -= ny * (across * 0.75 + pull);
+      }
+    }
     dx += sx * 1.6; dy += sy * 1.6;
     const mag = mhypot(dx, dy) || 1;
     dx /= mag; dy /= mag;
@@ -3103,8 +3121,12 @@ const Rules = (() => {
     ownEvent(S, P.team, 'unitready');
     if (u.d.move === 'jet') { u.ord = null; return; }
     if (!u.d.cargo) {
-      const r = best.rally;
-      if (r) orderMove(S, [u], r[0], r[1], false);
+      const r = best.rally, raid = P.raid && S.tick - P.raid.tick < 12 * HZ ? P.raid : null;
+      // While the base is under attack, an armed unit goes straight out to meet the attackers, hunting on its way.
+      if (raid && armed(u) && !u.d.engineer) {
+        const a = raid.by && S.byId.get(raid.by), at = a && a.hp > 0 && mhypot(a.x - raid.x, a.y - raid.y) < 20 ? a : raid;
+        orderMove(S, [u], at.x, at.y, true);
+      } else if (r) orderMove(S, [u], r[0], r[1], false);
       else {
         const dx = x - best.x, dy = y - best.y, m = mhypot(dx, dy) || 1;
         orderMove(S, [u], x + dx / m * 3 + (S.rand() - 0.5) * 3, y + dy / m * 3 + (S.rand() - 0.5) * 3, false);
@@ -6445,9 +6467,9 @@ if (typeof module !== 'undefined') module.exports = Looks;
         uCloud: SH.uCloud, uCloudT: SH.uCloudT, uSunW: SH.uSunDir, uCloudA: { value: 0 }, uCloudG: { value: 0 }, uRayK: { value: 0 }, uSand: { value: 0 }, uBliz: { value: 0 },
         uInvVP: { value: new THREE.Matrix4() }, uW2S: { value: new THREE.Vector4(1, 0, 0, 1) }, uLev: { value: 1 },
         // Each side's colour as the anchor pass keeps it, its hue and how coloured it is, and its inks on either paper.
-        uSideKey: { value: [...Array(8)].map(() => new THREE.Vector2()) }, uSideL: { value: [...Array(8)].map(() => new THREE.Vector3()) }, uSideD: { value: [...Array(8)].map(() => new THREE.Vector3()) } }, vertexShader: vs, depthTest: false, depthWrite: false, fragmentShader: `
+        uSideKey: { value: [...Array(8)].map(() => new THREE.Vector2()) }, uSideL: { value: [...Array(8)].map(() => new THREE.Vector3()) }, uSideD: { value: [...Array(8)].map(() => new THREE.Vector3()) }, uSideB: { value: [...Array(8)].map(() => new THREE.Vector3()) } }, vertexShader: vs, depthTest: false, depthWrite: false, fragmentShader: `
         varying vec2 vUv; uniform sampler2D t, tSubj, tHeat, tPaper, tNorm, tFogS, tLand; uniform vec2 res, uOff, uSun2, uWindS, uView, uHSize; uniform float uHScale, uFxs; uniform int uUnits, uInks; uniform float uDark; uniform sampler2D tH, tFx, tAnc; uniform vec3 uUpV, uDayMul, uDayAdd; uniform float uTime, uK, uRain, uStorm, uSnowF, uSnowC, uFog, uMist, uNight, uWet, uWaterL, uCloudK, uMarks; uniform int uStyle, uRoad, uOre;
-        uniform vec2 uSideKey[8]; uniform vec3 uSideL[8], uSideD[8];
+        uniform vec2 uSideKey[8]; uniform vec3 uSideL[8], uSideD[8], uSideB[8];
         uniform vec2 uCloud; uniform vec3 uSunW; uniform float uCloudT, uCloudA, uCloudG, uRayK, uSand, uBliz;
         // The clouds float at CLOUD_H over the land. cloudAt gives the cloud over a point of the land at that height,
         // taken from the same field the land pass casts their shadows with, shifted along the sun, so each cloud
@@ -6465,6 +6487,16 @@ if (typeof module !== 'undefined') module.exports = Looks;
             if (d < best) { best = d; c = dk ? uSideD[i] : uSideL[i]; }
           }
           return mix(dk ? vec3(0.88) : vec3(0.12), c, smoothstep(0.15, 0.4, aw.w));
+        }
+        // A unit's body tint on light paper, from the same nearest side. A colour faded to grey keeps the paper.
+        vec3 sideBody(vec4 aw) {
+          float best = 1e9; vec3 c = vec3(1.0);
+          for (int i = 0; i < 8; i++) {
+            float dh = abs(aw.z - uSideKey[i].x); dh = min(dh, 1.0 - dh) * 36.0;
+            float ds = (aw.w - uSideKey[i].y) * 20.0, d = dh * dh + ds * ds;
+            if (d < best) { best = d; c = uSideB[i]; }
+          }
+          return mix(vec3(0.949, 0.910, 0.824), c, smoothstep(0.15, 0.4, aw.w));
         }
         const vec3 PAPER = vec3(0.949, 0.910, 0.824), INK = vec3(0.122, 0.102, 0.086);
         // The soft axonometric's washes, after the atlas: speckled pale green ground, lilac water, pink paths,
@@ -7017,6 +7049,13 @@ if (typeof module !== 'undefined') module.exports = Looks;
             vec3 sI = sideInk(texture2D(tAnc, vUv), dk), hI = dk ? sI : mix(sI, mix(sI, INK, 0.4), 1.0 - smoothstep(1.2, 1.9, uLev));
             vec3 tInk = mix(hI, sI, clamp(lineK / max(cover, 1e-3), 0.0, 1.0));
             col = mix(col, tInk, nearU * smoothstep(0.25, 0.6, cover) * step(0.05, mkx)); mark = 0.0; wash = 0.0;
+            // On light paper the body is tinted in the side's colour, laid under the lines as a multiply, so a
+            // unit reads as a coloured figure on snow, sand and pale ground alike.
+            if (!dk) {
+              vec4 aw0 = texture2D(tAnc, vUv);
+              vec3 bt = sideBody(aw0) / vec3(0.949, 0.910, 0.824);
+              col *= mix(vec3(1.0), bt, smoothstep(0.85, 0.95, s0) * step(0.05, mkx));
+            }
           }
           if (uUnits == 2) { col = mix(col, hue * 0.85, mark * nearU); mark = 0.0; wash = 0.0; }
           // Line, hatch and stipple units keep their bodies paper, the side shown by its marks alone.
@@ -7200,7 +7239,7 @@ if (typeof module !== 'undefined') module.exports = Looks;
           let hh = d < 1e-4 ? 0 : mx === c.r ? ((c.g - c.b) / d + 6) % 6 : mx === c.g ? (c.b - c.r) / d + 2 : (c.r - c.g) / d + 4;
           C.uSideKey.value[i].set(hh / 6, mx > 0 ? d / mx : 0);
           const ink = (s, v) => v.set(parseInt(s.slice(1, 3), 16) / 255, parseInt(s.slice(3, 5), 16) / 255, parseInt(s.slice(5, 7), 16) / 255);
-          ink(World.SLOT_INKS.light[i], C.uSideL.value[i]); ink(World.SLOT_INKS.dark[i], C.uSideD.value[i]);
+          ink(World.SLOT_INKS.light[i], C.uSideL.value[i]); ink(World.SLOT_INKS.dark[i], C.uSideD.value[i]); ink(World.SLOT_INKS.body[i], C.uSideB.value[i]);
         });
         sides = true;
       };
@@ -7504,6 +7543,9 @@ const World = (() => {
   const SLOT_INKS = {
     light: ['#1d4fc4', '#a82a0a', '#1e7a32', '#6a2fb0', '#c07000', '#0a7480', '#7f7c00', '#6a4020'],
     dark: ['#68a8ff', '#ee3a22', '#56cc6c', '#b088f2', '#ff7a1a', '#3fd0cc', '#cdf044', '#a8805a'],
+    // A unit's body on light paper, tinted in its side's colour so it stands out from the ground. Red is a
+    // terracotta, as a light red on cream reads as pink.
+    body: ['#7e9be2', '#cf7a4c', '#7db874', '#9a84d2', '#e2aa48', '#64b9b5', '#bfc552', '#a9845c'],
   };
 
   function create(THREE, canvas, opt = {}) {
@@ -11291,8 +11333,10 @@ const Hud = (() => {
       }
     }
     // The ghost plan, in pen and ink: what is planned in dotted orange, what was in dashed blue-grey.
-    const PLAN = '#e0703a', PLAN_BAD = '#c8321e', WAS = '#6d82ad';
-    const dotted = () => { og.setLineDash([0.5, 4]); og.lineCap = 'round'; og.lineWidth = 2; };
+    // The plan's orange is a deep burnt orange, dotted close and heavy enough to read on cream paper.
+    const PLAN = '#b4400e', PLAN_BAD = '#a8200e', WAS = '#4d6496';
+    const INK_OF = { '#7fe0a0': '#1f6b34', '#ffa040': '#b4400e', '#ff8a70': '#a8200e' };
+    const dotted = () => { og.setLineDash([0.5, 3.2]); og.lineCap = 'round'; og.lineWidth = 2.6; };
     const dashed = () => { og.setLineDash([6, 4]); og.lineCap = 'butt'; og.lineWidth = 1.4; };
     // A box standing on the ground over cells x..x+w, y..y+h, ht tall, as a wireframe.
     function box3(s, x, y, w, h, ht) {
@@ -11715,7 +11759,8 @@ const Hud = (() => {
         m.t += dt;
         if (m.t > 0.5) { state.marks.splice(i, 1); continue; }
         const [x, y] = world.project(m.x, Rules.heightAt(s.map, m.x, m.y), m.y), k = 1 - m.t / 0.5;
-        og.strokeStyle = m.color; og.globalAlpha = k; og.lineWidth = 1.6;
+        // On paper the bright screen greens and oranges are drawn in their dark inks, so they show on cream.
+        og.strokeStyle = inked() ? (INK_OF[m.color] || m.color) : m.color; og.globalAlpha = k; og.lineWidth = inked() ? 2.2 : 1.6;
         og.beginPath(); og.ellipse(x, y, 16 * k + 2, (16 * k + 2) * 0.6, 0, 0, 6.3); og.stroke();
         og.beginPath(); og.ellipse(x, y, 6 * k + 1, (6 * k + 1) * 0.6, 0, 0, 6.3); og.stroke();
         og.globalAlpha = 1;
@@ -11733,7 +11778,9 @@ const Hud = (() => {
 
       const d = state.drag;
       if (d && d.box) {
-        og.strokeStyle = '#a9f0c0'; og.lineWidth = 1; og.fillStyle = 'rgba(120,240,160,0.08)';
+        // The selection box: pale green on the painted looks, the player's blue ink on paper.
+        if (inked()) { og.strokeStyle = '#1d3f8c'; og.lineWidth = 1.8; og.fillStyle = 'rgba(29,63,140,0.1)'; }
+        else { og.strokeStyle = '#a9f0c0'; og.lineWidth = 1; og.fillStyle = 'rgba(120,240,160,0.08)'; }
         og.fillRect(d.x0, d.y0, d.x1 - d.x0, d.y1 - d.y0); og.strokeRect(d.x0, d.y0, d.x1 - d.x0, d.y1 - d.y0);
       }
     }
@@ -13686,9 +13733,10 @@ const Game = (() => {
     // A saved look the settings offer is kept; anything else opens as pen and ink.
     if (!Looks.all().some(l => l.name === G.look)) G.look = 'ink';
     world.setLook(G.look);
-    // The paper's scheme: as the system has it, or light or dark by the player's choice, kept in the browser.
+    // The paper's scheme: light unless the player picks dark or the system's, kept in the browser. It is kept under
+    // a new key, so a choice made when the system's was the default does not carry over.
     const darkQ = window.matchMedia ? matchMedia('(prefers-color-scheme: dark)') : null;
-    let scheme = store.get('dg-scheme', 'auto');
+    let scheme = store.get('dg-paper', 'light');
     // The sidebar's pictures: the buildings as the engine renders them, the units as axonometric line drawings in
     // the look's own inks, with the player's side on their markings.
     // A building's card shows it in the player's age, and G.picAge says which age that was.
@@ -13718,7 +13766,7 @@ const Game = (() => {
     }));
     $('s-scheme').querySelectorAll('button').forEach(b => b.addEventListener('click', () => {
       scheme = b.dataset.v; applyScheme(); audio.ui('click');
-      store.set('dg-scheme', scheme);
+      store.set('dg-paper', scheme);
     }));
     const setOpen = open => { $('settings').hidden = !open; $('b-set').setAttribute('aria-expanded', String(open)); if (open) markLook(); };
     $('b-set').addEventListener('click', e => { e.stopPropagation(); setOpen($('settings').hidden); audio.ui('click'); });
