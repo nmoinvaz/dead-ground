@@ -964,10 +964,11 @@ const Hud = (() => {
       }
     }
     // The ghost plan, in pen and ink: what is planned in dotted orange, what was in dashed blue-grey.
-    // The plan's orange is a deep burnt orange, dotted close and heavy enough to read on cream paper.
-    const PLAN = '#b4400e', PLAN_BAD = '#a8200e', WAS = '#4d6496';
+    // The plan's orange is a burnt orange, between the first pale one and the darkest, dotted close enough to read
+    // on cream paper without weighing on the map.
+    const PLAN = '#d0602a', PLAN_BAD = '#b8301a', WAS = '#5a71a0';
     const INK_OF = { '#7fe0a0': '#1f6b34', '#ffa040': '#b4400e', '#ff8a70': '#a8200e' };
-    const dotted = () => { og.setLineDash([0.5, 3.2]); og.lineCap = 'round'; og.lineWidth = 2.6; };
+    const dotted = () => { og.setLineDash([0.5, 3.6]); og.lineCap = 'round'; og.lineWidth = 2.1; };
     const dashed = () => { og.setLineDash([6, 4]); og.lineCap = 'butt'; og.lineWidth = 1.4; };
     // A box standing on the ground over cells x..x+w, y..y+h, ht tall, as a wireframe.
     function box3(s, x, y, w, h, ht) {
@@ -1004,7 +1005,7 @@ const Hud = (() => {
       const g = world.ghostState;
       if (g) { og.strokeStyle = g.ok ? PLAN : PLAN_BAD; dotted(); const d = BUILDINGS[g.kind]; box3(s, g.x, g.y, d.w, d.h, world.bHeight(g.kind)); }
       og.strokeStyle = PLAN; dotted();
-      const ends = [];
+      const ends = [], shared = new Set();
       let byId = null;
       for (const e of selected) {
         if (!e || e.b || e.team !== t || e.hp <= 0 || !e.ord) continue;
@@ -1023,7 +1024,15 @@ const Hud = (() => {
         const [bx, by] = world.project(tx, Rules.heightAt(s.map, tx, ty) + 0.2, ty);
         og.beginPath(); og.moveTo(ax, ay);
         // A ground unit's line follows the way it will take, roads and tracks and all; an aircraft's flies straight.
-        if (!air) for (const [px, py] of routeOf(s, e, tx, ty).slice(1)) { const [qx, qy] = world.project(px, Rules.heightAt(s.map, px, py) + 0.2, py); og.lineTo(qx, qy); }
+        // A stretch that units share is drawn once, so a column's lines stay one dotted line, not a solid stripe.
+        if (!air) {
+          let px0 = e.x, py0 = e.y;
+          for (const [px, py] of routeOf(s, e, tx, ty).slice(1)) {
+            const k = `${px0.toFixed(1)},${py0.toFixed(1)}>${px.toFixed(1)},${py.toFixed(1)}`, [qx, qy] = world.project(px, Rules.heightAt(s.map, px, py) + 0.2, py);
+            if (shared.has(k)) og.moveTo(qx, qy); else { shared.add(k); og.lineTo(qx, qy); }
+            px0 = px; py0 = py;
+          }
+        }
         og.lineTo(bx, by); og.stroke();
         if (!ends.some(p => Math.abs(p[0] - bx) < 8 && Math.abs(p[1] - by) < 8)) ends.push([bx, by]);
       }
