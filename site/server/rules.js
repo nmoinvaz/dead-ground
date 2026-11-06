@@ -1534,7 +1534,7 @@ const Rules = (() => {
   // twentieths, makes open ground and young tracks dearer, while a hardened track and a road stay firm.
   let fillBlock = null;
   function fill(S, f, cls, gx, gy, occ, g, reach = Infinity, wq = 20) {
-    const M = S.map, bit = BIT[cls], woodC = cls === 'track' ? 3 : 1.6, roadC = ROAD_COST[cls], offK = 20 / wq;
+    const M = S.map, bit = BIT[cls], woodC = cls === 'track' ? 3 : 1.6, roadC = ROAD_COST[cls], offK = 20 / wq, naval = cls === 'naval';
     if (!fillBlock || fillBlock.length !== N) fillBlock = new Uint8Array(N);
     const block = fillBlock, road = roadW(M);
     if (cls === 'naval') { const sea = M.sea; for (let c = 0; c < N; c++) block[c] = !sea[c] || occ[c] !== 0 ? 1 : 0; }
@@ -1578,8 +1578,9 @@ const Rules = (() => {
         if (block[m]) continue;
         if ((i & 1) && (block[y * W + nx] || block[ny * W + x])) continue;
         // Rounded to the array's own precision, so a cell is never queued again for the same distance.
+        // Open water is the same going everywhere, under a bridge's road as well.
         const gm = g[m], rw = road[m], lv = (gm >> 5) & 3, off = lv >= 3 ? TRACK_COST[3] : TRACK_COST[lv] * offK, here = rw > 0 ? off + (roadC - off) * rw : off;
-        const nd = Math.fround(dc + COST[i] * here * (gm & 8 ? woodC : 1) * (gm & 16 ? 2 : 1));
+        const nd = Math.fround(dc + COST[i] * (naval ? 1 : here * (gm & 8 ? woodC : 1) * (gm & 16 ? 2 : 1)));
         if (nd < dist[m]) { dist[m] = nd; dir[m] = (i + 4) & 7; push(m, nd); }
       }
     }
@@ -1613,7 +1614,7 @@ const Rules = (() => {
   // Looks ahead along the field for the farthest point in a straight, clear line.
   function waypoint(S, u, tx, ty) {
     const cls = clsOf(u), far = mhypot(tx - u.x, ty - u.y);
-    if (far < 16 && lineClear(S, cls, u.x, u.y, tx, ty) && (far < 8 || !waysBetween(S, u.x, u.y, tx, ty))) return [tx, ty];
+    if (far < 16 && lineClear(S, cls, u.x, u.y, tx, ty) && (far < 8 || cls === 'naval' || !waysBetween(S, u.x, u.y, tx, ty))) return [tx, ty];
     // From afar the way leads to the middle of the goal's block of four by four cells, so a group and
     // anyone going near the same place share one field. Close in it leads to the goal's own cell.
     const q = far > 24;
@@ -1643,17 +1644,18 @@ const Rules = (() => {
   // joins, so it merges at a slant.
   function lookAhead(S, f, cls, bx, by) {
     let c = cellOf(bx, by), wx = (c % W) + 0.5, wy = (c / W | 0) + 0.5;
-    const M = S.map, rw = roadW(M), lv0 = S.gnd[c] & 96, on0 = rw[c] > 0.5, lane = on0 ? Math.max(1.2, roadDistAt(M, bx, by)) : 0;
+    // A ship passing under a bridge is not on its road.
+    const M = S.map, rw = roadW(M), wet = cls === 'naval', lv0 = S.gnd[c] & 96, on0 = !wet && rw[c] > 0.5, lane = on0 ? Math.max(1.2, roadDistAt(M, bx, by)) : 0;
     let joined = -1;
     for (let i = 0; i < 10; i++) {
       const dir = f.dir[c];
       if (dir < 0) break;
       const x = c % W + FDX[dir], y = (c / W | 0) + FDY[dir];
       c = y * W + x;
-      const px = x + 0.5, py = y + 0.5, on = rw[c] > 0.5;
+      const px = x + 0.5, py = y + 0.5, on = !wet && rw[c] > 0.5;
       // The next cell along the field is always taken, so a man on a bend still moves on.
       if (lineClear(S, cls, bx, by, px, py) && (!on0 || !i || laneClear(M, bx, by, px, py, lane))) { wx = px; wy = py; } else break;
-      if ((S.gnd[c] & 96) !== lv0 && !on) break;
+      if (!wet && (S.gnd[c] & 96) !== lv0 && !on) break;
       if (on0 && !on) break;
       if (!on0 && on && joined < 0) joined = i;
       if (joined >= 0 && i >= joined + 2) break;
@@ -1684,7 +1686,7 @@ const Rules = (() => {
     for (let i = 0; i < max; i++) {
       const far = mhypot(tx - x, ty - y);
       if (far < 0.6) break;
-      if (far < 16 && lineClear(S, cls, x, y, tx, ty) && (far < 8 || !waysBetween(S, x, y, tx, ty))) { pts.push([tx, ty]); break; }
+      if (far < 16 && lineClear(S, cls, x, y, tx, ty) && (far < 8 || cls === 'naval' || !waysBetween(S, x, y, tx, ty))) { pts.push([tx, ty]); break; }
       const q = far > 24, gx = clamp(q ? (tx >> 2) * 4 + 2 : tx | 0, 0, W - 1), gy = clamp(q ? (ty >> 2) * 4 + 2 : ty | 0, 0, H - 1);
       const f = peekField(S, cls, gx, gy, far), c = cellOf(x, y);
       if (f.dist[c] === Infinity || (f.dir[c] < 0 && f.dist[c] !== 0)) break;
@@ -2043,14 +2045,14 @@ const Rules = (() => {
     let dx = dx0 / dist, dy = dy0 / dist;
     let sx = 0, sy = 0;
     near(S, u.x, u.y, 2.5, o => {
-      if (o === u || o.b || o.drop > 0 || isAir(o) !== isAir(u)) return;
+      if (o === u || o.b || o.drop > 0 || isAir(o) !== isAir(u) || (o.d.move === 'naval') !== (d.move === 'naval')) return;
       const ox = u.x - o.x, oy = u.y - o.y, gapD = mhypot(ox, oy) || 0.01, reach = u.d.r + o.d.r + 0.25;
       if (gapD < reach) { const k = (reach - gapD) / reach; sx += ox / gapD * k; sy += oy / gapD * k; }
     });
     // On a road a unit keeps to the carriageway when its way runs on along it. Neighbours push it along the road
     // rather than off it, and it drifts back toward the middle line, so a group marches as a column.
-    const rd0 = roadDistAt(S.map, u.x, u.y);
-    if (rd0 < 1.6 && roadDistAt(S.map, wx, wy) < 1.3) {
+    const rd0 = roadDistAt(S.map, u.x, u.y), naval = d.move === 'naval';
+    if (!naval && rd0 < 1.6 && roadDistAt(S.map, wx, wy) < 1.3) {
       const gx = roadDistAt(S.map, u.x + 0.5, u.y) - roadDistAt(S.map, u.x - 0.5, u.y), gy = roadDistAt(S.map, u.x, u.y + 0.5) - roadDistAt(S.map, u.x, u.y - 0.5), gm = mhypot(gx, gy);
       if (gm > 1e-3) {
         const nx = gx / gm, ny = gy / gm, across = sx * nx + sy * ny, pull = Math.max(0, rd0 - 0.35) * 0.5;
@@ -2060,7 +2062,7 @@ const Rules = (() => {
     dx += sx * 1.6; dy += sy * 1.6;
     const mag = mhypot(dx, dy) || 1;
     dx /= mag; dy /= mag;
-    const rk = 1 - smooth(0.9, 1.6, roadDistAt(S.map, u.x, u.y)), here = S.gnd[cellOf(u.x, u.y)], w = sky(S);
+    const rk = naval ? 0 : 1 - smooth(0.9, 1.6, roadDistAt(S.map, u.x, u.y)), here = naval ? 0 : S.gnd[cellOf(u.x, u.y)], w = sky(S);
     // Mud after rain bogs wheels down off the roads, snow slows everyone, and woods and fords slow what is in them.
     // A worn track is quicker going, and a hardened one is as firm as a road in the wet. The road's own going
     // fades out across its verge.
@@ -2418,6 +2420,8 @@ const Rules = (() => {
     }
     if (o && o.t === 'attack') {
       t = S.byId.get(o.id);
+      // An engineer sent to mend unasked turns to the next hurt building if its own is made whole first.
+      if (o.fix && t && t.hp >= t.max) { t = fixFor(S, u); if (t) o.id = t.id; }
       if (!t || t.hp <= 0 || (t.team === u.team && !d.engineer) || atPeace(S, u.team, t.team)) { u.ord = null; u.tgt = 0; t = null; o = null; }
       else u.tgt = t.id;
     }
@@ -2477,6 +2481,21 @@ const Rules = (() => {
       if (o.cov >= 0 && mhypot(u.x - sx, u.y - sy) < 0.5) { u.x = sx; u.y = sy; u.a = coverPoints(S.map)[o.cov].dir; u.cov = o.cov; }
       u.ord = null; u.tgt = 0; u.home = null;
     }
+  }
+
+  // The building an engineer goes to mend unasked. Its side's own within reach, at most FIX_AT whole, the worst hurt
+  // first and the nearest of near equals, passing over any that another engineer is already on its way into.
+  const FIX_AT = 0.75, FIX_REACH = 60;
+  function fixFor(S, u) {
+    const taken = new Set();
+    for (const o of S.ents) if (o !== u && o.team === u.team && o.d.engineer && o.hp > 0 && o.ord && o.ord.t === 'attack') taken.add(o.ord.id);
+    let best = null, bk = 1e9;
+    for (const e of S.ents) {
+      if (!e.b || e.team !== u.team || e.hp <= 0 || e.hp > e.max * FIX_AT || taken.has(e.id)) continue;
+      const d = mhypot(e.x - u.x, e.y - u.y), k = e.hp / e.max + d / 600;
+      if (d < FIX_REACH && k < bk) { bk = k; best = e; }
+    }
+    return best;
   }
 
   function engineerGo(S, u, t) {
@@ -2760,9 +2779,11 @@ const Rules = (() => {
     ownEvent(S, P.team, 'unitready');
     if (u.d.move === 'jet') { u.ord = null; return; }
     if (!u.d.cargo) {
-      const r = best.rally, raid = P.raid && S.tick - P.raid.tick < 12 * HZ ? P.raid : null;
+      const r = best.rally, raid = P.raid && S.tick - P.raid.tick < 12 * HZ ? P.raid : null, fix = u.d.engineer && fixFor(S, u);
+      // A new engineer goes straight into a hurt building of its base to mend it.
+      if (fix) { u.ord = { t: 'attack', id: fix.id, fix: true }; u.tgt = fix.id; u.wpT = 0; u.stuck = 0; }
       // While the base is under attack, an armed unit goes straight out to meet the attackers, hunting on its way.
-      if (raid && armed(u) && !u.d.engineer) {
+      else if (raid && armed(u) && !u.d.engineer) {
         const a = raid.by && S.byId.get(raid.by), at = a && a.hp > 0 && mhypot(a.x - raid.x, a.y - raid.y) < 20 ? a : raid;
         orderMove(S, [u], at.x, at.y, true);
       } else if (r) orderMove(S, [u], r[0], r[1], false);
@@ -2999,7 +3020,7 @@ const Rules = (() => {
     for (const u of S.ents) {
       if (u.b || u.hp <= 0 || u.drop > 0 || isAir(u)) continue;
       near(S, u.x, u.y, 2, o => {
-        if (o.id <= u.id || o.b || o.hp <= 0 || o.drop > 0 || isAir(o)) return;
+        if (o.id <= u.id || o.b || o.hp <= 0 || o.drop > 0 || isAir(o) || (o.d.move === 'naval') !== (u.d.move === 'naval')) return;
         const dx = u.x - o.x, dy = u.y - o.y, d = mhypot(dx, dy) || 0.01, min = (u.d.r + o.d.r) * (u.d.men && o.d.men ? 0.9 : 0.95);
         if (d >= min) return;
         const push = (min - d) * 0.5, nx = dx / d, ny = dy / d;

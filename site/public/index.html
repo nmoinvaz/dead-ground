@@ -525,7 +525,7 @@ body[data-look="ink"] .sheet { box-shadow: 4px 4px 0 var(--ink); }
     <div id="settings" hidden role="dialog" aria-label="Settings">
       <div class="choice"><h2>Look</h2><div id="s-look" class="two"></div></div>
       <div class="choice"><h2>Paper</h2><div id="s-scheme"><button data-v="light">Light</button><button data-v="dark">Dark</button><button data-v="auto">As the system</button></div></div>
-      <p id="build">Build 5b4267d 2026-11-05 19:42</p>
+      <p id="build">Build d43a998 2026-11-06 05:53</p>
     </div>
     <div id="banner" hidden></div>
     <button id="update" hidden>A new version of Dead Ground is out. <b>Reload</b></button>
@@ -2159,7 +2159,7 @@ const Rules = (() => {
   // twentieths, makes open ground and young tracks dearer, while a hardened track and a road stay firm.
   let fillBlock = null;
   function fill(S, f, cls, gx, gy, occ, g, reach = Infinity, wq = 20) {
-    const M = S.map, bit = BIT[cls], woodC = cls === 'track' ? 3 : 1.6, roadC = ROAD_COST[cls], offK = 20 / wq;
+    const M = S.map, bit = BIT[cls], woodC = cls === 'track' ? 3 : 1.6, roadC = ROAD_COST[cls], offK = 20 / wq, naval = cls === 'naval';
     if (!fillBlock || fillBlock.length !== N) fillBlock = new Uint8Array(N);
     const block = fillBlock, road = roadW(M);
     if (cls === 'naval') { const sea = M.sea; for (let c = 0; c < N; c++) block[c] = !sea[c] || occ[c] !== 0 ? 1 : 0; }
@@ -2203,8 +2203,9 @@ const Rules = (() => {
         if (block[m]) continue;
         if ((i & 1) && (block[y * W + nx] || block[ny * W + x])) continue;
         // Rounded to the array's own precision, so a cell is never queued again for the same distance.
+        // Open water is the same going everywhere, under a bridge's road as well.
         const gm = g[m], rw = road[m], lv = (gm >> 5) & 3, off = lv >= 3 ? TRACK_COST[3] : TRACK_COST[lv] * offK, here = rw > 0 ? off + (roadC - off) * rw : off;
-        const nd = Math.fround(dc + COST[i] * here * (gm & 8 ? woodC : 1) * (gm & 16 ? 2 : 1));
+        const nd = Math.fround(dc + COST[i] * (naval ? 1 : here * (gm & 8 ? woodC : 1) * (gm & 16 ? 2 : 1)));
         if (nd < dist[m]) { dist[m] = nd; dir[m] = (i + 4) & 7; push(m, nd); }
       }
     }
@@ -2238,7 +2239,7 @@ const Rules = (() => {
   // Looks ahead along the field for the farthest point in a straight, clear line.
   function waypoint(S, u, tx, ty) {
     const cls = clsOf(u), far = mhypot(tx - u.x, ty - u.y);
-    if (far < 16 && lineClear(S, cls, u.x, u.y, tx, ty) && (far < 8 || !waysBetween(S, u.x, u.y, tx, ty))) return [tx, ty];
+    if (far < 16 && lineClear(S, cls, u.x, u.y, tx, ty) && (far < 8 || cls === 'naval' || !waysBetween(S, u.x, u.y, tx, ty))) return [tx, ty];
     // From afar the way leads to the middle of the goal's block of four by four cells, so a group and
     // anyone going near the same place share one field. Close in it leads to the goal's own cell.
     const q = far > 24;
@@ -2268,17 +2269,18 @@ const Rules = (() => {
   // joins, so it merges at a slant.
   function lookAhead(S, f, cls, bx, by) {
     let c = cellOf(bx, by), wx = (c % W) + 0.5, wy = (c / W | 0) + 0.5;
-    const M = S.map, rw = roadW(M), lv0 = S.gnd[c] & 96, on0 = rw[c] > 0.5, lane = on0 ? Math.max(1.2, roadDistAt(M, bx, by)) : 0;
+    // A ship passing under a bridge is not on its road.
+    const M = S.map, rw = roadW(M), wet = cls === 'naval', lv0 = S.gnd[c] & 96, on0 = !wet && rw[c] > 0.5, lane = on0 ? Math.max(1.2, roadDistAt(M, bx, by)) : 0;
     let joined = -1;
     for (let i = 0; i < 10; i++) {
       const dir = f.dir[c];
       if (dir < 0) break;
       const x = c % W + FDX[dir], y = (c / W | 0) + FDY[dir];
       c = y * W + x;
-      const px = x + 0.5, py = y + 0.5, on = rw[c] > 0.5;
+      const px = x + 0.5, py = y + 0.5, on = !wet && rw[c] > 0.5;
       // The next cell along the field is always taken, so a man on a bend still moves on.
       if (lineClear(S, cls, bx, by, px, py) && (!on0 || !i || laneClear(M, bx, by, px, py, lane))) { wx = px; wy = py; } else break;
-      if ((S.gnd[c] & 96) !== lv0 && !on) break;
+      if (!wet && (S.gnd[c] & 96) !== lv0 && !on) break;
       if (on0 && !on) break;
       if (!on0 && on && joined < 0) joined = i;
       if (joined >= 0 && i >= joined + 2) break;
@@ -2309,7 +2311,7 @@ const Rules = (() => {
     for (let i = 0; i < max; i++) {
       const far = mhypot(tx - x, ty - y);
       if (far < 0.6) break;
-      if (far < 16 && lineClear(S, cls, x, y, tx, ty) && (far < 8 || !waysBetween(S, x, y, tx, ty))) { pts.push([tx, ty]); break; }
+      if (far < 16 && lineClear(S, cls, x, y, tx, ty) && (far < 8 || cls === 'naval' || !waysBetween(S, x, y, tx, ty))) { pts.push([tx, ty]); break; }
       const q = far > 24, gx = clamp(q ? (tx >> 2) * 4 + 2 : tx | 0, 0, W - 1), gy = clamp(q ? (ty >> 2) * 4 + 2 : ty | 0, 0, H - 1);
       const f = peekField(S, cls, gx, gy, far), c = cellOf(x, y);
       if (f.dist[c] === Infinity || (f.dir[c] < 0 && f.dist[c] !== 0)) break;
@@ -2668,14 +2670,14 @@ const Rules = (() => {
     let dx = dx0 / dist, dy = dy0 / dist;
     let sx = 0, sy = 0;
     near(S, u.x, u.y, 2.5, o => {
-      if (o === u || o.b || o.drop > 0 || isAir(o) !== isAir(u)) return;
+      if (o === u || o.b || o.drop > 0 || isAir(o) !== isAir(u) || (o.d.move === 'naval') !== (d.move === 'naval')) return;
       const ox = u.x - o.x, oy = u.y - o.y, gapD = mhypot(ox, oy) || 0.01, reach = u.d.r + o.d.r + 0.25;
       if (gapD < reach) { const k = (reach - gapD) / reach; sx += ox / gapD * k; sy += oy / gapD * k; }
     });
     // On a road a unit keeps to the carriageway when its way runs on along it. Neighbours push it along the road
     // rather than off it, and it drifts back toward the middle line, so a group marches as a column.
-    const rd0 = roadDistAt(S.map, u.x, u.y);
-    if (rd0 < 1.6 && roadDistAt(S.map, wx, wy) < 1.3) {
+    const rd0 = roadDistAt(S.map, u.x, u.y), naval = d.move === 'naval';
+    if (!naval && rd0 < 1.6 && roadDistAt(S.map, wx, wy) < 1.3) {
       const gx = roadDistAt(S.map, u.x + 0.5, u.y) - roadDistAt(S.map, u.x - 0.5, u.y), gy = roadDistAt(S.map, u.x, u.y + 0.5) - roadDistAt(S.map, u.x, u.y - 0.5), gm = mhypot(gx, gy);
       if (gm > 1e-3) {
         const nx = gx / gm, ny = gy / gm, across = sx * nx + sy * ny, pull = Math.max(0, rd0 - 0.35) * 0.5;
@@ -2685,7 +2687,7 @@ const Rules = (() => {
     dx += sx * 1.6; dy += sy * 1.6;
     const mag = mhypot(dx, dy) || 1;
     dx /= mag; dy /= mag;
-    const rk = 1 - smooth(0.9, 1.6, roadDistAt(S.map, u.x, u.y)), here = S.gnd[cellOf(u.x, u.y)], w = sky(S);
+    const rk = naval ? 0 : 1 - smooth(0.9, 1.6, roadDistAt(S.map, u.x, u.y)), here = naval ? 0 : S.gnd[cellOf(u.x, u.y)], w = sky(S);
     // Mud after rain bogs wheels down off the roads, snow slows everyone, and woods and fords slow what is in them.
     // A worn track is quicker going, and a hardened one is as firm as a road in the wet. The road's own going
     // fades out across its verge.
@@ -3043,6 +3045,8 @@ const Rules = (() => {
     }
     if (o && o.t === 'attack') {
       t = S.byId.get(o.id);
+      // An engineer sent to mend unasked turns to the next hurt building if its own is made whole first.
+      if (o.fix && t && t.hp >= t.max) { t = fixFor(S, u); if (t) o.id = t.id; }
       if (!t || t.hp <= 0 || (t.team === u.team && !d.engineer) || atPeace(S, u.team, t.team)) { u.ord = null; u.tgt = 0; t = null; o = null; }
       else u.tgt = t.id;
     }
@@ -3102,6 +3106,21 @@ const Rules = (() => {
       if (o.cov >= 0 && mhypot(u.x - sx, u.y - sy) < 0.5) { u.x = sx; u.y = sy; u.a = coverPoints(S.map)[o.cov].dir; u.cov = o.cov; }
       u.ord = null; u.tgt = 0; u.home = null;
     }
+  }
+
+  // The building an engineer goes to mend unasked. Its side's own within reach, at most FIX_AT whole, the worst hurt
+  // first and the nearest of near equals, passing over any that another engineer is already on its way into.
+  const FIX_AT = 0.75, FIX_REACH = 60;
+  function fixFor(S, u) {
+    const taken = new Set();
+    for (const o of S.ents) if (o !== u && o.team === u.team && o.d.engineer && o.hp > 0 && o.ord && o.ord.t === 'attack') taken.add(o.ord.id);
+    let best = null, bk = 1e9;
+    for (const e of S.ents) {
+      if (!e.b || e.team !== u.team || e.hp <= 0 || e.hp > e.max * FIX_AT || taken.has(e.id)) continue;
+      const d = mhypot(e.x - u.x, e.y - u.y), k = e.hp / e.max + d / 600;
+      if (d < FIX_REACH && k < bk) { bk = k; best = e; }
+    }
+    return best;
   }
 
   function engineerGo(S, u, t) {
@@ -3385,9 +3404,11 @@ const Rules = (() => {
     ownEvent(S, P.team, 'unitready');
     if (u.d.move === 'jet') { u.ord = null; return; }
     if (!u.d.cargo) {
-      const r = best.rally, raid = P.raid && S.tick - P.raid.tick < 12 * HZ ? P.raid : null;
+      const r = best.rally, raid = P.raid && S.tick - P.raid.tick < 12 * HZ ? P.raid : null, fix = u.d.engineer && fixFor(S, u);
+      // A new engineer goes straight into a hurt building of its base to mend it.
+      if (fix) { u.ord = { t: 'attack', id: fix.id, fix: true }; u.tgt = fix.id; u.wpT = 0; u.stuck = 0; }
       // While the base is under attack, an armed unit goes straight out to meet the attackers, hunting on its way.
-      if (raid && armed(u) && !u.d.engineer) {
+      else if (raid && armed(u) && !u.d.engineer) {
         const a = raid.by && S.byId.get(raid.by), at = a && a.hp > 0 && mhypot(a.x - raid.x, a.y - raid.y) < 20 ? a : raid;
         orderMove(S, [u], at.x, at.y, true);
       } else if (r) orderMove(S, [u], r[0], r[1], false);
@@ -3624,7 +3645,7 @@ const Rules = (() => {
     for (const u of S.ents) {
       if (u.b || u.hp <= 0 || u.drop > 0 || isAir(u)) continue;
       near(S, u.x, u.y, 2, o => {
-        if (o.id <= u.id || o.b || o.hp <= 0 || o.drop > 0 || isAir(o)) return;
+        if (o.id <= u.id || o.b || o.hp <= 0 || o.drop > 0 || isAir(o) || (o.d.move === 'naval') !== (u.d.move === 'naval')) return;
         const dx = u.x - o.x, dy = u.y - o.y, d = mhypot(dx, dy) || 0.01, min = (u.d.r + o.d.r) * (u.d.men && o.d.men ? 0.9 : 0.95);
         if (d >= min) return;
         const push = (min - d) * 0.5, nx = dx / d, ny = dy / d;
@@ -6903,12 +6924,12 @@ if (typeof module !== 'undefined') module.exports = Looks;
       // The ground's hatching is pinned to the map so it pans with it, the units' redraws a few times a second.
       const ink = new THREE.ShaderMaterial({ uniforms: { t: { value: null }, tSubj: { value: null }, tHeat: { value: null }, tPaper: { value: null }, res: { value: new THREE.Vector2(1, 1) }, uTime: { value: 0 }, uK: { value: 1 }, uOff: { value: new THREE.Vector2() }, uStyle: { value: 8 }, tNorm: { value: null }, tFogS: { value: null }, tLand: { value: null }, uSun2: { value: new THREE.Vector2(-1, 0) }, uUpV: { value: new THREE.Vector3(0, 1, 0) }, uRoad: { value: 0 }, uOre: { value: 0 }, uMarks: { value: 1 },
         uWindS: { value: new THREE.Vector2() }, uView: { value: new THREE.Vector2(1, 0) }, tFx: { value: null }, tAnc: { value: null }, uDark: { value: 0 }, uInks: { value: 0 }, uFxs: { value: 0 }, uUnits: { value: 0 }, tH: SH.tH, uHSize: { value: new THREE.Vector2(1, 1) }, uHScale: { value: 1 }, uRain: { value: 0 }, uStorm: { value: 0 }, uSnowF: { value: 0 }, uSnowC: SH.uSnowC, uFog: { value: 0 }, uMist: { value: 0 }, uNight: { value: 0 }, uWet: { value: 0 },
-        uDayMul: { value: new THREE.Vector3(1, 1, 1) }, uDayAdd: { value: new THREE.Vector3() }, uWaterL: { value: -0.15 }, uCloudK: SH.uCloudK,
+        uDayMul: { value: new THREE.Vector3(1, 1, 1) }, uDayAdd: { value: new THREE.Vector3() }, uWaterL: { value: -0.15 }, uCloudK: SH.uCloudK, tMarks: SH.tMarks, uMap: SH.uMap,
         uCloud: SH.uCloud, uCloudT: SH.uCloudT, uSunW: SH.uSunDir, uCloudA: { value: 0 }, uCloudG: { value: 0 }, uRayK: { value: 0 }, uSand: { value: 0 },
         uInvVP: { value: new THREE.Matrix4() }, uW2S: { value: new THREE.Vector4(1, 0, 0, 1) }, uLev: { value: 1 },
         // Each side's colour as the anchor pass keeps it, its hue and how coloured it is, and its inks on either paper.
         uSideKey: { value: [...Array(8)].map(() => new THREE.Vector2()) }, uSideL: { value: [...Array(8)].map(() => new THREE.Vector3()) }, uSideD: { value: [...Array(8)].map(() => new THREE.Vector3()) }, uSideB: { value: [...Array(8)].map(() => new THREE.Vector3()) } }, vertexShader: vs, depthTest: false, depthWrite: false, fragmentShader: `
-        varying vec2 vUv; uniform sampler2D t, tSubj, tHeat, tPaper, tNorm, tFogS, tLand; uniform vec2 res, uOff, uSun2, uWindS, uView, uHSize; uniform float uHScale, uFxs; uniform int uUnits, uInks; uniform float uDark; uniform sampler2D tH, tFx, tAnc; uniform vec3 uUpV, uDayMul, uDayAdd; uniform float uTime, uK, uRain, uStorm, uSnowF, uSnowC, uFog, uMist, uNight, uWet, uWaterL, uCloudK, uMarks; uniform int uStyle, uRoad, uOre;
+        varying vec2 vUv; uniform sampler2D t, tSubj, tHeat, tPaper, tNorm, tFogS, tLand, tMarks; uniform float uMap; uniform vec2 res, uOff, uSun2, uWindS, uView, uHSize; uniform float uHScale, uFxs; uniform int uUnits, uInks; uniform float uDark; uniform sampler2D tH, tFx, tAnc; uniform vec3 uUpV, uDayMul, uDayAdd; uniform float uTime, uK, uRain, uStorm, uSnowF, uSnowC, uFog, uMist, uNight, uWet, uWaterL, uCloudK, uMarks; uniform int uStyle, uRoad, uOre;
         uniform vec2 uSideKey[8]; uniform vec3 uSideL[8], uSideD[8], uSideB[8];
         uniform vec2 uCloud; uniform vec3 uSunW; uniform float uCloudT, uCloudA, uCloudG, uRayK, uSand;
         // The clouds float at CLOUD_H over the land. cloudAt gives the cloud over a point of the land at that height,
@@ -7541,6 +7562,13 @@ if (typeof module !== 'undefined') module.exports = Looks;
           } else { float scs = min(sc, 0.8); scT = tone(p, scs > 0.6 ? 4.0 : scs > 0.35 ? 2.0 : scs > 0.12 ? 1.0 : 0.0, 61.0) * 0.85; }
           col = mix(col, inkC, scT * gnd * 0.9);
           col = mix(col, inkC, trk * gnd * 0.5 * step(0.4, noise(px * 0.22 / uK)));
+          // Blood where men and beasts fell, in solid red ink read from the scars on the land under the pixel.
+          // A flat wash inside a fine outline of darker red, as a blot of ink dries.
+          float bB = texture2D(tMarks, landAt(vUv, F.b - 20.0) / uMap).b, bw = max(fwidth(bB), 1e-4);
+          float bld = smoothstep(0.36, 0.4, bB) * gnd, bRim = (1.0 - smoothstep(0.6 * uK, 1.5 * uK, abs(bB - 0.38) / bw)) * gnd;
+          vec3 bloodC = dk ? vec3(0.5, 0.05, 0.045) : vec3(0.66, 0.08, 0.06);
+          col = mix(col, bloodC, bld * 0.9);
+          col = mix(col, bloodC * 0.55, bRim * 0.85);
           // Fire in flat bands of coloured ink, red, orange, yellow and a pale core, inside a black boiling outline.
           vec3 c1 = vec3(0.8, 0.17, 0.09), c2 = vec3(0.98, 0.47, 0.1), c3 = vec3(1.0, 0.82, 0.24), c4 = vec3(1.0, 0.97, 0.84);
           if (hz.b > hz.r * 1.1) { c1 = vec3(0.13, 0.33, 0.8); c2 = vec3(0.3, 0.6, 0.95); c3 = vec3(0.65, 0.86, 1.0); c4 = vec3(0.93, 0.97, 1.0); }
@@ -8087,6 +8115,8 @@ const World = (() => {
             vec4 mk = texture2D(tMarks, vW.xz / uMap);
             diffuseColor.rgb *= 1.0 - mk.r * 0.86;
             diffuseColor.rgb *= 1.0 - mk.g * 0.34;
+            // Blood, a deep red soaked into the ground.
+            diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.15, 0.018, 0.016), smoothstep(0.32, 0.45, mk.b) * 0.9);
             // Worn tracks, bare earth.
             float trk = texture2D(tTrail, vW.xz / uMap).r;
             diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(0.9, 0.84, 0.74) + vec3(0.05, 0.04, 0.02), smoothstep(0.2, 0.6, trk) * 0.7);`);
@@ -8618,7 +8648,7 @@ const World = (() => {
 
     let S = null, M = null, theme = null, viewTeam = 0, sets = {}, terrainMesh = null, waterMesh = null, statics = [], baseImage = null;
     const rs = new Map();
-    let wrecks = [], corpses = [], flyers = [], planes = [], falls = [], marks = null, marksTex = null, marksDirty = false, marksLast = 0;
+    let wrecks = [], corpses = [], bleeds = [], flyers = [], planes = [], falls = [], marks = null, marksTex = null, marksDirty = false, marksLast = 0;
     let fogTex = null, fogData = null, fogR = null, fogG = null, terrTex = null, terrData = null, terrSeen = -1, hTex = null;
     // A number as a half float, for heights within a few units of the ground.
     const halfBuf = new Float32Array(1), halfBits = new Uint32Array(halfBuf.buffer);
@@ -8640,7 +8670,7 @@ const World = (() => {
       statics = [];
       for (const k in sets) for (const p of sets[k]) { scene.remove(p.mesh); p.mesh.dispose(); }
       sets = {};
-      rs.clear(); wrecks = []; corpses = []; flyers = []; planes = []; falls = []; inkFx.length = 0; pastBoxes.length = 0; stuckArrows.length = 0; strokes.length = 0; scen = null; life = null;
+      rs.clear(); wrecks = []; corpses = []; bleeds = []; flyers = []; planes = []; falls = []; inkFx.length = 0; pastBoxes.length = 0; stuckArrows.length = 0; strokes.length = 0; scen = null; life = null;
     }
     const add = o => { scene.add(o); statics.push(o); return o; };
     function lineCat(mesh, cat, sway = false) {
@@ -9967,6 +9997,7 @@ const World = (() => {
           if (alive < r.alive && vis) {
             const [cx, cz] = manAt(e.d.men, alive, x, y, yaw);
             corpses.push({ kind: e.kind, x: cx, y: heightAt(M, cx, cz), z: cz, yaw, t: 0, color });
+            bleed(cx, cz, -yaw);
           }
           r.alive = alive;
         }
@@ -10066,6 +10097,11 @@ const World = (() => {
           dustPuff(f.x + Math.cos(a) * q, f.y0 + 0.1, f.z + Math.sin(a) * q, 1.6 + fall);
           smoke.add(f.x + (Math.random() - 0.5) * f.w, f.y0 + 1.4 * (1 - g2), f.z + (Math.random() - 0.5) * f.h, (Math.random() - 0.5) * 3, 2 + Math.random() * 3, (Math.random() - 0.5) * 3, 0.9, 0.12, 0.18, [0.2, 0.18, 0.16, 1], [0.2, 0.18, 0.16, 0.9], 11, { grav: -12, spin: 6 });
         }
+      }
+      for (let i = bleeds.length - 1; i >= 0; i--) {
+        const b = bleeds[i];
+        b.t += dt;
+        if (b.n === 0 && b.t > 0.5) { pool(b, 0.7); b.n = 1; } else if (b.n === 1 && b.t > 1.8) { pool(b, 1); bleeds.splice(i, 1); }
       }
       for (let i = corpses.length - 1; i >= 0; i--) {
         const c = corpses[i];
@@ -10245,6 +10281,35 @@ const World = (() => {
         c.lineWidth = Math.max(1, r * 0.08 * k);
         c.beginPath(); c.moveTo((x + Math.cos(a) * d0) * k, (y + Math.sin(a) * d0) * k); c.lineTo((x + Math.cos(a) * d1) * k, (y + Math.sin(a) * d1) * k); c.stroke();
       }
+      marksDirty = true;
+    }
+    // Blood where a man or a beast falls on dry ground, in the scars layer's blue: a few drops flung out at once,
+    // then a pool that spreads from under the body over two seconds, longest along the way it lay.
+    function bleed(x, y, a, r = 0.17) {
+      const t = terrainAt(M, x, y);
+      if (t < M.water + 0.05 || heightAt(M, x, y) > t + 0.1) return;
+      const b = { x, y, a, r, t: 0, n: 0 }, c = marks.ctx, k = marks.width / W, q0 = 0.8 / k;
+      bleeds.push(b);
+      c.globalCompositeOperation = 'lighter'; c.fillStyle = 'rgb(0,0,160)';
+      c.beginPath();
+      for (let i = 0, n = 2 + (Math.random() * 4 | 0); i < n; i++) {
+        const a2 = Math.random() * 6.28, d = r * (0.9 + Math.random() * 1.3), q = Math.max(q0, r * (0.12 + Math.random() * 0.12));
+        const px = (x + Math.cos(a2) * d) * k, py = (y + Math.sin(a2) * d) * k;
+        c.moveTo(px + q * k, py); c.arc(px, py, q * k, 0, 6.3);
+      }
+      c.fill();
+      pool(b, 0.45);
+    }
+    function pool(b, s) {
+      const c = marks.ctx, k = marks.width / W, ca = Math.cos(b.a), sa = Math.sin(b.a);
+      c.globalCompositeOperation = 'lighter'; c.fillStyle = 'rgb(0,0,110)';
+      c.beginPath();
+      for (let i = 0; i < 4; i++) {
+        const along = (Math.random() - 0.5) * b.r * 1.5 * s, across = (Math.random() - 0.5) * b.r * 0.6 * s, q = Math.max(0.8 / k, b.r * s * (0.5 + Math.random() * 0.3));
+        const px = (b.x + ca * along - sa * across) * k, py = (b.y + sa * along + ca * across) * k;
+        c.moveTo(px + q * k, py); c.arc(px, py, q * k, 0, 6.3);
+      }
+      c.fill();
       marksDirty = true;
     }
     function trackMark(r, x, y, yaw, half, a) {
@@ -10551,9 +10616,10 @@ const World = (() => {
         explosion(e.x, y + e.z, e.y, UNITS[e.kind].hp > 200 ? 1.2 : 0.4, BLAST_OF[e.kind]);
       } else if (UNITS[e.kind].men) {
         const kept = r ? r.alive : 0;
-        for (let i = 0; i < (kept || 1); i++) { const [cx, cz] = manAt(UNITS[e.kind].men, i, e.x, e.y, -e.a); corpses.push({ kind: e.kind, x: cx, y: heightAt(M, cx, cz), z: cz, yaw: -e.a, t: 0, color: teamCol[e.team] }); }
+        for (let i = 0; i < (kept || 1); i++) { const [cx, cz] = manAt(UNITS[e.kind].men, i, e.x, e.y, -e.a); corpses.push({ kind: e.kind, x: cx, y: heightAt(M, cx, cz), z: cz, yaw: -e.a, t: 0, color: teamCol[e.team] }); bleed(cx, cz, e.a); }
       } else if (OLD(e.kind)) {
         dustBurst(e.x, y, e.y, UNITS[e.kind].hp > 500 ? 1.4 : 1);
+        if (MODELS.units[e.kind] && MODELS.units[e.kind].gait) bleed(e.x, e.y, e.a, 0.34);
         wrecks.push({ kind: e.kind, x: e.x, y, z: e.y, yaw: -e.a, pitch: 0, t: 0, smoke: 0 }); capWrecks(e.kind);
       } else {
         explosion(e.x, y + 0.4, e.y, UNITS[e.kind].hp > 500 ? 1.4 : 0.9, BLAST_OF[e.kind]);
