@@ -2039,12 +2039,14 @@ const World = (() => {
           pushScreen(onScreen, e, x, gh + 0.4, y, 0.6);
           continue;
         }
-        const air = Rules.isAir(e), L = e.d.r * 0.9;
-        const z = air ? gh * 0 + Math.max(gh, M.water) + e.z : gh;
+        const air = Rules.isAir(e), naval = e.d.move === 'naval', L = e.d.r * 0.9;
+        // A ship rides on the water, rising and falling a little with the swell.
+        const z = air ? gh * 0 + Math.max(gh, M.water) + e.z : naval ? M.water + waterRise.value + 0.04 * Math.sin(now * 1.6 + e.id) : gh;
         if (!air) {
           const cA = Math.cos(-yaw), sA = Math.sin(-yaw);
           const hf = heightAt(M, x + cA * L, y + sA * L), hb = heightAt(M, x - cA * L, y - sA * L), hl = heightAt(M, x - sA * L * 0.7, y + cA * L * 0.7), hr = heightAt(M, x + sA * L * 0.7, y - cA * L * 0.7);
-          const tp = Math.atan2(hf - hb, L * 2), tr = Math.atan2(hl - hr, L * 1.4), k = 1 - Math.exp(-dt * 10);
+          const k = 1 - Math.exp(-dt * 10);
+          const tp = naval ? 0.03 * Math.sin(now * 1.3 + e.id) : Math.atan2(hf - hb, L * 2), tr = naval ? 0.05 * Math.sin(now * 1.05 + e.id * 2) : Math.atan2(hl - hr, L * 1.4);
           r.pitch += (tp - r.pitch) * k; r.roll += (tr - r.roll) * k;
           compose(m1, x, z, y, yaw, r.pitch, -r.roll, US);
           // A beast or walker rides up and down on its stride, and a gallop rocks it fore and aft. A gun runs back as
@@ -2066,8 +2068,8 @@ const World = (() => {
         if (r.morph !== undefined && r.morph < 0.45) { r.morph += dt; const k = Math.min(1, r.morph / 0.45); m3.makeScale(1, 0.55 + 0.45 * (1 - (1 - k) ** 3), 1); m1.multiply(m3); }
         drawParts(sets[e.kind], m1, color, e, r, now);
         if (!air) {
-          // Dust behind what moves, and tracks in the ground.
-          if (e.v > 0.8) {
+          // Dust behind what moves on land, and tracks in the ground.
+          if (e.v > 0.8 && !naval) {
             r.dust -= dt;
             if (r.dust <= 0) {
               r.dust = 0.13;

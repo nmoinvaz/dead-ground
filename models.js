@@ -733,6 +733,19 @@ const Models = (() => {
       g.cyl(0.014, 0.02, 0.62, 0.3, 0, 0, P.steelDk, { axis: 'x', seg: 6 });
       buildings.bunker = [part('body', b), part('turret', t, { pivot: [0, 0.1, 0], aim: true }), part('gun', g, { parent: 'turret', pivot: [0.7, 0.26, 0], recoil: 0.04 })];
     }
+    // Dock: a plank quay on the shore with a crane, bollards, stacked crates and a boathouse under the side's mark.
+    {
+      const b = G(), wood = 0x6a5238, woodDk = 0x4e3a26;
+      b.box(3, 0.3, 3, 0, -0.1, 0, wood);
+      for (let i = 0; i < 6; i++) b.box(3, 0.012, 0.03, 0, 0.2, -1.25 + i * 0.5, woodDk);
+      for (const [x, z] of [[1.3, 1.3], [1.3, -1.3], [-1.3, 1.3], [-1.3, -1.3], [1.3, 0], [-1.3, 0]]) b.cyl(0.07, 0.08, 0.2, x, 0.3, z, woodDk, { seg: 8 });
+      b.box(1.3, 0.62, 1.0, -0.6, 0.2, -0.75, woodDk, T);
+      b.prism([[-0.7, 0], [0, 0.42], [0.7, 0], [0.7, 0.04], [0, 0.46], [-0.7, 0.04]], 1.06, -0.6, 0.82, -0.75, P.rust);
+      b.cyl(0.06, 0.08, 1.3, 0.7, 0.85, 0.6, P.steelDk, { seg: 8 }); b.box(1.3, 0.07, 0.07, 1.05, 1.45, 0.6, P.steelDk, { rz: 0.2 });
+      for (const [x, z, h] of [[0.2, 0.9, 0.28], [0.5, 0.95, 0.22], [0.3, 0.55, 0.24]]) b.box(0.28, h, 0.28, x, 0.2, z, P.sand);
+      mark(b, 0.6, 0.6, -0.6, 0.83, -0.75);
+      buildings.dock = [part('body', b)];
+    }
     {
       const b = G();
       b.box(2, 0.4, 2, 0, -0.34, 0, P.sand);
@@ -1489,6 +1502,81 @@ const Models = (() => {
       // Hover freighter: the hauler's barge with a sealed cargo pod on its bin.
       const c = G(); c.box(1.1, 0.36, 0.7, -0.3, 1.04, 0, A.exo, T); c.box(1.12, 0.04, 0.72, -0.3, 1.0, 0, A.glow, GLOW); mark(c, 0.3, 0.4, -0.3, 1.225, 0);
       units.hovfreight = [part('hull', b), part('pod', c)];
+    }
+    // Ships and boats, their waterline at 0. A hull is a plan with a pointed bow pushed up from the water, and a
+    // deck laid on it; masts carry square sails that take the side's mark.
+    const hull = (g, L, Wd, h, c, deck = A.wood) => {
+      const plan = (k, e) => [[L / 2 - e, 0], [L / 2 - Wd * 0.9, Wd / 2 * k - e], [-L / 2 + e, Wd / 2 * 0.85 * k - e], [-L / 2 + e, -(Wd / 2 * 0.85 * k - e)], [L / 2 - Wd * 0.9, -(Wd / 2 * k - e)]];
+      g.plate(plan(1, 0), h, 0, -0.08, 0, c);
+      g.plate(plan(1, 0.05), 0.02, 0, h - 0.08, 0, deck);
+    };
+    const mast = (g, x, hgt, w, y0) => { g.cyl(0.025, 0.035, hgt, x, y0 + hgt / 2, 0, A.woodDk, { seg: 6 }); g.box(0.03, hgt * 0.55, w, x + 0.03, y0 + hgt * 0.3, 0, A.canvas, T); };
+    {
+      // War galley: a long low hull, a bronze ram, a bank of oars a side and one square sail.
+      const b = G();
+      hull(b, 2.1, 0.5, 0.22, A.wood);
+      b.box(0.24, 0.07, 0.07, 1.1, -0.02, 0, A.bronze);
+      for (let i = 0; i < 6; i++) for (const s of [-1, 1]) b.box(0.035, 0.02, 0.44, 0.55 - i * 0.24, 0.08, s * 0.42, A.woodDk, { ry: s * 0.25 });
+      b.box(0.1, 0.3, 0.1, -1.0, 0.14, 0, A.woodDk);
+      mast(b, 0.05, 0.9, 0.72, 0.14); mark(b, 0.3, 0.26, -0.6, 0.15, 0);
+      units.galley = [part('hull', b)];
+    }
+    {
+      // War cog: a round tubby hull with a castle at each end and one great square sail.
+      const b = G();
+      hull(b, 1.8, 0.7, 0.34, A.wood);
+      b.box(0.42, 0.22, 0.62, 0.55, 0.26, 0, A.woodDk, T); b.box(0.5, 0.32, 0.64, -0.62, 0.26, 0, A.woodDk, T);
+      mast(b, 0, 1.25, 0.86, 0.26);
+      units.cog = [part('hull', b)];
+    }
+    {
+      // Frigate: a long dark hull with a row of gunports and three masts under sail.
+      const b = G();
+      hull(b, 2.6, 0.72, 0.38, A.woodDk, A.wood);
+      b.box(1.7, 0.07, 0.74, -0.1, 0.16, 0, 0x2a2826);
+      for (let i = 0; i < 6; i++) for (const s of [-1, 1]) b.box(0.08, 0.06, 0.02, 0.55 - i * 0.26, 0.17, s * 0.375, A.ivory);
+      mast(b, 0.75, 1.25, 0.72, 0.3); mast(b, 0, 1.5, 0.86, 0.3); mast(b, -0.78, 1.15, 0.66, 0.3);
+      units.frigate = [part('hull', b)];
+    }
+    {
+      // Ironclad: a low iron hull, an armoured casemate with a gun at each end, and a tall funnel.
+      const b = G();
+      hull(b, 2.4, 0.78, 0.22, P.steel, P.steelDk);
+      b.plate([[0.6, 0.26], [-0.6, 0.26], [-0.8, 0], [-0.6, -0.26], [0.6, -0.26], [0.8, 0]], 0.26, -0.05, 0.14, 0, P.steel, T);
+      for (const x of [0.9, -0.95]) b.cyl(0.03, 0.035, 0.46, x, 0.28, 0, P.steelDk, { axis: 'x', seg: 6 });
+      b.cyl(0.09, 0.1, 0.62, -0.05, 0.62, 0, A.coal, { seg: 10 }); mark(b, 0.32, 0.3, -0.05, 0.41, 0);
+      units.ironclad = [part('hull', b)];
+    }
+    {
+      // Destroyer: a long grey hull, a bridge and mast amidships, a gun turret fore and aft and a raked funnel.
+      const b = G(), grey = 0x8c9196, dark = 0x5d6267;
+      hull(b, 2.9, 0.6, 0.3, grey, dark);
+      b.box(0.62, 0.36, 0.42, 0.25, 0.22, 0, grey, T); b.box(0.5, 0.06, 0.44, 0.25, 0.58, 0, dark);
+      b.cyl(0.02, 0.025, 0.7, 0.2, 0.9, 0, dark, { seg: 6 });
+      b.cyl(0.08, 0.1, 0.42, -0.35, 0.4, 0, dark, { seg: 10, rz: 0.15 });
+      for (const [x, r] of [[0.95, 1], [-0.95, -1]]) { b.cyl(0.13, 0.15, 0.12, x, 0.28, 0, grey, { seg: 10 }); b.cyl(0.022, 0.026, 0.42, x + r * 0.26, 0.31, 0, dark, { axis: 'x', seg: 6 }); }
+      mark(b, 0.36, 0.3, -0.85, 0.231, 0);
+      units.destroyer = [part('hull', b)];
+    }
+    {
+      // Rail corvette: an angular composite hull, a sealed pod, a long rail gun and a strip of blue light.
+      const b = G();
+      b.plate([[1.4, 0], [0.4, 0.34], [-1.3, 0.3], [-1.3, -0.3], [0.4, -0.34]], 0.26, 0, -0.08, 0, A.exo);
+      b.plate([[0.5, 0.2], [-0.8, 0.22], [-0.9, 0], [-0.8, -0.22], [0.5, -0.2], [0.8, 0]], 0.24, 0, 0.18, 0, A.exoDk, T);
+      b.box(1.6, 0.05, 0.08, 0.35, 0.44, 0, A.exoDk); b.box(1.5, 0.02, 0.04, 0.35, 0.49, 0, A.glow, GLOW);
+      b.box(0.02, 0.06, 0.62, -1.3, 0.06, 0, A.glow, GLOW); mark(b, 0.34, 0.3, -0.45, 0.425, 0);
+      units.corvette = [part('hull', b)];
+    }
+    {
+      // Fishing boats: a skiff under one sail, a two-masted smack, a steam trawler with its wheelhouse and boom,
+      // and a hover trawler. Each carries a net at the stern.
+      const net = (g, x, y) => g.sph(0.12, x, y, 0, A.rope, { seg: 8, rings: 5, sy: 0.6 });
+      { const b = G(); hull(b, 1.0, 0.36, 0.15, A.wood); mast(b, 0.08, 0.62, 0.42, 0.1); net(b, -0.32, 0.12); mark(b, 0.16, 0.16, -0.2, 0.08, 0); units.skiff = [part('hull', b)]; }
+      { const b = G(); hull(b, 1.35, 0.46, 0.2, A.coatB, A.wood); mast(b, 0.3, 0.8, 0.46, 0.14); mast(b, -0.25, 0.65, 0.4, 0.14); net(b, -0.52, 0.17); units.smack = [part('hull', b)]; }
+      { const b = G(); hull(b, 1.55, 0.52, 0.24, A.coatR, A.woodDk); b.box(0.36, 0.3, 0.36, 0.2, 0.17, 0, A.white, T); b.cyl(0.05, 0.06, 0.34, 0.0, 0.5, 0, A.coal, { seg: 8 });
+        b.cyl(0.02, 0.02, 0.8, -0.35, 0.45, 0, A.woodDk, { seg: 6, rz: 0.7 }); net(b, -0.6, 0.2); units.trawler = [part('hull', b)]; }
+      { const b = G(); b.plate([[0.8, 0], [0.3, 0.27], [-0.7, 0.26], [-0.7, -0.26], [0.3, -0.27]], 0.2, 0, -0.06, 0, A.exo); b.box(0.36, 0.22, 0.34, 0.15, 0.14, 0, A.exoDk, T);
+        b.box(0.02, 0.04, 0.5, -0.7, 0.06, 0, A.glow, GLOW); net(b, -0.45, 0.16); units.hovtrawler = [part('hull', b)]; }
     }
     // Rail artillery: a hover sled with a long rail on a turntable.
     {

@@ -32,6 +32,9 @@ const Hud = (() => {
       case 'eng': g.moveTo(-a, -b * 0.4); g.lineTo(a, -b * 0.4); g.moveTo(-a, -b * 0.4); g.lineTo(-a, b); g.moveTo(0, -b * 0.4); g.lineTo(0, b); g.moveTo(a, -b * 0.4); g.lineTo(a, b); break;
       case 'snp': cross(); dot(b * 0.3); break;
       case 'hero': g.moveTo(-a * 0.3, -b); g.lineTo(a * 0.5, -b * 0.1); g.lineTo(-a * 0.1, b * 0.1); g.lineTo(a * 0.3, b); break;
+      case 'ship': g.moveTo(-a, -b * 0.1); g.lineTo(a * 0.7, -b * 0.1); g.lineTo(a, -b * 0.5); g.moveTo(-a, -b * 0.1); g.lineTo(-a * 0.7, b * 0.5); g.lineTo(a * 0.6, b * 0.5); g.lineTo(a * 0.7, -b * 0.1); g.moveTo(-a * 0.1, -b * 0.1); g.lineTo(-a * 0.1, -b); break;
+      case 'boat': g.moveTo(-a * 0.8, 0); g.lineTo(a * 0.8, 0); g.lineTo(a * 0.5, b * 0.5); g.lineTo(-a * 0.5, b * 0.5); g.closePath(); g.moveTo(0, 0); g.lineTo(0, -b * 0.9); g.lineTo(a * 0.5, -b * 0.1); break;
+      case 'dock': g.rect(-a * 0.8, -b * 0.2, a * 1.6, b * 0.5); g.moveTo(-a * 0.5, -b * 0.2); g.lineTo(-a * 0.5, -b * 0.9); g.lineTo(a * 0.5, -b * 0.9); break;
       case 'trade': g.rect(-a * 0.7, -b * 0.4, a * 1.4, b * 0.9); g.moveTo(-a * 0.7, -b * 0.4); g.lineTo(a * 0.7, b * 0.5); g.moveTo(a * 0.7, -b * 0.4); g.lineTo(-a * 0.7, b * 0.5); break;
       case 'sup': case 'sup2': g.moveTo(-a, b * 0.5); g.lineTo(a, b * 0.5); if (sym === 'sup2') { g.moveTo(0, -b); g.lineTo(0, b * 0.2); g.moveTo(-a * 0.4, -b * 0.4); g.lineTo(a * 0.4, -b * 0.4); } break;
       case 'rec': g.moveTo(-a, b); g.lineTo(a, -b); break;
@@ -81,6 +84,8 @@ const Hud = (() => {
       case 'chariot': beast(3.4, 0.2, 2.6, 1.4); box(-7.2, -2.2, 5.4, 3); ring(-4.6, 3, 2.4); ln([[-1.8, -0.6], [1, -0.2]]); dot(-4.6, -4.8, 1.3); ln([[-4.6, -3.5], [-4.6, -2.2]]); break;
       case 'elephant': g.beginPath(); g.ellipse(-1.5, -0.4, 5.6, 3.4, 0, 0, 6.3); g.fill(); for (const x of [-5.4, -2.2, 1.4]) box(x, 1.5, 2.2, 4.3); dot(4.6, -1.4, 2.8); g.lineWidth = 1.8; ln([[6.8, -0.4], [7.8, 2.6], [7.2, 5.4]]); g.lineWidth = 1.1; ln([[5.6, 1.2], [8.2, 1.6]]); box(-4, -6.6, 4.8, 2.2); break;
       case 'cart': case 'cart2': beast(4.2, 0, 2.4, 1.3); box(-7.6, -2.6, 7.2, 3.6); ring(-4, 3, 2.4); ln([[-0.4, -0.6], [2, -0.6]]); if (sym === 'cart2') { g.fillStyle = bg; box(-5.4, -1.3, 3, 1); box(-4.4, -2.3, 1, 3); } break;
+      case 'ship': poly([[-8, 0], [6, 0], [8, -2.5], [-8, -1]]); poly([[-7, 1], [6, 1], [4, 4], [-6, 4]]); ln([[-1, -1], [-1, -7]]); ln([[-1, -6.5], [3.5, -2]]); break;
+      case 'boat': poly([[-6, 1], [6, 1], [4, 4], [-4, 4]]); ln([[0, 1], [0, -6]]); ln([[0, -5.5], [4, -0.5]]); break;
       case 'trade': box(-7, -3, 6, 5); box(0, -1.5, 5, 3.5); dot(-4.5, 3.5, 1.6); dot(2.5, 3.5, 1.6); ln([[5.5, 0], [8, 0]]); break;
       case 'sup': box(-7, -3, 9, 5); box(2.5, -1, 4.5, 3); dot(-4.5, 3.5, 1.6); dot(4, 3.5, 1.6); break;
       case 'sup2': box(-7, -3, 9, 5); box(2.5, -1, 4.5, 3); dot(-4.5, 3.5, 1.6); dot(4, 3.5, 1.6); g.fillStyle = bg; box(-4, -2.4, 3, 0.9); box(-3, -3.4, 0.9, 3); break;
@@ -154,15 +159,15 @@ const Hud = (() => {
 
     const TABS = [
       { id: 'bld', label: 'Base', key: 'Z' }, { id: 'def', label: 'Guns', key: 'X' }, { id: 'inf', label: 'Men', key: 'C' },
-      { id: 'veh', label: 'Armor', key: 'V' }, { id: 'air', label: 'Air', key: 'B' }, { id: 'pow', label: 'Calls', key: 'N' },
+      { id: 'veh', label: 'Armor', key: 'V' }, { id: 'air', label: 'Air', key: 'B' }, { id: 'sea', label: 'Sea', key: ',' }, { id: 'pow', label: 'Calls', key: 'N' },
     ];
     // Everything a side may come to build; the sidebar shows what its age has opened.
     const ALL = {
-      bld: ['power', 'refinery', 'barracks', 'factory', 'radar', 'derrick', 'fob', 'airfield', 'silo'],
+      bld: ['power', 'refinery', 'barracks', 'factory', 'radar', 'derrick', 'fob', 'airfield', 'dock', 'silo'],
       def: ['bunker', 'atgun', 'sam', 'rail'],
       pow: ['tech', 'flare', 'uav', 'barrage', 'para', 'launch'],
     };
-    const LISTS = { bld: [], def: [], inf: [], veh: [], air: [], pow: [] };
+    const LISTS = { bld: [], def: [], inf: [], veh: [], air: [], sea: [], pow: [] };
     const KEYS = 'QWERTYUIO';
     // The cards show only what the side's age has opened: one card for each line, in its form for that age, and
     // the buildings, defences and calls of that age.
@@ -171,7 +176,7 @@ const Hud = (() => {
     function lineLists(age) {
       if (age === listAge) return;
       listAge = age;
-      for (const cat of ['inf', 'veh', 'air']) LISTS[cat] = Rules.LINE_ORDER[cat].map(l => Rules.formOf(l, age)).filter(Boolean);
+      for (const cat of ['inf', 'veh', 'air', 'sea']) LISTS[cat] = Rules.LINE_ORDER[cat].map(l => Rules.formOf(l, age)).filter(Boolean);
       const opened = k => k === 'tech' || ((k === 'launch' ? BUILDINGS.silo : BUILDINGS[k] || POWERS[k]).tech || 1) <= age;
       for (const cat in ALL) LISTS[cat] = ALL[cat].filter(opened);
     }
@@ -185,6 +190,10 @@ const Hud = (() => {
       tabs.appendChild(b);
     });
     function pickTab(id) {
+      // The Sea tab shows only on a map with open water, and the Dock only there too.
+      const wet = !!(S() && S().map.seaCells > 200);
+      $('tab-sea').hidden = !wet;
+      if (id === 'sea' && !wet) id = 'bld';
       state.tab = id;
       lineLists(P() ? P().tech : 1);
       for (const t of TABS) $('tab-' + t.id).classList.toggle('on', t.id === id);
@@ -692,7 +701,7 @@ const Hud = (() => {
         }
         return;
       }
-      const tabKey = { KeyZ: 'bld', KeyX: 'def', KeyC: 'inf', KeyV: 'veh', KeyB: 'air', KeyN: 'pow' }[k];
+      const tabKey = { KeyZ: 'bld', KeyX: 'def', KeyC: 'inf', KeyV: 'veh', KeyB: 'air', Comma: 'sea', KeyN: 'pow' }[k];
       if (tabKey) { pickTab(tabKey); return; }
       const slot = { KeyQ: 0, KeyW: 1, KeyE: 2, KeyR: 3, KeyT: 4, KeyY: 5, KeyU: 6, KeyI: 7, KeyO: 8 }[k];
       if (slot !== undefined) { const c = LISTS[state.tab][slot]; if (c) camClick(c, e.shiftKey ? 5 : 1); return; }
