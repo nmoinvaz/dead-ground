@@ -525,7 +525,7 @@ body[data-look="ink"] .sheet { box-shadow: 4px 4px 0 var(--ink); }
     <div id="settings" hidden role="dialog" aria-label="Settings">
       <div class="choice"><h2>Look</h2><div id="s-look" class="two"></div></div>
       <div class="choice"><h2>Paper</h2><div id="s-scheme"><button data-v="light">Light</button><button data-v="dark">Dark</button><button data-v="auto">As the system</button></div></div>
-      <p id="build">Build 1ac866a 2026-11-05 18:49</p>
+      <p id="build">Build f638498 2026-11-05 18:59</p>
     </div>
     <div id="banner" hidden></div>
     <button id="update" hidden>A new version of Dead Ground is out. <b>Reload</b></button>
@@ -7260,6 +7260,9 @@ if (typeof module !== 'undefined') module.exports = Looks;
               vec3 bodyC = sideBody(aw0), nU = texture2D(tNorm, uv).xyz * 2.0 - 1.0;
               vec3 shadeB = dot(nU, uUpV) > 0.6 ? mix(bodyC, vec3(0.949, 0.910, 0.824), 0.38) : nU.x < 0.0 ? bodyC : bodyC * 0.74;
               shadeB = mix(shadeB, bodyC * 0.5, 1.0 - smoothstep(0.05, 0.13, L(uv)));
+              // A wreck has lost its side's colour and is drawn charred, its faces in shades of soot.
+              float charred = 1.0 - smoothstep(0.08, 0.15, aw0.w);
+              shadeB = mix(shadeB, vec3(0.4, 0.37, 0.34) * (dot(nU, uUpV) > 0.6 ? 1.2 : nU.x < 0.0 ? 0.95 : 0.75), charred);
               // Every part of the unit takes the tint and the line, marked or not, so no part is left as bare
               // paper beside its tinted neighbours.
               col *= mix(vec3(1.0), shadeB / vec3(0.949, 0.910, 0.824), smoothstep(0.85, 0.95, s0));
@@ -8385,7 +8388,7 @@ const World = (() => {
     const m1 = new THREE.Matrix4(), m2 = new THREE.Matrix4(), m3 = new THREE.Matrix4(), mOut = new THREE.Matrix4();
     const q1 = new THREE.Quaternion(), q2 = new THREE.Quaternion(), e1 = new THREE.Euler(0, 0, 0, 'YXZ'), p1 = new THREE.Vector3(), s1 = new THREE.Vector3(1, 1, 1), s2 = new THREE.Vector3(1, 1, 1);
     const axisZ = new THREE.Vector3(0, 0, 1), axisY = new THREE.Vector3(0, 1, 0), axisX = new THREE.Vector3(1, 0, 0);
-    const colA = new THREE.Color(), teamCol = SLOT_COLORS.map(c => new THREE.Color(c)), burnt = new THREE.Color(0x141210), neutral = new THREE.Color(0xc9c5b6);
+    const colA = new THREE.Color(), teamCol = SLOT_COLORS.map(c => new THREE.Color(c)), burnt = new THREE.Color(0x141414), neutral = new THREE.Color(0xc9c5b6);
 
     function clearWorld() {
       for (const o of statics) { scene.remove(o); if (o.geometry && o.isInstancedMesh) o.dispose?.(); }
@@ -9287,7 +9290,7 @@ const World = (() => {
       for (const k in MODELS.buildings) put(k, MODELS.buildings[k], 24);
       for (const k in MODELS.man) put('man' + k, MODELS.man[k].map(p => Object.assign({}, p, { mult: p.id === 'leg' ? 2 : 1 })), UNITS[k] && UNITS[k].line === 'inf' ? 300 : k === 'hero' ? 8 : 120);
       put('chute', [{ id: 'c', geo: MODELS.chute }], 24);
-      put('rubble', [{ id: 'r', geo: MODELS.scenery.rubble }], 60);
+      put('rubble', [{ id: 'r', geo: MODELS.scenery.rubble }], 700);
       // Arrows, thrown stones and strokes of the pen, drawn in line as units are. Strokes cast no shadow.
       put('arrow', [{ id: 'a', geo: MODELS.fx.arrow }], 500);
       put('ball', [{ id: 'b', geo: MODELS.fx.ball }], 80);
@@ -9828,8 +9831,10 @@ const World = (() => {
         const w = wrecks[i];
         w.t += dt;
         if (w.t < 0) continue;
-        if (w.t > 34) { wrecks.splice(i, 1); continue; }
-        const set = sets[w.kind], sink = w.t > 30 ? (w.t - 30) * 0.4 : 0;
+        // Wrecks and rubble stay for the rest of the game. Only those given up, the oldest past a cap or what a new
+        // building now stands on, sink away over four seconds.
+        if (w.gone !== undefined) { w.gone += dt; if (w.gone > 4) { wrecks.splice(i, 1); continue; } }
+        const set = sets[w.kind], sink = w.gone !== undefined ? w.gone * 0.4 : 0;
         if (w.rubble) {
           compose(m1, w.x, w.y - sink, w.z, w.yaw, 0, 0, w.s);
           put(sets.rubble[0], m1, colA.setRGB(0.5, 0.48, 0.44));
@@ -9960,6 +9965,13 @@ const World = (() => {
       }
       rings.add(x, y, z, size * 3.2, 1.2, 0xfff0d0);
       rings.add(x, y, z, size * 2, 0.8);
+    }
+    // What a new building is placed over is cleared away, and past a cap the oldest wrecks and rubble go: twenty of a
+    // kind of vehicle, since they share its instances, and six hundred pieces of rubble.
+    function clearWrecks(x, y, r) { for (const w of wrecks) if (w.gone === undefined && Math.abs(w.x - x) < r && Math.abs(w.z - y) < r) w.gone = 0; }
+    function capWrecks(kind) {
+      const live = wrecks.filter(w => w.gone === undefined && (kind ? w.kind === kind && !w.rubble : w.rubble));
+      for (let i = 0; i < live.length - (kind ? 20 : 600); i++) live[i].gone = 0;
     }
     function scorch(x, y, r, strong = 1) {
       const c = marks.ctx, k = marks.width / W, g = c.createRadialGradient(x * k, y * k, 0, x * k, y * k, r * k);
@@ -10200,6 +10212,7 @@ const World = (() => {
           break;
         }
         case 'crater': if (!e.b) scorch(e.x, e.y, e.r); break;
+        case 'placed': clearWrecks(e.x, e.y, (BUILDINGS[e.kind] ? Math.max(BUILDINGS[e.kind].w, BUILDINGS[e.kind].h) : 2) * 0.75); break;
         case 'launch': flyers.push({ w: 'nuke', x0: e.x, y0: terrainAt(M, e.x, e.y) + 1, z0: e.y, x1: e.tx, y1: terrainAt(M, e.tx, e.ty), z1: e.ty, t: 0, dur: e.dur, arc: 46, trail: 0 }); break;
         case 'die': onDeath(e); startle(e.x, e.y, 6); break;
         case 'upgrade': {
@@ -10278,7 +10291,15 @@ const World = (() => {
           setTimeout(() => explosion(e.x + ox, y + Math.random(), e.y + oz, 1.2 + Math.random(), BLAST_OF[e.kind]), i * 170);
         }
         explosion(e.x, y + 0.6, e.y, Math.max(e.w, e.h) * 0.7, BLAST_OF[e.kind]);
+        // A ring of broken walls on the building's own outline, with gaps where it fell in.
+        const per = 2 * (e.w + e.h);
+        for (let s = 0; s < per; s += 0.75) {
+          if (Math.random() < 0.3) continue;
+          const a = s < e.w ? [e.cx + s, e.cy] : s < e.w + e.h ? [e.cx + e.w, e.cy + s - e.w] : s < 2 * e.w + e.h ? [e.cx + 2 * e.w + e.h - s, e.cy + e.h] : [e.cx, e.cy + per - s];
+          wrecks.push({ rubble: true, wall: true, x: a[0], y: heightAt(M, a[0], a[1]) + 0.03, z: a[1], yaw: (s < e.w || (s >= e.w + e.h && s < 2 * e.w + e.h) ? 0 : 1.571) + (Math.random() - 0.5) * 0.4, s: 0.55 + Math.random() * 0.5, t: -1.2 - Math.random() * 0.6, smoke: 9 });
+        }
         for (let i = 0; i < e.w * e.h / 2; i++) wrecks.push({ rubble: true, x: e.x + (Math.random() - 0.5) * e.w * 0.9, y: y + 0.03, z: e.y + (Math.random() - 0.5) * e.h * 0.9, yaw: Math.random() * 6.28, s: 0.7 + Math.random() * 0.9, t: -1.4 - Math.random() * 0.5, smoke: 0.2 + Math.random() * 2 });
+        capWrecks();
       } else if (e.z > 0 && UNITS[e.kind].move !== 'foot') {
         explosion(e.x, y + e.z, e.y, UNITS[e.kind].hp > 200 ? 1.2 : 0.4, BLAST_OF[e.kind]);
       } else if (UNITS[e.kind].men) {
@@ -10286,11 +10307,11 @@ const World = (() => {
         for (let i = 0; i < (kept || 1); i++) { const [cx, cz] = manAt(UNITS[e.kind].men, i, e.x, e.y, -e.a); corpses.push({ kind: e.kind, x: cx, y: heightAt(M, cx, cz), z: cz, yaw: -e.a, t: 0, color: teamCol[e.team] }); }
       } else if (OLD(e.kind)) {
         dustBurst(e.x, y, e.y, UNITS[e.kind].hp > 500 ? 1.4 : 1);
-        wrecks.push({ kind: e.kind, x: e.x, y, z: e.y, yaw: -e.a, pitch: 0, t: 0, smoke: 0 });
+        wrecks.push({ kind: e.kind, x: e.x, y, z: e.y, yaw: -e.a, pitch: 0, t: 0, smoke: 0 }); capWrecks(e.kind);
       } else {
         explosion(e.x, y + 0.4, e.y, UNITS[e.kind].hp > 500 ? 1.4 : 0.9, BLAST_OF[e.kind]);
         scorch(e.x, e.y, 1.1);
-        wrecks.push({ kind: e.kind, x: e.x, y, z: e.y, yaw: -e.a, pitch: 0, t: 0, smoke: 0 });
+        wrecks.push({ kind: e.kind, x: e.x, y, z: e.y, yaw: -e.a, pitch: 0, t: 0, smoke: 0 }); capWrecks(e.kind);
       }
     }
 
