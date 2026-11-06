@@ -806,24 +806,24 @@ const Rules = (() => {
   // Weather comes in spells of three minutes. A spell's kind follows from the seed and its number alone, so
   // every copy of the world has the same sky and nothing about it is saved. A game's first two are clear.
   const SPELL = 180 * HZ, BLEND = 24 * HZ;
-  const WIND = { clear: 0.45, cloud: 0.6, rain: 0.7, storm: 1, fog: 0.12, snow: 0.4, sand: 1.15, blizzard: 1.05 };
-  // The share of spells of each kind in a hundred, by theatre: dust storms on the salt flats and blizzards in the
+  const WIND = { clear: 0.45, cloud: 0.6, rain: 0.7, storm: 1, fog: 0.12, snow: 0.4, sand: 1.15 };
+  // The share of spells of each kind in a hundred, by theatre: dust storms on the salt flats and deep snow in the
   // pass. `any` is the one mix every game had before theatres had their own, kept for older saves and checks.
   const SKIES = {
     any: { clear: 36, cloud: 14, rain: 16, storm: 9, fog: 14, snow: 11 },
     desert: { clear: 52, cloud: 12, rain: 6, storm: 4, fog: 4, sand: 22 },
     steppe: { clear: 32, cloud: 16, rain: 20, storm: 12, fog: 16, snow: 4 },
-    winter: { clear: 28, cloud: 18, fog: 14, snow: 28, blizzard: 12 },
+    winter: { clear: 28, cloud: 22, fog: 14, snow: 36 },
   };
   // A game's weather setting weighs the kinds: mild keeps the harsh ones away, harsh brings them often, and off
   // leaves the sky clear.
   const WEATHERS = {
     random: {},
-    mild: { clear: 1.6, cloud: 1.3, rain: 0.7, fog: 0.6, snow: 0.5, storm: 0, sand: 0, blizzard: 0 },
-    harsh: { clear: 0.4, cloud: 0.6, rain: 1.3, fog: 1.3, snow: 1.4, storm: 2, sand: 1.8, blizzard: 2 },
-    off: { cloud: 0, rain: 0, storm: 0, fog: 0, snow: 0, sand: 0, blizzard: 0 },
+    mild: { clear: 1.6, cloud: 1.3, rain: 0.7, fog: 0.6, snow: 0.5, storm: 0, sand: 0 },
+    harsh: { clear: 0.4, cloud: 0.6, rain: 1.3, fog: 1.3, snow: 1.4, storm: 2, sand: 1.8 },
+    off: { cloud: 0, rain: 0, storm: 0, fog: 0, snow: 0, sand: 0 },
   };
-  const SKY_KINDS = ['clear', 'cloud', 'rain', 'storm', 'fog', 'snow', 'sand', 'blizzard'];
+  const SKY_KINDS = ['clear', 'cloud', 'rain', 'storm', 'fog', 'snow', 'sand'];
   // The kinds a theatre and setting allow, each with the top of its share, and the whole. Whole numbers, so every
   // copy of the world picks the same.
   function skyTable(theatre, weather) {
@@ -849,12 +849,12 @@ const Rules = (() => {
     return 'clear';
   }
   // Spells that keep every aircraft on the ground.
-  const GROUNDING = { storm: 1, sand: 1, blizzard: 1 };
+  const GROUNDING = { storm: 1, sand: 1 };
   // How much a spell holds at a tick. It rises over BLEND across its start and falls across its end, so two
   // spells of one kind in a row join without a seam.
   const spellW = (k, t) => clamp((t - (k * SPELL - BLEND / 2)) / BLEND, 0, 1) * clamp(((k + 1) * SPELL + BLEND / 2 - t) / BLEND, 0, 1);
   function weatherAt(seed, t, tab = ANY_SKY) {
-    const k = Math.floor(t / SPELL), o = { clear: 0, cloud: 0, rain: 0, storm: 0, fog: 0, snow: 0, sand: 0, blizzard: 0, wind: [0, 0], flood: 0, cover: 0, kind: spellOf(seed, k, tab), next: spellOf(seed, k + 1, tab), left: (k + 1) * SPELL - t };
+    const k = Math.floor(t / SPELL), o = { clear: 0, cloud: 0, rain: 0, storm: 0, fog: 0, snow: 0, sand: 0, wind: [0, 0], flood: 0, cover: 0, kind: spellOf(seed, k, tab), next: spellOf(seed, k + 1, tab), left: (k + 1) * SPELL - t };
     for (let j = k - 1; j <= k + 1; j++) {
       const w = spellW(j, t);
       if (w <= 0) continue;
@@ -864,25 +864,25 @@ const Rules = (() => {
     }
     o.rain = Math.min(1, o.rain + o.storm);
     // Rivers rise through a spell of rain or storm and go down over the next one and a half. Snow lies over
-    // most of its spell and melts over the next, and a blizzard lays it faster.
+    // most of its spell and melts over the next.
     for (let j = k - 3; j <= k; j++) {
-      const kd = spellOf(seed, j, tab), rv = kd === 'storm' ? 1 : kd === 'rain' ? 0.55 : 0, snow = kd === 'snow' || kd === 'blizzard';
+      const kd = spellOf(seed, j, tab), rv = kd === 'storm' ? 1 : kd === 'rain' ? 0.55 : 0, snow = kd === 'snow';
       if (!rv && !snow) continue;
-      const tau = t - j * SPELL, up = clamp(tau / (SPELL * (kd === 'blizzard' ? 0.35 : snow ? 0.6 : 0.8)), 0, 1), down = tau > SPELL ? clamp(1 - (tau - SPELL) / (SPELL * (snow ? 1 : 1.5)), 0, 1) : 1;
+      const tau = t - j * SPELL, up = clamp(tau / (SPELL * (snow ? 0.6 : 0.8)), 0, 1), down = tau > SPELL ? clamp(1 - (tau - SPELL) / (SPELL * (snow ? 1 : 1.5)), 0, 1) : 1;
       if (snow) o.cover += up * down; else o.flood += rv * up * down;
     }
     o.cover = Math.min(1, o.cover);
-    // A storm, a dust storm or a blizzard keeps every aircraft on the ground.
-    o.grounded = o.storm > 0.5 || o.sand > 0.5 || o.blizzard > 0.5;
+    // A storm or a dust storm keeps every aircraft on the ground.
+    o.grounded = o.storm > 0.5 || o.sand > 0.5;
     return o;
   }
   const sky = S => S._wx && S._wx.at === S.tick ? S._wx : (S._wx = Object.assign(weatherAt(S.seed, S.tick, skyOf(S)), { at: S.tick }));
   // How fast a kind of mover goes off the roads in the weather, before any worn track. Mud bogs wheels down, snow
-  // and blizzards slow everyone, and blown sand slows men and wheels.
+  // slows everyone, and blown sand slows men and wheels.
   function offGoing(move, w) {
-    const g = move === 'wheel' ? 1 - 0.24 * w.rain - 0.2 * w.snow - 0.25 * w.sand - 0.35 * w.blizzard
-      : move === 'track' ? 1 - 0.12 * w.storm - 0.1 * w.snow - 0.1 * w.sand - 0.25 * w.blizzard
-        : 1 - 0.18 * w.snow - 0.2 * w.sand - 0.35 * w.blizzard;
+    const g = move === 'wheel' ? 1 - 0.24 * w.rain - 0.2 * w.snow - 0.25 * w.sand
+      : move === 'track' ? 1 - 0.12 * w.storm - 0.1 * w.snow - 0.1 * w.sand
+        : 1 - 0.18 * w.snow - 0.2 * w.sand;
     return Math.max(0.3, g);
   }
   // The time of day, from 0 at dawn round to 1. A day lasts twenty minutes and a game starts early in the morning.
@@ -1275,8 +1275,8 @@ const Rules = (() => {
         }
       }
     };
-    // Fog, storms, blown sand and blizzards shorten everyone's sight. Radar sweeps see through them.
-    const w = sky(S), fk = Math.max(0.4, 1 - 0.45 * w.fog - 0.12 * w.storm - 0.4 * w.sand - 0.45 * w.blizzard), fa = Math.max(0.5, 1 - 0.3 * w.fog - 0.3 * w.sand - 0.3 * w.blizzard);
+    // Fog, storms and blown sand shorten everyone's sight. Radar sweeps see through them.
+    const w = sky(S), fk = Math.max(0.4, 1 - 0.45 * w.fog - 0.12 * w.storm - 0.4 * w.sand), fa = Math.max(0.5, 1 - 0.3 * w.fog - 0.3 * w.sand);
     for (const e of S.ents) {
       if (e.hp <= 0) continue;
       const P = S.P[e.team];
@@ -1769,7 +1769,7 @@ const Rules = (() => {
   // with the wind and not at all in rain or snow, then leaves the ground burnt and open.
   function ignite(S, x, y, r, p) {
     const w = sky(S);
-    p *= 1 - 0.8 * Math.min(1, w.rain + w.snow + w.blizzard);
+    p *= 1 - 0.8 * Math.min(1, w.rain + w.snow);
     if (p <= 0 || S.burn.length >= 400) return;
     for (let cy = Math.max(0, (y - r) | 0); cy <= Math.min(H - 1, (y + r) | 0); cy++) for (let cx = Math.max(0, (x - r) | 0); cx <= Math.min(W - 1, (x + r) | 0); cx++) {
       const c = cy * W + cx;
@@ -1783,7 +1783,7 @@ const Rules = (() => {
   const D8 = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, 1], [1, -1], [-1, -1]];
   function stepFire(S) {
     if (!S.burn.length) return;
-    const w = sky(S), wet = Math.min(1, w.rain + w.snow + w.blizzard), spread = 0.06 * (1 - wet), out = [];
+    const w = sky(S), wet = Math.min(1, w.rain + w.snow), spread = 0.06 * (1 - wet), out = [];
     for (let i = S.burn.length - 1; i >= 0; i--) {
       const b = S.burn[i], c = b[0], x = c % W, y = c / W | 0;
       b[1] -= 10 * (1 + wet * 3);
@@ -2833,7 +2833,7 @@ const Rules = (() => {
       const k = S.tick / SPELL, now = spellOf(S.seed, k, skyOf(S)), was = spellOf(S.seed, k - 1, skyOf(S));
       if (now !== was) S.ev.push({ t: 'weather', kind: now, was });
     }
-    // Half a minute's warning of weather that grounds the aircraft, as stormsoon, sandsoon or blizzardsoon.
+    // Half a minute's warning of weather that grounds the aircraft, as stormsoon or sandsoon.
     if ((S.tick + 30 * HZ) % SPELL === 0) {
       const k = (S.tick + 30 * HZ) / SPELL, next = spellOf(S.seed, k, skyOf(S));
       if (GROUNDING[next] && !GROUNDING[spellOf(S.seed, k - 1, skyOf(S))]) S.ev.push({ t: 'weather', kind: next + 'soon' });

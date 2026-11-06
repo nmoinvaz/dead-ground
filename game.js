@@ -14,12 +14,10 @@ const Game = (() => {
     fog: ['Fog. Sight is cut short.', '', 'Fog'], snow: ['Snow. Everything moves slower.', '', 'Snow'], stormsoon: ['A storm is coming. Aircraft will be grounded.', 'bad', 'Storm warning'],
     clear: ['The weather clears.', 'good', ''], cloud: ['Clouding over.', '', ''],
     sand: ['Dust storm. Sight is cut short, men and wheels slowed, aircraft grounded.', 'bad', 'Dust storm. Aircraft grounded'],
-    blizzard: ['Blizzard. Everyone slowed hard, sight cut short, aircraft grounded.', 'bad', 'Blizzard. Aircraft grounded'],
     sandsoon: ['A dust storm is coming. Aircraft will be grounded.', 'bad', 'Dust storm warning'],
-    blizzardsoon: ['A blizzard is coming. Aircraft will be grounded.', 'bad', 'Blizzard warning'],
   };
   // What a theatre's weather brings under a setting, for the set-up.
-  const SKY_OF = { desert: 'Dust storms, little rain and no snow.', steppe: 'Rain, thunderstorms and fog, with a little snow.', winter: 'Snow, blizzards and fog, and no rain.' };
+  const SKY_OF = { desert: 'Dust storms, little rain and no snow.', steppe: 'Rain, thunderstorms and fog, with a little snow.', winter: 'Deep snow and fog, and no rain.' };
   const WEATHER_OF = { random: 'In their usual measure.', mild: 'Mostly fair, with no storms of any kind.', harsh: 'Often, and the storms come hard.' };
   const weatherNote = (theme, w) => w === 'off' ? 'Fair skies all game.' : `${SKY_OF[theme] || ''} ${WEATHER_OF[w] || ''}`;
 
