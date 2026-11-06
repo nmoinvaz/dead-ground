@@ -10,7 +10,10 @@ const Rules = (() => {
   // rooms do on the server, and each sets the size again as it steps.
   const MAXN = 256 * 256;
   let HW = Math.ceil(W / 8);
-  const heapC = new Int32Array(MAXN * 8), heapD = new Float32Array(MAXN * 8);
+  // The flow fields' queue: each entry a cell, its distance and the next entry in its bucket. A cell is queued
+  // once for each neighbour that shortens its way, so eight times the cells at most, and the goal's cells besides.
+  const qC = new Int32Array(MAXN * 8 + 4096), qD = new Float32Array(MAXN * 8 + 4096), qN = new Int32Array(MAXN * 8 + 4096);
+  let qHead = new Int32Array(64);
   function setSize(w) {
     if (w === W) return;
     W = H = w; N = W * H; VW = W * RES + 1; VH = H * RES + 1; CX = W / 2; CY = H / 2;
@@ -1542,36 +1545,36 @@ const Rules = (() => {
     else for (let c = 0; c < N; c++) block[c] = (g[c] & bit) !== 0 || occ[c] !== 0 ? 1 : 0;
     const dist = f.dist, dir = f.dir;
     dist.fill(Infinity); dir.fill(-1);
-    let n = 0;
-    const push = (c, d) => {
-      let i = n++;
-      while (i > 0) { const p = (i - 1) >> 1; if (heapD[p] <= d) break; heapD[i] = heapD[p]; heapC[i] = heapC[p]; i = p; }
-      heapD[i] = d; heapC[i] = c;
-    };
-    const pop = () => {
-      const top = heapC[0], d = heapD[--n], c = heapC[n];
-      let i = 0;
-      for (;;) {
-        let k = 2 * i + 1;
-        if (k >= n) break;
-        if (k + 1 < n && heapD[k + 1] < heapD[k]) k++;
-        if (heapD[k] >= d) break;
-        heapD[i] = heapD[k]; heapC[i] = heapC[k]; i = k;
-      }
-      heapD[i] = d; heapC[i] = c;
-      return top;
-    };
+    // The cells waiting to be settled lie in buckets by distance (Dial's queue). A bucket is narrower than the
+    // cheapest step, so no cell can shorten the way to another in its own bucket, and taking each bucket whole, in
+    // any order, settles every cell at its true distance. The buckets go round in a ring wide enough for the
+    // dearest step. Both bounds come from the costs a step can have: the road's, a hardened track's and open
+    // ground's in this weather, and at most woods and a ford on top.
+    const tk = TRACK_COST, minK = naval ? 1 : Math.min(roadC, tk[3], tk[0] * offK, tk[1] * offK, tk[2] * offK);
+    const maxK = naval ? 1 : Math.max(roadC, tk[3], tk[0] * offK, tk[1] * offK, tk[2] * offK) * Math.max(woodC, 1) * 2;
+    const bw = minK * 0.99, inv = 1 / bw;
+    let B = 8;
+    while (B < Math.ceil(1.42 * maxK * inv) + 2) B <<= 1;
+    const mask = B - 1;
+    if (qHead.length < B) qHead = new Int32Array(B);
+    qHead.fill(-1, 0, B);
+    let e = 0, live = 0;
+    const push = (c, d) => { const k = Math.floor(d * inv) & mask; qC[e] = c; qD[e] = d; qN[e] = qHead[k]; qHead[k] = e++; live++; };
     const seeds = goalCells(S, cls, gx, gy, occ, g);
     for (const c of seeds) { dist[c] = 0; push(c, 0); }
     const DX = [1, 1, 0, -1, -1, -1, 0, 1], DY = [0, 1, 1, 1, 0, -1, -1, -1];
     const COST = [1, 1.41, 1, 1.41, 1, 1.41, 1, 1.41];
-    while (n > 0) {
-      const dTop = heapD[0];
-      // Everything left is further than the field needs to reach.
-      if (dTop > reach) break;
-      const c = pop();
-      if (dTop > dist[c]) continue;
-      const x = c % W, y = (c - x) / W, dc = dist[c];
+    for (let cur = 0; live > 0;) {
+      const h = qHead[cur & mask];
+      if (h < 0) {
+        // Everything left is further than the field needs to reach.
+        if (++cur * bw > reach) break;
+        continue;
+      }
+      qHead[cur & mask] = qN[h]; live--;
+      const c = qC[h], dc = qD[h];
+      if (dc > dist[c] || dc > reach) continue;
+      const x = c % W, y = (c - x) / W;
       for (let i = 0; i < 8; i++) {
         const nx = x + DX[i], ny = y + DY[i];
         if (nx < 0 || ny < 0 || nx >= W || ny >= H) continue;
