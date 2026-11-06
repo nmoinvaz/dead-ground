@@ -4,5 +4,8 @@
 set -e
 cd "$(dirname "$0")"
 ~/Source/film-studio/.venv/bin/python ~/Source/film-studio/player/build.py game.json --out site/public/index.html
+# The settings panel names the build: the source commit, marked + when the folder holds unsaved changes, and when.
+STAMP="$(git rev-parse --short HEAD)$(git diff --quiet -- . ':!site' || echo +) $(date '+%Y-%m-%d %H:%M')"
+sed -i '' "s/Build __BUILD__/Build $STAMP/" site/public/index.html
 cp rules.js ai.js site/server/
 cp server.js site/server/index.js

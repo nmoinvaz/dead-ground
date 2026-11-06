@@ -368,9 +368,10 @@ const Game = (() => {
     // A saved look the settings offer is kept; anything else opens as pen and ink.
     if (!Looks.all().some(l => l.name === G.look)) G.look = 'ink';
     world.setLook(G.look);
-    // The paper's scheme: as the system has it, or light or dark by the player's choice, kept in the browser.
+    // The paper's scheme: light unless the player picks dark or the system's, kept in the browser. It is kept under
+    // a new key, so a choice made when the system's was the default does not carry over.
     const darkQ = window.matchMedia ? matchMedia('(prefers-color-scheme: dark)') : null;
-    let scheme = store.get('dg-scheme', 'auto');
+    let scheme = store.get('dg-paper', 'light');
     // The sidebar's pictures: the buildings as the engine renders them, the units as axonometric line drawings in
     // the look's own inks, with the player's side on their markings.
     // A building's card shows it in the player's age, and G.picAge says which age that was.
@@ -400,7 +401,7 @@ const Game = (() => {
     }));
     $('s-scheme').querySelectorAll('button').forEach(b => b.addEventListener('click', () => {
       scheme = b.dataset.v; applyScheme(); audio.ui('click');
-      store.set('dg-scheme', scheme);
+      store.set('dg-paper', scheme);
     }));
     const setOpen = open => { $('settings').hidden = !open; $('b-set').setAttribute('aria-expanded', String(open)); if (open) markLook(); };
     $('b-set').addEventListener('click', e => { e.stopPropagation(); setOpen($('settings').hidden); audio.ui('click'); });

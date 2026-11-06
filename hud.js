@@ -964,8 +964,10 @@ const Hud = (() => {
       }
     }
     // The ghost plan, in pen and ink: what is planned in dotted orange, what was in dashed blue-grey.
-    const PLAN = '#e0703a', PLAN_BAD = '#c8321e', WAS = '#6d82ad';
-    const dotted = () => { og.setLineDash([0.5, 4]); og.lineCap = 'round'; og.lineWidth = 2; };
+    // The plan's orange is a deep burnt orange, dotted close and heavy enough to read on cream paper.
+    const PLAN = '#b4400e', PLAN_BAD = '#a8200e', WAS = '#4d6496';
+    const INK_OF = { '#7fe0a0': '#1f6b34', '#ffa040': '#b4400e', '#ff8a70': '#a8200e' };
+    const dotted = () => { og.setLineDash([0.5, 3.2]); og.lineCap = 'round'; og.lineWidth = 2.6; };
     const dashed = () => { og.setLineDash([6, 4]); og.lineCap = 'butt'; og.lineWidth = 1.4; };
     // A box standing on the ground over cells x..x+w, y..y+h, ht tall, as a wireframe.
     function box3(s, x, y, w, h, ht) {
@@ -1388,7 +1390,8 @@ const Hud = (() => {
         m.t += dt;
         if (m.t > 0.5) { state.marks.splice(i, 1); continue; }
         const [x, y] = world.project(m.x, Rules.heightAt(s.map, m.x, m.y), m.y), k = 1 - m.t / 0.5;
-        og.strokeStyle = m.color; og.globalAlpha = k; og.lineWidth = 1.6;
+        // On paper the bright screen greens and oranges are drawn in their dark inks, so they show on cream.
+        og.strokeStyle = inked() ? (INK_OF[m.color] || m.color) : m.color; og.globalAlpha = k; og.lineWidth = inked() ? 2.2 : 1.6;
         og.beginPath(); og.ellipse(x, y, 16 * k + 2, (16 * k + 2) * 0.6, 0, 0, 6.3); og.stroke();
         og.beginPath(); og.ellipse(x, y, 6 * k + 1, (6 * k + 1) * 0.6, 0, 0, 6.3); og.stroke();
         og.globalAlpha = 1;
@@ -1406,7 +1409,9 @@ const Hud = (() => {
 
       const d = state.drag;
       if (d && d.box) {
-        og.strokeStyle = '#a9f0c0'; og.lineWidth = 1; og.fillStyle = 'rgba(120,240,160,0.08)';
+        // The selection box: pale green on the painted looks, the player's blue ink on paper.
+        if (inked()) { og.strokeStyle = '#1d3f8c'; og.lineWidth = 1.8; og.fillStyle = 'rgba(29,63,140,0.1)'; }
+        else { og.strokeStyle = '#a9f0c0'; og.lineWidth = 1; og.fillStyle = 'rgba(120,240,160,0.08)'; }
         og.fillRect(d.x0, d.y0, d.x1 - d.x0, d.y1 - d.y0); og.strokeRect(d.x0, d.y0, d.x1 - d.x0, d.y1 - d.y0);
       }
     }

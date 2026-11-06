@@ -178,10 +178,11 @@ body[data-look="ink"][data-scheme="dark"] #end, body[data-look="ink"][data-schem
 .help dt { color: var(--amber); font-family: var(--mono); font-size: 12px; align-self: center; }
 .help dd { margin: 0; }
 #credit { font: 12px var(--mono); color: #8d8c78; }
+/* Which build this page is, from the source commit it was made from. */
+#build { margin: 10px 0 0; font: 12px var(--mono); opacity: .7; }
 /* The boot screen shows before the page knows its look, so it is drawn as the pen and ink look a game opens in:
-   Jost on paper, light or dark as the system is. */
+   Jost on light paper. */
 #loading { position: absolute; inset: 0; z-index: 20; background: #f2e8d2; display: flex; align-items: center; justify-content: center; font: 500 20px "Jost", "Futura", "Trebuchet MS", sans-serif; letter-spacing: .32em; color: #1f1a16; }
-@media (prefers-color-scheme: dark) { #loading { background: #23201b; color: #e8e0cf; } }
 body.ready #loading { display: none; }
 
 #end { background: rgba(5,6,3,.76); align-items: center; justify-content: center; }
@@ -342,8 +343,10 @@ body[data-look="ink"] .tab:hover { color: var(--ink); }
 body[data-look="ink"] .tab.on { background: var(--ink); color: var(--paper); border-color: var(--ink); }
 body[data-look="ink"] .tab.lit i { background: var(--redink); box-shadow: none; }
 body[data-look="ink"] .cam { background: var(--paper-hi); border: 1.5px solid var(--ink); box-shadow: none; }
-body[data-look="ink"] .cam::before { content: ""; position: absolute; inset: 0; background: var(--img) center 34% / 100% auto no-repeat; filter: grayscale(1) contrast(1.5) brightness(1.08); mix-blend-mode: multiply; pointer-events: none; }
-body[data-look="ink"] .cam.axo::before, body[data-look="ink"][data-scheme="dark"] .cam.axo::before { filter: none; mix-blend-mode: normal; }
+/* On light paper the pictures keep their colour, a little richer, printed into the paper. */
+body[data-look="ink"] .cam::before { content: ""; position: absolute; inset: 0; background: var(--img) center 34% / 100% auto no-repeat; filter: saturate(1.35) contrast(1.15); mix-blend-mode: multiply; pointer-events: none; }
+body[data-look="ink"] .cam.axo::before { filter: saturate(1.45) contrast(1.06); mix-blend-mode: multiply; }
+body[data-look="ink"][data-scheme="dark"] .cam.axo::before { filter: none; mix-blend-mode: normal; }
 body[data-look="ink"] #sel img.axo, body[data-look="ink"][data-scheme="dark"] #sel img.axo { filter: none; mix-blend-mode: normal; background: var(--paper-hi); border-color: var(--ink); }
 body[data-look="ink"] .cam:hover { box-shadow: inset 0 0 0 1.5px var(--redink); }
 body[data-look="ink"] .cam .nm { color: var(--ink); text-shadow: 0 0 3px var(--paper-hi), 0 0 2px var(--paper-hi), 0 0 1px var(--paper-hi); font-family: var(--display); font-weight: 400; font-size: 14px; }
@@ -352,7 +355,7 @@ body[data-look="ink"] .cam .key { color: var(--ink-dim); }
 body[data-look="ink"] .cam .state { color: var(--ink); text-shadow: 0 0 3px var(--paper-hi), 0 0 3px var(--paper-hi); }
 body[data-look="ink"] .cam.busy::after { background: conic-gradient(rgba(0,0,0,0) var(--p), rgba(242,232,210,.72) var(--p)); }
 /* A card that cannot be had is hatched across in ink, its picture and name still readable under it. */
-body[data-look="ink"] .cam.off { filter: none; opacity: .66; }
+body[data-look="ink"] .cam.off { filter: none; opacity: .8; }
 body[data-look="ink"] .cam.off:not(.busy)::after { content: ""; position: absolute; inset: 0; pointer-events: none; background: repeating-linear-gradient(135deg, color-mix(in srgb, var(--ink) 22%, transparent) 0 1px, transparent 1px 6px); }
 body[data-look="ink"] .cam.off .nm, body[data-look="ink"] .cam.off .ct { color: var(--ink-dim); }
 body[data-look="ink"] .cam.ready { box-shadow: inset 0 0 0 2px var(--redink); animation: none; }
@@ -509,7 +512,8 @@ body[data-look="ink"] .sheet { box-shadow: 4px 4px 0 var(--ink); }
     <div id="notes"><div id="objective" hidden></div><div id="log"></div></div>
     <div id="settings" hidden role="dialog" aria-label="Settings">
       <div class="choice"><h2>Look</h2><div id="s-look" class="two"></div></div>
-      <div class="choice"><h2>Paper</h2><div id="s-scheme"><button data-v="auto">As the system</button><button data-v="light">Light</button><button data-v="dark">Dark</button></div></div>
+      <div class="choice"><h2>Paper</h2><div id="s-scheme"><button data-v="light">Light</button><button data-v="dark">Dark</button><button data-v="auto">As the system</button></div></div>
+      <p id="build">Build __BUILD__</p>
     </div>
     <div id="banner" hidden></div>
     <div id="agecard" hidden aria-live="polite"></div>
