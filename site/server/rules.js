@@ -1481,10 +1481,14 @@ const Rules = (() => {
       if (best < 0) return null;
       return [best % W + 0.5, (best / W | 0) + 0.5];
     }
-    let bx = u.x, by = u.y, wx = (c % W) + 0.5, wy = (c / W | 0) + 0.5;
-    // The look ahead stops where a track's going changes, so a way that keeps to a track follows its bends. On a
-    // road it keeps within the road's verge and stops where the way leaves it. Off a road it aims two cells along
-    // a road it joins, so it merges at a slant.
+    return lookAhead(S, f, cls, u.x, u.y);
+  }
+  // The farthest point along a field from a spot that a mover can reach in a straight, clear line. The look ahead
+  // stops where a track's going changes, so a way that keeps to a track follows its bends. On a road it keeps
+  // within the road's verge and stops where the way leaves it. Off a road it aims two cells along a road it
+  // joins, so it merges at a slant.
+  function lookAhead(S, f, cls, bx, by) {
+    let c = cellOf(bx, by), wx = (c % W) + 0.5, wy = (c / W | 0) + 0.5;
     const M = S.map, rw = roadW(M), lv0 = S.gnd[c] & 96, on0 = rw[c] > 0.5, lane = on0 ? Math.max(1.2, roadDistAt(M, bx, by)) : 0;
     let joined = -1;
     for (let i = 0; i < 10; i++) {
@@ -1501,6 +1505,40 @@ const Rules = (() => {
       if (joined >= 0 && i >= joined + 2) break;
     }
     return [wx, wy];
+  }
+  // The way a unit would take to a point, as a line of points for the overlay to draw. It only reads the world: a
+  // field the world holds is used as it stands, and any other is worked out into a scratch copy kept outside the
+  // world, so drawing a route never changes how the game plays.
+  const scratch = new Map();
+  function peekField(S, cls, gx, gy, need) {
+    const key = (cls === 'foot' ? 0 : cls === 'veh' ? 1 : 2) * N + gy * W + gx, f = S.fields.get(key), p = S._fields.get(key);
+    if (f && p && p.ver === f.ver && p.reach === f.reach && f.reach >= need) return p;
+    const wq = goingKey(S, cls), sk = `${key}:${S.occVer}:${wq}`;
+    let q = scratch.get(sk);
+    if (!q || q.reach < need) {
+      q = q || { dist: new Float32Array(N), dir: new Int8Array(N), reach: 0 };
+      q.reach = Math.fround(need * 1.5 + 32);
+      fill(S, q, cls, gx, gy, S.occ, S.gnd, q.reach, wq);
+      scratch.set(sk, q);
+      if (scratch.size > 16) scratch.delete(scratch.keys().next().value);
+    }
+    return q;
+  }
+  function route(S, u, tx, ty, max = 200) {
+    const cls = clsOf(u), pts = [[u.x, u.y]];
+    let x = u.x, y = u.y;
+    for (let i = 0; i < max; i++) {
+      const far = mhypot(tx - x, ty - y);
+      if (far < 0.6) break;
+      if (far < 16 && lineClear(S, cls, x, y, tx, ty) && (far < 8 || !waysBetween(S, x, y, tx, ty))) { pts.push([tx, ty]); break; }
+      const q = far > 24, gx = clamp(q ? (tx >> 2) * 4 + 2 : tx | 0, 0, W - 1), gy = clamp(q ? (ty >> 2) * 4 + 2 : ty | 0, 0, H - 1);
+      const f = peekField(S, cls, gx, gy, far), c = cellOf(x, y);
+      if (f.dist[c] === Infinity || (f.dir[c] < 0 && f.dist[c] !== 0)) break;
+      const w = lookAhead(S, f, cls, x, y);
+      if (mhypot(w[0] - x, w[1] - y) < 0.05) { if (far < 3) pts.push([tx, ty]); break; }
+      pts.push(w); x = w[0]; y = w[1];
+    }
+    return pts;
   }
   // Whether the straight way between two points stays within `lane` of a road's middle line.
   function laneClear(M, ax, ay, bx, by, lane) {
@@ -2909,7 +2947,7 @@ const Rules = (() => {
     newGame, step, push, spawn, addBuilding, scoreOf, worth, SERIES, pickFrom, fits, spotFor, roomy, blockedReason, near, rehash, seenBy, terrainAt, heightAt, los, isAir, armed, cellOf, summary, exitOf,
     mulberry, noiser, clamp, lerp, smooth, angleTo, toXY, toUV, gap, setSize, save, load, hashOf, restartSlot, razeSlot, makeMap, mapFor, layoutFor,
     msin, mcos, matan2, mhypot,
-    BRIDGE_HP, SPELL, SKIES, WEATHERS, skyOf, offGoing, weatherAt, sky, dayAt, spellOf, bridgeAt, clsOf, houseHp, hurtBridge, ignite, shielded,
+    BRIDGE_HP, SPELL, SKIES, WEATHERS, skyOf, offGoing, route, weatherAt, sky, dayAt, spellOf, bridgeAt, clsOf, houseHp, hurtBridge, ignite, shielded,
     coverPoints, coverNear, COVER_R, COVER_ARC,
   };
 })();
