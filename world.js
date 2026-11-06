@@ -420,7 +420,7 @@ const World = (() => {
         THREE, SH, vs, renderer, run, blur: pass,
         get w() { return w; }, get h() { return h; }, get ldr() { return ldr; }, get a0() { return a0; }, get a1() { return a1; },
         get time() { return SH.uTime.value; }, get camera() { return camera; }, get cam() { return cam; }, get sky() { return sky; },
-        get theme() { return theme; }, get center() { return [CX, CY]; }, get waterLevel() { return (M ? M.water : -0.15) + waterRise.value; },
+        get theme() { return theme; }, get viewTeam() { return viewTeam; }, get center() { return [CX, CY]; }, get waterLevel() { return (M ? M.water : -0.15) + waterRise.value; },
         get opts() { return { ink: inkStyle, road: roadStyle, ore: oreStyle }; },
         // Each side's colour, as numbers.
         get sides() { return teamCol.map(c => c.getHex()); },

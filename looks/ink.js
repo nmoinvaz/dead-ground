@@ -22,11 +22,12 @@
         uWindS: { value: new THREE.Vector2() }, uView: { value: new THREE.Vector2(1, 0) }, tFx: { value: null }, tAnc: { value: null }, uDark: { value: 0 }, uInks: { value: 0 }, uFxs: { value: 0 }, uFire: { value: 0 }, uUnits: { value: 0 }, tH: SH.tH, uHSize: { value: new THREE.Vector2(1, 1) }, uHScale: { value: 1 }, uRain: { value: 0 }, uStorm: { value: 0 }, uSnowF: { value: 0 }, uSnowC: SH.uSnowC, uFog: { value: 0 }, uMist: { value: 0 }, uNight: { value: 0 }, uWet: { value: 0 },
         uDayMul: { value: new THREE.Vector3(1, 1, 1) }, uDayAdd: { value: new THREE.Vector3() }, uWaterL: { value: -0.15 }, uCloudK: SH.uCloudK, tMarks: SH.tMarks, uMap: SH.uMap,
         uCloud: SH.uCloud, uCloudT: SH.uCloudT, uSunW: SH.uSunDir, uCloudA: { value: 0 }, uCloudG: { value: 0 }, uRayK: { value: 0 }, uSand: { value: 0 },
-        uInvVP: { value: new THREE.Matrix4() }, uW2S: { value: new THREE.Vector4(1, 0, 0, 1) }, uLev: { value: 1 },
+        uInvVP: { value: new THREE.Matrix4() }, uW2S: { value: new THREE.Vector4(1, 0, 0, 1) }, uLev: { value: 1 }, tTerr: SH.tTerr, uBorder: SH.uBorder, uMe: { value: 0 },
         // Each side's colour as the anchor pass keeps it, its hue and how coloured it is, and its inks on either paper.
         uSideKey: { value: [...Array(8)].map(() => new THREE.Vector2()) }, uSideL: { value: [...Array(8)].map(() => new THREE.Vector3()) }, uSideD: { value: [...Array(8)].map(() => new THREE.Vector3()) }, uSideB: { value: [...Array(8)].map(() => new THREE.Vector3()) } }, vertexShader: vs, depthTest: false, depthWrite: false, fragmentShader: `
         varying vec2 vUv; uniform sampler2D t, tSubj, tHeat, tPaper, tNorm, tFogS, tLand, tMarks; uniform float uMap; uniform vec2 res, uOff, uSun2, uWindS, uView, uHSize; uniform float uHScale, uFxs, uFire; uniform int uUnits, uInks; uniform float uDark; uniform sampler2D tH, tFx, tAnc; uniform vec3 uUpV, uDayMul, uDayAdd; uniform float uTime, uK, uRain, uStorm, uSnowF, uSnowC, uFog, uMist, uNight, uWet, uWaterL, uCloudK, uMarks; uniform int uStyle, uRoad, uOre;
         uniform vec2 uSideKey[8]; uniform vec3 uSideL[8], uSideD[8], uSideB[8];
+        uniform sampler2D tTerr; uniform float uBorder, uMe;
         uniform vec2 uCloud; uniform vec3 uSunW; uniform float uCloudT, uCloudA, uCloudG, uRayK, uSand;
         // The clouds float at CLOUD_H over the land. cloudAt gives the cloud over a point of the land at that height,
         // taken from the same field the land pass casts their shadows with, shifted along the sun, so each cloud
@@ -172,6 +173,9 @@
           float cover = 0.0;
           vec3 paperC = dk ? DPAPER : PAPER, inkC = dk ? DINK : INK;
           bool inverse = false;
+          // A side's border: its line's ink and weight, and its ribbon's tint and weight, laid in by the mixture.
+          vec3 brdLC = vec3(0.0), brdWC = vec3(1.0);
+          float brdL = 0.0, brdW = 0.0;
           float waterK = 0.0;
           // The mixture's washes under its ink, and its lines alone, for the remembered past.
           vec3 baseC = paperC;
@@ -529,6 +533,22 @@
               base = mix(base, mix(base, OCH, dk ? 0.3 : 0.4), pat * zo * isG * (1.0 - isO));
             }
             baseC = base;
+            // The sides' borders as an old map colours them: a firm line in the side's ink along the edge, and a
+            // ribbon of its colour washed along the inside, for the viewer's own side and the strongest other.
+            // Read from the reach on the land under the pixel, so the line keeps its place and weight at any zoom.
+            vec2 tvB = (texture2D(tTerr, Wl / uMap).rg - 0.5) * 16.0, twB = max(fwidth(tvB), vec2(1e-4));
+            float whoB = floor(texture2D(tTerr, (floor(Wl) + 0.5) / uMap).b * 8.0 + 0.5);
+            vec3 meI = INK, otI = INK, meT = PAPER, otT = PAPER;
+            for (int i = 0; i < 8; i++) {
+              if (float(i) == uMe) { meI = dk ? uSideD[i] : uSideL[i]; meT = uSideB[i]; }
+              if (float(i) == whoB) { otI = dk ? uSideD[i] : uSideL[i]; otT = uSideB[i]; }
+            }
+            float bOn = clamp(isG + isW, 0.0, 1.0);
+            float lnA = 1.0 - smoothstep(0.9 * uK, 1.8 * uK, abs(tvB.x) / twB.x), lnB = 1.0 - smoothstep(0.9 * uK, 1.8 * uK, abs(tvB.y) / twB.y);
+            float rbA = step(0.0, tvB.x) * (1.0 - smoothstep(0.0, 1.8, tvB.x)), rbB = step(0.0, tvB.y) * (1.0 - smoothstep(0.0, 1.8, tvB.y));
+            brdL = max(lnA, lnB) * bOn * 0.85; brdLC = lnA >= lnB ? meI : otI;
+            brdW = max(rbA, rbB) * bOn * min(1.0, 0.5 * uBorder);
+            brdWC = dk ? (rbA >= rbB ? meI : otI) : (rbA >= rbB ? meT : otT) / PAPER;
             // Inks by what is drawn: 0 black throughout; 1 survey inks, sepia land and roads, Prussian blue water,
             // green trees, umber buildings and each side's units in its own ink; 2 sepia throughout with blue water
             // and the sides' inks; 3 blue-black iron gall throughout with the sides' inks. A line takes the ink of the
@@ -586,6 +606,8 @@
           else { cover *= 1.0 - lit; cover = max(cover, rim); }
           if (uFxs > 0.5 && uFxs < 1.5) cover *= 1.0 - fxSmk * 0.9;
           vec3 col = mix(uStyle == 8 ? baseC : paperC, inkC, clamp(cover, 0.0, 1.0));
+          col = dk ? mix(col, col + brdWC * 0.14, brdW) : col * mix(vec3(1.0), brdWC, brdW);
+          col = mix(col, brdLC, brdL);
           // A flash is bare paper on light paper, and a warm glow on dark as it heats, never a white-out.
           vec3 flashC = dk ? mix(baseC, vec3(0.72, 0.6, 0.42), smoothstep(0.45, 1.0, hn) * 0.85) : paperC;
           // Smoke as a grey wash and fire as a warm wash round a bare-paper core, for the washed effects.
@@ -884,7 +906,7 @@
           C.uSand.value = sky.sand || 0; C.uCloudA.value = sky.cloudA || 0; C.uCloudG.value = sky.cloudG || 0; C.uRayK.value = sky.rayK || 0;
           C.uNight.value = sky.night; C.uWet.value = sky.wet; C.uDayMul.value.set(...sky.mul); C.uDayAdd.value.set(...sky.add);
           C.uWaterL.value = K.waterLevel; C.uWindS.value.set(sky.windS, 0);
-          C.uView.value.set(Math.cos(K.cam.yaw), Math.sin(K.cam.yaw)); C.uHSize.value.set(Rules.VW, Rules.VH); C.uHScale.value = Rules.RES;
+          C.uMe.value = Math.max(0, K.viewTeam); C.uView.value.set(Math.cos(K.cam.yaw), Math.sin(K.cam.yaw)); C.uHSize.value.set(Rules.VW, Rules.VH); C.uHScale.value = Rules.RES;
           K.run(ink, null);
         },
       };
