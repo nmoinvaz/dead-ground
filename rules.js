@@ -2420,6 +2420,8 @@ const Rules = (() => {
     }
     if (o && o.t === 'attack') {
       t = S.byId.get(o.id);
+      // An engineer sent to mend unasked turns to the next hurt building if its own is made whole first.
+      if (o.fix && t && t.hp >= t.max) { t = fixFor(S, u); if (t) o.id = t.id; }
       if (!t || t.hp <= 0 || (t.team === u.team && !d.engineer) || atPeace(S, u.team, t.team)) { u.ord = null; u.tgt = 0; t = null; o = null; }
       else u.tgt = t.id;
     }
@@ -2479,6 +2481,21 @@ const Rules = (() => {
       if (o.cov >= 0 && mhypot(u.x - sx, u.y - sy) < 0.5) { u.x = sx; u.y = sy; u.a = coverPoints(S.map)[o.cov].dir; u.cov = o.cov; }
       u.ord = null; u.tgt = 0; u.home = null;
     }
+  }
+
+  // The building an engineer goes to mend unasked. Its side's own within reach, at most FIX_AT whole, the worst hurt
+  // first and the nearest of near equals, passing over any that another engineer is already on its way into.
+  const FIX_AT = 0.75, FIX_REACH = 60;
+  function fixFor(S, u) {
+    const taken = new Set();
+    for (const o of S.ents) if (o !== u && o.team === u.team && o.d.engineer && o.hp > 0 && o.ord && o.ord.t === 'attack') taken.add(o.ord.id);
+    let best = null, bk = 1e9;
+    for (const e of S.ents) {
+      if (!e.b || e.team !== u.team || e.hp <= 0 || e.hp > e.max * FIX_AT || taken.has(e.id)) continue;
+      const d = mhypot(e.x - u.x, e.y - u.y), k = e.hp / e.max + d / 600;
+      if (d < FIX_REACH && k < bk) { bk = k; best = e; }
+    }
+    return best;
   }
 
   function engineerGo(S, u, t) {
@@ -2762,9 +2779,11 @@ const Rules = (() => {
     ownEvent(S, P.team, 'unitready');
     if (u.d.move === 'jet') { u.ord = null; return; }
     if (!u.d.cargo) {
-      const r = best.rally, raid = P.raid && S.tick - P.raid.tick < 12 * HZ ? P.raid : null;
+      const r = best.rally, raid = P.raid && S.tick - P.raid.tick < 12 * HZ ? P.raid : null, fix = u.d.engineer && fixFor(S, u);
+      // A new engineer goes straight into a hurt building of its base to mend it.
+      if (fix) { u.ord = { t: 'attack', id: fix.id, fix: true }; u.tgt = fix.id; u.wpT = 0; u.stuck = 0; }
       // While the base is under attack, an armed unit goes straight out to meet the attackers, hunting on its way.
-      if (raid && armed(u) && !u.d.engineer) {
+      else if (raid && armed(u) && !u.d.engineer) {
         const a = raid.by && S.byId.get(raid.by), at = a && a.hp > 0 && mhypot(a.x - raid.x, a.y - raid.y) < 20 ? a : raid;
         orderMove(S, [u], at.x, at.y, true);
       } else if (r) orderMove(S, [u], r[0], r[1], false);
