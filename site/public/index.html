@@ -525,7 +525,7 @@ body[data-look="ink"] .sheet { box-shadow: 4px 4px 0 var(--ink); }
     <div id="settings" hidden role="dialog" aria-label="Settings">
       <div class="choice"><h2>Look</h2><div id="s-look" class="two"></div></div>
       <div class="choice"><h2>Paper</h2><div id="s-scheme"><button data-v="light">Light</button><button data-v="dark">Dark</button><button data-v="auto">As the system</button></div></div>
-      <p id="build">Build d43a998 2026-11-06 05:53</p>
+      <p id="build">Build b89edb9 2026-11-06 06:37</p>
     </div>
     <div id="banner" hidden></div>
     <button id="update" hidden>A new version of Dead Ground is out. <b>Reload</b></button>
@@ -2454,8 +2454,9 @@ const Rules = (() => {
       if (P && team >= 0) P.raid = { tick: S.tick, by: by || 0, x: t.x, y: t.y };
     }
     else if (!t.b && t.d.cargo) { ownEvent(S, t.team, 'truckattack'); S.ev.push({ t: 'alert', team: t.team, x: t.x, y: t.y }); }
-    // A unit under fire with nothing better to do answers it.
+    // A unit under fire with nothing better to do answers it, and so do its idle neighbours.
     if (!t.b && by && !t.ord && !t.tgt && armed(t)) t.tgt = by;
+    if (by && team >= 0 && team !== t.team) answer(S, t, by);
     if (team >= 0 && t.team >= 0 && team !== t.team && S.hist) { const k = team * S.P.length + t.team; S.hist.acc[k] = (S.hist.acc[k] || 0) + Math.min(dmg, t.hp + dmg); }
     if (t.hp <= 0) {
       kill(S, t, team);
@@ -2464,6 +2465,27 @@ const Rules = (() => {
       P.stats[t.b ? 'blost' : 'lost']++; P.stats.lostV += w;
       reward(S, by, t);
     }
+  }
+
+  // Answering fire. When a unit or a building is hit, every idle armed unit of its side within ANS_R of it goes
+  // for whoever hit it, chases it up to ANS_LEASH from where it stood, and then goes back there. A unit given
+  // an order, a squad holding cover, and one already fighting a unit keep to what they are doing. A unit that
+  // gives up a chase answers nothing more for a while, so a gun out of its reach does not draw it back and forth.
+  const ANS_R = 10, ANS_LEASH = 18;
+  function answer(S, t, by) {
+    if (S.tick - (t.ansT ?? -1e9) < HZ) return;
+    const a = S.byId.get(by);
+    if (!a || a.hp <= 0 || a.team === t.team || a.drop > 0) return;
+    t.ansT = S.tick;
+    near(S, t.x, t.y, ANS_R, o => {
+      if (o.b || o.team !== t.team || o.hp <= 0 || o.drop > 0 || o.ord || o.cov >= 0 || S.tick < (o.calm || 0)) return;
+      if (!armed(o) || o.d.cargo || o.d.engineer || o.d.move === 'jet' || mhypot(o.x - t.x, o.y - t.y) > ANS_R) return;
+      const c = o.tgt && S.byId.get(o.tgt);
+      if (c && c.hp > 0 && !c.b) return;
+      if (!o.d.weapons.some(wn => canHit(wn, a))) return;
+      o.home = o.home || [o.x, o.y];
+      o.ord = { t: 'attack', id: a.id, ans: true }; o.tgt = a.id; o.wpT = 0; o.stuck = 0;
+    });
   }
 
   function kill(S, t, team) {
@@ -3047,6 +3069,8 @@ const Rules = (() => {
       t = S.byId.get(o.id);
       // An engineer sent to mend unasked turns to the next hurt building if its own is made whole first.
       if (o.fix && t && t.hp >= t.max) { t = fixFor(S, u); if (t) o.id = t.id; }
+      // A unit answering fire gives up a chase past its leash and goes home.
+      if (o.ans && u.home && mhypot(u.x - u.home[0], u.y - u.home[1]) > ANS_LEASH) { t = null; u.calm = S.tick + 8 * HZ; }
       if (!t || t.hp <= 0 || (t.team === u.team && !d.engineer) || atPeace(S, u.team, t.team)) { u.ord = null; u.tgt = 0; t = null; o = null; }
       else u.tgt = t.id;
     }
@@ -6909,9 +6933,8 @@ if (typeof module !== 'undefined') module.exports = Looks;
   const GL = Looks.GL;
   Looks.add({
     name: 'ink', title: 'Pen and ink', said: 'Pen and ink.', panels: 'ink', hud: 'ink', sceneFog: false, ghost3d: false,
-    // Blasts: flames as flicks of line, fire left white and scorch hatched in the pass, and the drawn burst lives long
-    // enough to be seen. Each kind of thing has its own drawing, set in world.js.
-    fx: 1, fxs: 2, burstLife: 2.5,
+    // Blasts: no burst drawn over the scene, fire in bands of coloured ink, and scorch hatched in the pass.
+    fx: 4, fxs: 2, fire: 0, burstLife: 2.5,
     // Survey inks, each family of things in its own colour, and units drawn in their side's ink on bare paper.
     inks: 1, units: 1,
     // The lens stands back as far again as frames the same ground, so everything sized by cam.dist holds.
@@ -6923,13 +6946,13 @@ if (typeof module !== 'undefined') module.exports = Looks;
       // 45 and 135 degrees, then flat and upright lines for the darkest, each line a little uneven with small gaps.
       // The ground's hatching is pinned to the map so it pans with it, the units' redraws a few times a second.
       const ink = new THREE.ShaderMaterial({ uniforms: { t: { value: null }, tSubj: { value: null }, tHeat: { value: null }, tPaper: { value: null }, res: { value: new THREE.Vector2(1, 1) }, uTime: { value: 0 }, uK: { value: 1 }, uOff: { value: new THREE.Vector2() }, uStyle: { value: 8 }, tNorm: { value: null }, tFogS: { value: null }, tLand: { value: null }, uSun2: { value: new THREE.Vector2(-1, 0) }, uUpV: { value: new THREE.Vector3(0, 1, 0) }, uRoad: { value: 0 }, uOre: { value: 0 }, uMarks: { value: 1 },
-        uWindS: { value: new THREE.Vector2() }, uView: { value: new THREE.Vector2(1, 0) }, tFx: { value: null }, tAnc: { value: null }, uDark: { value: 0 }, uInks: { value: 0 }, uFxs: { value: 0 }, uUnits: { value: 0 }, tH: SH.tH, uHSize: { value: new THREE.Vector2(1, 1) }, uHScale: { value: 1 }, uRain: { value: 0 }, uStorm: { value: 0 }, uSnowF: { value: 0 }, uSnowC: SH.uSnowC, uFog: { value: 0 }, uMist: { value: 0 }, uNight: { value: 0 }, uWet: { value: 0 },
+        uWindS: { value: new THREE.Vector2() }, uView: { value: new THREE.Vector2(1, 0) }, tFx: { value: null }, tAnc: { value: null }, uDark: { value: 0 }, uInks: { value: 0 }, uFxs: { value: 0 }, uFire: { value: 0 }, uUnits: { value: 0 }, tH: SH.tH, uHSize: { value: new THREE.Vector2(1, 1) }, uHScale: { value: 1 }, uRain: { value: 0 }, uStorm: { value: 0 }, uSnowF: { value: 0 }, uSnowC: SH.uSnowC, uFog: { value: 0 }, uMist: { value: 0 }, uNight: { value: 0 }, uWet: { value: 0 },
         uDayMul: { value: new THREE.Vector3(1, 1, 1) }, uDayAdd: { value: new THREE.Vector3() }, uWaterL: { value: -0.15 }, uCloudK: SH.uCloudK, tMarks: SH.tMarks, uMap: SH.uMap,
         uCloud: SH.uCloud, uCloudT: SH.uCloudT, uSunW: SH.uSunDir, uCloudA: { value: 0 }, uCloudG: { value: 0 }, uRayK: { value: 0 }, uSand: { value: 0 },
         uInvVP: { value: new THREE.Matrix4() }, uW2S: { value: new THREE.Vector4(1, 0, 0, 1) }, uLev: { value: 1 },
         // Each side's colour as the anchor pass keeps it, its hue and how coloured it is, and its inks on either paper.
         uSideKey: { value: [...Array(8)].map(() => new THREE.Vector2()) }, uSideL: { value: [...Array(8)].map(() => new THREE.Vector3()) }, uSideD: { value: [...Array(8)].map(() => new THREE.Vector3()) }, uSideB: { value: [...Array(8)].map(() => new THREE.Vector3()) } }, vertexShader: vs, depthTest: false, depthWrite: false, fragmentShader: `
-        varying vec2 vUv; uniform sampler2D t, tSubj, tHeat, tPaper, tNorm, tFogS, tLand, tMarks; uniform float uMap; uniform vec2 res, uOff, uSun2, uWindS, uView, uHSize; uniform float uHScale, uFxs; uniform int uUnits, uInks; uniform float uDark; uniform sampler2D tH, tFx, tAnc; uniform vec3 uUpV, uDayMul, uDayAdd; uniform float uTime, uK, uRain, uStorm, uSnowF, uSnowC, uFog, uMist, uNight, uWet, uWaterL, uCloudK, uMarks; uniform int uStyle, uRoad, uOre;
+        varying vec2 vUv; uniform sampler2D t, tSubj, tHeat, tPaper, tNorm, tFogS, tLand, tMarks; uniform float uMap; uniform vec2 res, uOff, uSun2, uWindS, uView, uHSize; uniform float uHScale, uFxs, uFire; uniform int uUnits, uInks; uniform float uDark; uniform sampler2D tH, tFx, tAnc; uniform vec3 uUpV, uDayMul, uDayAdd; uniform float uTime, uK, uRain, uStorm, uSnowF, uSnowC, uFog, uMist, uNight, uWet, uWaterL, uCloudK, uMarks; uniform int uStyle, uRoad, uOre;
         uniform vec2 uSideKey[8]; uniform vec3 uSideL[8], uSideD[8], uSideB[8];
         uniform vec2 uCloud; uniform vec3 uSunW; uniform float uCloudT, uCloudA, uCloudG, uRayK, uSand;
         // The clouds float at CLOUD_H over the land. cloudAt gives the cloud over a point of the land at that height,
@@ -7572,18 +7595,19 @@ if (typeof module !== 'undefined') module.exports = Looks;
           // Fire in flat bands of coloured ink, red, orange, yellow and a pale core, inside a black boiling outline.
           vec3 c1 = vec3(0.8, 0.17, 0.09), c2 = vec3(0.98, 0.47, 0.1), c3 = vec3(1.0, 0.82, 0.24), c4 = vec3(1.0, 0.97, 0.84);
           if (hz.b > hz.r * 1.1) { c1 = vec3(0.13, 0.33, 0.8); c2 = vec3(0.3, 0.6, 0.95); c3 = vec3(0.65, 0.86, 1.0); c4 = vec3(0.93, 0.97, 1.0); }
-          // Fire as the bands (uFxs 0), as a warm wash round a paper core with no outline (1), or as bare paper
-          // with one thin outline and a halo of hatching, as an engraver leaves a flash white (2).
+          // Fire as the bands (uFire 0), as a warm wash round a paper core with no outline (1), or as bare paper
+          // with one thin outline and a halo of hatching, as an engraver leaves a flash white (2). The bands are
+          // edged in a dark red, not black, so the fire reads as colour and never as a blot of ink.
           vec3 fc = hn < 0.62 ? c1 : hn < 1.35 ? c2 : hn < 2.7 ? c3 : c4;
-          if (uFxs < 0.5) fc = mix(fc, c1 * 0.5, hatch(px, 45.0, 3.4, 1.0, 91.0 + boil, 0.05) * step(hn, 0.62) * 0.65);
-          else if (uFxs < 1.5) fc = mix(vec3(1.0, 0.76, 0.42), c4, smoothstep(0.8, 2.2, hn));
+          if (uFire < 0.5) fc = mix(hn < 2.7 ? fc : vec3(1.0, 0.91, 0.55), c1 * 0.5, hatch(px, 45.0, 3.4, 1.0, 91.0 + boil, 0.05) * step(hn, 0.62) * 0.65);
+          else if (uFire < 1.5) fc = mix(vec3(1.0, 0.76, 0.42), c4, smoothstep(0.8, 2.2, hn));
           else fc = flashC;
           col = mix(col, fc, lit);
-          if (uFxs > 1.5) col = mix(col, inkC, hatch(px, 60.0, 3.0, 0.9, 5.0 + boil, 0.3) * smoothstep(0.08, 0.26, hr0) * (1.0 - lit) * 0.7);
-          float fw = max(fwidth(hn), 1e-4), fxO = uFxs < 0.5 ? 1.0 : uFxs < 1.5 ? 0.0 : 0.7;
-          float o1 = (1.0 - smoothstep(1.0 * uK, 2.3 * uK, abs(hn - 0.26) / fw)) * step(0.12, hr0) * fxO;
-          float o2 = max(1.0 - smoothstep(0.5 * uK, 1.4 * uK, abs(hn - 0.62) / fw), 1.0 - smoothstep(0.5 * uK, 1.4 * uK, abs(hn - 1.35) / fw)) * step(uFxs, 0.5);
-          col = mix(col, inkC, o1);
+          if (uFire > 1.5) col = mix(col, inkC, hatch(px, 60.0, 3.0, 0.9, 5.0 + boil, 0.3) * smoothstep(0.08, 0.26, hr0) * (1.0 - lit) * 0.7);
+          float fw = max(fwidth(hn), 1e-4), fxO = uFire < 0.5 ? 0.85 : uFire < 1.5 ? 0.0 : 0.7;
+          float o1 = (1.0 - smoothstep(0.7 * uK, 1.8 * uK, abs(hn - 0.26) / fw)) * step(0.12, hr0) * fxO;
+          float o2 = max(1.0 - smoothstep(0.5 * uK, 1.4 * uK, abs(hn - 0.62) / fw), 1.0 - smoothstep(0.5 * uK, 1.4 * uK, abs(hn - 1.35) / fw)) * step(uFire, 0.5);
+          col = mix(col, uFire < 0.5 ? c1 * 0.42 : inkC, o1);
           col = mix(col, c1 * 0.45, o2 * lit * 0.85);
           // Cloud shadows passing over what is seen now, as a cool wash.
           vec4 LND = texture2D(tLand, vUv);
@@ -7732,7 +7756,7 @@ if (typeof module !== 'undefined') module.exports = Looks;
           if (!C.tPaper.value) C.tPaper.value = K.paper();
           if (!sides) setSides(C);
           C.t.value = K.ldr.texture; C.tSubj.value = K.mask(); C.tNorm.value = K.norm(); C.tHeat.value = K.a0.texture;
-          C.tFx.value = K.fx(); C.uFxs.value = look.fxs || 0; C.uUnits.value = look.units || 0; C.tAnc.value = K.anchor(); C.uDark.value = Looks.dark ? 1 : 0; C.uInks.value = look.inks || 0;
+          C.tFx.value = K.fx(); C.uFxs.value = look.fxs || 0; C.uFire.value = look.fire ?? (look.fxs || 0); C.uUnits.value = look.units || 0; C.tAnc.value = K.anchor(); C.uDark.value = Looks.dark ? 1 : 0; C.uInks.value = look.inks || 0;
           C.res.value.set(w, h); C.uTime.value = K.time; C.uK.value = h / 1080;
           C.tFogS.value = K.fog();
           // Distance to the nearest road, per pixel of the land.
@@ -10194,6 +10218,12 @@ const World = (() => {
       const smoke1 = [sm[0] * 1.6, sm[1] * 1.5, sm[2] * 1.5, 0.82], smoke0 = [sm[0] * 3.4, sm[1] * 3.2, sm[2] * 3.1, 0];
       // The flash, white at its heart.
       glow.add(x, y + 0.4 * size, z, 0, 0, 0, 0.1, size * 2.6, size * 4.6, [7, 5, 3, 0.9], [3, 1.2, 0.2, 0], 8);
+      // Where the look draws fire in bands of coloured ink, a fireball that swells and burns down from yellow through
+      // orange to red over half a second, so the blast is seen in colour with nothing drawn over it.
+      if (style.fire === 0) for (let i = 0; i < 3; i++) {
+        glow.add(x + (R() - 0.5) * size * 0.7, y + 0.3 * size + R() * 0.4 * size, z + (R() - 0.5) * size * 0.7, 0, 0.9 * size, 0,
+          0.45 + R() * 0.25, size * 1.1, size * (2.2 + R()), [6, 3.4, 1.2, 1], [2, 0.45, 0.08, 0], 8, { rot: R() * 6 });
+      }
       glow.add(x, y + 0.2, z, 0, 0, 0, 0.06, size * 1.4, size * 1.8, [9, 7, 4.5, 1], [4, 2, 0.6, 0], 12, { rot: R() * 6 });
       // The fireball: puffs that leave hot, swell and roll upward, and cool to brown smoke.
       for (let i = 0; i < n; i++) {
@@ -11078,7 +11108,8 @@ const Hud = (() => {
       pow: ['tech', 'flare', 'uav', 'barrage', 'para', 'launch'],
     };
     const LISTS = { bld: [], def: [], inf: [], veh: [], air: [], sea: [], pow: [] };
-    const KEYS = 'QWERTYUIO';
+    // The build keys run along the top row, past P, which pauses, to [ for a tenth picture.
+    const KEYS = 'QWERTYUIO[';
     // The cards show only what the side's age has opened: one card for each line, in its form for that age, and
     // the buildings, defences and calls of that age.
     const sameLine = (a, b) => a === b || (!!UNITS[a] && !!UNITS[b] && UNITS[a].line === UNITS[b].line);
@@ -11128,7 +11159,7 @@ const Hud = (() => {
       LISTS[state.tab].forEach((k, i) => {
         const b = document.createElement('button'), info = camInfo(k), img = state.cameos[k];
         b.className = 'cam'; b.dataset.kind = k;
-        b.innerHTML = `<canvas width="4" height="3"></canvas><b class="nm"></b><em class="ct"></em><u class="qty"></u><s class="key">${KEYS[i]}</s><span class="state"></span>`;
+        b.innerHTML = `<canvas width="4" height="3"></canvas><b class="nm"></b><em class="ct"></em><u class="qty"></u><s class="key">${KEYS[i] || ''}</s><span class="state"></span>`;
         // A card a new age brought is drawn in, after those before it, and marked new for a few seconds.
         if (state.fresh && state.fresh.has(k) && performance.now() < state.freshUntil) {
           b.classList.add('fresh'); b.style.animationDelay = `${i * 70}ms`;
@@ -11613,7 +11644,7 @@ const Hud = (() => {
       }
       const tabKey = { KeyZ: 'bld', KeyX: 'def', KeyC: 'inf', KeyV: 'veh', KeyB: 'air', Comma: 'sea', KeyN: 'pow' }[k];
       if (tabKey) { pickTab(tabKey); return; }
-      const slot = { KeyQ: 0, KeyW: 1, KeyE: 2, KeyR: 3, KeyT: 4, KeyY: 5, KeyU: 6, KeyI: 7, KeyO: 8 }[k];
+      const slot = { KeyQ: 0, KeyW: 1, KeyE: 2, KeyR: 3, KeyT: 4, KeyY: 5, KeyU: 6, KeyI: 7, KeyO: 8, BracketLeft: 9 }[k];
       if (slot !== undefined) { const c = LISTS[state.tab][slot]; if (c) camClick(c, e.shiftKey ? 5 : 1); return; }
       if (k === 'KeyA') { if (orderIds().length) enter({ type: 'amove' }), showBanner('Attack-move: click a spot', true); return; }
       if (k === 'KeyS') { const ids = orderIds(); if (ids.length) game.order(s, t, { c: 'stop', ids }); return; }
@@ -11818,8 +11849,8 @@ const Hud = (() => {
       PAPER_C = blastDark ? 'rgba(0,0,0,0)' : '#f3ecdc';
       const INKC = '#1a1512', PAPERC = PAPER_C;
       for (const f of world.inkFx) {
-        // A burst carries the style of what went up; a muzzle flash is always a few rays.
-        const fx = f.k === 'star' ? 1 : f.fx !== undefined ? f.fx : (world.style.fx || 0);
+        // A burst carries the style of what went up, unless the look draws none; a muzzle flash is always a few rays.
+        const fx = f.k === 'star' ? 1 : world.style.fx === 4 ? 4 : f.fx !== undefined ? f.fx : (world.style.fx || 0);
         if (fx === 4) continue;
         const [x, y] = world.project(f.x, f.y, f.z);
         if (x < -60 || y < -60 || x > world.vw + 60 || y > world.vh + 60) continue;
@@ -11924,6 +11955,9 @@ const Hud = (() => {
     // Each chosen unit's way to its goal, traced from the rules' own pathing, kept a quarter second at a time and
     // traced again sooner when the goal moves.
     const routes = new Map();
+    // The routes are drawn on a sheet of their own, and every unit on screen is cut out of it before it is laid on
+    // the overlay, so a route passes under the units it crosses and not over them.
+    let planC = null, pg = null;
     function routeOf(s, e, tx, ty) {
       const now = performance.now(), key = `${tx.toFixed(1)},${ty.toFixed(1)}`, r = routes.get(e.id);
       if (r && r.key === key && now - r.at < 250) return r.pts;
@@ -11941,9 +11975,12 @@ const Hud = (() => {
       // What is planned: the building being placed, and where the chosen units are bound.
       const g = world.ghostState;
       if (g) { og.strokeStyle = g.ok ? PLAN : PLAN_BAD; dotted(); const d = BUILDINGS[g.kind]; box3(s, g.x, g.y, d.w, d.h, world.bHeight(g.kind)); }
+      if (!planC || planC.width !== ov.width || planC.height !== ov.height) { planC = planC || document.createElement('canvas'); planC.width = ov.width; planC.height = ov.height; pg = planC.getContext('2d'); }
+      pg.setTransform(1, 0, 0, 1, 0, 0); pg.clearRect(0, 0, planC.width, planC.height); pg.setTransform(og.getTransform());
+      pg.strokeStyle = PLAN; pg.setLineDash([0.5, 3.6]); pg.lineCap = 'round'; pg.lineWidth = 2.1;
       og.strokeStyle = PLAN; dotted();
       const ends = [], shared = new Set();
-      let byId = null;
+      let byId = null, drawn = 0;
       for (const e of selected) {
         if (!e || e.b || e.team !== t || e.hp <= 0 || !e.ord) continue;
         const o = e.ord;
@@ -11959,19 +11996,28 @@ const Hud = (() => {
         const air = Rules.isAir(e);
         const [ax, ay] = world.project(e.x, Rules.heightAt(s.map, clamp(e.x, 0, W), clamp(e.y, 0, H)) + (air ? e.z : 0.2), e.y);
         const [bx, by] = world.project(tx, Rules.heightAt(s.map, tx, ty) + 0.2, ty);
-        og.beginPath(); og.moveTo(ax, ay);
+        pg.beginPath(); pg.moveTo(ax, ay); drawn++;
         // A ground unit's line follows the way it will take, roads and tracks and all; an aircraft's flies straight.
         // A stretch that units share is drawn once, so a column's lines stay one dotted line, not a solid stripe.
+        // Stretches are matched to the half cell, either way along, so near and reversed copies count as shared.
         if (!air) {
           let px0 = e.x, py0 = e.y;
+          const hc = v => Math.round(v * 2);
           for (const [px, py] of routeOf(s, e, tx, ty).slice(1)) {
-            const k = `${px0.toFixed(1)},${py0.toFixed(1)}>${px.toFixed(1)},${py.toFixed(1)}`, [qx, qy] = world.project(px, Rules.heightAt(s.map, px, py) + 0.2, py);
-            if (shared.has(k)) og.moveTo(qx, qy); else { shared.add(k); og.lineTo(qx, qy); }
+            const a = `${hc(px0)},${hc(py0)}`, b = `${hc(px)},${hc(py)}`, k = a < b ? a + '>' + b : b + '>' + a;
+            const [qx, qy] = world.project(px, Rules.heightAt(s.map, px, py) + 0.2, py);
+            if (shared.has(k) || a === b) pg.moveTo(qx, qy); else { shared.add(k); pg.lineTo(qx, qy); }
             px0 = px; py0 = py;
           }
         }
-        og.lineTo(bx, by); og.stroke();
+        pg.lineTo(bx, by); pg.stroke();
         if (!ends.some(p => Math.abs(p[0] - bx) < 8 && Math.abs(p[1] - by) < 8)) ends.push([bx, by]);
+      }
+      if (drawn) {
+        pg.globalCompositeOperation = 'destination-out'; pg.setLineDash([]);
+        for (const o of world.onScreen) { if (o.e.b) continue; pg.beginPath(); pg.arc(o.x, o.y, Math.max(4, o.r * 1.15), 0, 6.3); pg.fill(); }
+        pg.globalCompositeOperation = 'source-over';
+        og.save(); og.setTransform(1, 0, 0, 1, 0, 0); og.globalAlpha = 1; og.drawImage(planC, 0, 0); og.restore();
       }
       for (const [x, y] of ends) { og.beginPath(); og.ellipse(x, y, 9, 5.5, 0, 0, 6.3); og.stroke(); }
       og.restore();

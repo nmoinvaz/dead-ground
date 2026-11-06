@@ -1829,8 +1829,9 @@ const Rules = (() => {
       if (P && team >= 0) P.raid = { tick: S.tick, by: by || 0, x: t.x, y: t.y };
     }
     else if (!t.b && t.d.cargo) { ownEvent(S, t.team, 'truckattack'); S.ev.push({ t: 'alert', team: t.team, x: t.x, y: t.y }); }
-    // A unit under fire with nothing better to do answers it.
+    // A unit under fire with nothing better to do answers it, and so do its idle neighbours.
     if (!t.b && by && !t.ord && !t.tgt && armed(t)) t.tgt = by;
+    if (by && team >= 0 && team !== t.team) answer(S, t, by);
     if (team >= 0 && t.team >= 0 && team !== t.team && S.hist) { const k = team * S.P.length + t.team; S.hist.acc[k] = (S.hist.acc[k] || 0) + Math.min(dmg, t.hp + dmg); }
     if (t.hp <= 0) {
       kill(S, t, team);
@@ -1839,6 +1840,27 @@ const Rules = (() => {
       P.stats[t.b ? 'blost' : 'lost']++; P.stats.lostV += w;
       reward(S, by, t);
     }
+  }
+
+  // Answering fire. When a unit or a building is hit, every idle armed unit of its side within ANS_R of it goes
+  // for whoever hit it, chases it up to ANS_LEASH from where it stood, and then goes back there. A unit given
+  // an order, a squad holding cover, and one already fighting a unit keep to what they are doing. A unit that
+  // gives up a chase answers nothing more for a while, so a gun out of its reach does not draw it back and forth.
+  const ANS_R = 10, ANS_LEASH = 18;
+  function answer(S, t, by) {
+    if (S.tick - (t.ansT ?? -1e9) < HZ) return;
+    const a = S.byId.get(by);
+    if (!a || a.hp <= 0 || a.team === t.team || a.drop > 0) return;
+    t.ansT = S.tick;
+    near(S, t.x, t.y, ANS_R, o => {
+      if (o.b || o.team !== t.team || o.hp <= 0 || o.drop > 0 || o.ord || o.cov >= 0 || S.tick < (o.calm || 0)) return;
+      if (!armed(o) || o.d.cargo || o.d.engineer || o.d.move === 'jet' || mhypot(o.x - t.x, o.y - t.y) > ANS_R) return;
+      const c = o.tgt && S.byId.get(o.tgt);
+      if (c && c.hp > 0 && !c.b) return;
+      if (!o.d.weapons.some(wn => canHit(wn, a))) return;
+      o.home = o.home || [o.x, o.y];
+      o.ord = { t: 'attack', id: a.id, ans: true }; o.tgt = a.id; o.wpT = 0; o.stuck = 0;
+    });
   }
 
   function kill(S, t, team) {
@@ -2422,6 +2444,8 @@ const Rules = (() => {
       t = S.byId.get(o.id);
       // An engineer sent to mend unasked turns to the next hurt building if its own is made whole first.
       if (o.fix && t && t.hp >= t.max) { t = fixFor(S, u); if (t) o.id = t.id; }
+      // A unit answering fire gives up a chase past its leash and goes home.
+      if (o.ans && u.home && mhypot(u.x - u.home[0], u.y - u.home[1]) > ANS_LEASH) { t = null; u.calm = S.tick + 8 * HZ; }
       if (!t || t.hp <= 0 || (t.team === u.team && !d.engineer) || atPeace(S, u.team, t.team)) { u.ord = null; u.tgt = 0; t = null; o = null; }
       else u.tgt = t.id;
     }
