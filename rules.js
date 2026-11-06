@@ -658,6 +658,13 @@ const Rules = (() => {
       if (keyB.has(k)) continue;
       keyB.add(k); addBridge(a, b);
     }
+    // A road is never under water away from a bridge or a ford. Where its carriageway dips into the water, as a
+    // shore road round a lake can, it is carried on a low causeway.
+    for (let c = 0; c < h.length; c++) {
+      if (roadDist[c] > 2.1 || deck[c] > 0 || h[c] >= water + 0.25) continue;
+      if (fordK((c % VW) / RES, (c / VW | 0) / RES) > 0) continue;
+      h[c] = water + 0.25;
+    }
 
     // Towns, ore and wells.
     L.towns.forEach(p => towns.push({ x: p[0], y: p[1], owner: -1, cap: 0, capTeam: -1, r: 14 }));
@@ -689,6 +696,8 @@ const Rules = (() => {
       }
       if (lo < water + 0.1) return fordK(x + 0.5, y + 0.5) > 0.85 ? 4 | 16 : 7;
       const slope = hi - lo;
+      // A road's carriageway is never too steep to use, however hard it climbs. It is only kept free of building.
+      if (roadDist[clamp(Math.round((y + 0.5) * RES), 0, VH - 1) * VW + clamp(Math.round((x + 0.5) * RES), 0, VW - 1)] <= 1.2) return slope > 0.5 ? 4 : 0;
       let bits = 0;
       if (slope > 0.95) bits |= 1 | 4;
       if (slope > 1.4) bits |= 2;
