@@ -134,7 +134,10 @@ const AI = (() => {
     const buy = k => R.push(S, me.team, { c: 'train', kind: k });
     if (has(P, 'factory') && P.q.veh.length < 2) {
       const truck = R.formOf('truck', P.tech);
+      // Caravans once there are two posts to run between, a few more for a stronger commander.
+      const trade = R.formOf('trade', P.tech), posts = 1 + S.towns.filter(t => t.owner === me.team).length, want = me.level === 'veteran' ? 4 : me.level === 'regular' ? 3 : 2;
       if (trucks < Math.min(refs * 2, 6) && !queuedIn(P, 'veh', truck)) R.push(S, me.team, { c: 'train', kind: truck });
+      else if (trade && posts >= 2 && R.lineCount(P, 'trade') < want && !queuedIn(P, 'veh', trade) && P.supply > 500) R.push(S, me.team, { c: 'train', kind: trade });
       else if (ready('veh')) {
         const mix = forms(P, P.supply > 3000 ? RICH : VEH_MIX[P.tech]);
         const k = mix[me.plan++ % mix.length];

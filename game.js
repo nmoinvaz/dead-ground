@@ -282,6 +282,7 @@ const Game = (() => {
             else if (G.playing && e.team === G.team) { const v = VOICE[e.line]; if (v) { hud.say(v[0] + '.', v[1]); audio.voice(e.line, v[0]); } }
             break;
           case 'alert': if (G.playing && e.team === G.team) hud.alert(e.x, e.y); break;
+          case 'trade': if (G.playing && e.team === G.team) hud.pop(e.x, e.y, '+' + e.n); break;
           case 'hint': if (G.playing && e.team === G.team && e.hint === 'attrition') hud.say('Attrition: troops wear down abroad. A Support Truck stops it.', 'bad'); break;
           case 'launch': if (G.playing && e.team === G.team) audio.play('launch', { gain: 0.9 }); break;
           case 'placed': if (G.playing && e.team === G.team) audio.at('place', e.x, e.y, { gain: 0.8 }); break;

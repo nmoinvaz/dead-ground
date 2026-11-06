@@ -32,6 +32,7 @@ const Hud = (() => {
       case 'eng': g.moveTo(-a, -b * 0.4); g.lineTo(a, -b * 0.4); g.moveTo(-a, -b * 0.4); g.lineTo(-a, b); g.moveTo(0, -b * 0.4); g.lineTo(0, b); g.moveTo(a, -b * 0.4); g.lineTo(a, b); break;
       case 'snp': cross(); dot(b * 0.3); break;
       case 'hero': g.moveTo(-a * 0.3, -b); g.lineTo(a * 0.5, -b * 0.1); g.lineTo(-a * 0.1, b * 0.1); g.lineTo(a * 0.3, b); break;
+      case 'trade': g.rect(-a * 0.7, -b * 0.4, a * 1.4, b * 0.9); g.moveTo(-a * 0.7, -b * 0.4); g.lineTo(a * 0.7, b * 0.5); g.moveTo(a * 0.7, -b * 0.4); g.lineTo(-a * 0.7, b * 0.5); break;
       case 'sup': case 'sup2': g.moveTo(-a, b * 0.5); g.lineTo(a, b * 0.5); if (sym === 'sup2') { g.moveTo(0, -b); g.lineTo(0, b * 0.2); g.moveTo(-a * 0.4, -b * 0.4); g.lineTo(a * 0.4, -b * 0.4); } break;
       case 'rec': g.moveTo(-a, b); g.lineTo(a, -b); break;
       case 'ifv': oval(); g.moveTo(-a * 0.7, 0); g.lineTo(a * 0.7, 0); break;
@@ -80,6 +81,7 @@ const Hud = (() => {
       case 'chariot': beast(3.4, 0.2, 2.6, 1.4); box(-7.2, -2.2, 5.4, 3); ring(-4.6, 3, 2.4); ln([[-1.8, -0.6], [1, -0.2]]); dot(-4.6, -4.8, 1.3); ln([[-4.6, -3.5], [-4.6, -2.2]]); break;
       case 'elephant': g.beginPath(); g.ellipse(-1.5, -0.4, 5.6, 3.4, 0, 0, 6.3); g.fill(); for (const x of [-5.4, -2.2, 1.4]) box(x, 1.5, 2.2, 4.3); dot(4.6, -1.4, 2.8); g.lineWidth = 1.8; ln([[6.8, -0.4], [7.8, 2.6], [7.2, 5.4]]); g.lineWidth = 1.1; ln([[5.6, 1.2], [8.2, 1.6]]); box(-4, -6.6, 4.8, 2.2); break;
       case 'cart': case 'cart2': beast(4.2, 0, 2.4, 1.3); box(-7.6, -2.6, 7.2, 3.6); ring(-4, 3, 2.4); ln([[-0.4, -0.6], [2, -0.6]]); if (sym === 'cart2') { g.fillStyle = bg; box(-5.4, -1.3, 3, 1); box(-4.4, -2.3, 1, 3); } break;
+      case 'trade': box(-7, -3, 6, 5); box(0, -1.5, 5, 3.5); dot(-4.5, 3.5, 1.6); dot(2.5, 3.5, 1.6); ln([[5.5, 0], [8, 0]]); break;
       case 'sup': box(-7, -3, 9, 5); box(2.5, -1, 4.5, 3); dot(-4.5, 3.5, 1.6); dot(4, 3.5, 1.6); break;
       case 'sup2': box(-7, -3, 9, 5); box(2.5, -1, 4.5, 3); dot(-4.5, 3.5, 1.6); dot(4, 3.5, 1.6); g.fillStyle = bg; box(-4, -2.4, 3, 0.9); box(-3, -3.4, 0.9, 3); break;
       case 'rec': box(-6, -1.5, 12, 4); box(-2.5, -4, 4, 2.5); ln([[0, -3], [6, -4]]); dot(-3.5, 3.5, 1.5); dot(3.5, 3.5, 1.5); break;
@@ -434,6 +436,8 @@ const Hud = (() => {
 
     function orderIds() { return state.sel.filter(e => alive(e) && !e.b && e.team === team()).map(e => e.id); }
     function marker(x, y, color) { state.marks.push({ x, y, t: 0, color }); }
+    // A sum that rises from where it was earned, as a caravan's pay at a post.
+    function pop(x, y, text) { (state.pops || (state.pops = [])).push({ x, y, text, t: 0 }); }
 
     function smart(px, py, forceAttack) {
       const s = S(), t = team();
@@ -1457,6 +1461,15 @@ const Hud = (() => {
       drawNight(s, t); drawBridges(s, t); drawWires(); drawFires(); drawBirds(); drawLightning(dt);
       if (game.playing) { drawSkyNote(s); drawGroundTip(s, dt); }
 
+      for (let i = (state.pops || []).length - 1; i >= 0; i--) {
+        const q = state.pops[i];
+        q.t += dt;
+        if (q.t > 1.8) { state.pops.splice(i, 1); continue; }
+        const [x, y] = world.project(q.x, Rules.heightAt(s.map, q.x, q.y) + 1.5, q.y), ink = inked();
+        og.save(); og.globalAlpha = Math.min(1, (1.8 - q.t) / 0.5); og.textAlign = 'center'; og.font = ink ? `600 15px ${labelFont()}` : '700 15px "Barlow Condensed", system-ui, sans-serif';
+        og.lineWidth = 3; og.strokeStyle = ink ? 'rgba(250,244,228,0.95)' : 'rgba(0,0,0,0.7)'; og.strokeText(q.text, x, y - q.t * 18);
+        og.fillStyle = ink ? '#1f6b34' : '#7fe0a0'; og.fillText(q.text, x, y - q.t * 18); og.restore();
+      }
       for (let i = state.marks.length - 1; i >= 0; i--) {
         const m = state.marks[i];
         m.t += dt;
@@ -1724,7 +1737,7 @@ const Hud = (() => {
     }
 
     return {
-      state, pickTab, say, symbol, enter, leave, select, layoutMini,
+      state, pickTab, say, symbol, enter, leave, select, layoutMini, pop,
       reset() {
         state.sel = []; state.groups = {}; state.mode = null; state.marks = []; state.alerts = []; state.lastAlert = null; state.selKey = null; state.fogC = null; ro = { sup: -1, oil: -1 };
         world.setGhost(null); showBanner(''); $('log').textContent = '';

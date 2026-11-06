@@ -584,6 +584,48 @@ const Axo = (() => {
         box(-1.33, -1.07, -0.9, -0.88, 1.05, 1.95, 'mark', { b: 0.05 }), box(-1.65, -0.75, -0.9, -0.88, 1.37, 1.63, 'mark', { b: 0.05 }),
       ];
     } },
+    tradecart: { name: 'Trade Cart', ruler: 2, build() {
+      // A horse before a cart of crates, a bale and a cask.
+      const c = [
+        ...spoked(-1.3, 0.85, 0.6, 0.1), ...spoked(-1.3, -0.85, 0.6, 0.1),
+        rod([0.55, 0.4, 1.2], [-0.4, 0.4, 0.8], 0.04, 'wood'), rod([0.55, -0.4, 1.2], [-0.4, -0.4, 0.8], 0.04, 'wood'),
+        box(-2.3, -0.35, -0.72, 0.72, 0.66, 1.0, 'wood'),
+        box(-2.2, -1.5, -0.6, 0.05, 1.0, 1.55, 'wood'), box(-1.4, -0.6, 0.0, 0.62, 1.0, 1.45, 'wood'),
+        cyl('y', [-1.2, 0, 1.85], 0.3, 1.3, 'cloth', 10), box(-0.6, -0.4, -0.66, -0.3, 1.0, 1.7, 'mark', { b: 0.04 }),
+      ];
+      return [...at(grp(horse({ cloth: false, saddle: false })), 1.3, 0), ...grp(c)];
+    } },
+    caravan: { name: 'Caravan', ruler: 2, build() {
+      // Two horses before a long wagon of crates and bales.
+      const team = [...at(grp(horse({ cloth: false, saddle: false })), 1.6, 0.42), ...at(grp(horse({ cloth: false, saddle: false, stride: -0.1 })), 1.6, -0.42)];
+      const c = [
+        ...spoked(-0.6, 0.85, 0.5, 0.1), ...spoked(-0.6, -0.85, 0.5, 0.1), ...spoked(-2.4, 0.85, 0.5, 0.1), ...spoked(-2.4, -0.85, 0.5, 0.1),
+        box(-2.9, 0.1, -0.76, 0.76, 0.74, 1.05, 'wood'),
+        box(-2.8, -2.0, -0.6, 0.05, 1.05, 1.6, 'wood'), box(-1.9, -1.1, 0.0, 0.62, 1.05, 1.5, 'wood'), box(-1.0, -0.2, -0.62, 0.0, 1.05, 1.45, 'wood'),
+        cyl('y', [-0.5, 0.3, 1.75], 0.28, 0.6, 'cloth', 10), box(-2.95, -2.75, -0.7, -0.3, 0.9, 1.6, 'mark', { b: 0.04 }),
+      ];
+      return [...team, ...grp(c)];
+    } },
+    tradewagon: { name: 'Trade Wagon', ruler: 2, build() {
+      // A covered wagon of goods with a cask lashed behind and the side's pennant.
+      const c = [
+        ...spoked(-1.3, 0.85, 0.6, 0.1), ...spoked(-1.3, -0.85, 0.6, 0.1),
+        rod([0.55, 0.4, 1.2], [-0.4, 0.4, 0.8], 0.04, 'wood'), rod([0.55, -0.4, 1.2], [-0.4, -0.4, 0.8], 0.04, 'wood'),
+        box(-2.3, -0.35, -0.72, 0.72, 0.66, 1.0, 'wood'),
+        box(-2.25, -0.4, -0.74, 0.74, 1.0, 1.5, 'cloth'), arch(-2.25, -0.4, 0.74, 1.5, 'cloth'),
+        cyl('z', [-2.55, 0.4, 1.0], 0.22, 0.4, 'wood', 10), ...flag(-2.4, -0.7, 1.5, 0.9, 0.5),
+      ];
+      return [...at(grp(horse({ cloth: false, saddle: false })), 1.3, 0), ...grp(c)];
+    } },
+    freightlorry: { name: 'Freight Lorry', ruler: 2, build() {
+      return [...chassis('cloth'), box(-2.45, 0.38, -0.88, 0.88, 0.78, 1.9, 'cloth'), arch(-2.45, 0.38, 0.88, 1.9, 'cloth'), box(-1.4, -0.7, -0.9, -0.88, 1.1, 1.6, 'mark', { b: 0.05 })];
+    } },
+    freighter: { name: 'Freight Truck', ruler: 2, build() {
+      return [...chassis('hull'), box(-2.55, 0.38, -0.9, 0.9, 0.78, 2.45, 'polo'), box(-2.5, 0.3, -0.92, -0.9, 1.6, 1.9, 'mark', { b: 0.05 })];
+    } },
+    hovfreight: { name: 'Hover Freighter', ruler: 2, build() {
+      return [...chassis('hull'), box(-2.55, 0.38, -0.9, 0.9, 0.78, 2.2, 'hull'), box(-2.5, 0.3, -0.92, -0.9, 1.5, 1.8, 'mark', { b: 0.05 })];
+    } },
     aalorry: { name: 'AA Lorry', ruler: 2, build() {
       // Twin guns raised on a pedestal in the bed.
       const guns = turn([...[1, -1].map(s => cyl('x', [0.9, s * 0.16, 0.06], 0.045, 1.9, 'dark', 8)), box(-0.4, 0.4, -0.3, 0.3, -0.18, 0.2, 'hull')], 'y', -40, [0, 0, 0]);

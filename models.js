@@ -1282,6 +1282,55 @@ const Models = (() => {
       for (const s of [-1, 1]) { b.box(0.06, 0.22, 0.01, -0.36, 0.42, s * 0.305, P.red, TB); b.box(0.22, 0.06, 0.01, -0.36, 0.5, s * 0.305, P.red, TB); }
       units.ambulance = [part('hull', b)];
     }
+    // Trade caravans, which run goods between a side's towns: a cart, a wagon train and a covered wagon of crates,
+    // bales and casks, then a lorry under a canvas tilt and a box truck. Each carries the side's mark.
+    const goods = (g, x, y) => {
+      g.box(0.2, 0.16, 0.18, x - 0.14, y + 0.08, -0.11, A.wood, T); g.box(0.18, 0.14, 0.16, x + 0.1, y + 0.07, 0.11, A.woodDk, T);
+      g.cyl(0.08, 0.08, 0.32, x + 0.02, y + 0.2, 0, A.canvas, { axis: 'z', seg: 8 });
+      g.cyl(0.07, 0.07, 0.14, x + 0.2, y + 0.08, -0.12, A.woodDk, { seg: 8 });
+    };
+    {
+      const b = G(), hips = [], wh = [];
+      horse(b, 0.55, 0, 0x8a6a4a, { cloth: false, rig: hips });
+      for (const s of [-1, 1]) cartWheel(b, -0.3, s * 0.27, 0.2, 0.04, wh);
+      b.box(0.66, 0.06, 0.46, -0.3, 0.28, 0, A.wood);
+      goods(b, -0.32, 0.31); mark(b, 0.14, 0.2, -0.62, 0.42, 0);
+      units.tradecart = [part('hull', b), ...horseLegs(0x8a6a4a, hips), wheelPart(wh)];
+      units.tradecart.gait = GAIT.horse;
+    }
+    {
+      const b = G(), h1 = [], h2 = [], wh = [];
+      horse(b, 0.62, 0.12, 0x6b4a32, { cloth: false, rig: h1 }); horse(b, 0.62, -0.12, 0x3a2a20, { cloth: false, rig: h2, off: 0.5 });
+      for (const x of [-0.08, -0.62]) for (const s of [-1, 1]) cartWheel(b, x, s * 0.3, 0.17, 0.04, wh);
+      b.box(0.8, 0.06, 0.5, -0.35, 0.3, 0, A.wood, T);
+      goods(b, -0.2, 0.33); goods(b, -0.52, 0.33); mark(b, 0.14, 0.2, -0.76, 0.45, 0);
+      units.caravan = [part('hull', b), ...horseLegs(0x6b4a32, h1), ...horseLegs(0x3a2a20, h2), wheelPart(wh)];
+      units.caravan.gait = GAIT.horse;
+    }
+    {
+      const b = G(), hips = [], wh = [];
+      horse(b, 0.55, 0, 0x6b4a32, { cloth: false, rig: hips });
+      for (const s of [-1, 1]) cartWheel(b, -0.3, s * 0.27, 0.2, 0.04, wh);
+      b.box(0.66, 0.06, 0.46, -0.3, 0.28, 0, A.wood);
+      b.cyl(0.23, 0.23, 0.62, -0.3, 0.36, 0, A.canvas, { axis: 'x', seg: 12, sy: 1.15 });
+      b.cyl(0.07, 0.07, 0.14, -0.68, 0.36, 0.12, A.woodDk, { seg: 8 }); mark(b, 0.12, 0.18, -0.3, 0.6, 0);
+      units.tradewagon = [part('hull', b), ...horseLegs(0x6b4a32, hips), wheelPart(wh)];
+      units.tradewagon.gait = GAIT.horse;
+    }
+    {
+      const b = G();
+      lorry(b, A.field);
+      b.box(0.74, 0.34, 0.6, -0.36, 0.38, 0, A.canvas, T); b.cyl(0.3, 0.3, 0.74, -0.36, 0.52, 0, A.canvas, { axis: 'x', seg: 12, sy: 0.45 });
+      mark(b, 0.2, 0.3, -0.36, 0.67, 0);
+      units.freightlorry = [part('hull', b)];
+    }
+    {
+      const b = G();
+      lorry(b, A.khaki);
+      b.box(0.8, 0.5, 0.62, -0.38, 0.4, 0, A.white, T); b.box(0.82, 0.08, 0.64, -0.38, 0.36, 0, A.khaki);
+      mark(b, 0.3, 0.3, -0.38, 0.655, 0);
+      units.freighter = [part('hull', b)];
+    }
     // AA lorry: twin guns on a pedestal in its bed.
     {
       const b = G();
@@ -1437,6 +1486,9 @@ const Models = (() => {
       b.prism([[-0.86, 0.4], [-0.9, 0.86], [0.36, 0.86], [0.36, 0.4]], 0.86, 0, 0, 0, A.exo, T);
       mark(b, 0.3, 0.6, 0.56, 0.865, 0);
       units.hauler = [part('hull', b), part('load', oreLoad([[-0.6, 0.12, 0.17], [-0.3, -0.14, 0.2], [-0.04, 0.12, 0.16], [-0.42, -0.2, 0.13]], 0.86), { pivot: [0, 0, 0], load: true })];
+      // Hover freighter: the hauler's barge with a sealed cargo pod on its bin.
+      const c = G(); c.box(1.1, 0.36, 0.7, -0.3, 1.04, 0, A.exo, T); c.box(1.12, 0.04, 0.72, -0.3, 1.0, 0, A.glow, GLOW); mark(c, 0.3, 0.4, -0.3, 1.225, 0);
+      units.hovfreight = [part('hull', b), part('pod', c)];
     }
     // Rail artillery: a hover sled with a long rail on a turntable.
     {
