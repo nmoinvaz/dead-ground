@@ -23,9 +23,9 @@
         uCloud: SH.uCloud, uCloudT: SH.uCloudT, uSunW: SH.uSunDir, uCloudA: { value: 0 }, uCloudG: { value: 0 }, uRayK: { value: 0 }, uSand: { value: 0 }, uBliz: { value: 0 },
         uInvVP: { value: new THREE.Matrix4() }, uW2S: { value: new THREE.Vector4(1, 0, 0, 1) }, uLev: { value: 1 },
         // Each side's colour as the anchor pass keeps it, its hue and how coloured it is, and its inks on either paper.
-        uSideKey: { value: [...Array(8)].map(() => new THREE.Vector2()) }, uSideL: { value: [...Array(8)].map(() => new THREE.Vector3()) }, uSideD: { value: [...Array(8)].map(() => new THREE.Vector3()) } }, vertexShader: vs, depthTest: false, depthWrite: false, fragmentShader: `
+        uSideKey: { value: [...Array(8)].map(() => new THREE.Vector2()) }, uSideL: { value: [...Array(8)].map(() => new THREE.Vector3()) }, uSideD: { value: [...Array(8)].map(() => new THREE.Vector3()) }, uSideB: { value: [...Array(8)].map(() => new THREE.Vector3()) } }, vertexShader: vs, depthTest: false, depthWrite: false, fragmentShader: `
         varying vec2 vUv; uniform sampler2D t, tSubj, tHeat, tPaper, tNorm, tFogS, tLand; uniform vec2 res, uOff, uSun2, uWindS, uView, uHSize; uniform float uHScale, uFxs; uniform int uUnits, uInks; uniform float uDark; uniform sampler2D tH, tFx, tAnc; uniform vec3 uUpV, uDayMul, uDayAdd; uniform float uTime, uK, uRain, uStorm, uSnowF, uSnowC, uFog, uMist, uNight, uWet, uWaterL, uCloudK, uMarks; uniform int uStyle, uRoad, uOre;
-        uniform vec2 uSideKey[8]; uniform vec3 uSideL[8], uSideD[8];
+        uniform vec2 uSideKey[8]; uniform vec3 uSideL[8], uSideD[8], uSideB[8];
         uniform vec2 uCloud; uniform vec3 uSunW; uniform float uCloudT, uCloudA, uCloudG, uRayK, uSand, uBliz;
         // The clouds float at CLOUD_H over the land. cloudAt gives the cloud over a point of the land at that height,
         // taken from the same field the land pass casts their shadows with, shifted along the sun, so each cloud
@@ -43,6 +43,16 @@
             if (d < best) { best = d; c = dk ? uSideD[i] : uSideL[i]; }
           }
           return mix(dk ? vec3(0.88) : vec3(0.12), c, smoothstep(0.15, 0.4, aw.w));
+        }
+        // A unit's body tint on light paper, from the same nearest side. A colour faded to grey keeps the paper.
+        vec3 sideBody(vec4 aw) {
+          float best = 1e9; vec3 c = vec3(1.0);
+          for (int i = 0; i < 8; i++) {
+            float dh = abs(aw.z - uSideKey[i].x); dh = min(dh, 1.0 - dh) * 36.0;
+            float ds = (aw.w - uSideKey[i].y) * 20.0, d = dh * dh + ds * ds;
+            if (d < best) { best = d; c = uSideB[i]; }
+          }
+          return mix(vec3(0.949, 0.910, 0.824), c, smoothstep(0.15, 0.4, aw.w));
         }
         const vec3 PAPER = vec3(0.949, 0.910, 0.824), INK = vec3(0.122, 0.102, 0.086);
         // The soft axonometric's washes, after the atlas: speckled pale green ground, lilac water, pink paths,
@@ -595,6 +605,13 @@
             vec3 sI = sideInk(texture2D(tAnc, vUv), dk), hI = dk ? sI : mix(sI, mix(sI, INK, 0.4), 1.0 - smoothstep(1.2, 1.9, uLev));
             vec3 tInk = mix(hI, sI, clamp(lineK / max(cover, 1e-3), 0.0, 1.0));
             col = mix(col, tInk, nearU * smoothstep(0.25, 0.6, cover) * step(0.05, mkx)); mark = 0.0; wash = 0.0;
+            // On light paper the body is tinted in the side's colour, laid under the lines as a multiply, so a
+            // unit reads as a coloured figure on snow, sand and pale ground alike.
+            if (!dk) {
+              vec4 aw0 = texture2D(tAnc, vUv);
+              vec3 bt = sideBody(aw0) / vec3(0.949, 0.910, 0.824);
+              col *= mix(vec3(1.0), bt, smoothstep(0.85, 0.95, s0) * step(0.05, mkx));
+            }
           }
           if (uUnits == 2) { col = mix(col, hue * 0.85, mark * nearU); mark = 0.0; wash = 0.0; }
           // Line, hatch and stipple units keep their bodies paper, the side shown by its marks alone.
@@ -778,7 +795,7 @@
           let hh = d < 1e-4 ? 0 : mx === c.r ? ((c.g - c.b) / d + 6) % 6 : mx === c.g ? (c.b - c.r) / d + 2 : (c.r - c.g) / d + 4;
           C.uSideKey.value[i].set(hh / 6, mx > 0 ? d / mx : 0);
           const ink = (s, v) => v.set(parseInt(s.slice(1, 3), 16) / 255, parseInt(s.slice(3, 5), 16) / 255, parseInt(s.slice(5, 7), 16) / 255);
-          ink(World.SLOT_INKS.light[i], C.uSideL.value[i]); ink(World.SLOT_INKS.dark[i], C.uSideD.value[i]);
+          ink(World.SLOT_INKS.light[i], C.uSideL.value[i]); ink(World.SLOT_INKS.dark[i], C.uSideD.value[i]); ink(World.SLOT_INKS.body[i], C.uSideB.value[i]);
         });
         sides = true;
       };
