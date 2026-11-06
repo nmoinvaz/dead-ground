@@ -611,9 +611,15 @@
             // lines are laid in the side's ink taken well toward black, and the shade and hatching in a deep tone
             // of the body, so the parts stay apart and the unit never fills to one flat colour.
             if (!dk) {
-              vec3 bodyC = sideBody(aw0);
-              col *= mix(vec3(1.0), bodyC / vec3(0.949, 0.910, 0.824), smoothstep(0.85, 0.95, s0) * step(0.05, mkx));
-              tInk = mix(bodyC * 0.6, mix(sI, INK, 0.55), lk);
+              // The body is massed by face in shades of the side's colour, as the buildings are: tops palest, walls
+              // facing left in the side's own tint, walls facing right deeper, and dark-painted parts, as tracks,
+              // wheels and guns, deepest whichever way they face. The palest stays well short of the paper, so red
+              // pales to a light terracotta and never to pink.
+              vec3 bodyC = sideBody(aw0), nU = texture2D(tNorm, uv).xyz * 2.0 - 1.0;
+              vec3 shadeB = dot(nU, uUpV) > 0.6 ? mix(bodyC, vec3(0.949, 0.910, 0.824), 0.38) : nU.x < 0.0 ? bodyC : bodyC * 0.74;
+              shadeB = mix(shadeB, bodyC * 0.5, 1.0 - smoothstep(0.1, 0.24, L(uv)));
+              col *= mix(vec3(1.0), shadeB / vec3(0.949, 0.910, 0.824), smoothstep(0.85, 0.95, s0) * step(0.05, mkx));
+              tInk = mix(bodyC * 0.5, mix(sI, INK, 0.6), lk);
             }
             col = mix(col, tInk, nearU * smoothstep(0.25, 0.6, cover) * step(0.05, mkx)); mark = 0.0; wash = 0.0;
           }
