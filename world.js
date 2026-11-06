@@ -42,7 +42,7 @@ const World = (() => {
     dark: ['#68a8ff', '#ee3a22', '#56cc6c', '#b088f2', '#ff7a1a', '#3fd0cc', '#cdf044', '#a8805a'],
     // A unit's body on light paper, tinted in its side's colour so it stands out from the ground. Red is a
     // terracotta, as a light red on cream reads as pink.
-    body: ['#7e9be2', '#cf7a4c', '#7db874', '#9a84d2', '#e2aa48', '#64b9b5', '#bfc552', '#a9845c'],
+    body: ['#8aa8e6', '#cf7a4c', '#7db874', '#9a84d2', '#e2aa48', '#64b9b5', '#bfc552', '#a9845c'],
   };
 
   function create(THREE, canvas, opt = {}) {

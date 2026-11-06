@@ -600,18 +600,22 @@
           // Each side's units drawn in its own ink (1), or their marks laid solid on a black body (2).
           float nearU = smoothstep(0.85, 0.95, max(max(A(uv + k * vec2(2.4, 0.0)), A(uv - k * vec2(2.4, 0.0))), max(max(A(uv + k * vec2(0.0, 2.4)), A(uv - k * vec2(0.0, 2.4))), s0)));
           if (uUnits == 1) {
-            // Lines take the side's ink. On light paper a close unit's hatching takes it darkened two fifths of the
-            // way to black, since fine hatching in red mixes to pink by eye. A far unit's solid shade keeps the ink.
-            vec3 sI = sideInk(texture2D(tAnc, vUv), dk), hI = dk ? sI : mix(sI, mix(sI, INK, 0.4), 1.0 - smoothstep(1.2, 1.9, uLev));
-            vec3 tInk = mix(hI, sI, clamp(lineK / max(cover, 1e-3), 0.0, 1.0));
-            col = mix(col, tInk, nearU * smoothstep(0.25, 0.6, cover) * step(0.05, mkx)); mark = 0.0; wash = 0.0;
-            // On light paper the body is tinted in the side's colour, laid under the lines as a multiply, so a
-            // unit reads as a coloured figure on snow, sand and pale ground alike.
+            // Lines take the side's ink. On dark paper a close unit's hatching takes it as it is, and a far unit's
+            // solid shade keeps it.
+            vec4 aw0 = texture2D(tAnc, vUv);
+            vec3 sI = sideInk(aw0, dk), hI = dk ? sI : mix(sI, mix(sI, INK, 0.4), 1.0 - smoothstep(1.2, 1.9, uLev));
+            float lk = clamp(lineK / max(cover, 1e-3), 0.0, 1.0);
+            vec3 tInk = mix(hI, sI, lk);
+            // On light paper a unit is a coloured figure drawn in dark line, as on snow, sand and pale ground the
+            // side's colour must be in the body and the drawing in the line. The body is tinted first, then the
+            // lines are laid in the side's ink taken well toward black, and the shade and hatching in a deep tone
+            // of the body, so the parts stay apart and the unit never fills to one flat colour.
             if (!dk) {
-              vec4 aw0 = texture2D(tAnc, vUv);
-              vec3 bt = sideBody(aw0) / vec3(0.949, 0.910, 0.824);
-              col *= mix(vec3(1.0), bt, smoothstep(0.85, 0.95, s0) * step(0.05, mkx));
+              vec3 bodyC = sideBody(aw0);
+              col *= mix(vec3(1.0), bodyC / vec3(0.949, 0.910, 0.824), smoothstep(0.85, 0.95, s0) * step(0.05, mkx));
+              tInk = mix(bodyC * 0.6, mix(sI, INK, 0.55), lk);
             }
+            col = mix(col, tInk, nearU * smoothstep(0.25, 0.6, cover) * step(0.05, mkx)); mark = 0.0; wash = 0.0;
           }
           if (uUnits == 2) { col = mix(col, hue * 0.85, mark * nearU); mark = 0.0; wash = 0.0; }
           // Line, hatch and stipple units keep their bodies paper, the side shown by its marks alone.
