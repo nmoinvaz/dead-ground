@@ -178,6 +178,11 @@ body[data-look="ink"][data-scheme="dark"] #end, body[data-look="ink"][data-schem
 .help dt { color: var(--amber); font-family: var(--mono); font-size: 12px; align-self: center; }
 .help dd { margin: 0; }
 #credit { font: 12px var(--mono); color: #8d8c78; }
+/* A newer build on the site, offered as a reload. It sits under the top bar, clear of the banner. */
+#update { position: absolute; z-index: 15; top: calc(96px + env(safe-area-inset-top, 0px)); left: 50%; transform: translateX(-50%); padding: 7px 16px; cursor: pointer;
+  background: var(--paper-hi, #faf4e4); border: 1.5px solid var(--ink, #1f1a16); box-shadow: 2px 2px 0 rgba(31,26,22,.5); color: var(--ink, #1f1a16); font: 500 16px "Jost", "Futura", sans-serif; white-space: nowrap; }
+#update b { color: var(--blueink, #23458c); font-weight: 600; text-decoration: underline; text-underline-offset: 3px; margin-left: 6px; }
+#update:hover b, #update:focus-visible b { color: var(--redink, #a3301e); }
 /* Which build this page is, from the source commit it was made from. */
 #build { margin: 10px 0 0; font: 12px var(--mono); opacity: .7; }
 /* The boot screen shows before the page knows its look, so it is drawn as the pen and ink look a game opens in:
@@ -516,6 +521,7 @@ body[data-look="ink"] .sheet { box-shadow: 4px 4px 0 var(--ink); }
       <p id="build">Build __BUILD__</p>
     </div>
     <div id="banner" hidden></div>
+    <button id="update" hidden>A new version of Dead Ground is out. <b>Reload</b></button>
     <div id="agecard" hidden aria-live="polite"></div>
     <div id="sel" hidden></div>
     <div id="roster" hidden></div>

@@ -403,6 +403,24 @@ const Game = (() => {
       scheme = b.dataset.v; applyScheme(); audio.ui('click');
       store.set('dg-paper', scheme);
     }));
+    // A newer build on the site. The page asks a minute apart and whenever it comes back into view, and offers a
+    // reload; the game in hand is saved as the page goes and comes back after it. Only a stamped page served from
+    // the site asks, as a file or an artifact has no version to read.
+    const myBuild = ($('build').textContent || '').replace(/^Build /, '').trim();
+    let updateShown = false;
+    async function checkUpdate() {
+      if (updateShown || myBuild.includes('__BUILD__') || !/^https?:$/.test(location.protocol) || /claude\.ai$/.test(location.hostname)) return;
+      try {
+        const r = await fetch('version.json?t=' + Date.now(), { cache: 'no-store' });
+        if (!r.ok) return;
+        const v = await r.json();
+        if (v.build && v.build !== myBuild) { updateShown = true; $('update').hidden = false; }
+      } catch (e) { /* offline, or no version to read */ }
+    }
+    $('update').addEventListener('click', () => { audio.ui('click'); location.reload(); });
+    setInterval(checkUpdate, 60000);
+    document.addEventListener('visibilitychange', () => { if (!document.hidden) checkUpdate(); });
+    setTimeout(checkUpdate, 5000);
     const setOpen = open => { $('settings').hidden = !open; $('b-set').setAttribute('aria-expanded', String(open)); if (open) markLook(); };
     $('b-set').addEventListener('click', e => { e.stopPropagation(); setOpen($('settings').hidden); audio.ui('click'); });
     document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('settings').hidden) setOpen(false); });
