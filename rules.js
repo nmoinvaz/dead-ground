@@ -1487,16 +1487,17 @@ const Rules = (() => {
   // and when last used is part of the world; their arrays are not, and are made when first needed.
   // need is how far from the goal the asker stands. A field reaches some way past that and is made again,
   // further out, for someone beyond it. After the ground changes a field is kept three seconds more before
-  // it is made again, and at most four are made in a step.
+  // it is made again, and at most two are made in a step, so a burst of orders is spread over steps.
   // The weather's going off the roads for a class, in twentieths, so a field is made again as the going changes.
+  const FIELDS_A_STEP = 2;
   const goingKey = (S, cls) => Math.round(offGoing(cls === 'veh' ? 'wheel' : cls, sky(S)) * 20);
   function field(S, cls, gx, gy, need = 0) {
     const key = (cls === 'foot' ? 0 : cls === 'veh' ? 1 : cls === 'track' ? 2 : 3) * N + gy * W + gx, wq = goingKey(S, cls);
     let f = S.fields.get(key);
     if (f && f.ver < oldestOcc(S)) { S.fields.delete(key); S._fields.delete(key); f = null; }
     const enough = f && f.reach >= need;
-    if (enough && ((f.ver === S.occVer && f.wq === wq) || S.fieldQueue >= 4 || S.tick - f.made < 60)) { f.used = S.tick; return built(S, key, f, cls, gx, gy); }
-    if (S.fieldQueue >= 4) return null;
+    if (enough && ((f.ver === S.occVer && f.wq === wq) || S.fieldQueue >= FIELDS_A_STEP || S.tick - f.made < 60)) { f.used = S.tick; return built(S, key, f, cls, gx, gy); }
+    if (S.fieldQueue >= FIELDS_A_STEP) return null;
     S.fieldQueue++;
     if (!f) {
       if (S.fields.size >= 48) {
