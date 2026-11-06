@@ -6,6 +6,8 @@
     name: 'ink', title: 'Pen and ink', said: 'Pen and ink.', panels: 'ink', hud: 'ink', sceneFog: false, ghost3d: false,
     // Blasts: no burst drawn over the scene, fire in bands of coloured ink, and scorch hatched in the pass.
     fx: 4, fxs: 2, fire: 0, burstLife: 2.5,
+    // Tread marks drawn by the pass alone, with the ground left undarkened under them so they take no outline.
+    treadK: 0,
     // Survey inks, each family of things in its own colour, and units drawn in their side's ink on bare paper.
     inks: 1, units: 1,
     // The lens stands back as far again as frames the same ground, so everything sized by cam.dist holds.
@@ -641,9 +643,9 @@
           // Coloured ink laid as close crosshatching, solid only where a marking is small.
           float ch = max(hatch(p, 45.0, 2.6, 1.3, 77.0, 0.0), hatch(p, 135.0, 3.2, 1.1, 81.0, 0.0));
           col = mix(col, colour, mark * mix(0.55, 0.95, ch));
-          // Scars on the ground: crater rings with hatching inside, ink splatter solid, tread marks broken.
+          // Scars on the ground: crater rings with hatching inside, ink splatter solid.
           vec4 F = texture2D(tFogS, vUv);
-          float trk = step(1.0, F.a), sc = F.a - trk, gnd = 1.0 - step(0.5, s0);
+          float sc = F.a, gnd = 1.0 - step(0.5, s0);
           float scw = max(fwidth(sc), 1e-4);
           float ringS = (1.0 - smoothstep(0.7 * uK, 1.8 * uK, abs(sc - 0.28) / scw)) * step(0.05, sc);
           // The scars as rings and solid splatter (uFxs 0), as a grey smudge lightly hatched (1), or as hatched
@@ -655,10 +657,18 @@
             col = mix(col, inkC, hatch(p, 45.0, 5.0, 0.8, 61.0, 0.2) * smoothstep(0.35, 0.8, min(sc, 0.8)) * gnd * 0.3);
           } else { float scs = min(sc, 0.8); scT = tone(p, scs > 0.6 ? 4.0 : scs > 0.35 ? 2.0 : scs > 0.12 ? 1.0 : 0.0, 61.0) * 0.85; }
           col = mix(col, inkC, scT * gnd * 0.9);
-          col = mix(col, inkC, trk * gnd * 0.5 * step(0.4, noise(px * 0.22 / uK)));
+          // Tread marks pressed into the ground, read from the scars on the land under the pixel, so they keep their
+          // place and their width on the land at every zoom. A light sepia band with a crisp edge, darker where more
+          // have passed, and broken a little by the land's own grain, which is pinned to the land as well. Four reads a
+          // little apart round off the corners the scars' coarse texels would leave.
+          vec2 Wm = landAt(vUv, F.b - 20.0), mu = Wm / uMap, mo = vec2(0.45 / 1024.0);
+          float tG = 0.25 * (texture2D(tMarks, mu + mo).g + texture2D(tMarks, mu - mo).g + texture2D(tMarks, mu + vec2(mo.x, -mo.y)).g + texture2D(tMarks, mu + vec2(-mo.x, mo.y)).g);
+          float tGw = max(fwidth(tG), 1e-4), tBand = smoothstep(0.06 - tGw * 0.6, 0.06 + tGw * 0.6, tG) * gnd;
+          float tGrain = mix(0.3 + 0.7 * step(0.3, noise(Wm * 5.0)), 0.8, smoothstep(0.25, 0.8, fwidth(Wm.x * 5.0)));
+          col = mix(col, dk ? vec3(0.44, 0.42, 0.39) : vec3(0.55, 0.46, 0.35), tBand * (0.24 + 0.36 * smoothstep(0.1, 0.45, tG)) * tGrain);
           // Blood where men and beasts fell, in solid red ink read from the scars on the land under the pixel.
           // A flat wash inside a fine outline of darker red, as a blot of ink dries.
-          float bB = texture2D(tMarks, landAt(vUv, F.b - 20.0) / uMap).b, bw = max(fwidth(bB), 1e-4);
+          float bB = texture2D(tMarks, Wm / uMap).b, bw = max(fwidth(bB), 1e-4);
           float bld = smoothstep(0.36, 0.4, bB) * gnd, bRim = (1.0 - smoothstep(0.6 * uK, 1.5 * uK, abs(bB - 0.38) / bw)) * gnd;
           vec3 bloodC = dk ? vec3(0.5, 0.05, 0.045) : vec3(0.66, 0.08, 0.06);
           col = mix(col, bloodC, bld * 0.9);

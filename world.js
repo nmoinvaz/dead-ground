@@ -70,6 +70,8 @@ const World = (() => {
       uHaze: { value: new THREE.Color(0xf29a5e) }, uHazeK: { value: 0.012 }, uHazeFrom: { value: 80 }, uShroud: { value: new THREE.Color(0x120907) }, uSunDir: { value: new THREE.Vector3(1, 0.3, 0) },
       // The wind on the ground, how far it has carried the clouds, how overcast it is, and lying snow.
       uWind: { value: new THREE.Vector2(0.3, 0.1) }, uCloud: { value: new THREE.Vector2() }, uCloudK: { value: 0.2 }, uCloudT: { value: 0.3 }, uSnowC: { value: 0 },
+      // How far tread marks darken the ground, none where the look draws them itself.
+      uTreadK: { value: 0.34 },
       // How hard the track worn into each cell has become, in red.
       tTrail: { value: black },
     };
@@ -119,7 +121,7 @@ const World = (() => {
           mvPosition = modelViewMatrix * mvPosition;
           gl_Position = projectionMatrix * mvPosition;`);
         f = f.replace('#include <common>', `#include <common>
-          uniform sampler2D tFog, tDetail, tTerr, tMarks, tTrail; uniform float uTime, uFogOn, uBorder, uHazeK, uHazeFrom, uMap, uCloudK, uSnowC; uniform vec3 uTeam0, uTeams[8], uHaze, uShroud, uSunDir; uniform vec2 uCloud;
+          uniform sampler2D tFog, tDetail, tTerr, tMarks, tTrail; uniform float uTreadK, uTime, uFogOn, uBorder, uHazeK, uHazeFrom, uMap, uCloudK, uSnowC; uniform vec3 uTeam0, uTeams[8], uHaze, uShroud, uSunDir; uniform vec2 uCloud;
           varying vec3 vW; varying vec3 vL; varying float vGlow; varying vec3 vTint;`);
         if (o.plain || o.tint) v = v.replace('vGlow = ', 'vTint = vec3(0.0); vGlow = ');
         if (o.terrain) {
@@ -128,7 +130,7 @@ const World = (() => {
             diffuseColor.rgb *= 0.82 + 0.26 * d1 + 0.1 * d2;
             vec4 mk = texture2D(tMarks, vW.xz / uMap);
             diffuseColor.rgb *= 1.0 - mk.r * 0.86;
-            diffuseColor.rgb *= 1.0 - mk.g * 0.34;
+            diffuseColor.rgb *= 1.0 - mk.g * uTreadK;
             // Blood, a deep red soaked into the ground.
             diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.15, 0.018, 0.016), smoothstep(0.32, 0.45, mk.b) * 0.9);
             // Worn tracks, bare earth.
@@ -324,14 +326,14 @@ const World = (() => {
           if (d > 1e-4) h = mx == vC.r ? mod((vC.g - vC.b) / d, 6.0) : mx == vC.g ? (vC.b - vC.r) / d + 2.0 : (vC.r - vC.g) / d + 4.0;
           gl_FragColor = vec4(gl_FragCoord.xy - vO, h / 6.0, mx > 0.0 ? d / mx : 0.0);
         }` });
-      // The land alone, for passes that need it: visible, seen, height, and scars with a flag for tread marks.
+      // The land alone, for passes that need it: visible, seen, height, and scars.
       const fogPassMat = new THREE.ShaderMaterial({ uniforms: { tFog: SH.tFog, tMarks: SH.tMarks, uFogOn: SH.uFogOn, uMap: SH.uMap }, vertexShader: `
         varying vec3 vW; void main() { vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }`, fragmentShader: `
         uniform sampler2D tFog, tMarks; uniform float uFogOn, uMap; varying vec3 vW;
         void main() {
           vec2 f = mix(vec2(1.0), texture2D(tFog, vW.xz / uMap).rg, uFogOn);
           vec4 m = texture2D(tMarks, vW.xz / uMap);
-          gl_FragColor = vec4(f.r, f.g, vW.y + 20.0, min(m.r, 0.99) + step(0.15, m.g));
+          gl_FragColor = vec4(f.r, f.g, vW.y + 20.0, min(m.r, 0.99));
         }` });
       // The land alone again, for the distance to the nearest road.
       // Green is the shadow of a passing cloud and blue the banks fog drifts in, both carried on the wind. Alpha is
@@ -662,7 +664,7 @@ const World = (() => {
 
     let S = null, M = null, theme = null, viewTeam = 0, sets = {}, terrainMesh = null, waterMesh = null, statics = [], baseImage = null;
     const rs = new Map();
-    let wrecks = [], corpses = [], bleeds = [], flyers = [], planes = [], falls = [], marks = null, marksTex = null, marksDirty = false, marksLast = 0;
+    let wrecks = [], corpses = [], bleeds = [], flyers = [], planes = [], falls = [], marks = null, marksTex = null, marksDirty = false, marksLast = 0, treadFade = 0;
     let fogTex = null, fogData = null, fogR = null, fogG = null, terrTex = null, terrData = null, terrSeen = -1, hTex = null;
     // A number as a half float, for heights within a few units of the ground.
     const halfBuf = new Float32Array(1), halfBits = new Uint32Array(halfBuf.buffer);
@@ -2726,6 +2728,15 @@ const World = (() => {
       const u = pp.grade.uniforms.uFlash;
       if (u.value > 0) u.value = Math.max(0, u.value - dt * 0.9);
       marksLast += dt;
+      // Tread marks weather away: every five seconds the scars' green is scaled down a tenth, so one pass is gone in a
+      // minute and a well-used way lasts longer. Scorch and blood stay.
+      treadFade += dt;
+      if (marks && treadFade > 5) {
+        treadFade = 0;
+        const c = marks.ctx;
+        c.globalCompositeOperation = 'multiply'; c.fillStyle = 'rgb(255,230,255)'; c.fillRect(0, 0, marks.width, marks.height);
+        c.globalCompositeOperation = 'lighter'; marksDirty = true;
+      }
       if (marksDirty && marksLast > 0.5) { marksTex.needsUpdate = true; marksDirty = false; marksLast = 0; }
       smoke.flush(); glow.flush();
       updateGhost();
@@ -2892,6 +2903,7 @@ const World = (() => {
       ppu(x, y, z) { p1.set(x, y, z); return world.vh / (2 * Math.tan(camera.fov * Math.PI / 360) * camera.position.distanceTo(p1)); },
       setLook(name) {
         style = Looks.get(name);
+        SH.uTreadK.value = style.treadK ?? 0.34;
         applyLight();
         // The page dresses its panels to match.
         if (typeof document !== 'undefined') document.body.dataset.look = style.panels;
