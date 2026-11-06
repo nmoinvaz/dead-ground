@@ -190,6 +190,7 @@ body[data-look="ink"][data-scheme="dark"] #end, body[data-look="ink"][data-schem
 #update:hover b, #update:focus-visible b { color: var(--redink, #a3301e); }
 /* Which build this page is, from the source commit it was made from. */
 #build { margin: 10px 0 0; font: 12px var(--mono); opacity: .7; }
+#s-pic-note { margin: 5px 0 0; font: 12px var(--mono); opacity: .7; }
 /* The boot screen shows before the page knows its look, so it is drawn as the pen and ink look a game opens in:
    Jost on light paper. */
 #loading { position: absolute; inset: 0; z-index: 20; background: #f2e8d2; display: flex; align-items: center; justify-content: center; font: 500 20px "Jost", "Futura", "Trebuchet MS", sans-serif; letter-spacing: .32em; color: #1f1a16; }
@@ -525,7 +526,8 @@ body[data-look="ink"] .sheet { box-shadow: 4px 4px 0 var(--ink); }
     <div id="settings" hidden role="dialog" aria-label="Settings">
       <div class="choice"><h2>Look</h2><div id="s-look" class="two"></div></div>
       <div class="choice"><h2>Paper</h2><div id="s-scheme"><button data-v="light">Light</button><button data-v="dark">Dark</button><button data-v="auto">As the system</button></div></div>
-      <p id="build">Build ab1377c 2026-11-06 11:25</p>
+      <div class="choice"><h2>Picture</h2><div id="s-pic" class="two"><button data-v="sharp">Sharp</button><button data-v="fast">Faster</button></div><p id="s-pic-note"></p></div>
+      <p id="build">Build c7d313f 2026-11-06 12:03</p>
     </div>
     <div id="banner" hidden></div>
     <button id="update" hidden>A new version of Dead Ground is out. <b>Reload</b></button>
@@ -10725,14 +10727,17 @@ const World = (() => {
     }
 
     // A machine that has had to give up the most pixels it may (scale under 0.8) also gets the smaller shadow map.
-    function resize(w, h, dpr, scale = 1) {
+    // px is the drawing's size in pixels and ovPx the overlay's, each the canvas's own device pixels where the page
+    // knows them, so a picture at full size is shown pixel for pixel and not stretched by the browser.
+    function resize(w, h, dpr, scale = 1, px = null, ovPx = null) {
       const sm = low || scale < 0.8 ? 2048 : 4096;
       if (sun.shadow.mapSize.x !== sm) { sun.shadow.mapSize.set(sm, sm); if (sun.shadow.map) { sun.shadow.map.dispose(); sun.shadow.map = null; } }
-      world.vw = w; world.vh = h;
+      const bw = px ? px[0] : Math.round(w * dpr), bh = px ? px[1] : Math.round(h * dpr);
+      world.vw = w; world.vh = h; world.ovPx = ovPx;
       renderer.setPixelRatio(1);
-      renderer.setSize(Math.round(w * dpr), Math.round(h * dpr), false);
+      renderer.setSize(bw, bh, false);
       camera.aspect = w / h; camera.updateProjectionMatrix();
-      pp.size(Math.round(w * dpr), Math.round(h * dpr));
+      pp.size(bw, bh);
     }
 
     function frame(alpha, dt, now) {
@@ -12316,9 +12321,12 @@ const Hud = (() => {
       og.fillStyle = '#f2e8d2'; og.fillText(text, x, yy + 2); og.restore();
     }
     function drawOverlay(dt) {
-      const dpr = Math.min(2, devicePixelRatio || 1), w = world.vw, h = world.vh;
-      if (ov.width !== Math.round(w * dpr)) { ov.width = Math.round(w * dpr); ov.height = Math.round(h * dpr); }
-      og.setTransform(dpr, 0, 0, dpr, 0, 0);
+      // The overlay is drawn at the canvas's own device pixels where the page knows them, so its lines and words are
+      // never stretched by the browser.
+      const dpr = Math.min(2, devicePixelRatio || 1), w = world.vw, h = world.vh, op = world.ovPx;
+      const pw = op ? op[0] : Math.round(w * dpr), ph = op ? op[1] : Math.round(h * dpr);
+      if (ov.width !== pw || ov.height !== ph) { ov.width = pw; ov.height = ph; }
+      og.setTransform(pw / w, 0, 0, ph / h, 0, 0);
       og.clearRect(0, 0, w, h);
       const s = S(), t = game.team, far = world.cam.dist > 150;
       if (!s) return;
@@ -14355,14 +14363,28 @@ const Game = (() => {
     // when nothing has changed. Shown between a resize and a draw, the cleared canvas flashes.
     let scale = 1, fitDue = true, fitKey = '';
     function fit() { fitDue = true; }
+    // The canvas's own size in device pixels, as the browser lays it out. The CSS size times the pixel ratio can miss
+    // it by a pixel at a ratio like 1.25, and the browser then stretches the whole picture by that pixel, which
+    // softens every pen line. A browser that cannot say gets the CSS size times the ratio.
+    let devPx = null;
+    try {
+      new ResizeObserver(es => {
+        const s = es[es.length - 1].devicePixelContentBoxSize;
+        if (s && s[0]) { devPx = [s[0].inlineSize, s[0].blockSize]; fit(); }
+      }).observe(canvas, { box: 'device-pixel-content-box' });
+    } catch (e) { /* not offered */ }
     function applyFit() {
       fitDue = false;
-      const r = view.getBoundingClientRect(), w = Math.max(2, r.width | 0), h = Math.max(2, r.height | 0);
-      const pr = Math.min(devicePixelRatio || 1, 2) * scale, key = `${w}x${h}@${pr.toFixed(3)}`;
+      const r = view.getBoundingClientRect(), w = Math.max(2, r.width), h = Math.max(2, r.height), dpr = devicePixelRatio || 1;
+      // Past a ratio of 2 the picture is drawn at 2 and stretched, as more pixels than that cost more than they show.
+      const base = Math.min(dpr, 2), known = devPx && Math.abs(devPx[0] - w * dpr) < 3 && Math.abs(devPx[1] - h * dpr) < 3;
+      const ovPx = known ? devPx.map(v => Math.max(2, Math.round(v * base / dpr))) : [Math.round(w * base), Math.round(h * base)];
+      const px = ovPx.map(v => Math.max(2, Math.round(v * scale))), key = `${w}x${h}:${px}:${ovPx}`;
       if (key === fitKey) return;
       fitKey = key;
-      world.resize(w, h, pr, scale);
+      world.resize(w, h, px[0] / w, scale, px, ovPx);
       hud.layoutMini();
+      $('s-pic-note').textContent = `Drawn at ${px[0]} by ${px[1]}${scale < 1 ? `, ${Math.round(scale * 100)}% of full size` : ', full size'}.`;
     }
     window.addEventListener('resize', fit);
     new ResizeObserver(fit).observe(view);
@@ -14560,21 +14582,29 @@ const Game = (() => {
       c.dist += (64 - c.dist) * dt * 0.12;
     }
 
-    // The picture's resolution follows the machine. Slow frames are taken as held up by drawing, so the picture gives
-    // up pixels a step at a time; frames that keep pace win them back, up to just under the size found too slow, and
-    // a while later past it. Frames filled by the page's own work are a slow processor's, and fewer pixels would not
-    // help it.
+    // The picture is drawn at full size unless the player picks Faster in the settings, kept in the browser; a phone
+    // starts on Faster. Then the resolution follows the machine. Slow frames are taken as held up by drawing, so the
+    // picture gives up pixels a step at a time; frames that keep pace win them back, up to just under the size found
+    // too slow, and a while later past it. Frames filled by the page's own work are a slow processor's, and fewer
+    // pixels would not help it.
+    let picture = store.get('dg-picture', mobile ? 'fast' : 'sharp');
     const RES = { ft: 1 / 60, wk: 0, t: 0, ceil: 1, calm: 0 };
+    function setPicture(v) {
+      picture = v; store.set('dg-picture', v);
+      Object.assign(RES, { t: 0, ceil: 1, calm: 0 });
+      if (v !== 'fast' && scale !== 1) { scale = 1; fit(); }
+      $('s-pic').querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.v === picture));
+    }
     function tune(dt, work) {
-      if (dt > 0.5 || document.hidden) return;
+      if (picture !== 'fast' || dt > 0.5 || document.hidden) return;
       RES.ft += (dt - RES.ft) * 0.05; RES.wk += (work - RES.wk) * 0.05;
       RES.t += dt; RES.calm += dt;
       if (RES.calm > 45 && RES.ceil < 1) { RES.ceil = Math.min(1, RES.ceil + 0.1); RES.calm = 0; }
       // Two seconds after a change, so the averages hold the new size.
       if (RES.t < 2) return;
-      // Never under three quarters of full size on a desktop, as below that the pen lines go soft, and only once
-      // the frame rate falls under about 33, a twentieth or a tenth at a time.
-      const lo = mobile ? 0.6 : 0.75, was = scale;
+      // Never under three fifths of full size, and only once the frame rate falls under about 33, a twentieth or a
+      // tenth at a time.
+      const lo = 0.6, was = scale;
       if (RES.ft > 0.03 && RES.wk < RES.ft * 0.85 && scale > lo) {
         scale = Math.max(lo, Math.round(scale * Math.max(0.9, Math.sqrt(0.025 / RES.ft)) * 20) / 20);
         RES.ceil = Math.max(lo, was - 0.05); RES.calm = 0;
@@ -14663,6 +14693,8 @@ const Game = (() => {
       scheme = b.dataset.v; applyScheme(); audio.ui('click');
       store.set('dg-paper', scheme);
     }));
+    $('s-pic').querySelectorAll('button').forEach(b => b.addEventListener('click', () => { setPicture(b.dataset.v); audio.ui('click'); }));
+    setPicture(picture);
     // A newer build on the site. The page asks a minute apart and whenever it comes back into view, and offers a
     // reload; the game in hand is saved as the page goes and comes back after it. Only a stamped page served from
     // the site asks, as a file or an artifact has no version to read.
