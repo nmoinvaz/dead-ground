@@ -364,7 +364,8 @@ const World = (() => {
         ldr = new THREE.WebGLRenderTarget(w, h, { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, depthBuffer: false });
         maskRT = new THREE.WebGLRenderTarget(w, h, { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter });
         const opts = { type: THREE.HalfFloatType, depthBuffer: false, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter };
-        rt = new THREE.WebGLRenderTarget(w, h, { type: THREE.HalfFloatType, samples: low ? 0 : 4, depthBuffer: true, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter });
+        // A look that paints over the picture draws its own lines from the masks, so its scene is not multisampled.
+        rt = new THREE.WebGLRenderTarget(w, h, { type: THREE.HalfFloatType, samples: low || style.create ? 0 : 4, depthBuffer: true, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter });
         const qw = Math.max(2, w >> 2), qh = Math.max(2, h >> 2);
         a0 = new THREE.WebGLRenderTarget(qw, qh, opts); a1 = new THREE.WebGLRenderTarget(qw, qh, opts);
         b0 = new THREE.WebGLRenderTarget(qw >> 1, qh >> 1, opts); b1 = new THREE.WebGLRenderTarget(qw >> 1, qh >> 1, opts);
@@ -460,7 +461,9 @@ const World = (() => {
         if (!painters.has(style.name)) painters.set(style.name, style.create(K));
         painters.get(style.name).render(K);
       }
-      return { size, render, grade };
+      // The buffers made again at their size, as when a look that wants multisampling takes over from one that does not.
+      const remake = () => { if (rt) size(w, h); };
+      return { size, render, grade, remake };
     })();
 
     // Particle tiles, drawn once: smoke, fire, a glow, a spark, a ring, a shard.
@@ -2902,7 +2905,12 @@ const World = (() => {
       // Screen pixels to a world unit at a point, for sizing drawn marks.
       ppu(x, y, z) { p1.set(x, y, z); return world.vh / (2 * Math.tan(camera.fov * Math.PI / 360) * camera.position.distanceTo(p1)); },
       setLook(name) {
+        const aa = !style.create;
         style = Looks.get(name);
+        if (aa !== !style.create) pp.remake();
+        // A painted look draws a blast's fire from its own glow, and the flash lights cost every lit pixel every
+        // frame while adding nothing it shows, so only the plain look keeps them.
+        for (const f of flashes) f.l.visible = !style.create;
         SH.uTreadK.value = style.treadK ?? 0.34;
         applyLight();
         // The page dresses its panels to match.
