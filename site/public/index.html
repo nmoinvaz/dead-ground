@@ -525,7 +525,7 @@ body[data-look="ink"] .sheet { box-shadow: 4px 4px 0 var(--ink); }
     <div id="settings" hidden role="dialog" aria-label="Settings">
       <div class="choice"><h2>Look</h2><div id="s-look" class="two"></div></div>
       <div class="choice"><h2>Paper</h2><div id="s-scheme"><button data-v="light">Light</button><button data-v="dark">Dark</button><button data-v="auto">As the system</button></div></div>
-      <p id="build">Build d2f51af 2026-11-05 18:05</p>
+      <p id="build">Build dd4f165 2026-11-05 18:37</p>
     </div>
     <div id="banner" hidden></div>
     <button id="update" hidden>A new version of Dead Ground is out. <b>Reload</b></button>
@@ -892,6 +892,8 @@ const Rules = (() => {
 
   // Support calls, made from a radar station.
   const POWERS = {
+    // A flare needs no radar: anyone may light the ground, most use by night.
+    flare: { name: 'Flare', sym: 'flare', cost: 60, cd: 30, tech: 1, r: 8, life: 20, free: true, names: ['Fire Pots', 'Fire Pots', 'Star Shell', 'Star Shell', 'Flare', 'Light Drone'], note: 'Lights a patch of ground for twenty seconds. Most use by night.' },
     uav: { name: 'UAV Sweep', sym: 'uav', cost: 150, cd: 60, tech: 4, r: 14, life: 15, names: [0, 0, 0, 'Recon Flight', 'UAV Sweep', 'UAV Sweep'], note: 'Lights up a patch of the map for a while.' },
     barrage: { name: 'Artillery Barrage', sym: 'art', cost: 500, cd: 120, tech: 3, r: 6, names: [0, 0, 'Cannon Barrage', 'Artillery Barrage', 'Artillery Barrage', 'Orbital Barrage'], note: 'Twelve heavy shells on one spot.' },
     para: { name: 'Paradrop', sym: 'par', cost: 600, cd: 150, tech: 5, r: 4, note: 'Three squads of infantry, anywhere you can see.' },
@@ -1431,24 +1433,24 @@ const Rules = (() => {
   // Weather comes in spells of three minutes. A spell's kind follows from the seed and its number alone, so
   // every copy of the world has the same sky and nothing about it is saved. A game's first two are clear.
   const SPELL = 180 * HZ, BLEND = 24 * HZ;
-  const WIND = { clear: 0.45, cloud: 0.6, rain: 0.7, storm: 1, fog: 0.12, snow: 0.4, sand: 1.15, blizzard: 1.05 };
-  // The share of spells of each kind in a hundred, by theatre: dust storms on the salt flats and blizzards in the
+  const WIND = { clear: 0.45, cloud: 0.6, rain: 0.7, storm: 1, fog: 0.12, snow: 0.4, sand: 1.15 };
+  // The share of spells of each kind in a hundred, by theatre: dust storms on the salt flats and deep snow in the
   // pass. `any` is the one mix every game had before theatres had their own, kept for older saves and checks.
   const SKIES = {
     any: { clear: 36, cloud: 14, rain: 16, storm: 9, fog: 14, snow: 11 },
     desert: { clear: 52, cloud: 12, rain: 6, storm: 4, fog: 4, sand: 22 },
     steppe: { clear: 32, cloud: 16, rain: 20, storm: 12, fog: 16, snow: 4 },
-    winter: { clear: 28, cloud: 18, fog: 14, snow: 28, blizzard: 12 },
+    winter: { clear: 28, cloud: 22, fog: 14, snow: 36 },
   };
   // A game's weather setting weighs the kinds: mild keeps the harsh ones away, harsh brings them often, and off
   // leaves the sky clear.
   const WEATHERS = {
     random: {},
-    mild: { clear: 1.6, cloud: 1.3, rain: 0.7, fog: 0.6, snow: 0.5, storm: 0, sand: 0, blizzard: 0 },
-    harsh: { clear: 0.4, cloud: 0.6, rain: 1.3, fog: 1.3, snow: 1.4, storm: 2, sand: 1.8, blizzard: 2 },
-    off: { cloud: 0, rain: 0, storm: 0, fog: 0, snow: 0, sand: 0, blizzard: 0 },
+    mild: { clear: 1.6, cloud: 1.3, rain: 0.7, fog: 0.6, snow: 0.5, storm: 0, sand: 0 },
+    harsh: { clear: 0.4, cloud: 0.6, rain: 1.3, fog: 1.3, snow: 1.4, storm: 2, sand: 1.8 },
+    off: { cloud: 0, rain: 0, storm: 0, fog: 0, snow: 0, sand: 0 },
   };
-  const SKY_KINDS = ['clear', 'cloud', 'rain', 'storm', 'fog', 'snow', 'sand', 'blizzard'];
+  const SKY_KINDS = ['clear', 'cloud', 'rain', 'storm', 'fog', 'snow', 'sand'];
   // The kinds a theatre and setting allow, each with the top of its share, and the whole. Whole numbers, so every
   // copy of the world picks the same.
   function skyTable(theatre, weather) {
@@ -1474,12 +1476,12 @@ const Rules = (() => {
     return 'clear';
   }
   // Spells that keep every aircraft on the ground.
-  const GROUNDING = { storm: 1, sand: 1, blizzard: 1 };
+  const GROUNDING = { storm: 1, sand: 1 };
   // How much a spell holds at a tick. It rises over BLEND across its start and falls across its end, so two
   // spells of one kind in a row join without a seam.
   const spellW = (k, t) => clamp((t - (k * SPELL - BLEND / 2)) / BLEND, 0, 1) * clamp(((k + 1) * SPELL + BLEND / 2 - t) / BLEND, 0, 1);
   function weatherAt(seed, t, tab = ANY_SKY) {
-    const k = Math.floor(t / SPELL), o = { clear: 0, cloud: 0, rain: 0, storm: 0, fog: 0, snow: 0, sand: 0, blizzard: 0, wind: [0, 0], flood: 0, cover: 0, kind: spellOf(seed, k, tab), next: spellOf(seed, k + 1, tab), left: (k + 1) * SPELL - t };
+    const k = Math.floor(t / SPELL), o = { clear: 0, cloud: 0, rain: 0, storm: 0, fog: 0, snow: 0, sand: 0, wind: [0, 0], flood: 0, cover: 0, kind: spellOf(seed, k, tab), next: spellOf(seed, k + 1, tab), left: (k + 1) * SPELL - t };
     for (let j = k - 1; j <= k + 1; j++) {
       const w = spellW(j, t);
       if (w <= 0) continue;
@@ -1489,29 +1491,35 @@ const Rules = (() => {
     }
     o.rain = Math.min(1, o.rain + o.storm);
     // Rivers rise through a spell of rain or storm and go down over the next one and a half. Snow lies over
-    // most of its spell and melts over the next, and a blizzard lays it faster.
+    // most of its spell and melts over the next.
     for (let j = k - 3; j <= k; j++) {
-      const kd = spellOf(seed, j, tab), rv = kd === 'storm' ? 1 : kd === 'rain' ? 0.55 : 0, snow = kd === 'snow' || kd === 'blizzard';
+      const kd = spellOf(seed, j, tab), rv = kd === 'storm' ? 1 : kd === 'rain' ? 0.55 : 0, snow = kd === 'snow';
       if (!rv && !snow) continue;
-      const tau = t - j * SPELL, up = clamp(tau / (SPELL * (kd === 'blizzard' ? 0.35 : snow ? 0.6 : 0.8)), 0, 1), down = tau > SPELL ? clamp(1 - (tau - SPELL) / (SPELL * (snow ? 1 : 1.5)), 0, 1) : 1;
+      const tau = t - j * SPELL, up = clamp(tau / (SPELL * (snow ? 0.6 : 0.8)), 0, 1), down = tau > SPELL ? clamp(1 - (tau - SPELL) / (SPELL * (snow ? 1 : 1.5)), 0, 1) : 1;
       if (snow) o.cover += up * down; else o.flood += rv * up * down;
     }
     o.cover = Math.min(1, o.cover);
-    // A storm, a dust storm or a blizzard keeps every aircraft on the ground.
-    o.grounded = o.storm > 0.5 || o.sand > 0.5 || o.blizzard > 0.5;
+    // A storm or a dust storm keeps every aircraft on the ground.
+    o.grounded = o.storm > 0.5 || o.sand > 0.5;
     return o;
   }
   const sky = S => S._wx && S._wx.at === S.tick ? S._wx : (S._wx = Object.assign(weatherAt(S.seed, S.tick, skyOf(S)), { at: S.tick }));
   // How fast a kind of mover goes off the roads in the weather, before any worn track. Mud bogs wheels down, snow
-  // and blizzards slow everyone, and blown sand slows men and wheels.
+  // slows everyone, and blown sand slows men and wheels.
   function offGoing(move, w) {
-    const g = move === 'wheel' ? 1 - 0.24 * w.rain - 0.2 * w.snow - 0.25 * w.sand - 0.35 * w.blizzard
-      : move === 'track' ? 1 - 0.12 * w.storm - 0.1 * w.snow - 0.1 * w.sand - 0.25 * w.blizzard
-        : 1 - 0.18 * w.snow - 0.2 * w.sand - 0.35 * w.blizzard;
+    const g = move === 'wheel' ? 1 - 0.24 * w.rain - 0.2 * w.snow - 0.25 * w.sand
+      : move === 'track' ? 1 - 0.12 * w.storm - 0.1 * w.snow - 0.1 * w.sand
+        : 1 - 0.18 * w.snow - 0.2 * w.sand;
     return Math.max(0.3, g);
   }
   // The time of day, from 0 at dawn round to 1. A day lasts twenty minutes and a game starts early in the morning.
   const dayAt = t => (t / (HZ * 1200) + 0.03) % 1;
+  // How dark it is, 0 by day to 1 in the dead of night, rising through dusk and falling at first light, as the
+  // picture's own night does.
+  function nightAt(t) {
+    const d = dayAt(t);
+    return d < 0.07 ? (0.07 - d) / 0.07 * 0.3 : d < 0.78 ? 0 : d < 0.85 ? (d - 0.78) / 0.07 : d < 0.94 ? 1 : 1 - (d - 0.94) / 0.06 * 0.7;
+  }
   // A side's running totals. made, lost, killed and razed count units and buildings. mined is supply from
   // trucks, townIn supply from towns and oilIn oil from towns and derricks. killV and lostV are the worth of
   // what was destroyed. inf, veh and air count units made by kind, and built the buildings placed.
@@ -1520,7 +1528,7 @@ const Rules = (() => {
     return {
       team, supply: o.supply || 3500, oil: o.oil || 250, tech: 1, income: 1, carried: 0,
       q: { bld: [], def: [], inf: [], veh: [], air: [], tech: [] }, prod: 0, use: 0, low: false, vis: new Uint8Array(N), seen: new Uint8Array(N),
-      counts: {}, cooldown: { uav: 0, barrage: 0, para: 0 }, stats: freshStats(), spoke: {}, hints: {}, exposed: false,
+      counts: {}, cooldown: { flare: 0, uav: 0, barrage: 0, para: 0 }, stats: freshStats(), spoke: {}, hints: {}, exposed: false,
       silo: 0, alive: true, shield: 0, born: 0,
     };
   }
@@ -1900,16 +1908,19 @@ const Rules = (() => {
         }
       }
     };
-    // Fog, storms, blown sand and blizzards shorten everyone's sight. Radar sweeps see through them.
-    const w = sky(S), fk = Math.max(0.4, 1 - 0.45 * w.fog - 0.12 * w.storm - 0.4 * w.sand - 0.45 * w.blizzard), fa = Math.max(0.5, 1 - 0.3 * w.fog - 0.3 * w.sand - 0.3 * w.blizzard);
+    // Fog, storms and blown sand shorten everyone's sight. Radar sweeps and flares see through them. By night a
+    // unit sees two fifths less, a building a little less by its lamps, and a building that fights not at all, by
+    // its searchlight.
+    const w = sky(S), n = nightAt(S.tick), fk = Math.max(0.4, 1 - 0.45 * w.fog - 0.12 * w.storm - 0.4 * w.sand), fa = Math.max(0.5, 1 - 0.3 * w.fog - 0.3 * w.sand);
+    const nu = 1 - 0.4 * n, nb = 1 - 0.15 * n;
     for (const e of S.ents) {
       if (e.hp <= 0) continue;
       const P = S.P[e.team];
-      if (e.b) light(P, e.x, e.y, (e.d.sight + Math.max(e.w, e.h) / 2) * fk, 3, false);
-      else if (e.d.move === 'air' || e.d.move === 'jet') light(P, e.x, e.y, e.d.sight * fa, 0, true);
-      else light(P, e.x, e.y, e.d.sight * fk * (e.cov >= 0 ? 1.2 : 1), 1.1, false);
+      if (e.b) light(P, e.x, e.y, (e.d.sight + Math.max(e.w, e.h) / 2) * fk * (armOf(S, e) ? 1 : nb), 3, false);
+      else if (e.d.move === 'air' || e.d.move === 'jet') light(P, e.x, e.y, e.d.sight * fa * (1 - 0.3 * n), 0, true);
+      else light(P, e.x, e.y, e.d.sight * fk * nu * (e.cov >= 0 ? 1.2 : 1), 1.1, false);
     }
-    for (const t of S.towns) if (t.owner >= 0) light(S.P[t.owner], t.x, t.y, 9 * fk, 2, false);
+    for (const t of S.towns) if (t.owner >= 0) light(S.P[t.owner], t.x, t.y, 9 * fk * (1 - 0.25 * n), 2, false);
     for (const s of S.sweeps) if (s.until > S.tick) light(S.P[s.team], s.x, s.y, s.r, 0, true);
     // A unit or building that has fired lately is seen by the side it fired on, wherever it stands, by its flash.
     for (const e of S.ents) if (e.hp > 0 && e.firedUntil > S.tick && S.P[e.firedOn]) light(S.P[e.firedOn], e.x, e.y, e.b ? Math.max(e.w, e.h) / 2 + 0.5 : 0.8, 0, true);
@@ -2394,7 +2405,7 @@ const Rules = (() => {
   // with the wind and not at all in rain or snow, then leaves the ground burnt and open.
   function ignite(S, x, y, r, p) {
     const w = sky(S);
-    p *= 1 - 0.8 * Math.min(1, w.rain + w.snow + w.blizzard);
+    p *= 1 - 0.8 * Math.min(1, w.rain + w.snow);
     if (p <= 0 || S.burn.length >= 400) return;
     for (let cy = Math.max(0, (y - r) | 0); cy <= Math.min(H - 1, (y + r) | 0); cy++) for (let cx = Math.max(0, (x - r) | 0); cx <= Math.min(W - 1, (x + r) | 0); cx++) {
       const c = cy * W + cx;
@@ -2408,7 +2419,7 @@ const Rules = (() => {
   const D8 = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, 1], [1, -1], [-1, -1]];
   function stepFire(S) {
     if (!S.burn.length) return;
-    const w = sky(S), wet = Math.min(1, w.rain + w.snow + w.blizzard), spread = 0.06 * (1 - wet), out = [];
+    const w = sky(S), wet = Math.min(1, w.rain + w.snow), spread = 0.06 * (1 - wet), out = [];
     for (let i = S.burn.length - 1; i >= 0; i--) {
       const b = S.burn[i], c = b[0], x = c % W, y = c / W | 0;
       b[1] -= 10 * (1 + wet * 3);
@@ -3368,12 +3379,15 @@ const Rules = (() => {
 
   function callPower(S, team, name, x, y) {
     const P = S.P[team], d = POWERS[name];
-    if (!d || P.cooldown[name] > 0 || P.tech < d.tech || !P.counts.radar || P.low || P.supply < d.cost) return;
+    if (!d || P.cooldown[name] > 0 || P.tech < d.tech || (!d.free && (!P.counts.radar || P.low)) || P.supply < d.cost) return;
     P.supply -= d.cost; P.stats.spent += d.cost;
     P.cooldown[name] = d.cd;
     if (name === 'uav') {
       S.sweeps.push({ team, x, y, r: d.r, until: S.tick + d.life * HZ });
       S.ev.push({ t: 'uav', team, x, y, dur: d.life });
+    } else if (name === 'flare') {
+      S.sweeps.push({ team, x, y, r: d.r, until: S.tick + d.life * HZ, flare: S.tick });
+      S.ev.push({ t: 'flare', team, x, y, dur: d.life });
     } else if (name === 'barrage') {
       for (let i = 0; i < 12; i++) {
         const delay = 1.5 + i * 0.28, a = S.rand() * TAU, r = Math.sqrt(S.rand()) * d.r, sx = x + mcos(a) * r, sy = y + msin(a) * r;
@@ -3458,7 +3472,7 @@ const Rules = (() => {
       const k = S.tick / SPELL, now = spellOf(S.seed, k, skyOf(S)), was = spellOf(S.seed, k - 1, skyOf(S));
       if (now !== was) S.ev.push({ t: 'weather', kind: now, was });
     }
-    // Half a minute's warning of weather that grounds the aircraft, as stormsoon, sandsoon or blizzardsoon.
+    // Half a minute's warning of weather that grounds the aircraft, as stormsoon or sandsoon.
     if ((S.tick + 30 * HZ) % SPELL === 0) {
       const k = (S.tick + 30 * HZ) / SPELL, next = spellOf(S.seed, k, skyOf(S));
       if (GROUNDING[next] && !GROUNDING[spellOf(S.seed, k - 1, skyOf(S))]) S.ev.push({ t: 'weather', kind: next + 'soon' });
@@ -3572,7 +3586,7 @@ const Rules = (() => {
     newGame, step, push, spawn, addBuilding, scoreOf, worth, SERIES, pickFrom, fits, spotFor, roomy, blockedReason, near, rehash, seenBy, terrainAt, heightAt, los, isAir, armed, cellOf, summary, exitOf,
     mulberry, noiser, clamp, lerp, smooth, angleTo, toXY, toUV, gap, setSize, save, load, hashOf, restartSlot, razeSlot, makeMap, mapFor, layoutFor,
     msin, mcos, matan2, mhypot,
-    BRIDGE_HP, SPELL, SKIES, WEATHERS, skyOf, offGoing, route, weatherAt, sky, dayAt, spellOf, bridgeAt, clsOf, houseHp, hurtBridge, ignite, shielded,
+    BRIDGE_HP, SPELL, SKIES, WEATHERS, nightAt, skyOf, offGoing, route, weatherAt, sky, dayAt, spellOf, bridgeAt, clsOf, houseHp, hurtBridge, ignite, shielded,
     coverPoints, coverNear, COVER_R, COVER_ARC,
   };
 })();
@@ -3862,6 +3876,14 @@ const AI = (() => {
   }
 
   function powers(S, me, P) {
+    // By night a commander lights the ground ahead of its army with a flare now and then.
+    if (R.nightAt(S.tick) > 0.6 && (P.cooldown.flare || 0) <= 0 && P.supply > 300 && me.rand() < 0.02) {
+      const army = S.ents.filter(e => e.team === me.team && !e.b && e.hp > 0 && R.armed(e)), foe = foeOf(S, me);
+      if (army.length >= 4 && foe >= 0) {
+        const cx = army.reduce((a, e) => a + e.x, 0) / army.length, cy = army.reduce((a, e) => a + e.y, 0) / army.length, t = S.bases[foe], d = Math.hypot(t[0] - cx, t[1] - cy) || 1;
+        R.push(S, me.team, { c: 'power', name: 'flare', x: cx + (t[0] - cx) / d * 8, y: cy + (t[1] - cy) / d * 8 });
+      }
+    }
     if (!me.D.power || !has(P, 'radar') || S.tick - me.lastPower < me.D.gap * HZ) return;
     // An easier commander calls no powers before it can call a barrage.
     if (me.level !== 'veteran' && !opened(P, POWERS.barrage)) return;
@@ -6508,13 +6530,13 @@ if (typeof module !== 'undefined') module.exports = Looks;
       const ink = new THREE.ShaderMaterial({ uniforms: { t: { value: null }, tSubj: { value: null }, tHeat: { value: null }, tPaper: { value: null }, res: { value: new THREE.Vector2(1, 1) }, uTime: { value: 0 }, uK: { value: 1 }, uOff: { value: new THREE.Vector2() }, uStyle: { value: 8 }, tNorm: { value: null }, tFogS: { value: null }, tLand: { value: null }, uSun2: { value: new THREE.Vector2(-1, 0) }, uUpV: { value: new THREE.Vector3(0, 1, 0) }, uRoad: { value: 0 }, uOre: { value: 0 }, uMarks: { value: 1 },
         uWindS: { value: new THREE.Vector2() }, uView: { value: new THREE.Vector2(1, 0) }, tFx: { value: null }, tAnc: { value: null }, uDark: { value: 0 }, uInks: { value: 0 }, uFxs: { value: 0 }, uUnits: { value: 0 }, tH: SH.tH, uHSize: { value: new THREE.Vector2(1, 1) }, uHScale: { value: 1 }, uRain: { value: 0 }, uStorm: { value: 0 }, uSnowF: { value: 0 }, uSnowC: SH.uSnowC, uFog: { value: 0 }, uMist: { value: 0 }, uNight: { value: 0 }, uWet: { value: 0 },
         uDayMul: { value: new THREE.Vector3(1, 1, 1) }, uDayAdd: { value: new THREE.Vector3() }, uWaterL: { value: -0.15 }, uCloudK: SH.uCloudK,
-        uCloud: SH.uCloud, uCloudT: SH.uCloudT, uSunW: SH.uSunDir, uCloudA: { value: 0 }, uCloudG: { value: 0 }, uRayK: { value: 0 }, uSand: { value: 0 }, uBliz: { value: 0 },
+        uCloud: SH.uCloud, uCloudT: SH.uCloudT, uSunW: SH.uSunDir, uCloudA: { value: 0 }, uCloudG: { value: 0 }, uRayK: { value: 0 }, uSand: { value: 0 },
         uInvVP: { value: new THREE.Matrix4() }, uW2S: { value: new THREE.Vector4(1, 0, 0, 1) }, uLev: { value: 1 },
         // Each side's colour as the anchor pass keeps it, its hue and how coloured it is, and its inks on either paper.
         uSideKey: { value: [...Array(8)].map(() => new THREE.Vector2()) }, uSideL: { value: [...Array(8)].map(() => new THREE.Vector3()) }, uSideD: { value: [...Array(8)].map(() => new THREE.Vector3()) }, uSideB: { value: [...Array(8)].map(() => new THREE.Vector3()) } }, vertexShader: vs, depthTest: false, depthWrite: false, fragmentShader: `
         varying vec2 vUv; uniform sampler2D t, tSubj, tHeat, tPaper, tNorm, tFogS, tLand; uniform vec2 res, uOff, uSun2, uWindS, uView, uHSize; uniform float uHScale, uFxs; uniform int uUnits, uInks; uniform float uDark; uniform sampler2D tH, tFx, tAnc; uniform vec3 uUpV, uDayMul, uDayAdd; uniform float uTime, uK, uRain, uStorm, uSnowF, uSnowC, uFog, uMist, uNight, uWet, uWaterL, uCloudK, uMarks; uniform int uStyle, uRoad, uOre;
         uniform vec2 uSideKey[8]; uniform vec3 uSideL[8], uSideD[8], uSideB[8];
-        uniform vec2 uCloud; uniform vec3 uSunW; uniform float uCloudT, uCloudA, uCloudG, uRayK, uSand, uBliz;
+        uniform vec2 uCloud; uniform vec3 uSunW; uniform float uCloudT, uCloudA, uCloudG, uRayK, uSand;
         // The clouds float at CLOUD_H over the land. cloudAt gives the cloud over a point of the land at that height,
         // taken from the same field the land pass casts their shadows with, shifted along the sun, so each cloud
         // drifts over its own shadow.
@@ -7207,13 +7229,11 @@ if (typeof module !== 'undefined') module.exports = Looks;
           col = mix(col, dk ? vec3(0.25, 0.25, 0.26) : vec3(0.945, 0.94, 0.925), veil);
           float fband = hatch(px + vec2(uTime * 5.0 * uK, 0.0), 0.0, 10.0, 0.8, 97.0, 0.6) * smoothstep(0.2, 0.55, veil);
           col = mix(col, dk ? vec3(0.42, 0.44, 0.5) : vec3(0.6, 0.62, 0.67), fband * 0.2);
-          // Blown sand as an ochre veil and a blizzard as a white-out, each billowing as it is carried on the wind.
+          // Blown sand as an ochre veil, billowing as it is carried on the wind.
           vec2 blw = landAt(vUv, max(hg, 0.0) + 1.5) * 0.03 + uCloud * 5.0;
           float billow = noise(blw) * 0.6 + noise(blw * 2.3 + 5.0) * 0.4, keepU = 1.0 - 0.4 * step(0.85, s0);
           float dustV = clamp(uSand * (0.3 + 0.38 * billow) * onMap, 0.0, 0.7) * keepU;
           col = mix(col, dk ? vec3(0.36, 0.3, 0.22) : vec3(0.86, 0.76, 0.58), dustV);
-          float whiteV = clamp(uBliz * (0.3 + 0.28 * billow) * onMap, 0.0, 0.62) * keepU;
-          col = mix(col, dk ? vec3(0.62, 0.64, 0.68) : vec3(0.97, 0.97, 0.98), whiteV);
           // Grit driven low across the page in long fine strokes.
           if (uSand > 0.01) {
             float sx = uWindS.x >= 0.0 ? 1.0 : -1.0;
@@ -7247,13 +7267,12 @@ if (typeof module !== 'undefined') module.exports = Looks;
             float ring = (1.0 - smoothstep(0.015, 0.05, abs(length(sf * vec2(1.0, 1.7)) - st * 0.4))) * step(hash(si + 3.0), uRain * 0.6) * (1.0 - st) * (1.0 - step(0.5, s0)) * seenE;
             col = mix(col, dk ? vec3(0.5, 0.57, 0.7) : vec3(0.35, 0.42, 0.55), ring * 0.55);
           }
-          // Snow falling in two layers, each flake white with a fine blue-grey rim. A blizzard drives it thick and
-          // sideways.
-          float snowF = uSnowF + 1.4 * uBliz;
+          // Snow falling in two layers, each flake white with a fine blue-grey rim.
+          float snowF = uSnowF;
           if (snowF > 0.01) {
             for (int L = 0; L < 2; L++) {
               float fl = float(L), sc = 15.0 + fl * 9.0;
-              vec2 q = (px + vec2(sin(uTime * 0.7 + fl * 2.0) * 10.0 * uK + uTime * uWindS.x * (30.0 + 160.0 * uBliz) * uK, uTime * (45.0 + fl * 30.0) * uK)) / (sc * uK);
+              vec2 q = (px + vec2(sin(uTime * 0.7 + fl * 2.0) * 10.0 * uK + uTime * uWindS.x * 30.0 * uK, uTime * (45.0 + fl * 30.0) * uK)) / (sc * uK);
               vec2 qi = floor(q), qf = fract(q) - 0.5 - (vec2(hash(qi + fl * 7.0), hash(qi + 3.0 + fl)) - 0.5) * 0.6;
               float has = step(hash(qi + 11.0 + fl), min(snowF * 0.55, 0.9)), r = (1.4 + fl * 0.8) / sc, dd = length(qf);
               float inner = 1.0 - smoothstep(r * 0.55, r * 0.8, dd), rimF = (1.0 - smoothstep(r * 0.8, r * 1.1, dd)) - inner;
@@ -7328,7 +7347,7 @@ if (typeof module !== 'undefined') module.exports = Looks;
           C.uUpV.value.set(0, 1, 0).transformDirection(camera.matrixWorldInverse);
           C.uRoad.value = K.opts.road; C.uOre.value = K.opts.ore; C.uMarks.value = K.marked ? 1 : 0;
           C.uRain.value = sky.rain; C.uStorm.value = sky.storm; C.uSnowF.value = sky.snow; C.uFog.value = sky.fog; C.uMist.value = sky.mist;
-          C.uSand.value = sky.sand || 0; C.uBliz.value = sky.blizzard || 0; C.uCloudA.value = sky.cloudA || 0; C.uCloudG.value = sky.cloudG || 0; C.uRayK.value = sky.rayK || 0;
+          C.uSand.value = sky.sand || 0; C.uCloudA.value = sky.cloudA || 0; C.uCloudG.value = sky.cloudG || 0; C.uRayK.value = sky.rayK || 0;
           C.uNight.value = sky.night; C.uWet.value = sky.wet; C.uDayMul.value.set(...sky.mul); C.uDayAdd.value.set(...sky.add);
           C.uWaterL.value = K.waterLevel; C.uWindS.value.set(sky.windS, 0);
           C.uView.value.set(Math.cos(K.cam.yaw), Math.sin(K.cam.yaw)); C.uHSize.value.set(Rules.VW, Rules.VH); C.uHScale.value = Rules.RES;
@@ -9059,7 +9078,7 @@ const World = (() => {
     }
 
     // The sky: weather from the rules, eased so a change comes over a few seconds, and the hour.
-    const sky = { clear: 1, rain: 0, storm: 0, fog: 0, snow: 0, sand: 0, blizzard: 0, cloud: 0, cover: 0, flood: 0, wet: 0, cloudA: 0, cloudG: 0, rayK: 0, night: 0, mist: 0, day: 0.3, kind: 'clear', windS: 0, sun: [0, 1, 0], mul: [1, 1, 1], add: [0, 0, 0] };
+    const sky = { clear: 1, rain: 0, storm: 0, fog: 0, snow: 0, sand: 0, cloud: 0, cover: 0, flood: 0, wet: 0, cloudA: 0, cloudG: 0, rayK: 0, night: 0, mist: 0, day: 0.3, kind: 'clear', windS: 0, sun: [0, 1, 0], mul: [1, 1, 1], add: [0, 0, 0] };
     const DAY = [
       // time of day, colour multiplied, colour added, night
       [0.00, [1.0, 0.92, 0.93], [0.02, 0.0, 0.02], 0.2],
@@ -9084,16 +9103,16 @@ const World = (() => {
     function updateSky(dt) {
       if (!S) return;
       const w = studySky ? Object.assign({}, Rules.sky(S), studySky) : Rules.sky(S), k = studySky ? 1 : 1 - Math.exp(-dt * 0.8);
-      for (const key of ['clear', 'rain', 'storm', 'fog', 'snow', 'sand', 'blizzard', 'cloud', 'cover', 'flood']) sky[key] += (w[key] - sky[key]) * k;
+      for (const key of ['clear', 'rain', 'storm', 'fog', 'snow', 'sand', 'cloud', 'cover', 'flood']) sky[key] += (w[key] - sky[key]) * k;
       sky.kind = w.kind;
       // The ground stays wet a while after the rain.
       sky.wet += ((w.rain > 0.2 ? 1 : 0) - sky.wet) * (studySky ? 1 : 1 - Math.exp(-dt * (w.rain > 0.2 ? 0.15 : 0.012)));
       const U = SH.uWind.value;
       U.x += (w.wind[0] - U.x) * k; U.y += (w.wind[1] - U.y) * k;
       SH.uCloud.value.x += (U.x * 0.008 + 0.0004) * dt; SH.uCloud.value.y += U.y * 0.008 * dt;
-      SH.uCloudK.value = clamp(0.35 + 0.45 * sky.cloud + 0.6 * sky.rain + 0.2 * sky.fog + 0.3 * sky.snow + 0.2 * sky.sand + 0.6 * sky.blizzard, 0, 1);
+      SH.uCloudK.value = clamp(0.35 + 0.45 * sky.cloud + 0.6 * sky.rain + 0.2 * sky.fog + 0.3 * sky.snow + 0.2 * sky.sand, 0, 1);
       // How much of the sky the clouds cover: a few in fair weather, broken cloud when overcast, a lid in rain.
-      SH.uCloudT.value = clamp(0.2 + 0.18 * sky.cloud + 0.3 * sky.rain + 0.1 * sky.fog + 0.22 * sky.snow + 0.05 * sky.sand + 0.3 * sky.blizzard, 0.15, 0.55);
+      SH.uCloudT.value = clamp(0.2 + 0.18 * sky.cloud + 0.3 * sky.rain + 0.1 * sky.fog + 0.22 * sky.snow + 0.05 * sky.sand, 0.15, 0.55);
       SH.uSnowC.value = sky.cover;
       waterRise.value = Math.min(1.25, sky.flood) * 0.26;
       right3.setFromMatrixColumn(camera.matrixWorld, 0);
@@ -9110,11 +9129,11 @@ const World = (() => {
       // The look's own sun, or its light's, or the hour's.
       sky.sun = style.sun ? style.sun({ cam, day: d, light, SUN, sunAt }) : light ? light.sun : sunAt(d);
       // The clouds as seen from above, see-through, greyer as the weather worsens and hidden in fog or blown sand.
-      sky.cloudA = clamp(0.42 + 0.15 * sky.cloud + 0.15 * sky.rain + 0.1 * sky.snow + 0.15 * sky.blizzard - 0.35 * sky.fog - 0.3 * sky.sand, 0, 0.5) * (1 - 0.5 * sky.night);
-      sky.cloudG = clamp(sky.rain + 0.5 * sky.storm + 0.6 * sky.blizzard + 0.3 * sky.snow, 0, 1);
+      sky.cloudA = clamp(0.42 + 0.15 * sky.cloud + 0.15 * sky.rain + 0.1 * sky.snow - 0.35 * sky.fog - 0.3 * sky.sand, 0, 0.5) * (1 - 0.5 * sky.night);
+      sky.cloudG = clamp(sky.rain + 0.5 * sky.storm + 0.3 * sky.snow, 0, 1);
       // Shafts of sun through gaps in broken cloud, longest and strongest with the sun low, none by night.
       const up = sky.sun[1] / Math.hypot(...sky.sun), sunUp = clamp(up * 4, 0, 1) * (1 - 0.45 * smooth(0.55, 0.9, up)) * (1 - sky.night);
-      sky.rayK = sunUp * clamp(0.5 * sky.clear + sky.cloud + 0.25 * sky.rain - 0.8 * sky.fog - 0.8 * sky.sand - 0.5 * sky.blizzard - 0.3 * sky.storm, 0, 1);
+      sky.rayK = sunUp * clamp(0.5 * sky.clear + sky.cloud + 0.25 * sky.rain - 0.8 * sky.fog - 0.8 * sky.sand - 0.3 * sky.storm, 0, 1);
     }
 
     function buildSets() {
@@ -10470,6 +10489,7 @@ const Hud = (() => {
       case 'hel': g.moveTo(-a, -b); g.lineTo(a, b); g.lineTo(a, -b); g.lineTo(-a, b); g.closePath(); break;
       case 'jet': g.moveTo(0, -b); g.lineTo(a, b * 0.6); g.lineTo(0, b * 0.1); g.lineTo(-a, b * 0.6); g.closePath(); break;
       case 'uav': g.moveTo(-a, -b * 0.6); g.lineTo(0, b * 0.6); g.lineTo(a, -b * 0.6); break;
+      case 'flare': for (let i = 0; i < 8; i++) { const an = i * 0.785; g.moveTo(Math.cos(an) * a * 0.3, Math.sin(an) * b * 0.3); g.lineTo(Math.cos(an) * a, Math.sin(an) * b); } break;
       case 'par': g.arc(0, 0, a * 0.7, Math.PI, 0); g.moveTo(-a * 0.7, 0); g.lineTo(0, b); g.lineTo(a * 0.7, 0); break;
       default: g.rect(-a * 0.5, -b * 0.5, a, b);
     }
@@ -10518,6 +10538,7 @@ const Hud = (() => {
       case 'aa': box(-6.5, 0, 13, 3.5); box(-2.5, -2.5, 5, 2.5); ln([[0, -2], [5, -7]]); ln([[1.5, -2], [6.5, -7]]); break;
       case 'art': box(-7, 0, 14, 3); dot(-4.5, 4, 1.4); dot(4.5, 4, 1.4); g.save(); g.rotate(-0.45); box(-5, -4.5, 9, 3.5); g.restore(); break;
       case 'siege': ln([[-7, 5], [7, 5]]); ln([[-4.5, 5], [-0.5, -3], [3.5, 5]]); g.lineWidth = 1.8; ln([[-6, -5.4], [5, 1.4]]); dot(-6, -5.6, 1.8); dot(-5, 5, 1.4); dot(5, 5, 1.4); break;
+      case 'flare': for (let i = 0; i < 8; i++) { const an = i * 0.785, r0 = 1.6, r1 = i % 2 ? 4.5 : 6.5; ln([[Math.cos(an) * r0, Math.sin(an) * r0], [Math.cos(an) * r1, Math.sin(an) * r1]]); } dot(0, 0, 1.4); break;
       case 'uav': ln([[-5, -4], [5, 4]]); ln([[5, -4], [-5, 4]]); for (const [a, b] of [[-5, -4], [5, 4], [5, -4], [-5, 4]]) dot(a, b, 1.6); break;
       case 'hel': ln([[-7.5, -4], [7.5, -4]]); ln([[0, -4], [0, -2]]); g.beginPath(); g.ellipse(1, 0.5, 4, 2.4, 0, 0, 6.3); g.fill(); ln([[-2.5, 0.5], [-7.5, -1.5]]); break;
       case 'jet': poly([[7.5, 0], [-5, -6], [-3, 0], [-5, 6]]); break;
@@ -10584,7 +10605,7 @@ const Hud = (() => {
     const ALL = {
       bld: ['power', 'refinery', 'barracks', 'factory', 'radar', 'derrick', 'fob', 'airfield', 'silo'],
       def: ['bunker', 'atgun', 'sam', 'rail'],
-      pow: ['tech', 'uav', 'barrage', 'para', 'launch'],
+      pow: ['tech', 'flare', 'uav', 'barrage', 'para', 'launch'],
     };
     const LISTS = { bld: [], def: [], inf: [], veh: [], air: [], pow: [] };
     const KEYS = 'QWERTYUIO';
@@ -10672,7 +10693,7 @@ const Hud = (() => {
       if (k === 'launch') { const si = s.ents.find(e => e.b && e.team === t && e.kind === 'silo' && e.charge >= e.d.charge); if (si) enter({ type: 'launch' }); return; }
       if (POWERS[k]) {
         const d = POWERS[k];
-        if (p.cooldown[k] > 0 || p.tech < d.tech || !p.counts.radar || p.supply < d.cost) { game.audio.ui('deny'); return; }
+        if (p.cooldown[k] > 0 || p.tech < d.tech || (!d.free && !p.counts.radar) || p.supply < d.cost) { game.audio.ui('deny'); return; }
         enter({ type: 'power', name: k });
         return;
       }
@@ -10718,7 +10739,7 @@ const Hud = (() => {
           off = !si; if (si) { prog = si.charge / si.d.charge; ready = prog >= 1; if (ready) prog = 0; label = ready ? 'FIRE' : si ? Math.ceil(si.d.charge - si.charge) + 's' : ''; }
         } else if (POWERS[k]) {
           const cd = p.cooldown[k], d = POWERS[k];
-          off = !p.counts.radar || p.tech < d.tech;
+          off = (!d.free && !p.counts.radar) || p.tech < d.tech;
           if (cd > 0) { prog = 1 - cd / d.cd; label = Math.ceil(cd) + 's'; }
         } else {
           off = !!Rules.blockedReason(s, t, k);
@@ -11614,12 +11635,12 @@ const Hud = (() => {
       return labelF;
     }
     // The weather and the hour in a corner, with what the weather does, and a word of what is coming.
-    const SKY_NAME = { clear: 'Fair', cloud: 'Overcast', rain: 'Rain', storm: 'Storm', fog: 'Fog', snow: 'Snow', sand: 'Dust storm', blizzard: 'Blizzard' };
-    const SKY_NOTE = { rain: 'Wheels bog down off the roads', storm: 'Aircraft grounded', fog: 'Sight cut short', snow: 'Everyone slowed', sand: 'Sight cut, aircraft grounded', blizzard: 'Everyone slowed, aircraft grounded' };
+    const SKY_NAME = { clear: 'Fair', cloud: 'Overcast', rain: 'Rain', storm: 'Storm', fog: 'Fog', snow: 'Snow', sand: 'Dust storm' };
+    const SKY_NOTE = { rain: 'Wheels bog down off the roads', storm: 'Aircraft grounded', fog: 'Sight cut short', snow: 'Everyone slowed', sand: 'Sight cut, aircraft grounded' };
     const hourName = d => d < 0.05 || d >= 0.95 ? 'Dawn' : d < 0.3 ? 'Morning' : d < 0.5 ? 'Midday' : d < 0.7 ? 'Afternoon' : d < 0.8 ? 'Dusk' : 'Night';
     function drawSkyNote(s) {
       const w = Rules.sky(s), ink = inked();
-      let note = SKY_NOTE[w.kind] || '';
+      let note = SKY_NOTE[w.kind] || (Rules.nightAt(s.tick) > 0.5 ? 'Night: sight cut short, flares light the way' : '');
       if (s.flooded) note = note ? note + '. Fords flooded' : 'Fords flooded';
       if (w.next !== w.kind && w.left < 40 * HZ) note = (SKY_NAME[w.next] || w.next) + ' coming';
       // A newcomer's protection, counting down.
@@ -11635,6 +11656,37 @@ const Hud = (() => {
       if (ink) { og.strokeStyle = 'rgba(31,26,22,0.85)'; og.lineWidth = 1; og.strokeRect(x - tw - 13.5, y + 0.5, tw + 13, bh - 1); }
       og.fillStyle = ink ? '#2a231c' : '#e8e0c8'; og.font = f1; og.fillText(top, x - 7, y + 12);
       if (note) { og.fillStyle = ink ? '#8a3a22' : '#f0b060'; og.font = f2; og.fillText(note, x - 7, y + 29); }
+      og.restore();
+    }
+    // Night: a flare burns as a bright star over a pool of warm light, and each building that fights sweeps a
+    // searchlight round it. Drawn as light added to the page, they show only as the dark comes on.
+    function drawNight(s, t) {
+      const n = Rules.nightAt(s.tick);
+      if (n < 0.05) return;
+      og.save(); og.globalCompositeOperation = 'lighter';
+      for (const w of s.sweeps) {
+        if (!w.flare || w.until <= s.tick || (t >= 0 && w.team !== t && !(s.P[t] && s.P[t].vis[Rules.cellOf(w.x, w.y)]))) continue;
+        const left = (w.until - s.tick) / (20 * HZ), [x, y] = world.project(w.x, Rules.heightAt(s.map, w.x, w.y), w.y), r = w.r * world.ppu(w.x, 0, w.y);
+        const fl = 0.85 + 0.15 * Math.sin(performance.now() / 70 + w.flare), a = n * Math.min(1, left * 4) * fl;
+        const gr = og.createRadialGradient(x, y, 0, x, y, r);
+        gr.addColorStop(0, `rgba(255,214,140,${0.42 * a})`); gr.addColorStop(0.6, `rgba(255,170,90,${0.16 * a})`); gr.addColorStop(1, 'rgba(255,150,80,0)');
+        og.fillStyle = gr; og.beginPath(); og.ellipse(x, y, r, r * 0.8, 0, 0, 6.283); og.fill();
+        // The flare itself hangs over the pool and sinks as it burns.
+        const [fx, fy] = world.project(w.x, Rules.heightAt(s.map, w.x, w.y) + 3 + 5 * left, w.y);
+        og.fillStyle = `rgba(255,240,200,${0.9 * a})`; og.beginPath(); og.arc(fx, fy, 3.2, 0, 6.283); og.fill();
+      }
+      for (const o of world.onScreen) {
+        const e = o.e;
+        if (!e.b || e.hp <= 0 || !Rules.armOf(s, e)) continue;
+        const reach = (e.d.sight || 8) * 0.9, sweep = performance.now() / 2600 + e.id * 1.7, an = Math.sin(sweep) * 1.6 + e.id;
+        const ex = e.x + Math.cos(an) * reach, ey = e.y + Math.sin(an) * reach, [bx, by] = world.project(ex, Rules.heightAt(s.map, ex, ey), ey);
+        const [ax, ay] = world.project(e.x, Rules.heightAt(s.map, e.x, e.y) + 1.5, e.y), half = 0.22 * reach * world.ppu(ex, 0, ey);
+        const dx = bx - ax, dy = by - ay, L = Math.hypot(dx, dy) || 1, nx = -dy / L * half, ny = dx / L * half;
+        const gr = og.createLinearGradient(ax, ay, bx, by);
+        gr.addColorStop(0, `rgba(255,236,190,${0.3 * n})`); gr.addColorStop(1, `rgba(255,236,190,${0.05 * n})`);
+        og.fillStyle = gr; og.beginPath(); og.moveTo(ax, ay); og.lineTo(bx + nx, by + ny); og.lineTo(bx - nx, by - ny); og.closePath(); og.fill();
+        og.fillStyle = `rgba(255,236,190,${0.18 * n})`; og.beginPath(); og.ellipse(bx, by, half, half * 0.7, 0, 0, 6.283); og.fill();
+      }
       og.restore();
     }
     // A fallen bridge: its outline as what was, dotted orange while it is being rebuilt, and C4 counting down.
@@ -11849,7 +11901,7 @@ const Hud = (() => {
       }
 
       if (inked()) { drawGhostPlan(s, t, selected); drawKey(); drawInk(s, t); drawTactical(s, t); }
-      drawBridges(s, t); drawWires(); drawFires(); drawBirds(); drawLightning(dt);
+      drawNight(s, t); drawBridges(s, t); drawWires(); drawFires(); drawBirds(); drawLightning(dt);
       if (game.playing) { drawSkyNote(s); drawGroundTip(s, dt); }
 
       for (let i = state.marks.length - 1; i >= 0; i--) {
@@ -13478,12 +13530,10 @@ const Game = (() => {
     fog: ['Fog. Sight is cut short.', '', 'Fog'], snow: ['Snow. Everything moves slower.', '', 'Snow'], stormsoon: ['A storm is coming. Aircraft will be grounded.', 'bad', 'Storm warning'],
     clear: ['The weather clears.', 'good', ''], cloud: ['Clouding over.', '', ''],
     sand: ['Dust storm. Sight is cut short, men and wheels slowed, aircraft grounded.', 'bad', 'Dust storm. Aircraft grounded'],
-    blizzard: ['Blizzard. Everyone slowed hard, sight cut short, aircraft grounded.', 'bad', 'Blizzard. Aircraft grounded'],
     sandsoon: ['A dust storm is coming. Aircraft will be grounded.', 'bad', 'Dust storm warning'],
-    blizzardsoon: ['A blizzard is coming. Aircraft will be grounded.', 'bad', 'Blizzard warning'],
   };
   // What a theatre's weather brings under a setting, for the set-up.
-  const SKY_OF = { desert: 'Dust storms, little rain and no snow.', steppe: 'Rain, thunderstorms and fog, with a little snow.', winter: 'Snow, blizzards and fog, and no rain.' };
+  const SKY_OF = { desert: 'Dust storms, little rain and no snow.', steppe: 'Rain, thunderstorms and fog, with a little snow.', winter: 'Deep snow and fog, and no rain.' };
   const WEATHER_OF = { random: 'In their usual measure.', mild: 'Mostly fair, with no storms of any kind.', harsh: 'Often, and the storms come hard.' };
   const weatherNote = (theme, w) => w === 'off' ? 'Fair skies all game.' : `${SKY_OF[theme] || ''} ${WEATHER_OF[w] || ''}`;
 
