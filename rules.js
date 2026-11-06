@@ -364,12 +364,15 @@ const Rules = (() => {
     wells: [[-64, -16], [-64, 16], [-16, 28], [-26, -50], [-20, -26]],
     bridges: [0, 40, -40],
   };
-  const SIZES = { duel: 128, quad: 192, world: 256 };
+  const SIZES = { duel: 128, quad: 192, world: 256, gulf: 128, pass: 128, lakes: 192 };
   // The maps a game may be set on, each a layout and the most sides it seats.
   const MAPS = {
     duel: { name: 'River Duel', layout: 'duel', seats: 2, about: 'Two bases across one river, three bridges and a ford.' },
     quad: { name: 'Four Quarters', layout: 'quad', seats: 4, about: 'Four corners parted by two crossing rivers.' },
     world: { name: 'Crossed Rivers', layout: 'world', seats: 8, about: 'Eight bases round a ring, two to each quarter.' },
+    gulf: { name: 'The Gulf', layout: 'gulf', seats: 2, about: 'Two bases either side of a long gulf, with land round both ends. Docks and ships hold the water.' },
+    pass: { name: 'High Pass', layout: 'pass', seats: 2, about: 'A steep ridge between two bases, crossed only at three passes.' },
+    lakes: { name: 'Lake Country', layout: 'lakes', seats: 4, about: 'Four corners round a great lake, a road all the way round its shore.' },
   };
   // Which of a map's bases each seated slot starts at: spread evenly round the ring. In slot order, or given a
   // random draw rnd, with the ring turned a random step and the sides dealt the places in a random order.
@@ -391,6 +394,61 @@ const Rules = (() => {
     // A ford's images, each its middle and the unit way along the river.
     const fordAt = (p, q) => { for (const T of L.syms) { const a = T(p), b = T(q), d = mhypot(b[0] - a[0], b[1] - a[1]); L.fords.push([a[0], a[1], (b[0] - a[0]) / d, (b[1] - a[1]) / d]); } };
     const R = (a, b, wig, rep = true) => L.roads.push({ a, b, wig, rep });
+    // Lake Country: the four quarters round one great lake, with no rivers or bridges, a road round the shore.
+    if (kind === 'lakes') {
+      const rot = ([x, y], k) => { let dx = x - CX, dy = y - CY; for (let i = 0; i < k; i++) { const t = dx; dx = -dy; dy = t; } return [CX + dx, CY + dy]; };
+      L.syms = [0, 1, 2, 3].map(k => p => rot(p, k));
+      const sc = W / 256, polar = (r, deg) => [CX + r * sc * mcos(deg * PI / 180), CY + r * sc * msin(deg * PI / 180)], R0 = 40 * sc;
+      L.lake = true;
+      L.river = (x, y) => [Math.max(0, mhypot(x - CX, y - CY) - R0), 3];
+      L.domain = (x, y) => x + 0.5 - CX > 0 && y + 0.5 - CY > 0;
+      const C = polar(120, 45), tOut = polar(102, 67.5), tIn = polar(70, 67.5), mid = polar(98, 90);
+      for (const T of L.syms) L.bases.push(T(C));
+      all(L.towns, tOut); all(L.towns, tIn);
+      all(L.ore, mid, [6]);
+      const m = mhypot(CX - C[0], CY - C[1]), f = [(CX - C[0]) / m, (CY - C[1]) / m], s = [-f[1], f[0]];
+      all(L.ore, [C[0] + f[0] * 7 + s[0] * 18, C[1] + f[1] * 7 + s[1] * 18], [7]);
+      all(L.ore, [C[0] + f[0] * 7 - s[0] * 19, C[1] + f[1] * 7 - s[1] * 19], [6.5]);
+      all(L.wells, [C[0] - f[0] * 4 + s[0] * 16, C[1] - f[1] * 4 + s[1] * 16]);
+      all(L.wells, [C[0] - f[0] * 4 - s[0] * 16, C[1] - f[1] * 4 - s[1] * 16]);
+      all(L.ore, polar(84, 67.5), [5]);
+      all(L.wells, polar(80, 56)); all(L.wells, polar(80, 79));
+      L.fish = []; all(L.fish, polar(20, 67.5)); all(L.fish, polar(30, 22.5));
+      R(C, tOut, 2); R(tOut, tIn, 3); R(tIn, polar(70, 157.5), 4); R(C, mid, 2.5);
+      return L;
+    }
+    // The Gulf and High Pass are drawn on the River Duel's frame, two bases mirrored across the middle.
+    if (kind === 'gulf' || kind === 'pass') {
+      L.syms = [p => [p[0], p[1]], mirror];
+      L.domain = (x, y) => { const u = toUV(x + 0.5, y + 0.5)[0]; return u < 0 || (u === 0 && x <= y); };
+      const uvp = (u, v) => toXY(u, v), B = uvp(kind === 'gulf' ? -46 : -52, 0);
+      L.bases.push(B, mirror(B));
+      if (kind === 'gulf') {
+        // A long gulf of open water down the middle, with land round both of its ends.
+        L.lake = true;
+        L.river = (x, y) => { const [u, v] = toUV(x, y); return [mhypot(u, Math.max(0, Math.abs(v) - 32)), 14 + 2 * mcos(v * 0.07)]; };
+        const tN = uvp(-34, 36), tS = uvp(-34, -36), tP = uvp(-8, 62);
+        all(L.towns, tN); all(L.towns, tS); all(L.towns, tP);
+        [[-44, 20, 7], [-44, -21, 6.5], [-46, 48, 5.5], [-50, -40, 5]].forEach(o => all(L.ore, uvp(o[0], o[1]), [o[2]]));
+        [[-54, -14], [-54, 14], [-24, 50], [-26, -52]].forEach(o => all(L.wells, uvp(o[0], o[1])));
+        L.fish = []; [[-4, 16], [-6, -14], [0, 0]].forEach(o => all(L.fish, uvp(o[0], o[1])));
+        R(uvp(-40, 0), tN, 2); R(uvp(-40, 0), tS, 2); R(tN, tP, 3); R(tP, uvp(8, 62), 2); R(tS, uvp(-12, -66), 3);
+      } else {
+        // A steep ridge down the middle, broken by a pass at each end and a narrow one between the bases.
+        L.river = () => [99, 0];
+        L.wall = (x, y) => {
+          const [u, v] = toUV(x, y), gap = Math.min(smooth(4, 9, Math.abs(v - 42)), smooth(4, 9, Math.abs(v + 42)), smooth(2, 4.5, Math.abs(v)));
+          return 7.5 * (1 - smooth(3, 8, Math.abs(u))) * gap;
+        };
+        const tN = uvp(-24, 42), tS = uvp(-24, -42), tC = uvp(-20, 0);
+        all(L.towns, tN); all(L.towns, tS); all(L.towns, tC);
+        [[-50, 18, 7], [-50, -19, 6.5], [-36, 24, 5.5], [-36, -26, 5.5], [-30, 60, 5]].forEach(o => all(L.ore, uvp(o[0], o[1]), [o[2]]));
+        [[-60, -16], [-60, 16], [-16, 28], [-18, -28]].forEach(o => all(L.wells, uvp(o[0], o[1])));
+        R(uvp(-46, 0), tC, 2); R(tC, uvp(0, 0), 0.5); R(uvp(-46, 0), tN, 2.5); R(uvp(-46, 0), tS, 2.5);
+        R(tN, uvp(0, 42), 1); R(tS, uvp(0, -42), 1);
+      }
+      return L;
+    }
     if (kind === 'world' || kind === 'quad') {
       const rot = ([x, y], k) => { let dx = x - CX, dy = y - CY; for (let i = 0; i < k; i++) { const t = dx; dx = -dy; dy = t; } return [CX + dx, CY + dy]; };
       L.syms = [0, 1, 2, 3].map(k => p => rot(p, k));
@@ -534,6 +592,8 @@ const Rules = (() => {
       }
     }
     for (let c = 0; c < h.length; c++) h[c] = lerp(h[c], blur[c], smooth(5.5, 2, roadDist[c]));
+    // A layout's own walls of rock, as High Pass's ridge, raised over the ground.
+    if (L.wall) for (let j = 0; j < VH; j++) for (let i = 0; i < VW; i++) h[j * VW + i] += L.wall(i / RES, j / RES);
     // How much of a ford a point is in: a strip across the river a few cells wide.
     const fordK = (x, y) => {
       let k = 0;
@@ -633,7 +693,9 @@ const Rules = (() => {
     const scatter = [];
     const keep = (x, y, pad = 0) => {
       for (const o of open) if (mhypot(x - o[0], y - o[1]) < o[2] * 0.85 + pad) return false;
-      if (L.river(x, y)[0] < 6.5) return false;
+      // Clear of a river's middle, or of a lake's water and the bank round it.
+      const [rd, rw] = L.river(x, y);
+      if (L.lake ? rd < rw + 5 : rd < 6.5) return false;
       const c = clamp(Math.round(y * RES), 0, VH - 1) * VW + clamp(Math.round(x * RES), 0, VW - 1);
       return roadDist[c] > 3;
     };
