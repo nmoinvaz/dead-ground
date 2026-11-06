@@ -418,7 +418,7 @@
             lineK = max(max(heavy, swell * (1.0 - step(0.6, a))), max(detail, max(edge * 0.55 * (1.0 - bankZone) * isG, max(rEdge * 0.9 * isG, bankL * step(0.001, dep + 0.05) * (isG + isW)))));
             // The washes: the land green, roads and bridge decks pink, water lilac with white ripples, canopies in
             // three greens, roofs cream and walls warm grey by which way they face.
-            vec3 base = mix(paperC, dk ? vec3(0.13, 0.19, 0.125) : SOFT_G, isG);
+            vec3 base = mix(paperC, dk ? vec3(0.24, 0.33, 0.22) : SOFT_G, isG);
             // Layer tints by height, pale green lowland to cream to tan upland, the slopes away from the light shaded
             // in a cool sepia and the slopes toward it lifted a little, and the contours in sepia. On dark paper the
             // tints are greys, near black in the lowland to a mid grey upland, mottled in broad patches.
@@ -426,12 +426,12 @@
             if (dk) {
               // The light paper's layers in the dark: its pale green as a deep green in the lowland, lighter green
               // and olive up the slopes, and its tan as a warm earth on the heights, each rise its own shade.
-              tint = hyps < 0.33 ? mix(vec3(0.1, 0.16, 0.1), vec3(0.16, 0.235, 0.145), hyps / 0.33)
-                : hyps < 0.66 ? mix(vec3(0.16, 0.235, 0.145), vec3(0.27, 0.29, 0.18), (hyps - 0.33) / 0.33)
-                : mix(vec3(0.27, 0.29, 0.18), vec3(0.45, 0.4, 0.29), (hyps - 0.66) / 0.34);
+              tint = hyps < 0.33 ? mix(vec3(0.2, 0.29, 0.19), vec3(0.27, 0.37, 0.25), hyps / 0.33)
+                : hyps < 0.66 ? mix(vec3(0.27, 0.37, 0.25), vec3(0.38, 0.41, 0.28), (hyps - 0.33) / 0.33)
+                : mix(vec3(0.38, 0.41, 0.28), vec3(0.55, 0.5, 0.37), (hyps - 0.66) / 0.34);
               tint *= 0.92 + 0.16 * (noise(Wl * 0.055) * 0.65 + noise(Wl * 0.16 + 5.0) * 0.35);
             }
-            vec3 CONT = dk ? vec3(0.52, 0.5, 0.47) : vec3(0.42, 0.33, 0.24);
+            vec3 CONT = dk ? vec3(0.68, 0.66, 0.6) : vec3(0.42, 0.33, 0.24);
             // A road takes a third of the tint and the contours cross it faint, so it climbs and falls with the land
             // rather than lying flat over it.
             base = mix(base, tint, isG * (1.0 - onRoad * 0.65));
