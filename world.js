@@ -129,6 +129,8 @@ const World = (() => {
             vec4 mk = texture2D(tMarks, vW.xz / uMap);
             diffuseColor.rgb *= 1.0 - mk.r * 0.86;
             diffuseColor.rgb *= 1.0 - mk.g * 0.34;
+            // Blood, a deep red soaked into the ground.
+            diffuseColor.rgb = mix(diffuseColor.rgb, vec3(0.15, 0.018, 0.016), smoothstep(0.32, 0.45, mk.b) * 0.9);
             // Worn tracks, bare earth.
             float trk = texture2D(tTrail, vW.xz / uMap).r;
             diffuseColor.rgb = mix(diffuseColor.rgb, diffuseColor.rgb * vec3(0.9, 0.84, 0.74) + vec3(0.05, 0.04, 0.02), smoothstep(0.2, 0.6, trk) * 0.7);`);
@@ -660,7 +662,7 @@ const World = (() => {
 
     let S = null, M = null, theme = null, viewTeam = 0, sets = {}, terrainMesh = null, waterMesh = null, statics = [], baseImage = null;
     const rs = new Map();
-    let wrecks = [], corpses = [], flyers = [], planes = [], falls = [], marks = null, marksTex = null, marksDirty = false, marksLast = 0;
+    let wrecks = [], corpses = [], bleeds = [], flyers = [], planes = [], falls = [], marks = null, marksTex = null, marksDirty = false, marksLast = 0;
     let fogTex = null, fogData = null, fogR = null, fogG = null, terrTex = null, terrData = null, terrSeen = -1, hTex = null;
     // A number as a half float, for heights within a few units of the ground.
     const halfBuf = new Float32Array(1), halfBits = new Uint32Array(halfBuf.buffer);
@@ -682,7 +684,7 @@ const World = (() => {
       statics = [];
       for (const k in sets) for (const p of sets[k]) { scene.remove(p.mesh); p.mesh.dispose(); }
       sets = {};
-      rs.clear(); wrecks = []; corpses = []; flyers = []; planes = []; falls = []; inkFx.length = 0; pastBoxes.length = 0; stuckArrows.length = 0; strokes.length = 0; scen = null; life = null;
+      rs.clear(); wrecks = []; corpses = []; bleeds = []; flyers = []; planes = []; falls = []; inkFx.length = 0; pastBoxes.length = 0; stuckArrows.length = 0; strokes.length = 0; scen = null; life = null;
     }
     const add = o => { scene.add(o); statics.push(o); return o; };
     function lineCat(mesh, cat, sway = false) {
@@ -2009,6 +2011,7 @@ const World = (() => {
           if (alive < r.alive && vis) {
             const [cx, cz] = manAt(e.d.men, alive, x, y, yaw);
             corpses.push({ kind: e.kind, x: cx, y: heightAt(M, cx, cz), z: cz, yaw, t: 0, color });
+            bleed(cx, cz, -yaw);
           }
           r.alive = alive;
         }
@@ -2108,6 +2111,11 @@ const World = (() => {
           dustPuff(f.x + Math.cos(a) * q, f.y0 + 0.1, f.z + Math.sin(a) * q, 1.6 + fall);
           smoke.add(f.x + (Math.random() - 0.5) * f.w, f.y0 + 1.4 * (1 - g2), f.z + (Math.random() - 0.5) * f.h, (Math.random() - 0.5) * 3, 2 + Math.random() * 3, (Math.random() - 0.5) * 3, 0.9, 0.12, 0.18, [0.2, 0.18, 0.16, 1], [0.2, 0.18, 0.16, 0.9], 11, { grav: -12, spin: 6 });
         }
+      }
+      for (let i = bleeds.length - 1; i >= 0; i--) {
+        const b = bleeds[i];
+        b.t += dt;
+        if (b.n === 0 && b.t > 0.5) { pool(b, 0.7); b.n = 1; } else if (b.n === 1 && b.t > 1.8) { pool(b, 1); bleeds.splice(i, 1); }
       }
       for (let i = corpses.length - 1; i >= 0; i--) {
         const c = corpses[i];
@@ -2287,6 +2295,35 @@ const World = (() => {
         c.lineWidth = Math.max(1, r * 0.08 * k);
         c.beginPath(); c.moveTo((x + Math.cos(a) * d0) * k, (y + Math.sin(a) * d0) * k); c.lineTo((x + Math.cos(a) * d1) * k, (y + Math.sin(a) * d1) * k); c.stroke();
       }
+      marksDirty = true;
+    }
+    // Blood where a man or a beast falls on dry ground, in the scars layer's blue: a few drops flung out at once,
+    // then a pool that spreads from under the body over two seconds, longest along the way it lay.
+    function bleed(x, y, a, r = 0.17) {
+      const t = terrainAt(M, x, y);
+      if (t < M.water + 0.05 || heightAt(M, x, y) > t + 0.1) return;
+      const b = { x, y, a, r, t: 0, n: 0 }, c = marks.ctx, k = marks.width / W, q0 = 0.8 / k;
+      bleeds.push(b);
+      c.globalCompositeOperation = 'lighter'; c.fillStyle = 'rgb(0,0,160)';
+      c.beginPath();
+      for (let i = 0, n = 2 + (Math.random() * 4 | 0); i < n; i++) {
+        const a2 = Math.random() * 6.28, d = r * (0.9 + Math.random() * 1.3), q = Math.max(q0, r * (0.12 + Math.random() * 0.12));
+        const px = (x + Math.cos(a2) * d) * k, py = (y + Math.sin(a2) * d) * k;
+        c.moveTo(px + q * k, py); c.arc(px, py, q * k, 0, 6.3);
+      }
+      c.fill();
+      pool(b, 0.45);
+    }
+    function pool(b, s) {
+      const c = marks.ctx, k = marks.width / W, ca = Math.cos(b.a), sa = Math.sin(b.a);
+      c.globalCompositeOperation = 'lighter'; c.fillStyle = 'rgb(0,0,110)';
+      c.beginPath();
+      for (let i = 0; i < 4; i++) {
+        const along = (Math.random() - 0.5) * b.r * 1.5 * s, across = (Math.random() - 0.5) * b.r * 0.6 * s, q = Math.max(0.8 / k, b.r * s * (0.5 + Math.random() * 0.3));
+        const px = (b.x + ca * along - sa * across) * k, py = (b.y + sa * along + ca * across) * k;
+        c.moveTo(px + q * k, py); c.arc(px, py, q * k, 0, 6.3);
+      }
+      c.fill();
       marksDirty = true;
     }
     function trackMark(r, x, y, yaw, half, a) {
@@ -2593,9 +2630,10 @@ const World = (() => {
         explosion(e.x, y + e.z, e.y, UNITS[e.kind].hp > 200 ? 1.2 : 0.4, BLAST_OF[e.kind]);
       } else if (UNITS[e.kind].men) {
         const kept = r ? r.alive : 0;
-        for (let i = 0; i < (kept || 1); i++) { const [cx, cz] = manAt(UNITS[e.kind].men, i, e.x, e.y, -e.a); corpses.push({ kind: e.kind, x: cx, y: heightAt(M, cx, cz), z: cz, yaw: -e.a, t: 0, color: teamCol[e.team] }); }
+        for (let i = 0; i < (kept || 1); i++) { const [cx, cz] = manAt(UNITS[e.kind].men, i, e.x, e.y, -e.a); corpses.push({ kind: e.kind, x: cx, y: heightAt(M, cx, cz), z: cz, yaw: -e.a, t: 0, color: teamCol[e.team] }); bleed(cx, cz, e.a); }
       } else if (OLD(e.kind)) {
         dustBurst(e.x, y, e.y, UNITS[e.kind].hp > 500 ? 1.4 : 1);
+        if (MODELS.units[e.kind] && MODELS.units[e.kind].gait) bleed(e.x, e.y, e.a, 0.34);
         wrecks.push({ kind: e.kind, x: e.x, y, z: e.y, yaw: -e.a, pitch: 0, t: 0, smoke: 0 }); capWrecks(e.kind);
       } else {
         explosion(e.x, y + 0.4, e.y, UNITS[e.kind].hp > 500 ? 1.4 : 0.9, BLAST_OF[e.kind]);
