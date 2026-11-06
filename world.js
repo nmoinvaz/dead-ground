@@ -1309,7 +1309,7 @@ const World = (() => {
         }
       }
       const CARS = [0xb8402e, 0x2f5a8a, 0xe8e0cc, 0x5d7a46, 0x3a3a3a, 0xe0b040], long = life.roads.filter(r => r.len > 14);
-      for (let i = 0; i < Math.min(long.length, Math.round(8 * scale)); i++) { const r = long[(i * 7) % long.length]; life.cars.push({ r, s: R() * r.len, dir: R() < 0.5 ? 1 : -1, v: 0, wait: R() * 3, col: CARS[i % CARS.length], x: r.pts[0][0], y: r.pts[0][1], a: 0, turn: false }); }
+      for (let i = 0; i < Math.min(long.length, Math.round(8 * scale)); i++) { const r = long[(i * 7) % long.length]; life.cars.push({ r, s: R() * r.len, dir: R() < 0.5 ? 1 : -1, v: 0, wait: R() * 3, col: CARS[i % CARS.length], x: r.pts[0][0], y: r.pts[0][1], a: 0, turn: false, careless: R() < 0.3 }); }
       const SHIRTS = [0xf4f0e4, 0xc84a3a, 0x5a7ab0, 0xe0c060, 0x7a9a5a, 0xd8a0a0];
       M.towns.forEach((t, ti) => { for (let k = 0; k < 5; k++) life.folk.push({ town: ti, x: t.x + (R() - 0.5) * 5, y: t.y + (R() - 0.5) * 5, tx: t.x, ty: t.y, v: 0, wait: R() * 4, hide: 0, col: SHIRTS[(ti * 5 + k) % SHIRTS.length], a: R() * 6.28, ph: R() * 6 }); });
       for (let tries = 0; life.boats.length < Math.round(2 * scale) && tries < 4000; tries++) {
@@ -1324,6 +1324,55 @@ const World = (() => {
       for (const f of life.flocks) { const d = Math.hypot(f.x - x, f.y - y); if (d < r + 10 && f.fly <= 0) { f.fly = 5 + Math.random() * 2; f.go = false; f.vx = (f.x - x) / (d || 1) * 8; f.vy = (f.y - y) / (d || 1) * 8; } }
       for (const c of life.cars) if (Math.hypot(c.x - x, c.y - y) < r + 7 && Math.cos(c.a) * (x - c.x) + Math.sin(c.a) * (y - c.y) > 0) c.turn = true;
       if (life.alarm.length < 60) life.alarm.push({ x, y, r: r + 6, t: 10 });
+    }
+    // Two cars meet: both slew round and stop in a cloud of dust and sparks, one now and then on fire, and the
+    // drivers of a car that is not burning often get out and fight it out between the wrecks.
+    const DRIVER_SHIRTS = [0xf4f0e4, 0x3a3a3a, 0x5a7ab0, 0xc84a3a, 0x8a6a4c];
+    function crash(c, o) {
+      const burn = Math.random() < 0.25, R = Math.random;
+      for (const [k, q] of [[1, c], [-1, o]]) { q.crash = { t: 22 + R() * 14, spin: k * (0.45 + R() * 0.7), roll: (R() - 0.5) * 0.3, burn: burn && q === c, smokeT: 0 }; q.v = 0; }
+      const mx = (c.x + o.x) / 2, my = (c.y + o.y) / 2, g = heightAt(M, mx, my);
+      if (VIS(mx, my)) {
+        dustBurst(mx, g, my, 0.55);
+        for (let i = 0; i < 10; i++) { const a = R() * 6.28, sp = 2 + R() * 3; glow.add(mx, g + 0.4, my, Math.cos(a) * sp, 1.5 + R() * 3, Math.sin(a) * sp, 0.35 + R() * 0.3, 0.06, 0.03, [10, 6, 2, 1], [5, 1.2, 0.1, 0], 9, { grav: -12, drag: 0.8 }); }
+      }
+      if (burn || R() > 0.7) return;
+      const fs = [c, o].map(q => {
+        const sd = Math.random() < 0.5 ? 1 : -1, x = q.x - Math.sin(q.a) * 1.1 * sd, y = q.y + Math.cos(q.a) * 1.1 * sd;
+        const f = { town: -1, driver: true, x, y, tx: x, ty: y, v: 0, wait: 0, hide: 0, a: q.a, ph: 0, life: 6 + R() * 4, col: DRIVER_SHIRTS[R() * DRIVER_SHIRTS.length | 0] };
+        life.folk.push(f);
+        return f;
+      });
+      startBrawl(fs[0], fs[1], 1.2);
+    }
+    // Two people come to blows: they close, square up and trade swings for a few seconds, until one goes down.
+    function startBrawl(a, b, delay = 0) {
+      const t = 4 + Math.random() * 4;
+      a.brawl = { foe: b, t, ph: 0, lead: true, on: false, delay };
+      b.brawl = { foe: a, t, ph: 0, lead: false, on: false, delay };
+    }
+    function stepBrawl(f, dt) {
+      const b = f.brawl, o = b.foe;
+      if (!o.brawl || o.brawl.foe !== f) { f.brawl = null; return; }
+      if (b.delay > 0) { b.delay -= dt; f.v = 0; return; }
+      const dx = o.x - f.x, dy = o.y - f.y, d = Math.hypot(dx, dy) || 1e-3;
+      f.a = Math.atan2(dy, dx);
+      if (!b.on) {
+        if (d > 0.8) {
+          f.v = 1.8; f.ph += dt * 13;
+          const nx = f.x + dx / d * f.v * dt, ny = f.y + dy / d * f.v * dt;
+          if (openAt(nx, ny) || f.driver) { f.x = nx; f.y = ny; }
+          return;
+        }
+        b.on = o.brawl.on = true;
+      }
+      f.v = 0; b.ph += dt;
+      if (Math.random() < dt * 2.5 && VIS(f.x, f.y)) { const d2 = dustC(); smoke.add(f.x, heightAt(M, f.x, f.y) + 0.05, f.y, (Math.random() - 0.5) * 0.8, 0.3, (Math.random() - 0.5) * 0.8, 0.8, 0.2, 0.6, [d2[0], d2[1], d2[2], 0.45], [d2[0], d2[1], d2[2], 0], Math.random() * 4 | 0, { drag: 2 }); }
+      if (b.lead && (b.t -= dt) <= 0) {
+        const lose = Math.random() < 0.5 ? f : o, win = lose === f ? o : f;
+        lose.down = 2.5 + Math.random() * 2.5; win.wait = 1.5 + Math.random() * 2;
+        f.brawl = o.brawl = null;
+      }
     }
     function roadAt(r, s) {
       s = clamp(s, 0, r.len);
@@ -1362,6 +1411,17 @@ const World = (() => {
           const ax = c.x + Math.cos(c.a) * 7, ay = c.y + Math.sin(c.a) * 7;
           Rules.near(S, ax, ay, 9, e => { if (e.hp > 0 && (e.b || e.tgt) && Rules.gap(ax, ay, e) < 8) c.turn = true; });
         }
+        // Now and then two townsfolk fall out and come to blows, and those near by stop to watch.
+        if (night < 0.6 && storm < 0.5) M.towns.forEach((t, ti) => {
+          if (L.danger[ti] || Math.random() > 0.4 / 80) return;
+          const out = L.folk.filter(f => f.town === ti && !f.brawl && !(f.down > 0) && !(f.hide > 0));
+          if (out.length < 2) return;
+          const a = out[Math.random() * out.length | 0], rest = out.filter(f => f !== a);
+          rest.sort((p, q) => Math.hypot(p.x - a.x, p.y - a.y) - Math.hypot(q.x - a.x, q.y - a.y));
+          const b = rest[0];
+          startBrawl(a, b);
+          for (const f of rest.slice(1)) if (Math.hypot(f.x - a.x, f.y - a.y) < 7) { f.watch = 9; f.watchAt = [(a.x + b.x) / 2, (a.y + b.y) / 2]; }
+        });
       }
       // Deer graze, wander a little, and bolt from trouble.
       for (const h of L.herds) {
@@ -1390,7 +1450,38 @@ const World = (() => {
       }
       // Cars run up and down the roads, stop for what is in the way, and turn back from fighting and broken bridges.
       // On a bridge a car drives on to the end rather than turning, and one blocked for long turns back.
+      // A car coming up behind a slower one brakes for it, and a careless driver runs into it. Two passing head on
+      // now and then swerve into each other. A wreck stands a while, smoking if it burns, and is then towed away.
       for (const c of L.cars) {
+        if (c.crash || c.wait > 0 || !(c.v > 0.5)) continue;
+        for (const o of L.cars) {
+          if (o === c) continue;
+          const dx = o.x - c.x, dy = o.y - c.y, d = Math.hypot(dx, dy);
+          if (d > 2.4 || d < 1e-3 || (dx * Math.cos(c.a) + dy * Math.sin(c.a)) / d < 0.6) continue;
+          const same = Math.cos(o.a - c.a);
+          if (same > 0.5) { if (d < 1.3 && c.v > 1.2 && c.careless) crash(c, o); else c.brake = true; }
+          else if (same < -0.5 && d < 1.5 && !o.crash && !(c.met && c.met.get(o) > SH.uTime.value - 5)) {
+            (c.met || (c.met = new Map())).set(o, SH.uTime.value); (o.met || (o.met = new Map())).set(c, SH.uTime.value);
+            if (Math.random() < 0.12) crash(c, o);
+          }
+          if (c.crash) break;
+        }
+      }
+      for (const c of L.cars) {
+        if (c.crash) {
+          const k = c.crash; k.t -= dt; c.v = 0;
+          if (k.burn && VIS(c.x, c.y) && (k.smokeT -= dt) <= 0) {
+            k.smokeT = 0.22;
+            const g = heightAt(M, c.x, c.y), R = Math.random;
+            glow.add(c.x + (R() - 0.5) * 0.4, g + 0.35, c.y + (R() - 0.5) * 0.4, (R() - 0.5) * 0.3, 1.1, (R() - 0.5) * 0.3, 0.55, 0.35, 0.9, [4, 1.7, 0.35, 1], [1.2, 0.25, 0.03, 0], 8, { drag: 1 });
+            smoke.add(c.x, g + 0.6, c.y, 0.2 + (R() - 0.5) * 0.3, 0.9 + R() * 0.5, (R() - 0.5) * 0.3, 2.6, 0.4, 1.6, [0.1, 0.09, 0.08, 0.7], [0.3, 0.29, 0.28, 0], R() * 4 | 0, { drag: 0.4 });
+          }
+          if (k.t <= 0) {
+            const rs = L.roads.filter(q => q.len > 14), r = rs[Math.floor(Math.random() * rs.length)], s2 = Math.random() * r.len, [rx, ry] = roadAt(r, s2);
+            Object.assign(c, { r, s: s2, x: rx, y: ry, dir: Math.random() < 0.5 ? 1 : -1, v: 0, wait: 15 + Math.random() * 20, turn: false, held: 0, crash: null });
+          }
+          continue;
+        }
         if (c.wait > 0) { c.wait -= dt; c.v = 0; continue; }
         const [x, y, a] = roadAt(c.r, c.s), ah = c.dir > 0 ? a : a + Math.PI;
         c.x = x + Math.sin(ah) * 0.55; c.y = y - Math.cos(ah) * 0.55; c.a = ah;
@@ -1406,6 +1497,7 @@ const World = (() => {
         let block = false;
         const bx = c.x + Math.cos(ah) * 2, by = c.y + Math.sin(ah) * 2;
         Rules.near(S, bx, by, 2.6, u => { if (u.hp > 0 && !u.b && !Rules.isAir(u) && Math.hypot(u.x - bx, u.y - by) < 2.2) block = true; });
+        if (c.brake) { block = true; c.brake = false; }
         c.held = block ? (c.held || 0) + dt : 0;
         if (c.held > 6 && !onBridge) { c.held = 0; c.dir *= -1; c.wait = 1 + Math.random() * 2; continue; }
         c.v += ((block ? 0 : worldAge() < MOTOR_AGE ? 1.6 : 3.4) - c.v) * Math.min(1, dt * (block ? 6 : 1.4));
@@ -1419,8 +1511,16 @@ const World = (() => {
       }
       // Townsfolk stroll between the houses and go indoors when soldiers come, at night and in a storm.
       for (const f of L.folk) {
-        const t = M.towns[f.town], inside = L.danger[f.town] || night > 0.6 || storm > 0.5;
-        if (f.hide > 0 || inside) { f.hide = inside ? Math.max(f.hide, 4) : f.hide - dt; continue; }
+        if (!f.driver) {
+          const inside = L.danger[f.town] || night > 0.6 || storm > 0.5;
+          if (f.hide > 0 || inside) { f.hide = inside ? Math.max(f.hide, 4) : f.hide - dt; f.brawl = null; f.down = 0; f.watch = 0; continue; }
+        }
+        if (f.down > 0) { f.down -= dt; f.v = 0; continue; }
+        if (f.brawl) { stepBrawl(f, dt); continue; }
+        // A driver stands by the wreck a little after the fight, then is gone with it.
+        if (f.driver) { f.v = 0; if ((f.life -= dt) <= 0) f.gone = true; continue; }
+        if (f.watch > 0) { f.watch -= dt; f.v = 0; f.a = Math.atan2(f.watchAt[1] - f.y, f.watchAt[0] - f.x); continue; }
+        const t = M.towns[f.town];
         if (f.wait > 0) { f.wait -= dt; f.v = 0; continue; }
         const dx = f.tx - f.x, dy = f.ty - f.y, d = Math.hypot(dx, dy);
         if (d < 0.3) {
@@ -1432,6 +1532,7 @@ const World = (() => {
         const nx = f.x + dx / d * f.v * dt, ny = f.y + dy / d * f.v * dt;
         if (openAt(nx, ny)) { f.x = nx; f.y = ny; } else { f.tx = f.x; f.ty = f.y; }
       }
+      if (L.folk.some(f => f.gone)) L.folk = L.folk.filter(f => !f.gone);
       // Boats keep to deep water, turning from the shallows, the fords and the banks.
       for (const b of L.boats) {
         const ahead = da => terrainAt(M, b.x + Math.cos(b.a + da) * 2.2, b.y + Math.sin(b.a + da) * 2.2);
@@ -1482,15 +1583,26 @@ const World = (() => {
       const motor = worldAge() >= MOTOR_AGE, CM = motor ? L.carM : L.cartM;
       for (const c of L.cars) {
         if (n >= 32 || !VIS(c.x, c.y)) continue;
-        compose(m1, c.x, heightAt(M, c.x, c.y) + 0.02, c.y, -c.a, 0, 0, 0.9);
-        CM.setMatrixAt(n, m1); CM.setColorAt(n, motor ? colA.set(c.col) : colA.set(0xffffff)); n++;
+        const k = c.crash;
+        compose(m1, c.x, heightAt(M, c.x, c.y) + 0.02, c.y, -(c.a + (k ? k.spin : 0)), 0, k ? k.roll : 0, 0.9);
+        colA.set(motor ? c.col : 0xffffff);
+        if (k && k.burn) colA.multiplyScalar(0.3);
+        CM.setMatrixAt(n, m1); CM.setColorAt(n, colA); n++;
       }
       CM.count = n; dirty(CM);
       (motor ? L.cartM : L.carM).count = 0;
       n = 0;
       for (const f of L.folk) {
         if (n >= 200 || f.hide > 0 || L.danger[f.town] || !VIS(f.x, f.y)) continue;
-        compose(m1, f.x, heightAt(M, f.x, f.y) + (f.v > 0 ? Math.abs(Math.sin(f.ph)) * 0.03 : 0), f.y, -f.a, 0, 0, 1);
+        let px = f.x, py = f.y, lean = 0, roll = 0, hop = f.v > 0 ? Math.abs(Math.sin(f.ph)) * 0.03 : 0;
+        // A swing throws the body forward and back, with a little bounce on the feet.
+        if (f.brawl && f.brawl.on) {
+          const k = Math.max(0, Math.sin(f.brawl.ph * 7 + (f.brawl.lead ? 0 : 2.2)));
+          px += Math.cos(f.a) * k * 0.14; py += Math.sin(f.a) * k * 0.14; lean = -k * 0.4; hop = Math.abs(Math.sin(f.brawl.ph * 5)) * 0.04;
+        }
+        // Down on the ground, and getting up in the last half second.
+        if (f.down > 0) roll = 1.45 * Math.min(1, f.down / 0.5);
+        compose(m1, px, heightAt(M, px, py) + hop, py, -f.a, lean, roll, 1);
         L.folkM.setMatrixAt(n, m1); L.folkM.setColorAt(n, colA.set(f.col)); n++;
       }
       L.folkM.count = n; dirty(L.folkM);
