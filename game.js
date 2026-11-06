@@ -120,13 +120,26 @@ const Game = (() => {
     // when nothing has changed. Shown between a resize and a draw, the cleared canvas flashes.
     let scale = 1, fitDue = true, fitKey = '';
     function fit() { fitDue = true; }
+    // The canvas's own size in device pixels, as the browser lays it out. The CSS size times the pixel ratio can miss
+    // it by a pixel at a ratio like 1.25, and the browser then stretches the whole picture by that pixel, which
+    // softens every pen line. A browser that cannot say gets the CSS size times the ratio.
+    let devPx = null;
+    try {
+      new ResizeObserver(es => {
+        const s = es[es.length - 1].devicePixelContentBoxSize;
+        if (s && s[0]) { devPx = [s[0].inlineSize, s[0].blockSize]; fit(); }
+      }).observe(canvas, { box: 'device-pixel-content-box' });
+    } catch (e) { /* not offered */ }
     function applyFit() {
       fitDue = false;
-      const r = view.getBoundingClientRect(), w = Math.max(2, r.width | 0), h = Math.max(2, r.height | 0);
-      const pr = Math.min(devicePixelRatio || 1, 2) * scale, key = `${w}x${h}@${pr.toFixed(3)}`;
+      const r = view.getBoundingClientRect(), w = Math.max(2, r.width), h = Math.max(2, r.height), dpr = devicePixelRatio || 1;
+      // Past a ratio of 2 the picture is drawn at 2 and stretched, as more pixels than that cost more than they show.
+      const base = Math.min(dpr, 2), known = devPx && Math.abs(devPx[0] - w * dpr) < 3 && Math.abs(devPx[1] - h * dpr) < 3;
+      const ovPx = known ? devPx.map(v => Math.max(2, Math.round(v * base / dpr))) : [Math.round(w * base), Math.round(h * base)];
+      const px = ovPx.map(v => Math.max(2, Math.round(v * scale))), key = `${w}x${h}:${px}:${ovPx}`;
       if (key === fitKey) return;
       fitKey = key;
-      world.resize(w, h, pr, scale);
+      world.resize(w, h, px[0] / w, scale, px, ovPx);
       hud.layoutMini();
     }
     window.addEventListener('resize', fit);

@@ -2677,14 +2677,17 @@ const World = (() => {
     }
 
     // A machine that has had to give up the most pixels it may (scale under 0.8) also gets the smaller shadow map.
-    function resize(w, h, dpr, scale = 1) {
+    // px is the drawing's size in pixels and ovPx the overlay's, each the canvas's own device pixels where the page
+    // knows them, so a picture at full size is shown pixel for pixel and not stretched by the browser.
+    function resize(w, h, dpr, scale = 1, px = null, ovPx = null) {
       const sm = low || scale < 0.8 ? 2048 : 4096;
       if (sun.shadow.mapSize.x !== sm) { sun.shadow.mapSize.set(sm, sm); if (sun.shadow.map) { sun.shadow.map.dispose(); sun.shadow.map = null; } }
-      world.vw = w; world.vh = h;
+      const bw = px ? px[0] : Math.round(w * dpr), bh = px ? px[1] : Math.round(h * dpr);
+      world.vw = w; world.vh = h; world.ovPx = ovPx;
       renderer.setPixelRatio(1);
-      renderer.setSize(Math.round(w * dpr), Math.round(h * dpr), false);
+      renderer.setSize(bw, bh, false);
       camera.aspect = w / h; camera.updateProjectionMatrix();
-      pp.size(Math.round(w * dpr), Math.round(h * dpr));
+      pp.size(bw, bh);
     }
 
     function frame(alpha, dt, now) {

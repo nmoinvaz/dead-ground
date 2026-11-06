@@ -1315,9 +1315,12 @@ const Hud = (() => {
       og.fillStyle = '#f2e8d2'; og.fillText(text, x, yy + 2); og.restore();
     }
     function drawOverlay(dt) {
-      const dpr = Math.min(2, devicePixelRatio || 1), w = world.vw, h = world.vh;
-      if (ov.width !== Math.round(w * dpr)) { ov.width = Math.round(w * dpr); ov.height = Math.round(h * dpr); }
-      og.setTransform(dpr, 0, 0, dpr, 0, 0);
+      // The overlay is drawn at the canvas's own device pixels where the page knows them, so its lines and words are
+      // never stretched by the browser.
+      const dpr = Math.min(2, devicePixelRatio || 1), w = world.vw, h = world.vh, op = world.ovPx;
+      const pw = op ? op[0] : Math.round(w * dpr), ph = op ? op[1] : Math.round(h * dpr);
+      if (ov.width !== pw || ov.height !== ph) { ov.width = pw; ov.height = ph; }
+      og.setTransform(pw / w, 0, 0, ph / h, 0, 0);
       og.clearRect(0, 0, w, h);
       const s = S(), t = game.team, far = world.cam.dist > 150;
       if (!s) return;
