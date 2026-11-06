@@ -140,7 +140,9 @@
           vec2 anc = texture2D(tAnc, vUv).xy;
           float onThing = step(0.4, A(vUv));
           vec2 own = anc + vec2(2048.0, 1024.0);
-          vec2 uv = vUv + s0 * (vec2(noise(own * 0.05 / uK + boil * 7.1), noise(own * 0.05 / uK + boil * 3.3 + 11.0)) - 0.5) * 1.2 * k;
+          // Work whose result is weighted by nothing at a pixel is skipped there, so the open ground stays cheap.
+          vec2 uv = vUv;
+          if (s0 > 0.0) uv += s0 * (vec2(noise(own * 0.05 / uK + boil * 7.1), noise(own * 0.05 / uK + boil * 3.3 + 11.0)) - 0.5) * 1.2 * k;
           float l = mix(L(uv), Ls(uv, k), 0.5 * (1.0 - s0));
           float v = clamp((l - 0.03) / 0.52, 0.0, 1.0);
           // The water's flat surface shows over a strip of bank above the water line, its edge zigzagging along the
@@ -340,28 +342,33 @@
               wC = dk ? 0.0 : hatch(p, 45.0, 3.4, 0.9, 63.0, 0.06) * shB * 0.75;
             }
             // Bridges: a pink deck with one light hatch in its shade, solid in its deepest.
-            float brC = max(hatch(p, 45.0, 4.6, 0.8, 41.0, 0.1) * step(0.62, dens), smoothstep(0.9, 0.94, dens));
+            float brC = isBr > 0.0 ? max(hatch(p, 45.0, 4.6, 0.8, 41.0, 0.1) * step(0.62, dens), smoothstep(0.9, 0.94, dens)) : 0.0;
             // Ore: outlined gold pebbles, hatched only on their shaded side. The other styles draw it in its wash,
             // and gold leaf keeps only its deepest shade black.
             float oC = uOre == 0 ? max(hatch(p, 45.0, 3.0, 0.9, 47.0, 0.05) * step(0.56, dens), smoothstep(0.9, 0.94, dens)) : uOre == 5 ? smoothstep(0.9, 0.94, dens) : 0.0;
             // Trees, rocks and houses: loose quick scribble.
             vec2 cell = floor(Wl / 1.2);
-            float sang = 30.0 + hash(cell + 3.0) * 120.0;
-            float sC = hatch(p, sang, 3.6, 1.0, hash(cell) * 40.0, 0.2) * step(0.3, dens);
-            sC = max(sC, hatch(p, sang + 75.0, 3.2, 0.9, 5.0, 0.25) * step(0.6, dens));
-            sC = max(sC, smoothstep(0.88, 0.92, dens));
+            float sang = 30.0 + hash(cell + 3.0) * 120.0, sC = 0.0, tC = 0.0, bC = 0.0;
+            if (isS > 0.0) {
+              sC = hatch(p, sang, 3.6, 1.0, hash(cell) * 40.0, 0.2) * step(0.3, dens);
+              sC = max(sC, hatch(p, sang + 75.0, 3.2, 0.9, 5.0, 0.25) * step(0.6, dens));
+              sC = max(sC, smoothstep(0.88, 0.92, dens));
+            }
             // Trees: cutout canopies in a translucent wash, scribbled only on their shaded side.
-            float tC = hatch(p, sang, 3.6, 0.9, hash(cell) * 40.0, 0.3) * step(0.58, dens);
-            tC = max(tC, smoothstep(0.9, 0.94, dens));
+            if (isT > 0.0) tC = max(hatch(p, sang, 3.6, 0.9, hash(cell) * 40.0, 0.3) * step(0.58, dens), smoothstep(0.9, 0.94, dens));
             // Buildings: massed in flat tones by face, so hatched only in shadow, with windows and deep shade solid.
-            float bC = max(hatch(p, 45.0, 4.4, 0.9, 0.0, 0.06) * step(0.6, dens), smoothstep(0.88, 0.92, dens));
+            if (isB > 0.0) bC = max(hatch(p, 45.0, 4.4, 0.9, 0.0, 0.06) * step(0.6, dens), smoothstep(0.88, 0.92, dens));
             // Units: bright paper with one hatch for their shade and solid black for the deepest.
             // The units' shade, in the way the study asks: a 45 degree hatch with solid black in the deepest (0, 1),
             // solid black with the edges cut white (2), bare paper with line alone (3), hatched along the form (4),
             // or stippled (5).
             vec3 nVu = N0.xyz * 2.0 - 1.0;
-            float uAng = degrees(atan(nVu.y, nVu.x)) + 90.0, uC;
-            if (uUnits == 2) uC = 1.0;
+            float uAng = degrees(atan(nVu.y, nVu.x)) + 90.0, uC = 0.0;
+            // On light paper a unit's form comes from its faces' shades of its side's colour, so it is not hatched,
+            // which at dusk covered a whole unit; only its blackest shadow is laid solid in a deep tone.
+            if (isU <= 0.0) uC = 0.0;
+            else if (!dk && uUnits == 1) uC = smoothstep(0.88, 0.94, dens) * 0.8;
+            else if (uUnits == 2) uC = 1.0;
             else if (uUnits == 3) uC = 0.0;
             else if (uUnits == 4) uC = max(hatch(p, uAng, mix(5.0, 2.6, smoothstep(0.15, 0.8, dens)), 0.9, seedU, 0.04) * smoothstep(0.12, 0.22, dens), smoothstep(0.84, 0.88, dens));
             else if (uUnits == 5) { vec2 uq = p / (2.2 * uK); float ud = length(fract(uq) - 0.5 - (vec2(hash(floor(uq) + seedU), hash(floor(uq) + seedU + 7.0)) - 0.5) * 0.3), ur = smoothstep(0.1, 0.85, dens) * 0.58; uC = max((1.0 - smoothstep(ur - 0.08, ur + 0.08, ud)) * step(0.06, ur), smoothstep(0.88, 0.92, dens)); }
@@ -369,10 +376,7 @@
             // shape. On dark paper it is a tint of the side's ink. On light paper it is the ink laid solid, as a pen
             // fills a small shape, since a pale tint of red is pink.
             else uC = max(mix(hatch(p, 45.0, 3.2, 1.0, seedU, 0.04) * smoothstep(0.42, 0.46, dens), dk ? smoothstep(0.4, 0.72, dens) * 0.4 : smoothstep(0.5, 0.56, dens), zU), smoothstep(0.8, 0.84, dens));
-            // On light paper a unit's form comes from its faces' shades of its side's colour, so it is not hatched,
-            // which at dusk covered a whole unit; only its blackest shadow is laid solid in a deep tone.
-            if (!dk && uUnits == 1) uC = smoothstep(0.88, 0.94, dens) * 0.8;
-            cover = isG * gC + isW * wC + isS * sC + isT * tC + isB * bC + isU * uC + isBr * brC + isO * oC + isL * smoothstep(0.88, 0.92, dens);
+            cover =isG * gC + isW * wC + isS * sC + isT * tC + isB * bC + isU * uC + isBr * brC + isO * oC + isL * smoothstep(0.88, 0.92, dens);
             // The bank drawn once, heavy, on whichever side of it the pixel lies.
             float bankL = 1.0 - smoothstep(0.7 * uK, 1.6 * uK, abs(dep - 0.03) / max(fwidth(dep), 1e-4));
             cover = max(cover, bankL * step(0.001, dep + 0.05) * (isG + isW) * 0.9);
@@ -448,7 +452,7 @@
             // Grass in tufts of three short strokes, leaning and stirring with the wind, thicker in the meadows.
             // Lying snow whitens the land, and the roads less.
             base = mix(base, dk ? vec3(0.48, 0.49, 0.52) : vec3(0.975, 0.975, 0.965), uSnowC * isG * (1.0 - onRoad * 0.5));
-            float rH = hatch(p, 60.0, 4.0, 0.8, 53.0, 0.1);
+            float rH = onRoad * isG > 0.0 || isBr > 0.0 ? hatch(p, 60.0, 4.0, 0.8, 53.0, 0.1) : 0.0;
             // Roads in one of six colours: pink, sand, pale stone, bare paper, khaki or white.
             vec3 RC = uRoad == 0 ? PINK : uRoad == 1 ? vec3(0.886, 0.824, 0.675) : uRoad == 2 ? vec3(0.847, 0.835, 0.804) : uRoad == 3 ? paperC : uRoad == 4 ? vec3(0.812, 0.765, 0.573) : vec3(0.969, 0.961, 0.933);
             vec3 RD = uRoad == 0 ? PINK_D : uRoad == 1 ? vec3(0.62, 0.52, 0.34) : uRoad == 2 ? vec3(0.5, 0.49, 0.46) : uRoad == 3 ? paperC : uRoad == 4 ? vec3(0.5, 0.47, 0.3) : vec3(0.72, 0.7, 0.66);
@@ -462,18 +466,20 @@
             float onR = onRoad * isG * (1.0 - wet);
             base = mix(base, base * vec3(0.8, 0.78, 0.76), rfDark * 0.55 * onR);
             base = mix(base, CONT, contour * 0.55 * onR);
-            float rip = hatch(p, -12.0, 6.5, 0.9, 57.0, 0.45);
+            float rip = isW > 0.0 ? hatch(p, -12.0, 6.5, 0.9, 57.0, 0.45) : 0.0;
             // Water on dark paper is a deep blue, its lines and ripples lighter than it.
             vec3 WTR = dk ? vec3(0.115, 0.15, 0.235) : LILAC, WTR_D = dk ? vec3(0.32, 0.4, 0.6) : LILAC_D, RIP = dk ? vec3(0.4, 0.5, 0.7) : vec3(1.0);
             base = mix(base, mix(mix(WTR, WTR_D, wLine * 0.6), RIP, rip * 0.55 * (1.0 - wLine)), isW);
             base = mix(base, base * (dk ? 0.5 : 0.8), shB * isW);
-            float tn = noise(p / (60.0 * uK));
-            vec3 TR = tn < 0.4 ? TREE3 : tn < 0.62 ? TREE1 : TREE2;
-            if (dk) TR = tn < 0.4 ? vec3(0.13, 0.2, 0.12) : tn < 0.62 ? vec3(0.16, 0.235, 0.14) : vec3(0.19, 0.26, 0.165);
-            base = mix(base, TR, isT * 0.8);
-            base = mix(base, dk ? vec3(0.4, 0.42, 0.45) : vec3(0.95, 0.96, 0.97), uSnowC * isT * 0.55);
-            // A burnt tree is charcoal, not green.
-            base = mix(base, dk ? vec3(0.06, 0.055, 0.05) : vec3(0.27, 0.25, 0.23), isT * (1.0 - smoothstep(0.06, 0.16, L(vUv))));
+            if (isT > 0.0) {
+              float tn = noise(p / (60.0 * uK));
+              vec3 TR = tn < 0.4 ? TREE3 : tn < 0.62 ? TREE1 : TREE2;
+              if (dk) TR = tn < 0.4 ? vec3(0.13, 0.2, 0.12) : tn < 0.62 ? vec3(0.16, 0.235, 0.14) : vec3(0.19, 0.26, 0.165);
+              base = mix(base, TR, isT * 0.8);
+              base = mix(base, dk ? vec3(0.4, 0.42, 0.45) : vec3(0.95, 0.96, 0.97), uSnowC * isT * 0.55);
+              // A burnt tree is charcoal, not green.
+              base = mix(base, dk ? vec3(0.06, 0.055, 0.05) : vec3(0.27, 0.25, 0.23), isT * (1.0 - smoothstep(0.06, 0.16, L(vUv))));
+            }
             vec3 nV = N0.xyz * 2.0 - 1.0;
             // Roofs palest, then the walls by which way they face, on either paper.
             vec3 face = dot(nV, uUpV) > 0.6 ? ROOF : nV.x < 0.0 ? WALL_L : WALL_R;
@@ -529,17 +535,22 @@
             // nearest thing it outlines.
             if (uInks > 0) {
               float aN = max(a, max(max(aR, aL), max(aT, aB)));
-              vec4 an = texture2D(tAnc, vUv);
-              vec4 anN = max(max(texture2D(tAnc, vUv + k * vec2(1.2, 0)), texture2D(tAnc, vUv - k * vec2(1.2, 0))), max(texture2D(tAnc, vUv + k * vec2(0, 1.2)), texture2D(tAnc, vUv - k * vec2(0, 1.2))));
               // A unit's outline swells up to three px out on its side away from the sun, past these taps, so its ink is
               // looked for a little wider. Otherwise that rim took the land's ink and mixed with the side's.
+              bool wide = false;
+              vec2 o1 = k * vec2(2.6, 0.0), o2 = k * vec2(0.0, 2.6), o3 = uSun2 * k * 3.4;
               if (aN <= 0.9 && a < 0.6) {
-                vec2 o1 = k * vec2(2.6, 0.0), o2 = k * vec2(0.0, 2.6), o3 = uSun2 * k * 3.4;
                 float aW = max(max(A(uv + o1), A(uv - o1)), max(max(A(uv + o2), A(uv - o2)), A(uv + o3)));
-                if (aW > 0.9) { aN = aW; anN = max(max(texture2D(tAnc, vUv + o1), texture2D(tAnc, vUv - o1)), max(max(texture2D(tAnc, vUv + o2), texture2D(tAnc, vUv - o2)), texture2D(tAnc, vUv + o3))); }
+                if (aW > 0.9) { aN = aW; wide = true; }
               }
-              vec4 aw = a > 0.9 ? an : anN;
-              vec3 uInk = sideInk(aw, dk);
+              // A side's ink is looked up only near a unit, the one place it is used.
+              vec3 uInk = vec3(0.0);
+              if (aN > 0.9) {
+                vec4 aw = a > 0.9 ? texture2D(tAnc, vUv) : wide
+                  ? max(max(texture2D(tAnc, vUv + o1), texture2D(tAnc, vUv - o1)), max(max(texture2D(tAnc, vUv + o2), texture2D(tAnc, vUv - o2)), texture2D(tAnc, vUv + o3)))
+                  : max(max(texture2D(tAnc, vUv + k * vec2(1.2, 0)), texture2D(tAnc, vUv - k * vec2(1.2, 0))), max(texture2D(tAnc, vUv + k * vec2(0, 1.2)), texture2D(tAnc, vUv - k * vec2(0, 1.2))));
+                uInk = sideInk(aw, dk);
+              }
               // The same inks on dark paper, each as pale as the light scheme's is deep.
               vec3 landI = uInks == 3 ? (dk ? vec3(0.7, 0.75, 0.9) : vec3(0.13, 0.15, 0.27)) : (dk ? vec3(0.8, 0.7, 0.56) : vec3(0.34, 0.23, 0.14));
               vec3 waterI = uInks == 3 ? landI : (dk ? vec3(0.55, 0.68, 0.88) : vec3(0.12, 0.24, 0.44));
@@ -568,7 +579,8 @@
           vec3 hz = texture2D(tHeat, vUv).rgb;
           float hr0 = max(hz.r, max(hz.g, hz.b));
           // Heat, given a boiling edge so a fireball's outline billows as a pen would draw it.
-          float hn = hr0 + (noise(px * 0.045 / uK + boil * 5.3) - 0.5) * 0.34 * smoothstep(0.04, 0.3, hr0);
+          float hn = hr0;
+          if (hr0 > 0.04) hn += (noise(px * 0.045 / uK + boil * 5.3) - 0.5) * 0.34 * smoothstep(0.04, 0.3, hr0);
           float lit = step(0.26, hn), rim = 0.0;
           if (inverse) { cover = max(cover * (1.0 - lit), 0.0); cover = max(cover, rim * 0.0); }
           else { cover *= 1.0 - lit; cover = max(cover, rim); }
@@ -603,7 +615,9 @@
           float wash = smoothstep(0.12, 0.25, mkx) * (1.0 - smoothstep(0.62, 0.8, mkx));
           // Each side's units drawn in its own ink (1), or their marks laid solid on a black body (2).
           float nearU = smoothstep(0.85, 0.95, max(max(A(uv + k * vec2(2.4, 0.0)), A(uv - k * vec2(2.4, 0.0))), max(max(A(uv + k * vec2(0.0, 2.4)), A(uv - k * vec2(0.0, 2.4))), s0)));
-          if (uUnits == 1) {
+          // Away from units the side's inks and body have nothing to tint.
+          if (uUnits == 1 && nearU <= 0.0 && s0 <= 0.85) { mark = 0.0; wash = 0.0; }
+          else if (uUnits == 1) {
             // Lines take the side's ink. On dark paper a close unit's hatching takes it as it is, and a far unit's
             // solid shade keeps it.
             vec4 aw0 = texture2D(tAnc, vUv);
@@ -641,8 +655,10 @@
           col = mix(col, col * wc, wash * (gold ? (uStyle == 8 && uOre != 0 ? 0.0 : 0.85) : 0.55));
           vec3 colour = hue * (dk ? 0.9 : 0.7);
           // Coloured ink laid as close crosshatching, solid only where a marking is small.
-          float ch = max(hatch(p, 45.0, 2.6, 1.3, 77.0, 0.0), hatch(p, 135.0, 3.2, 1.1, 81.0, 0.0));
-          col = mix(col, colour, mark * mix(0.55, 0.95, ch));
+          if (mark > 0.0) {
+            float ch = max(hatch(p, 45.0, 2.6, 1.3, 77.0, 0.0), hatch(p, 135.0, 3.2, 1.1, 81.0, 0.0));
+            col = mix(col, colour, mark * mix(0.55, 0.95, ch));
+          }
           // Scars on the ground: crater rings with hatching inside, ink splatter solid.
           vec4 F = texture2D(tFogS, vUv);
           float sc = F.a, gnd = 1.0 - step(0.5, s0);
@@ -679,11 +695,13 @@
           // Fire as the bands (uFire 0), as a warm wash round a paper core with no outline (1), or as bare paper
           // with one thin outline and a halo of hatching, as an engraver leaves a flash white (2). The bands are
           // edged in a dark red, not black, so the fire reads as colour and never as a blot of ink.
-          vec3 fc = hn < 0.62 ? c1 : hn < 1.35 ? c2 : hn < 2.7 ? c3 : c4;
-          if (uFire < 0.5) fc = mix(hn < 2.7 ? fc : vec3(1.0, 0.91, 0.55), c1 * 0.5, hatch(px, 45.0, 3.4, 1.0, 91.0 + boil, 0.05) * step(hn, 0.62) * 0.65);
-          else if (uFire < 1.5) fc = mix(vec3(1.0, 0.76, 0.42), c4, smoothstep(0.8, 2.2, hn));
-          else fc = flashC;
-          col = mix(col, fc, lit);
+          if (lit > 0.0) {
+            vec3 fc = hn < 0.62 ? c1 : hn < 1.35 ? c2 : hn < 2.7 ? c3 : c4;
+            if (uFire < 0.5) fc = mix(hn < 2.7 ? fc : vec3(1.0, 0.91, 0.55), c1 * 0.5, hatch(px, 45.0, 3.4, 1.0, 91.0 + boil, 0.05) * step(hn, 0.62) * 0.65);
+            else if (uFire < 1.5) fc = mix(vec3(1.0, 0.76, 0.42), c4, smoothstep(0.8, 2.2, hn));
+            else fc = flashC;
+            col = mix(col, fc, lit);
+          }
           if (uFire > 1.5) col = mix(col, inkC, hatch(px, 60.0, 3.0, 0.9, 5.0 + boil, 0.3) * smoothstep(0.08, 0.26, hr0) * (1.0 - lit) * 0.7);
           float fw = max(fwidth(hn), 1e-4), fxO = uFire < 0.5 ? 0.85 : uFire < 1.5 ? 0.0 : 0.7;
           float o1 = (1.0 - smoothstep(0.7 * uK, 1.8 * uK, abs(hn - 0.26) / fw)) * step(0.12, hr0) * fxO;
@@ -698,9 +716,11 @@
           // The shroud's marks are laid on the land under the pixel, from the height the fog pass left, so they keep
           // their place as the view is dragged. pL measures the land in pixels at the zoom's level, pL2 at the next.
           vec2 pL = landAt(vUv, F.b - 20.0) * 80.0 * exp2(-gLm) * uK, pL2 = pL * 0.5;
-          float edgeN = (mix(noise(pL * 0.03 / uK), noise(pL2 * 0.03 / uK + 7.0), gLf) - 0.5) * 0.5;
+          // The ragged edge moves a border by a quarter at most, so well inside what is seen it is not worked out.
+          float edgeN = 0.0;
+          if (F.g < 0.87 || F.r < 0.825) edgeN = (mix(noise(pL * 0.03 / uK), noise(pL2 * 0.03 / uK + 7.0), gLf) - 0.5) * 0.5;
           float seenE = smoothstep(0.38, 0.62, F.g + edgeN), visE = smoothstep(0.3, 0.7, F.r + edgeN * 0.5);
-          if (uStyle == 8) {
+          if (uStyle == 8 && visE < 1.0) {
             // What was, as a ghost plan draws it: pale washes and dashed blue-grey line, with no tone. Each dash
             // runs along its line, found from the edge of the shape or else of the land, so a straight edge dashes
             // evenly. The side's colour stays faintly, to say whose it was.
@@ -716,7 +736,7 @@
             past = mix(past, hue * 0.8, mark * 0.3);
             past = mix(past, dk ? vec3(0.5, 0.58, 0.74) : WAS, clamp(lineK, 0.0, 1.0) * dash * 0.75 * (1.0 - 0.6 * oreP));
             col = mix(past, col, visE);
-          } else {
+          } else if (uStyle != 8) {
             vec3 faded = mix(paperC, col, 0.55);
             faded = mix(vec3(dot(faded, vec3(0.3, 0.59, 0.11))), faded, 0.2);
             col = mix(faded, col, visE);
@@ -724,26 +744,30 @@
           // Off the map there is no land, so no contours, only the guide lines.
           float onMap = step(1.0, F.b), hgt = F.b - 20.0;
           float hw = max(fwidth(hgt), 1e-4), hf = fract(hgt / 0.8);
-          float cont = (1.0 - smoothstep(0.4 * uK, 1.2 * uK, min(hf, 1.0 - hf) * 0.8 / hw)) * step(0.3, mix(noise(pL * 0.04 / uK + 3.0), noise(pL2 * 0.04 / uK + 5.0), gLf)) * onMap;
-          float guide = mix(hatch(pL, 18.0, 70.0, 0.7, 3.0, 0.55) + hatch(pL, 104.0, 95.0, 0.6, 8.0, 0.6), hatch(pL2, 18.0, 70.0, 0.7, 3.0, 0.55) + hatch(pL2, 104.0, 95.0, 0.6, 8.0, 0.6), gLf);
           // Roads are pencilled in too, as two faint ruled lines.
-          float rdS = texture2D(tLand, vUv).r;
-          float rP = (1.0 - smoothstep(0.4 * uK, 1.0 * uK, abs(rdS - 1.3) / max(fwidth(rdS), 1e-4))) * onMap;
-          vec3 sketch = mix(paperC, dk ? vec3(0.4, 0.39, 0.37) : vec3(0.5, 0.49, 0.47), clamp(cont * 0.42 + guide * 0.14 + rP * 0.4, 0.0, 1.0));
-          col = mix(sketch, col, seenE);
+          float rdS = texture2D(tLand, vUv).r, rdW = max(fwidth(rdS), 1e-4);
+          if (seenE < 1.0) {
+            float cont = (1.0 - smoothstep(0.4 * uK, 1.2 * uK, min(hf, 1.0 - hf) * 0.8 / hw)) * step(0.3, mix(noise(pL * 0.04 / uK + 3.0), noise(pL2 * 0.04 / uK + 5.0), gLf)) * onMap;
+            float guide = mix(hatch(pL, 18.0, 70.0, 0.7, 3.0, 0.55) + hatch(pL, 104.0, 95.0, 0.6, 8.0, 0.6), hatch(pL2, 18.0, 70.0, 0.7, 3.0, 0.55) + hatch(pL2, 104.0, 95.0, 0.6, 8.0, 0.6), gLf);
+            float rP = (1.0 - smoothstep(0.4 * uK, 1.0 * uK, abs(rdS - 1.3) / rdW)) * onMap;
+            vec3 sketch = mix(paperC, dk ? vec3(0.4, 0.39, 0.37) : vec3(0.5, 0.49, 0.47), clamp(cont * 0.42 + guide * 0.14 + rP * 0.4, 0.0, 1.0));
+            col = mix(sketch, col, seenE);
+          }
           // Weather over everything. Fog and morning mist lie in the low ground and drift in banks, and the fog of
           // a foggy spell veils all of it.
           float hg = F.b - 20.0, fbank = smoothstep(0.3, 0.75, LND.b);
           float veil = uFog * (0.28 + 0.3 * fbank + 0.16 * (1.0 - smoothstep(-0.5, 2.5, hg))) + uMist * 0.55 * (1.0 - smoothstep(-0.6, 1.1, hg)) * (0.35 + 0.65 * fbank);
           veil = clamp(veil * onMap, 0.0, 0.8) * (1.0 - 0.4 * step(0.85, s0));
           col = mix(col, dk ? vec3(0.25, 0.25, 0.26) : vec3(0.945, 0.94, 0.925), veil);
-          float fband = hatch(px + vec2(uTime * 5.0 * uK, 0.0), 0.0, 10.0, 0.8, 97.0, 0.6) * smoothstep(0.2, 0.55, veil);
+          float fband = veil > 0.2 ? hatch(px + vec2(uTime * 5.0 * uK, 0.0), 0.0, 10.0, 0.8, 97.0, 0.6) * smoothstep(0.2, 0.55, veil) : 0.0;
           col = mix(col, dk ? vec3(0.42, 0.44, 0.5) : vec3(0.6, 0.62, 0.67), fband * 0.2);
           // Blown sand as an ochre veil, billowing as it is carried on the wind.
-          vec2 blw = landAt(vUv, max(hg, 0.0) + 1.5) * 0.03 + uCloud * 5.0;
-          float billow = noise(blw) * 0.6 + noise(blw * 2.3 + 5.0) * 0.4, keepU = 1.0 - 0.4 * step(0.85, s0);
-          float dustV = clamp(uSand * (0.3 + 0.38 * billow) * onMap, 0.0, 0.7) * keepU;
-          col = mix(col, dk ? vec3(0.36, 0.3, 0.22) : vec3(0.86, 0.76, 0.58), dustV);
+          if (uSand > 0.0) {
+            vec2 blw = landAt(vUv, max(hg, 0.0) + 1.5) * 0.03 + uCloud * 5.0;
+            float billow = noise(blw) * 0.6 + noise(blw * 2.3 + 5.0) * 0.4, keepU = 1.0 - 0.4 * step(0.85, s0);
+            float dustV = clamp(uSand * (0.3 + 0.38 * billow) * onMap, 0.0, 0.7) * keepU;
+            col = mix(col, dk ? vec3(0.36, 0.3, 0.22) : vec3(0.86, 0.76, 0.58), dustV);
+          }
           // Grit driven low across the page in long fine strokes.
           if (uSand > 0.01) {
             float sx = uWindS.x >= 0.0 ? 1.0 : -1.0;
