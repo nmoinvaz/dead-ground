@@ -21,12 +21,15 @@ const Game = (() => {
   const WEATHER_OF = { random: 'In their usual measure.', mild: 'Mostly fair, with no storms of any kind.', harsh: 'Often, and the storms come hard.' };
   const weatherNote = (theme, w) => w === 'off' ? 'Fair skies all game.' : `${SKY_OF[theme] || ''} ${WEATHER_OF[w] || ''}`;
 
-  // Sound. Effects are decoded once and played with a little pan and pitch from where they happen.
+  // Sound. Effects are decoded once and played with a little pan and pitch from where they happen. A browser driven
+  // by a test harness stays silent, sound and voice alike.
   function makeAudio(data, world) {
     let ctx = null, master = null, bank = {}, music = null, ambient = null, voiceT = 0, rainSrc = null, rainGain = null;
+    const robot = !!navigator.webdriver;
     const last = {}, a = {
       muted: false, ready: false,
       wake() {
+        if (robot) return;
         if (!ctx) {
           const C = window.AudioContext || window.webkitAudioContext;
           if (!C) return;
@@ -63,7 +66,7 @@ const Game = (() => {
       // Status calls in the browser's own voice, one at a time.
       voice(k, text) {
         const sp = window.speechSynthesis, now = performance.now();
-        if (!sp || a.muted || !text || now < voiceT) return;
+        if (!sp || robot || a.muted || !text || now < voiceT) return;
         try {
           const u = new SpeechSynthesisUtterance(text), vs = sp.getVoices();
           u.voice = vs.find(v => /Samantha|Google UK English Female|Zira|Karen|Moira/.test(v.name)) || vs.find(v => /^en/.test(v.lang)) || null;
