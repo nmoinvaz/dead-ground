@@ -57,7 +57,8 @@ const AI = (() => {
           if (best) { ax = R.lerp(best.x, b[0], 0.3); ay = R.lerp(best.y, b[1], 0.3); }
         }
         if (it.kind === 'fob') { ax = R.lerp(b[0], foe[0], 0.3); ay = R.lerp(b[1], foe[1], 0.3); }
-        const spot = R.spotFor(S, me.team, it.kind, ax, ay, 26, me.rand);
+        me.dockT = 0;
+        const spot = it.kind === 'dock' ? dockSpot(S, me) : R.spotFor(S, me.team, it.kind, ax, ay, 26, me.rand);
         if (spot) R.push(S, me.team, { c: 'place', kind: it.kind, x: spot[0], y: spot[1] });
         else R.push(S, me.team, { c: 'cancel', cat, i: 0 });
       }
@@ -77,6 +78,7 @@ const AI = (() => {
     if (opened(P, BUILDINGS.silo) && !has(P, 'silo') && D_silo(me)) pref.push('silo');
     if (has(P, 'factory') < 2 && P.supply > 3000) pref.push('factory');
     if (has(P, 'refinery') < 3 && P.supply > 2500) pref.push('refinery');
+    if ((S.map.fish || []).length && S.map.seaCells > 300 && !has(P, 'dock') && has(P, 'factory') && P.supply > 800 && dockSpot(S, me)) pref.push('dock');
     for (const k of pref) if (!R.blockedReason(S, me.team, k)) { R.push(S, me.team, { c: 'build', kind: k }); return; }
   }
   const D_silo = me => me.D.silo;
@@ -150,6 +152,25 @@ const AI = (() => {
       buy(mix[(me.plan * 3 + (m | 0)) % mix.length]);
     }
     if (air.length && P.q.air.length < 1 && ready('air')) buy(air[me.plan % air.length]);
+    // At a dock: fishing boats for the shoals, then warships, a few more as the army grows.
+    if (has(P, 'dock') && P.q.sea.length < 2) {
+      const boat = R.formOf('fish', P.tech), ship = R.formOf('ship', P.tech), shoals = (S.map.fish || []).length;
+      if (boat && shoals && R.lineCount(P, 'fish') < Math.min(3, shoals) && P.supply > 300) buy(boat);
+      else if (ship && R.lineCount(P, 'ship') < Math.min(6, 1 + count / 10 | 0) && P.supply > 700 && !R.blockedReason(S, me.team, ship)) buy(ship);
+    }
+  }
+  // Where a dock might go: a spot inside the border by the open water nearest home, looked for again now and then.
+  function dockSpot(S, me) {
+    if (me.dockT && S.tick < me.dockT) return me.dockAt || null;
+    me.dockT = S.tick + 30 * HZ; me.dockAt = null;
+    const M = S.map, b = S.bases[me.team], W = M.W, cand = [];
+    for (let c = 0; c < W * M.H; c += 2) if (M.sea[c]) cand.push([Math.hypot(c % W - b[0], (c / W | 0) - b[1]), c % W, c / W | 0]);
+    cand.sort((p, q) => p[0] - q[0]);
+    for (const [, x, y] of cand.slice(0, 60)) {
+      const spot = R.spotFor(S, me.team, 'dock', x, y, 9, me.rand);
+      if (spot) { me.dockAt = spot; break; }
+    }
+    return me.dockAt;
   }
 
   // The minute of the game a commander reaches for its next age, counted from the age the game began in. A game
@@ -363,7 +384,7 @@ const AI = (() => {
     bridges(S, me, P);
     powers(S, me, P);
 
-    let army = S.ents.filter(e => e.team === team && !e.b && !e.d.cargo && !e.d.repair && !e.d.engineer && e.drop <= 0);
+    let army = S.ents.filter(e => e.team === team && !e.b && !e.d.cargo && !e.d.repair && !e.d.engineer && !e.d.trade && !e.d.fish && e.drop <= 0);
     army = garrison(S, me, army);
     army = towns(S, me, army);
     const fight = army.filter(u => !(u.ord && u.ord.t === 'capture') && u.d.move !== 'jet');

@@ -156,6 +156,18 @@ const Rules = (() => {
     freightlorry: ride({ name: 'Freight Lorry', sym: 'trade', cost: 280, time: 8, hp: 360, armor: 'heavy', speed: 3, sight: 7, r: 0.95, trade: 1, limit: 8, note: 'Carries goods between your towns. Paid each trip, more the farther it goes.' }),
     freighter: ride({ name: 'Freight Truck', sym: 'trade', cost: 320, time: 8, hp: 420, armor: 'heavy', speed: 3.6, sight: 7, r: 0.95, trade: 1, limit: 8, note: 'Carries goods between your towns. Paid each trip, more the farther it goes.' }),
     hovfreight: ride({ name: 'Hover Freighter', sym: 'trade', cost: 360, time: 8, hp: 480, armor: 'heavy', speed: 4.2, sight: 8, r: 0.95, trade: 1, limit: 8, note: 'Carries goods between your towns. Paid each trip, more the farther it goes.' }),
+    // Ships and boats, launched at a dock and kept to open water. Warships fight on the water and shoot along the
+    // shore, and fishing boats work the shoals and land their catch at a dock.
+    galley: { name: 'War Galley', cat: 'sea', sym: 'ship', cost: 300, time: 9, hp: 280, armor: 'light', speed: 2.8, sight: 11, r: 1.1, weapons: ['bow'], move: 'naval', need: 'dock', note: 'Oars and archers. Holds the water and shoots along the shore.' },
+    cog: { name: 'War Cog', cat: 'sea', sym: 'ship', cost: 350, time: 10, hp: 380, armor: 'light', speed: 2.6, sight: 11, r: 1.2, weapons: ['ballista', 'xbow'], move: 'naval', need: 'dock', note: 'A castled ship with a ballista and crossbows.' },
+    frigate: { name: 'Frigate', cat: 'sea', sym: 'ship', cost: 500, time: 12, hp: 600, armor: 'heavy', speed: 2.8, sight: 12, r: 1.3, weapons: ['ball'], move: 'naval', need: 'dock', note: 'A broadside of cannon, against ships and the shore.' },
+    ironclad: { name: 'Ironclad', cat: 'sea', sym: 'ship', cost: 700, oil: 10, time: 13, hp: 900, armor: 'heavy', speed: 2.6, sight: 12, r: 1.3, weapons: ['twin', 'mg'], move: 'naval', need: 'dock', note: 'Armoured, with heavy guns fore and aft.' },
+    destroyer: { name: 'Destroyer', cat: 'sea', sym: 'ship', cost: 900, oil: 20, time: 14, hp: 1000, armor: 'heavy', speed: 3.2, sight: 13, r: 1.4, weapons: ['twin', 'flak'], move: 'naval', need: 'dock', note: 'Fast, with guns against ships and flak against aircraft.' },
+    corvette: { name: 'Rail Corvette', cat: 'sea', sym: 'ship', cost: 1000, oil: 30, time: 14, hp: 1100, armor: 'heavy', speed: 3.8, sight: 13, r: 1.3, weapons: ['twinrail', 'laser'], move: 'naval', need: 'dock', note: 'Rail guns and a laser against aircraft.' },
+    skiff: { name: 'Fishing Skiff', cat: 'sea', sym: 'boat', cost: 150, time: 6, hp: 120, armor: 'light', speed: 2.2, sight: 6, r: 0.8, weapons: [], move: 'naval', need: 'dock', fish: 100, limit: 6, note: 'Fishes the shoals and lands the catch at your dock.' },
+    smack: { name: 'Fishing Smack', cat: 'sea', sym: 'boat', cost: 170, time: 6, hp: 160, armor: 'light', speed: 2.4, sight: 6, r: 0.85, weapons: [], move: 'naval', need: 'dock', fish: 110, limit: 6, note: 'Fishes the shoals and lands the catch at your dock.' },
+    trawler: { name: 'Steam Trawler', cat: 'sea', sym: 'boat', cost: 220, time: 7, hp: 220, armor: 'light', speed: 2.8, sight: 7, r: 0.9, weapons: [], move: 'naval', need: 'dock', fish: 130, limit: 6, note: 'Fishes the shoals and lands the catch at your dock.' },
+    hovtrawler: { name: 'Hover Trawler', cat: 'sea', sym: 'boat', cost: 260, time: 7, hp: 260, armor: 'light', speed: 3.4, sight: 7, r: 0.9, weapons: [], move: 'naval', need: 'dock', fish: 150, limit: 6, note: 'Fishes the shoals and lands the catch at your dock.' },
     hauler: ride({ name: 'Hauler', sym: 'sup', cost: 800, time: 10, hp: 760, armor: 'heavy', speed: 3, sight: 8, r: 0.95, cargo: 600, note: 'Hover hauler. Mines ore fast.' }),
     outrider: ride({ name: 'Outriders', sym: 'rec', cost: 140, time: 5, hp: 110, speed: 4.6, sight: 13, r: 0.6, move: 'foot', weapons: ['horsebow'], note: 'Horse archers. Fast, and see far.' }),
     dragoon: ride({ name: 'Dragoons', sym: 'rec', cost: 180, time: 5, hp: 140, speed: 4.6, sight: 13, r: 0.6, move: 'foot', weapons: ['carbine'], note: 'Mounted carbines. Fast, and see far.' }),
@@ -196,6 +208,8 @@ const Rules = (() => {
     hero: [null, 'hero'],
     truck: ['oxcart', 'wagon', null, 'lorry', 'truck', 'hauler'],
     trade: ['tradecart', 'caravan', 'tradewagon', 'freightlorry', 'freighter', 'hovfreight'],
+    ship: ['galley', 'cog', 'frigate', 'ironclad', 'destroyer', 'corvette'],
+    fish: ['skiff', null, 'smack', 'trawler', null, 'hovtrawler'],
     rec: ['outrider', null, 'dragoon', 'motorbike', 'humvee', 'hoverscout'],
     mount: ['chariot', 'knight', 'cuirassier', 'armcar', 'tank', 'mech'],
     ifv: [null, null, null, 'halftrack', 'ifv', 'hoverapc'],
@@ -208,7 +222,7 @@ const Rules = (() => {
     jet: [null, null, null, 'biplane', 'jet', 'stealth'],
   };
   // The sidebar's lines, by the building that trains them.
-  const LINE_ORDER = { inf: ['inf', 'at', 'eng', 'snp', 'hero'], veh: ['truck', 'trade', 'rec', 'mount', 'ifv', 'aa', 'sup', 'siege', 'heavy'], air: ['fpv', 'heli', 'jet'] };
+  const LINE_ORDER = { sea: ['fish', 'ship'], inf: ['inf', 'at', 'eng', 'snp', 'hero'], veh: ['truck', 'trade', 'rec', 'mount', 'ifv', 'aa', 'sup', 'siege', 'heavy'], air: ['fpv', 'heli', 'jet'] };
   function formOf(line, age) {
     const L = LINES[line];
     if (!L) return null;
@@ -223,6 +237,7 @@ const Rules = (() => {
     hq: { name: 'Headquarters', sym: 'hq', w: 5, h: 5, hp: 2400, cost: 2500, time: 30, power: 20, terr: 24, sight: 22, armor: 'bld', cat: 'bld' },
     power: { name: 'Power Plant', sym: 'pwr', w: 3, h: 3, hp: 700, cost: 300, time: 5, power: 100, terr: 7, sight: 6, armor: 'bld', cat: 'bld', tech: 1, note: 'Every building draws power. Short of it, everything slows.' },
     refinery: { name: 'Ore Refinery', sym: 'ref', w: 4, h: 4, hp: 1000, cost: 1200, time: 11, power: -30, terr: 7, sight: 7, armor: 'bld', cat: 'bld', tech: 1, freeTruck: true, note: 'Turns ore into supply. Comes with a truck.' },
+    dock: { name: 'Dock', sym: 'dock', w: 3, h: 3, hp: 900, cost: 450, time: 8, power: -10, terr: 7, sight: 10, armor: 'bld', cat: 'bld', tech: 1, need: 'barracks', shore: true, note: 'Built on a shore beside open water. Launches warships and fishing boats.' },
     barracks: { name: 'Barracks', sym: 'bar', w: 3, h: 3, hp: 800, cost: 400, time: 5, power: -20, terr: 7, sight: 7, armor: 'bld', cat: 'bld', tech: 1, need: 'power', note: 'Trains infantry.' },
     factory: { name: 'War Factory', sym: 'fac', w: 4, h: 4, hp: 1400, cost: 1000, time: 11, power: -30, terr: 7, sight: 7, armor: 'bld', cat: 'bld', tech: 1, need: 'refinery', note: 'Builds vehicles.' },
     radar: { name: 'Radar Station', sym: 'rad', w: 3, h: 3, hp: 800, cost: 800, time: 8, power: -40, terr: 7, sight: 16, armor: 'bld', cat: 'bld', tech: 1, need: 'refinery', note: 'Sees far and opens support calls.' },
@@ -256,6 +271,7 @@ const Rules = (() => {
     power: { age: 4, names: [0, 0, 0, 'Power Station', 'Power Plant', 'Fusion Plant'] },
     refinery: { names: ['Smelter', 'Smelter', 'Smelter', 'Ore Refinery', 'Ore Refinery', 'Ore Refinery'] },
     factory: { names: ['Stables', 'Stables', 'Foundry', 'Factory', 'War Factory', 'Fabricator'] },
+    dock: { names: ['Jetty', 'Harbour', 'Dockyard', 'Shipyard', 'Naval Yard', 'Naval Yard'] },
     radar: { names: ['Watchtower', 'Watchtower', 'Signal Tower', 'Radio Station', 'Radar Station', 'Sensor Array'] },
     airfield: { age: 4, names: [0, 0, 0, 'Airfield', 'Airfield', 'Skyport'] },
     fob: { age: 2, names: [0, 'Outpost', 'Redoubt', 'Forward Base', 'Forward Base', 'Forward Base'] },
@@ -364,12 +380,15 @@ const Rules = (() => {
     wells: [[-64, -16], [-64, 16], [-16, 28], [-26, -50], [-20, -26]],
     bridges: [0, 40, -40],
   };
-  const SIZES = { duel: 128, quad: 192, world: 256 };
+  const SIZES = { duel: 128, quad: 192, world: 256, gulf: 128, pass: 128, lakes: 192 };
   // The maps a game may be set on, each a layout and the most sides it seats.
   const MAPS = {
     duel: { name: 'River Duel', layout: 'duel', seats: 2, about: 'Two bases across one river, three bridges and a ford.' },
     quad: { name: 'Four Quarters', layout: 'quad', seats: 4, about: 'Four corners parted by two crossing rivers.' },
     world: { name: 'Crossed Rivers', layout: 'world', seats: 8, about: 'Eight bases round a ring, two to each quarter.' },
+    gulf: { name: 'The Gulf', layout: 'gulf', seats: 2, about: 'Two bases either side of a long gulf, with land round both ends. Docks and ships hold the water.' },
+    pass: { name: 'High Pass', layout: 'pass', seats: 2, about: 'A steep ridge between two bases, crossed only at three passes.' },
+    lakes: { name: 'Lake Country', layout: 'lakes', seats: 4, about: 'Four corners round a great lake, a road all the way round its shore.' },
   };
   // Which of a map's bases each seated slot starts at: spread evenly round the ring. In slot order, or given a
   // random draw rnd, with the ring turned a random step and the sides dealt the places in a random order.
@@ -391,6 +410,61 @@ const Rules = (() => {
     // A ford's images, each its middle and the unit way along the river.
     const fordAt = (p, q) => { for (const T of L.syms) { const a = T(p), b = T(q), d = mhypot(b[0] - a[0], b[1] - a[1]); L.fords.push([a[0], a[1], (b[0] - a[0]) / d, (b[1] - a[1]) / d]); } };
     const R = (a, b, wig, rep = true) => L.roads.push({ a, b, wig, rep });
+    // Lake Country: the four quarters round one great lake, with no rivers or bridges, a road round the shore.
+    if (kind === 'lakes') {
+      const rot = ([x, y], k) => { let dx = x - CX, dy = y - CY; for (let i = 0; i < k; i++) { const t = dx; dx = -dy; dy = t; } return [CX + dx, CY + dy]; };
+      L.syms = [0, 1, 2, 3].map(k => p => rot(p, k));
+      const sc = W / 256, polar = (r, deg) => [CX + r * sc * mcos(deg * PI / 180), CY + r * sc * msin(deg * PI / 180)], R0 = 40 * sc;
+      L.lake = true;
+      L.river = (x, y) => [Math.max(0, mhypot(x - CX, y - CY) - R0), 3];
+      L.domain = (x, y) => x + 0.5 - CX > 0 && y + 0.5 - CY > 0;
+      const C = polar(120, 45), tOut = polar(102, 67.5), tIn = polar(70, 67.5), mid = polar(98, 90);
+      for (const T of L.syms) L.bases.push(T(C));
+      all(L.towns, tOut); all(L.towns, tIn);
+      all(L.ore, mid, [6]);
+      const m = mhypot(CX - C[0], CY - C[1]), f = [(CX - C[0]) / m, (CY - C[1]) / m], s = [-f[1], f[0]];
+      all(L.ore, [C[0] + f[0] * 7 + s[0] * 18, C[1] + f[1] * 7 + s[1] * 18], [7]);
+      all(L.ore, [C[0] + f[0] * 7 - s[0] * 19, C[1] + f[1] * 7 - s[1] * 19], [6.5]);
+      all(L.wells, [C[0] - f[0] * 4 + s[0] * 16, C[1] - f[1] * 4 + s[1] * 16]);
+      all(L.wells, [C[0] - f[0] * 4 - s[0] * 16, C[1] - f[1] * 4 - s[1] * 16]);
+      all(L.ore, polar(84, 67.5), [5]);
+      all(L.wells, polar(80, 56)); all(L.wells, polar(80, 79));
+      L.fish = []; all(L.fish, polar(20, 67.5)); all(L.fish, polar(30, 22.5));
+      R(C, tOut, 2); R(tOut, tIn, 3); R(tIn, polar(70, 157.5), 4); R(C, mid, 2.5);
+      return L;
+    }
+    // The Gulf and High Pass are drawn on the River Duel's frame, two bases mirrored across the middle.
+    if (kind === 'gulf' || kind === 'pass') {
+      L.syms = [p => [p[0], p[1]], mirror];
+      L.domain = (x, y) => { const u = toUV(x + 0.5, y + 0.5)[0]; return u < 0 || (u === 0 && x <= y); };
+      const uvp = (u, v) => toXY(u, v), B = uvp(kind === 'gulf' ? -46 : -52, 0);
+      L.bases.push(B, mirror(B));
+      if (kind === 'gulf') {
+        // A long gulf of open water down the middle, with land round both of its ends.
+        L.lake = true;
+        L.river = (x, y) => { const [u, v] = toUV(x, y); return [mhypot(u, Math.max(0, Math.abs(v) - 32)), 14 + 2 * mcos(v * 0.07)]; };
+        const tN = uvp(-34, 36), tS = uvp(-34, -36), tP = uvp(-8, 62);
+        all(L.towns, tN); all(L.towns, tS); all(L.towns, tP);
+        [[-44, 20, 7], [-44, -21, 6.5], [-46, 48, 5.5], [-50, -40, 5]].forEach(o => all(L.ore, uvp(o[0], o[1]), [o[2]]));
+        [[-54, -14], [-54, 14], [-24, 50], [-26, -52]].forEach(o => all(L.wells, uvp(o[0], o[1])));
+        L.fish = []; [[-4, 16], [-6, -14], [0, 0]].forEach(o => all(L.fish, uvp(o[0], o[1])));
+        R(uvp(-40, 0), tN, 2); R(uvp(-40, 0), tS, 2); R(tN, tP, 3); R(tP, uvp(8, 62), 2); R(tS, uvp(-12, -66), 3);
+      } else {
+        // A steep ridge down the middle, broken by a pass at each end and a narrow one between the bases.
+        L.river = () => [99, 0];
+        L.wall = (x, y) => {
+          const [u, v] = toUV(x, y), gap = Math.min(smooth(4, 9, Math.abs(v - 42)), smooth(4, 9, Math.abs(v + 42)), smooth(2, 4.5, Math.abs(v)));
+          return 7.5 * (1 - smooth(3, 8, Math.abs(u))) * gap;
+        };
+        const tN = uvp(-24, 42), tS = uvp(-24, -42), tC = uvp(-20, 0);
+        all(L.towns, tN); all(L.towns, tS); all(L.towns, tC);
+        [[-50, 18, 7], [-50, -19, 6.5], [-36, 24, 5.5], [-36, -26, 5.5], [-30, 60, 5]].forEach(o => all(L.ore, uvp(o[0], o[1]), [o[2]]));
+        [[-60, -16], [-60, 16], [-16, 28], [-18, -28]].forEach(o => all(L.wells, uvp(o[0], o[1])));
+        R(uvp(-46, 0), tC, 2); R(tC, uvp(0, 0), 0.5); R(uvp(-46, 0), tN, 2.5); R(uvp(-46, 0), tS, 2.5);
+        R(tN, uvp(0, 42), 1); R(tS, uvp(0, -42), 1);
+      }
+      return L;
+    }
     if (kind === 'world' || kind === 'quad') {
       const rot = ([x, y], k) => { let dx = x - CX, dy = y - CY; for (let i = 0; i < k; i++) { const t = dx; dx = -dy; dy = t; } return [CX + dx, CY + dy]; };
       L.syms = [0, 1, 2, 3].map(k => p => rot(p, k));
@@ -534,6 +608,8 @@ const Rules = (() => {
       }
     }
     for (let c = 0; c < h.length; c++) h[c] = lerp(h[c], blur[c], smooth(5.5, 2, roadDist[c]));
+    // A layout's own walls of rock, as High Pass's ridge, raised over the ground.
+    if (L.wall) for (let j = 0; j < VH; j++) for (let i = 0; i < VW; i++) h[j * VW + i] += L.wall(i / RES, j / RES);
     // How much of a ford a point is in: a strip across the river a few cells wide.
     const fordK = (x, y) => {
       let k = 0;
@@ -633,7 +709,9 @@ const Rules = (() => {
     const scatter = [];
     const keep = (x, y, pad = 0) => {
       for (const o of open) if (mhypot(x - o[0], y - o[1]) < o[2] * 0.85 + pad) return false;
-      if (L.river(x, y)[0] < 6.5) return false;
+      // Clear of a river's middle, or of a lake's water and the bank round it.
+      const [rd, rw] = L.river(x, y);
+      if (L.lake ? rd < rw + 5 : rd < 6.5) return false;
       const c = clamp(Math.round(y * RES), 0, VH - 1) * VW + clamp(Math.round(x * RES), 0, VW - 1);
       return roadDist[c] > 3;
     };
@@ -677,7 +755,18 @@ const Rules = (() => {
     }
     const faces = L.bases.map(b => matan2(CY - b[1], CX - b[0]));
     for (const s of scatter) s.c = clamp(s.y | 0, 0, H - 1) * W + clamp(s.x | 0, 0, W - 1);
-    return { W, H, seed, kind, h, deck, water, ground, ore: oreCells, oreFields, wells, towns, roads, roadDist, bridges, scatter, houses, oreRich, bases: L.bases, faces, fords: L.fords, fordCells };
+    // Open water deep enough for a ship: every corner of the cell well under the surface. Bridges stand high
+    // enough for ships to pass beneath. Shoals where fishing boats fish lie in it.
+    const sea = new Uint8Array(N);
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      let hi = -99;
+      for (let b = 0; b <= 2; b++) for (let a = 0; a <= 2; a++) hi = Math.max(hi, hAt(x + a / 2, y + b / 2));
+      if (hi < water - 0.3) sea[y * W + x] = 1;
+    }
+    const fish = (L.fish || []).map(p => ({ x: p[0], y: p[1] }));
+    let seaCells = 0;
+    for (let c = 0; c < N; c++) seaCells += sea[c];
+    return { W, H, seed, kind, h, deck, water, ground, ore: oreCells, oreFields, wells, towns, roads, roadDist, bridges, scatter, houses, oreRich, bases: L.bases, faces, fords: L.fords, fordCells, sea, fish, seaCells };
   }
 
   // A map is kept only if vehicles can get from the first base to every other base, town and well.
@@ -891,6 +980,7 @@ const Rules = (() => {
   // How fast a kind of mover goes off the roads in the weather, before any worn track. Mud bogs wheels down, snow
   // slows everyone, and blown sand slows men and wheels.
   function offGoing(move, w) {
+    if (move === 'naval') return Math.max(0.5, 1 - 0.3 * w.storm);
     const g = move === 'wheel' ? 1 - 0.24 * w.rain - 0.2 * w.snow - 0.25 * w.sand
       : move === 'track' ? 1 - 0.12 * w.storm - 0.1 * w.snow - 0.1 * w.sand
         : 1 - 0.18 * w.snow - 0.2 * w.sand;
@@ -911,7 +1001,7 @@ const Rules = (() => {
   function freshPlayer(team, o = {}) {
     return {
       team, supply: o.supply || 3500, oil: o.oil || 250, tech: 1, income: 1, carried: 0,
-      q: { bld: [], def: [], inf: [], veh: [], air: [], tech: [] }, prod: 0, use: 0, low: false, vis: new Uint8Array(N), seen: new Uint8Array(N),
+      q: { bld: [], def: [], inf: [], veh: [], air: [], sea: [], tech: [] }, prod: 0, use: 0, low: false, vis: new Uint8Array(N), seen: new Uint8Array(N),
       counts: {}, cooldown: { flare: 0, uav: 0, barrage: 0, para: 0 }, stats: freshStats(), spoke: {}, hints: {}, exposed: false,
       silo: 0, alive: true, shield: 0, born: 0,
     };
@@ -1128,6 +1218,8 @@ const Rules = (() => {
       if (!o.age0) P.tech = 5;
       P.vis = unbits(p.vis, N); P.seen = unbits(p.seen, N);
       for (const c in P.q) P.q[c] = p.q[c].map(it => Object.assign({}, it, { cost: c === 'tech' ? TECH[it.level] : (UNITS[it.kind] || BUILDINGS[it.kind]) }));
+      // A side saved before ships came has no dock's queue.
+      if (!P.q.sea) P.q.sea = [];
       return P;
     });
     S.ents = o.ents.map(e => Object.assign({}, e, { d: e.b ? BUILDINGS[e.kind] : UNITS[e.kind] }));
@@ -1190,6 +1282,7 @@ const Rules = (() => {
     Object.assign(u, o);
     if (d.cargo) u.ord = { t: 'harvest' };
     if (d.trade) u.ord = { t: 'trade' };
+    if (d.fish) u.ord = { t: 'fish' };
     return u;
   }
 
@@ -1199,6 +1292,12 @@ const Rules = (() => {
     if (d.well) {
       const w = M.wells.find(e => e.x === cx + 1 && e.y === cy + 1);
       if (!w) return false;
+    }
+    // A dock stands on the shore, with open water within five cells of it.
+    if (d.shore) {
+      let n = 0;
+      for (let y = Math.max(0, cy - 5); y < Math.min(H, cy + d.h + 5); y++) for (let x = Math.max(0, cx - 5); x < Math.min(W, cx + d.w + 5); x++) n += M.sea[y * W + x];
+      if (n < 4) return false;
     }
     for (let y = cy; y < cy + d.h; y++) for (let x = cx; x < cx + d.w; x++) {
       const c = y * W + x;
@@ -1351,9 +1450,11 @@ const Rules = (() => {
 
   // Three ways of getting about: on foot, on wheels, and on tracks, which go through woods by flattening them.
   // Each is stopped by its own ground bits.
-  const BIT = { foot: 2, veh: 9, track: 1 };
-  const clsOf = u => u.d.move === 'foot' ? 'foot' : u.d.move === 'track' ? 'track' : 'veh';
+  const BIT = { foot: 2, veh: 9, track: 1, naval: 0 };
+  const clsOf = u => u.d.move === 'foot' ? 'foot' : u.d.move === 'track' ? 'track' : u.d.move === 'naval' ? 'naval' : 'veh';
   function blocked(S, cls, c, occ = S.occ, g = S.gnd) {
+    // A ship keeps to open water.
+    if (cls === 'naval') return !S.map.sea[c] || occ[c] !== 0;
     return (g[c] & BIT[cls]) !== 0 || occ[c] !== 0;
   }
   // Each change to who stands where, or to the ground, is kept a while, so a flow field can be worked out
@@ -1390,7 +1491,7 @@ const Rules = (() => {
   // The weather's going off the roads for a class, in twentieths, so a field is made again as the going changes.
   const goingKey = (S, cls) => Math.round(offGoing(cls === 'veh' ? 'wheel' : cls, sky(S)) * 20);
   function field(S, cls, gx, gy, need = 0) {
-    const key = (cls === 'foot' ? 0 : cls === 'veh' ? 1 : 2) * N + gy * W + gx, wq = goingKey(S, cls);
+    const key = (cls === 'foot' ? 0 : cls === 'veh' ? 1 : cls === 'track' ? 2 : 3) * N + gy * W + gx, wq = goingKey(S, cls);
     let f = S.fields.get(key);
     if (f && f.ver < oldestOcc(S)) { S.fields.delete(key); S._fields.delete(key); f = null; }
     const enough = f && f.reach >= need;
@@ -1436,7 +1537,8 @@ const Rules = (() => {
     const M = S.map, bit = BIT[cls], woodC = cls === 'track' ? 3 : 1.6, roadC = ROAD_COST[cls], offK = 20 / wq;
     if (!fillBlock || fillBlock.length !== N) fillBlock = new Uint8Array(N);
     const block = fillBlock, road = roadW(M);
-    for (let c = 0; c < N; c++) block[c] = (g[c] & bit) !== 0 || occ[c] !== 0 ? 1 : 0;
+    if (cls === 'naval') { const sea = M.sea; for (let c = 0; c < N; c++) block[c] = !sea[c] || occ[c] !== 0 ? 1 : 0; }
+    else for (let c = 0; c < N; c++) block[c] = (g[c] & bit) !== 0 || occ[c] !== 0 ? 1 : 0;
     const dist = f.dist, dir = f.dir;
     dist.fill(Infinity); dir.fill(-1);
     let n = 0;
@@ -1563,7 +1665,7 @@ const Rules = (() => {
   // world, so drawing a route never changes how the game plays.
   const scratch = new Map();
   function peekField(S, cls, gx, gy, need) {
-    const key = (cls === 'foot' ? 0 : cls === 'veh' ? 1 : 2) * N + gy * W + gx, f = S.fields.get(key), p = S._fields.get(key);
+    const key = (cls === 'foot' ? 0 : cls === 'veh' ? 1 : cls === 'track' ? 2 : 3) * N + gy * W + gx, f = S.fields.get(key), p = S._fields.get(key);
     if (f && p && p.ver === f.ver && p.reach === f.reach && f.reach >= need) return p;
     const wq = goingKey(S, cls), sk = `${key}:${S.occVer}:${wq}`;
     let q = scratch.get(sk);
@@ -1973,7 +2075,7 @@ const Rules = (() => {
       u.a += clamp(diff, -6 * DT * 2, 6 * DT * 2);
       u.v = top;
     } else {
-      const turn = d.move === 'track' ? 2.4 : 2.9;
+      const turn = d.move === 'track' ? 2.4 : d.move === 'naval' ? 1.5 : 2.9;
       u.a += clamp(diff, -turn * DT, turn * DT);
       const ab = Math.abs(diff);
       const align = d.move === 'track' ? clamp(1 - ab / 1.1, 0, 1) : clamp(1 - ab / 1.8, 0.25, 1);
@@ -1995,7 +2097,7 @@ const Rules = (() => {
     // Whatever moves into a cell off the roads wears it.
     if (cNow !== u.lc) {
       u.lc = cNow;
-      if (S.map.roadDist[((u.y | 0) * RES) * VW + (u.x | 0) * RES] >= 2) S.trail[cNow] = Math.min(255, S.trail[cNow] + WEAR[d.move]);
+      if (WEAR[d.move] && S.map.roadDist[((u.y | 0) * RES) * VW + (u.x | 0) * RES] >= 2) S.trail[cNow] = Math.min(255, S.trail[cNow] + WEAR[d.move]);
     }
   }
 
@@ -2286,8 +2388,9 @@ const Rules = (() => {
     }
 
     if (d.cargo && u.ord && u.ord.t === 'harvest') { truckTick(S, u); return; }
-    // A caravan with nothing else to do trades.
+    // A caravan with nothing else to do trades, and a fishing boat fishes.
     if (d.trade && (!u.ord || u.ord.t === 'trade')) { tradeTick(S, u); return; }
+    if (d.fish && (!u.ord || u.ord.t === 'fish')) { fishTick(S, u); return; }
     if (u.ord && u.ord.t === 'bridge') return bridgeGo(S, u, u.ord);
     if (u.ord && u.ord.t === 'mend') return mendGo(S, u, u.ord);
 
@@ -2555,13 +2658,44 @@ const Rules = (() => {
     }
   }
 
+  // Fishing. A boat sails to the nearest shoal and fishes there a while, each boat at its own place round it, then
+  // lands the catch at the nearest of its side's docks and is paid for it.
+  function fishTick(S, u) {
+    let o = u.ord;
+    if (!o || o.t !== 'fish') o = u.ord = { t: 'fish' };
+    const P = S.P[u.team];
+    if (!o.full) {
+      if (o.x === undefined) {
+        let best = null, bd = 1e9;
+        for (const f of S.map.fish || []) { const d = mhypot(f.x - u.x, f.y - u.y); if (d < bd) { bd = d; best = f; } }
+        if (!best) { u.v = 0; return; }
+        const a = (u.id * 2.39996) % TAU, c = goalCells(S, 'naval', clamp((best.x + mcos(a) * 2.5) | 0, 0, W - 1), clamp((best.y + msin(a) * 2.5) | 0, 0, H - 1))[0];
+        o.x = c % W + 0.5; o.y = (c / W | 0) + 0.5; o.left = 10 * HZ;
+      }
+      if (drive(S, u, o.x, o.y, 1.5)) { u.v = 0; if (--o.left <= 0) { o.full = true; o.x = undefined; } }
+      return;
+    }
+    if (o.x === undefined) {
+      let best = null, bd = 1e9;
+      for (const e of S.ents) if (e.b && e.team === u.team && e.kind === 'dock' && e.hp > 0) { const d = mhypot(e.x - u.x, e.y - u.y); if (d < bd) { bd = d; best = e; } }
+      if (!best) { u.v = 0; return; }
+      const c = goalCells(S, 'naval', best.x | 0, best.y | 0)[0];
+      o.x = c % W + 0.5; o.y = (c / W | 0) + 0.5;
+    }
+    if (drive(S, u, o.x, o.y, 2.5)) {
+      const pay = Math.round(u.d.fish * P.income);
+      P.supply += pay; P.stats.mined += pay; S.ev.push({ t: 'trade', team: u.team, x: u.x, y: u.y, n: pay });
+      o.full = false; o.x = undefined;
+    }
+  }
+
   function stepEconomy(S) {
     if (S.tick % HZ === 0) {
       for (const t of S.towns) if (t.owner >= 0) { const P = S.P[t.owner]; P.supply += 5 * P.income; P.oil += 0.25 * P.income; P.stats.townIn += 5 * P.income; P.stats.oilIn += 0.25 * P.income; }
     }
     for (const P of S.P) {
       for (const k in P.cooldown) if (P.cooldown[k] > 0) P.cooldown[k] -= DT;
-      for (const cat of ['bld', 'def', 'inf', 'veh', 'air', 'tech']) {
+      for (const cat of ['bld', 'def', 'inf', 'veh', 'air', 'sea', 'tech']) {
         const q = P.q[cat];
         const item = q[0];
         if (!item) continue;
@@ -2585,7 +2719,7 @@ const Rules = (() => {
   }
 
   function producers(S, P, cat) {
-    const k = cat === 'inf' ? 'barracks' : cat === 'veh' ? 'factory' : 'airfield';
+    const k = cat === 'inf' ? 'barracks' : cat === 'veh' ? 'factory' : cat === 'sea' ? 'dock' : 'airfield';
     return P.counts[k] || 0;
   }
 
@@ -2613,11 +2747,12 @@ const Rules = (() => {
       upgradeSide(S, P.team, item.level);
       return;
     }
-    const need = cat === 'inf' ? 'barracks' : cat === 'veh' ? 'factory' : 'airfield';
+    const need = cat === 'inf' ? 'barracks' : cat === 'veh' ? 'factory' : cat === 'sea' ? 'dock' : 'airfield';
     let best = null, n = 0;
     for (const e of S.ents) if (e.b && e.team === P.team && e.kind === need && e.hp > 0) { n++; if (!best || e.primary) best = e; }
     if (!best) return;
-    const [x, y] = exitOf(S, best);
+    // A ship is launched into the open water nearest its dock.
+    const [x, y] = cat === 'sea' ? (c => [c % W + 0.5, (c / W | 0) + 0.5])(goalCells(S, 'naval', best.x | 0, best.y | 0)[0]) : exitOf(S, best);
     // A unit queued before the age turned comes out in the new age's form.
     const kind = formOf(UNITS[item.kind].line, P.tech) || item.kind, u = spawn(S, kind, P.team, x, y);
     P.stats.made++; P.stats[u.d.cat === 'air' ? 'air' : u.d.cat === 'veh' ? 'veh' : 'inf']++;
@@ -2689,6 +2824,7 @@ const Rules = (() => {
       if (now !== kind) return d.age > P.tech || !now ? 'Needs the ' + AGES[d.age].name + ' Age' : 'Now ' + UNITS[now].name;
     } else if ((d.tech || 1) > P.tech) return 'Needs the ' + AGES[d.tech].name + ' Age';
     if (d.need && !P.counts[d.need]) return 'Needs ' + nameOf(d.need, P.tech);
+    if (d.shore && !S.map.seaCells) return 'Needs open water on the map';
     if (BUILDINGS[kind] && !(P.counts.hq || P.counts.fob)) return 'Needs Headquarters';
     if (d.limit) {
       const made = (P.counts[kind] || 0) + P.q[d.cat].filter(i => i.kind === kind).length;

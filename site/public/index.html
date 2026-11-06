@@ -138,7 +138,7 @@ body[data-look="ink"][data-scheme="dark"] #end, body[data-look="ink"][data-schem
 #stats { display: grid; grid-template-columns: 1.7fr 1fr; gap: 4px; font: 11px var(--ui); letter-spacing: .08em; color: var(--dim); text-transform: uppercase; }
 #stats div { display: flex; justify-content: space-between; align-items: baseline; gap: 6px; min-width: 0; background: #1b1d15; padding: 1px 5px; border: 1px solid #0a0b07; }
 #stats b { font: 12px var(--mono); color: var(--amber); min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-#tabs { display: grid; grid-template-columns: repeat(6, 1fr); gap: 2px; }
+#tabs { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 2px; }
 .tab { position: relative; padding: 4px 0 3px; background: linear-gradient(#2f3328, #1d1f17); border: 1px solid #0a0b07; font: 600 12px var(--ui); letter-spacing: .03em; color: var(--dim); text-transform: uppercase; }
 .tab:hover { color: var(--stencil); }
 .tab.on { background: linear-gradient(#59442a, #3b2c17); color: var(--amber); border-color: #1c1409; }
@@ -525,7 +525,7 @@ body[data-look="ink"] .sheet { box-shadow: 4px 4px 0 var(--ink); }
     <div id="settings" hidden role="dialog" aria-label="Settings">
       <div class="choice"><h2>Look</h2><div id="s-look" class="two"></div></div>
       <div class="choice"><h2>Paper</h2><div id="s-scheme"><button data-v="light">Light</button><button data-v="dark">Dark</button><button data-v="auto">As the system</button></div></div>
-      <p id="build">Build f638498 2026-11-05 18:59</p>
+      <p id="build">Build 5b4267d 2026-11-05 19:42</p>
     </div>
     <div id="banner" hidden></div>
     <button id="update" hidden>A new version of Dead Ground is out. <b>Reload</b></button>
@@ -781,6 +781,18 @@ const Rules = (() => {
     freightlorry: ride({ name: 'Freight Lorry', sym: 'trade', cost: 280, time: 8, hp: 360, armor: 'heavy', speed: 3, sight: 7, r: 0.95, trade: 1, limit: 8, note: 'Carries goods between your towns. Paid each trip, more the farther it goes.' }),
     freighter: ride({ name: 'Freight Truck', sym: 'trade', cost: 320, time: 8, hp: 420, armor: 'heavy', speed: 3.6, sight: 7, r: 0.95, trade: 1, limit: 8, note: 'Carries goods between your towns. Paid each trip, more the farther it goes.' }),
     hovfreight: ride({ name: 'Hover Freighter', sym: 'trade', cost: 360, time: 8, hp: 480, armor: 'heavy', speed: 4.2, sight: 8, r: 0.95, trade: 1, limit: 8, note: 'Carries goods between your towns. Paid each trip, more the farther it goes.' }),
+    // Ships and boats, launched at a dock and kept to open water. Warships fight on the water and shoot along the
+    // shore, and fishing boats work the shoals and land their catch at a dock.
+    galley: { name: 'War Galley', cat: 'sea', sym: 'ship', cost: 300, time: 9, hp: 280, armor: 'light', speed: 2.8, sight: 11, r: 1.1, weapons: ['bow'], move: 'naval', need: 'dock', note: 'Oars and archers. Holds the water and shoots along the shore.' },
+    cog: { name: 'War Cog', cat: 'sea', sym: 'ship', cost: 350, time: 10, hp: 380, armor: 'light', speed: 2.6, sight: 11, r: 1.2, weapons: ['ballista', 'xbow'], move: 'naval', need: 'dock', note: 'A castled ship with a ballista and crossbows.' },
+    frigate: { name: 'Frigate', cat: 'sea', sym: 'ship', cost: 500, time: 12, hp: 600, armor: 'heavy', speed: 2.8, sight: 12, r: 1.3, weapons: ['ball'], move: 'naval', need: 'dock', note: 'A broadside of cannon, against ships and the shore.' },
+    ironclad: { name: 'Ironclad', cat: 'sea', sym: 'ship', cost: 700, oil: 10, time: 13, hp: 900, armor: 'heavy', speed: 2.6, sight: 12, r: 1.3, weapons: ['twin', 'mg'], move: 'naval', need: 'dock', note: 'Armoured, with heavy guns fore and aft.' },
+    destroyer: { name: 'Destroyer', cat: 'sea', sym: 'ship', cost: 900, oil: 20, time: 14, hp: 1000, armor: 'heavy', speed: 3.2, sight: 13, r: 1.4, weapons: ['twin', 'flak'], move: 'naval', need: 'dock', note: 'Fast, with guns against ships and flak against aircraft.' },
+    corvette: { name: 'Rail Corvette', cat: 'sea', sym: 'ship', cost: 1000, oil: 30, time: 14, hp: 1100, armor: 'heavy', speed: 3.8, sight: 13, r: 1.3, weapons: ['twinrail', 'laser'], move: 'naval', need: 'dock', note: 'Rail guns and a laser against aircraft.' },
+    skiff: { name: 'Fishing Skiff', cat: 'sea', sym: 'boat', cost: 150, time: 6, hp: 120, armor: 'light', speed: 2.2, sight: 6, r: 0.8, weapons: [], move: 'naval', need: 'dock', fish: 100, limit: 6, note: 'Fishes the shoals and lands the catch at your dock.' },
+    smack: { name: 'Fishing Smack', cat: 'sea', sym: 'boat', cost: 170, time: 6, hp: 160, armor: 'light', speed: 2.4, sight: 6, r: 0.85, weapons: [], move: 'naval', need: 'dock', fish: 110, limit: 6, note: 'Fishes the shoals and lands the catch at your dock.' },
+    trawler: { name: 'Steam Trawler', cat: 'sea', sym: 'boat', cost: 220, time: 7, hp: 220, armor: 'light', speed: 2.8, sight: 7, r: 0.9, weapons: [], move: 'naval', need: 'dock', fish: 130, limit: 6, note: 'Fishes the shoals and lands the catch at your dock.' },
+    hovtrawler: { name: 'Hover Trawler', cat: 'sea', sym: 'boat', cost: 260, time: 7, hp: 260, armor: 'light', speed: 3.4, sight: 7, r: 0.9, weapons: [], move: 'naval', need: 'dock', fish: 150, limit: 6, note: 'Fishes the shoals and lands the catch at your dock.' },
     hauler: ride({ name: 'Hauler', sym: 'sup', cost: 800, time: 10, hp: 760, armor: 'heavy', speed: 3, sight: 8, r: 0.95, cargo: 600, note: 'Hover hauler. Mines ore fast.' }),
     outrider: ride({ name: 'Outriders', sym: 'rec', cost: 140, time: 5, hp: 110, speed: 4.6, sight: 13, r: 0.6, move: 'foot', weapons: ['horsebow'], note: 'Horse archers. Fast, and see far.' }),
     dragoon: ride({ name: 'Dragoons', sym: 'rec', cost: 180, time: 5, hp: 140, speed: 4.6, sight: 13, r: 0.6, move: 'foot', weapons: ['carbine'], note: 'Mounted carbines. Fast, and see far.' }),
@@ -821,6 +833,8 @@ const Rules = (() => {
     hero: [null, 'hero'],
     truck: ['oxcart', 'wagon', null, 'lorry', 'truck', 'hauler'],
     trade: ['tradecart', 'caravan', 'tradewagon', 'freightlorry', 'freighter', 'hovfreight'],
+    ship: ['galley', 'cog', 'frigate', 'ironclad', 'destroyer', 'corvette'],
+    fish: ['skiff', null, 'smack', 'trawler', null, 'hovtrawler'],
     rec: ['outrider', null, 'dragoon', 'motorbike', 'humvee', 'hoverscout'],
     mount: ['chariot', 'knight', 'cuirassier', 'armcar', 'tank', 'mech'],
     ifv: [null, null, null, 'halftrack', 'ifv', 'hoverapc'],
@@ -833,7 +847,7 @@ const Rules = (() => {
     jet: [null, null, null, 'biplane', 'jet', 'stealth'],
   };
   // The sidebar's lines, by the building that trains them.
-  const LINE_ORDER = { inf: ['inf', 'at', 'eng', 'snp', 'hero'], veh: ['truck', 'trade', 'rec', 'mount', 'ifv', 'aa', 'sup', 'siege', 'heavy'], air: ['fpv', 'heli', 'jet'] };
+  const LINE_ORDER = { sea: ['fish', 'ship'], inf: ['inf', 'at', 'eng', 'snp', 'hero'], veh: ['truck', 'trade', 'rec', 'mount', 'ifv', 'aa', 'sup', 'siege', 'heavy'], air: ['fpv', 'heli', 'jet'] };
   function formOf(line, age) {
     const L = LINES[line];
     if (!L) return null;
@@ -848,6 +862,7 @@ const Rules = (() => {
     hq: { name: 'Headquarters', sym: 'hq', w: 5, h: 5, hp: 2400, cost: 2500, time: 30, power: 20, terr: 24, sight: 22, armor: 'bld', cat: 'bld' },
     power: { name: 'Power Plant', sym: 'pwr', w: 3, h: 3, hp: 700, cost: 300, time: 5, power: 100, terr: 7, sight: 6, armor: 'bld', cat: 'bld', tech: 1, note: 'Every building draws power. Short of it, everything slows.' },
     refinery: { name: 'Ore Refinery', sym: 'ref', w: 4, h: 4, hp: 1000, cost: 1200, time: 11, power: -30, terr: 7, sight: 7, armor: 'bld', cat: 'bld', tech: 1, freeTruck: true, note: 'Turns ore into supply. Comes with a truck.' },
+    dock: { name: 'Dock', sym: 'dock', w: 3, h: 3, hp: 900, cost: 450, time: 8, power: -10, terr: 7, sight: 10, armor: 'bld', cat: 'bld', tech: 1, need: 'barracks', shore: true, note: 'Built on a shore beside open water. Launches warships and fishing boats.' },
     barracks: { name: 'Barracks', sym: 'bar', w: 3, h: 3, hp: 800, cost: 400, time: 5, power: -20, terr: 7, sight: 7, armor: 'bld', cat: 'bld', tech: 1, need: 'power', note: 'Trains infantry.' },
     factory: { name: 'War Factory', sym: 'fac', w: 4, h: 4, hp: 1400, cost: 1000, time: 11, power: -30, terr: 7, sight: 7, armor: 'bld', cat: 'bld', tech: 1, need: 'refinery', note: 'Builds vehicles.' },
     radar: { name: 'Radar Station', sym: 'rad', w: 3, h: 3, hp: 800, cost: 800, time: 8, power: -40, terr: 7, sight: 16, armor: 'bld', cat: 'bld', tech: 1, need: 'refinery', note: 'Sees far and opens support calls.' },
@@ -881,6 +896,7 @@ const Rules = (() => {
     power: { age: 4, names: [0, 0, 0, 'Power Station', 'Power Plant', 'Fusion Plant'] },
     refinery: { names: ['Smelter', 'Smelter', 'Smelter', 'Ore Refinery', 'Ore Refinery', 'Ore Refinery'] },
     factory: { names: ['Stables', 'Stables', 'Foundry', 'Factory', 'War Factory', 'Fabricator'] },
+    dock: { names: ['Jetty', 'Harbour', 'Dockyard', 'Shipyard', 'Naval Yard', 'Naval Yard'] },
     radar: { names: ['Watchtower', 'Watchtower', 'Signal Tower', 'Radio Station', 'Radar Station', 'Sensor Array'] },
     airfield: { age: 4, names: [0, 0, 0, 'Airfield', 'Airfield', 'Skyport'] },
     fob: { age: 2, names: [0, 'Outpost', 'Redoubt', 'Forward Base', 'Forward Base', 'Forward Base'] },
@@ -989,12 +1005,15 @@ const Rules = (() => {
     wells: [[-64, -16], [-64, 16], [-16, 28], [-26, -50], [-20, -26]],
     bridges: [0, 40, -40],
   };
-  const SIZES = { duel: 128, quad: 192, world: 256 };
+  const SIZES = { duel: 128, quad: 192, world: 256, gulf: 128, pass: 128, lakes: 192 };
   // The maps a game may be set on, each a layout and the most sides it seats.
   const MAPS = {
     duel: { name: 'River Duel', layout: 'duel', seats: 2, about: 'Two bases across one river, three bridges and a ford.' },
     quad: { name: 'Four Quarters', layout: 'quad', seats: 4, about: 'Four corners parted by two crossing rivers.' },
     world: { name: 'Crossed Rivers', layout: 'world', seats: 8, about: 'Eight bases round a ring, two to each quarter.' },
+    gulf: { name: 'The Gulf', layout: 'gulf', seats: 2, about: 'Two bases either side of a long gulf, with land round both ends. Docks and ships hold the water.' },
+    pass: { name: 'High Pass', layout: 'pass', seats: 2, about: 'A steep ridge between two bases, crossed only at three passes.' },
+    lakes: { name: 'Lake Country', layout: 'lakes', seats: 4, about: 'Four corners round a great lake, a road all the way round its shore.' },
   };
   // Which of a map's bases each seated slot starts at: spread evenly round the ring. In slot order, or given a
   // random draw rnd, with the ring turned a random step and the sides dealt the places in a random order.
@@ -1016,6 +1035,61 @@ const Rules = (() => {
     // A ford's images, each its middle and the unit way along the river.
     const fordAt = (p, q) => { for (const T of L.syms) { const a = T(p), b = T(q), d = mhypot(b[0] - a[0], b[1] - a[1]); L.fords.push([a[0], a[1], (b[0] - a[0]) / d, (b[1] - a[1]) / d]); } };
     const R = (a, b, wig, rep = true) => L.roads.push({ a, b, wig, rep });
+    // Lake Country: the four quarters round one great lake, with no rivers or bridges, a road round the shore.
+    if (kind === 'lakes') {
+      const rot = ([x, y], k) => { let dx = x - CX, dy = y - CY; for (let i = 0; i < k; i++) { const t = dx; dx = -dy; dy = t; } return [CX + dx, CY + dy]; };
+      L.syms = [0, 1, 2, 3].map(k => p => rot(p, k));
+      const sc = W / 256, polar = (r, deg) => [CX + r * sc * mcos(deg * PI / 180), CY + r * sc * msin(deg * PI / 180)], R0 = 40 * sc;
+      L.lake = true;
+      L.river = (x, y) => [Math.max(0, mhypot(x - CX, y - CY) - R0), 3];
+      L.domain = (x, y) => x + 0.5 - CX > 0 && y + 0.5 - CY > 0;
+      const C = polar(120, 45), tOut = polar(102, 67.5), tIn = polar(70, 67.5), mid = polar(98, 90);
+      for (const T of L.syms) L.bases.push(T(C));
+      all(L.towns, tOut); all(L.towns, tIn);
+      all(L.ore, mid, [6]);
+      const m = mhypot(CX - C[0], CY - C[1]), f = [(CX - C[0]) / m, (CY - C[1]) / m], s = [-f[1], f[0]];
+      all(L.ore, [C[0] + f[0] * 7 + s[0] * 18, C[1] + f[1] * 7 + s[1] * 18], [7]);
+      all(L.ore, [C[0] + f[0] * 7 - s[0] * 19, C[1] + f[1] * 7 - s[1] * 19], [6.5]);
+      all(L.wells, [C[0] - f[0] * 4 + s[0] * 16, C[1] - f[1] * 4 + s[1] * 16]);
+      all(L.wells, [C[0] - f[0] * 4 - s[0] * 16, C[1] - f[1] * 4 - s[1] * 16]);
+      all(L.ore, polar(84, 67.5), [5]);
+      all(L.wells, polar(80, 56)); all(L.wells, polar(80, 79));
+      L.fish = []; all(L.fish, polar(20, 67.5)); all(L.fish, polar(30, 22.5));
+      R(C, tOut, 2); R(tOut, tIn, 3); R(tIn, polar(70, 157.5), 4); R(C, mid, 2.5);
+      return L;
+    }
+    // The Gulf and High Pass are drawn on the River Duel's frame, two bases mirrored across the middle.
+    if (kind === 'gulf' || kind === 'pass') {
+      L.syms = [p => [p[0], p[1]], mirror];
+      L.domain = (x, y) => { const u = toUV(x + 0.5, y + 0.5)[0]; return u < 0 || (u === 0 && x <= y); };
+      const uvp = (u, v) => toXY(u, v), B = uvp(kind === 'gulf' ? -46 : -52, 0);
+      L.bases.push(B, mirror(B));
+      if (kind === 'gulf') {
+        // A long gulf of open water down the middle, with land round both of its ends.
+        L.lake = true;
+        L.river = (x, y) => { const [u, v] = toUV(x, y); return [mhypot(u, Math.max(0, Math.abs(v) - 32)), 14 + 2 * mcos(v * 0.07)]; };
+        const tN = uvp(-34, 36), tS = uvp(-34, -36), tP = uvp(-8, 62);
+        all(L.towns, tN); all(L.towns, tS); all(L.towns, tP);
+        [[-44, 20, 7], [-44, -21, 6.5], [-46, 48, 5.5], [-50, -40, 5]].forEach(o => all(L.ore, uvp(o[0], o[1]), [o[2]]));
+        [[-54, -14], [-54, 14], [-24, 50], [-26, -52]].forEach(o => all(L.wells, uvp(o[0], o[1])));
+        L.fish = []; [[-4, 16], [-6, -14], [0, 0]].forEach(o => all(L.fish, uvp(o[0], o[1])));
+        R(uvp(-40, 0), tN, 2); R(uvp(-40, 0), tS, 2); R(tN, tP, 3); R(tP, uvp(8, 62), 2); R(tS, uvp(-12, -66), 3);
+      } else {
+        // A steep ridge down the middle, broken by a pass at each end and a narrow one between the bases.
+        L.river = () => [99, 0];
+        L.wall = (x, y) => {
+          const [u, v] = toUV(x, y), gap = Math.min(smooth(4, 9, Math.abs(v - 42)), smooth(4, 9, Math.abs(v + 42)), smooth(2, 4.5, Math.abs(v)));
+          return 7.5 * (1 - smooth(3, 8, Math.abs(u))) * gap;
+        };
+        const tN = uvp(-24, 42), tS = uvp(-24, -42), tC = uvp(-20, 0);
+        all(L.towns, tN); all(L.towns, tS); all(L.towns, tC);
+        [[-50, 18, 7], [-50, -19, 6.5], [-36, 24, 5.5], [-36, -26, 5.5], [-30, 60, 5]].forEach(o => all(L.ore, uvp(o[0], o[1]), [o[2]]));
+        [[-60, -16], [-60, 16], [-16, 28], [-18, -28]].forEach(o => all(L.wells, uvp(o[0], o[1])));
+        R(uvp(-46, 0), tC, 2); R(tC, uvp(0, 0), 0.5); R(uvp(-46, 0), tN, 2.5); R(uvp(-46, 0), tS, 2.5);
+        R(tN, uvp(0, 42), 1); R(tS, uvp(0, -42), 1);
+      }
+      return L;
+    }
     if (kind === 'world' || kind === 'quad') {
       const rot = ([x, y], k) => { let dx = x - CX, dy = y - CY; for (let i = 0; i < k; i++) { const t = dx; dx = -dy; dy = t; } return [CX + dx, CY + dy]; };
       L.syms = [0, 1, 2, 3].map(k => p => rot(p, k));
@@ -1159,6 +1233,8 @@ const Rules = (() => {
       }
     }
     for (let c = 0; c < h.length; c++) h[c] = lerp(h[c], blur[c], smooth(5.5, 2, roadDist[c]));
+    // A layout's own walls of rock, as High Pass's ridge, raised over the ground.
+    if (L.wall) for (let j = 0; j < VH; j++) for (let i = 0; i < VW; i++) h[j * VW + i] += L.wall(i / RES, j / RES);
     // How much of a ford a point is in: a strip across the river a few cells wide.
     const fordK = (x, y) => {
       let k = 0;
@@ -1258,7 +1334,9 @@ const Rules = (() => {
     const scatter = [];
     const keep = (x, y, pad = 0) => {
       for (const o of open) if (mhypot(x - o[0], y - o[1]) < o[2] * 0.85 + pad) return false;
-      if (L.river(x, y)[0] < 6.5) return false;
+      // Clear of a river's middle, or of a lake's water and the bank round it.
+      const [rd, rw] = L.river(x, y);
+      if (L.lake ? rd < rw + 5 : rd < 6.5) return false;
       const c = clamp(Math.round(y * RES), 0, VH - 1) * VW + clamp(Math.round(x * RES), 0, VW - 1);
       return roadDist[c] > 3;
     };
@@ -1302,7 +1380,18 @@ const Rules = (() => {
     }
     const faces = L.bases.map(b => matan2(CY - b[1], CX - b[0]));
     for (const s of scatter) s.c = clamp(s.y | 0, 0, H - 1) * W + clamp(s.x | 0, 0, W - 1);
-    return { W, H, seed, kind, h, deck, water, ground, ore: oreCells, oreFields, wells, towns, roads, roadDist, bridges, scatter, houses, oreRich, bases: L.bases, faces, fords: L.fords, fordCells };
+    // Open water deep enough for a ship: every corner of the cell well under the surface. Bridges stand high
+    // enough for ships to pass beneath. Shoals where fishing boats fish lie in it.
+    const sea = new Uint8Array(N);
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      let hi = -99;
+      for (let b = 0; b <= 2; b++) for (let a = 0; a <= 2; a++) hi = Math.max(hi, hAt(x + a / 2, y + b / 2));
+      if (hi < water - 0.3) sea[y * W + x] = 1;
+    }
+    const fish = (L.fish || []).map(p => ({ x: p[0], y: p[1] }));
+    let seaCells = 0;
+    for (let c = 0; c < N; c++) seaCells += sea[c];
+    return { W, H, seed, kind, h, deck, water, ground, ore: oreCells, oreFields, wells, towns, roads, roadDist, bridges, scatter, houses, oreRich, bases: L.bases, faces, fords: L.fords, fordCells, sea, fish, seaCells };
   }
 
   // A map is kept only if vehicles can get from the first base to every other base, town and well.
@@ -1516,6 +1605,7 @@ const Rules = (() => {
   // How fast a kind of mover goes off the roads in the weather, before any worn track. Mud bogs wheels down, snow
   // slows everyone, and blown sand slows men and wheels.
   function offGoing(move, w) {
+    if (move === 'naval') return Math.max(0.5, 1 - 0.3 * w.storm);
     const g = move === 'wheel' ? 1 - 0.24 * w.rain - 0.2 * w.snow - 0.25 * w.sand
       : move === 'track' ? 1 - 0.12 * w.storm - 0.1 * w.snow - 0.1 * w.sand
         : 1 - 0.18 * w.snow - 0.2 * w.sand;
@@ -1536,7 +1626,7 @@ const Rules = (() => {
   function freshPlayer(team, o = {}) {
     return {
       team, supply: o.supply || 3500, oil: o.oil || 250, tech: 1, income: 1, carried: 0,
-      q: { bld: [], def: [], inf: [], veh: [], air: [], tech: [] }, prod: 0, use: 0, low: false, vis: new Uint8Array(N), seen: new Uint8Array(N),
+      q: { bld: [], def: [], inf: [], veh: [], air: [], sea: [], tech: [] }, prod: 0, use: 0, low: false, vis: new Uint8Array(N), seen: new Uint8Array(N),
       counts: {}, cooldown: { flare: 0, uav: 0, barrage: 0, para: 0 }, stats: freshStats(), spoke: {}, hints: {}, exposed: false,
       silo: 0, alive: true, shield: 0, born: 0,
     };
@@ -1753,6 +1843,8 @@ const Rules = (() => {
       if (!o.age0) P.tech = 5;
       P.vis = unbits(p.vis, N); P.seen = unbits(p.seen, N);
       for (const c in P.q) P.q[c] = p.q[c].map(it => Object.assign({}, it, { cost: c === 'tech' ? TECH[it.level] : (UNITS[it.kind] || BUILDINGS[it.kind]) }));
+      // A side saved before ships came has no dock's queue.
+      if (!P.q.sea) P.q.sea = [];
       return P;
     });
     S.ents = o.ents.map(e => Object.assign({}, e, { d: e.b ? BUILDINGS[e.kind] : UNITS[e.kind] }));
@@ -1815,6 +1907,7 @@ const Rules = (() => {
     Object.assign(u, o);
     if (d.cargo) u.ord = { t: 'harvest' };
     if (d.trade) u.ord = { t: 'trade' };
+    if (d.fish) u.ord = { t: 'fish' };
     return u;
   }
 
@@ -1824,6 +1917,12 @@ const Rules = (() => {
     if (d.well) {
       const w = M.wells.find(e => e.x === cx + 1 && e.y === cy + 1);
       if (!w) return false;
+    }
+    // A dock stands on the shore, with open water within five cells of it.
+    if (d.shore) {
+      let n = 0;
+      for (let y = Math.max(0, cy - 5); y < Math.min(H, cy + d.h + 5); y++) for (let x = Math.max(0, cx - 5); x < Math.min(W, cx + d.w + 5); x++) n += M.sea[y * W + x];
+      if (n < 4) return false;
     }
     for (let y = cy; y < cy + d.h; y++) for (let x = cx; x < cx + d.w; x++) {
       const c = y * W + x;
@@ -1976,9 +2075,11 @@ const Rules = (() => {
 
   // Three ways of getting about: on foot, on wheels, and on tracks, which go through woods by flattening them.
   // Each is stopped by its own ground bits.
-  const BIT = { foot: 2, veh: 9, track: 1 };
-  const clsOf = u => u.d.move === 'foot' ? 'foot' : u.d.move === 'track' ? 'track' : 'veh';
+  const BIT = { foot: 2, veh: 9, track: 1, naval: 0 };
+  const clsOf = u => u.d.move === 'foot' ? 'foot' : u.d.move === 'track' ? 'track' : u.d.move === 'naval' ? 'naval' : 'veh';
   function blocked(S, cls, c, occ = S.occ, g = S.gnd) {
+    // A ship keeps to open water.
+    if (cls === 'naval') return !S.map.sea[c] || occ[c] !== 0;
     return (g[c] & BIT[cls]) !== 0 || occ[c] !== 0;
   }
   // Each change to who stands where, or to the ground, is kept a while, so a flow field can be worked out
@@ -2015,7 +2116,7 @@ const Rules = (() => {
   // The weather's going off the roads for a class, in twentieths, so a field is made again as the going changes.
   const goingKey = (S, cls) => Math.round(offGoing(cls === 'veh' ? 'wheel' : cls, sky(S)) * 20);
   function field(S, cls, gx, gy, need = 0) {
-    const key = (cls === 'foot' ? 0 : cls === 'veh' ? 1 : 2) * N + gy * W + gx, wq = goingKey(S, cls);
+    const key = (cls === 'foot' ? 0 : cls === 'veh' ? 1 : cls === 'track' ? 2 : 3) * N + gy * W + gx, wq = goingKey(S, cls);
     let f = S.fields.get(key);
     if (f && f.ver < oldestOcc(S)) { S.fields.delete(key); S._fields.delete(key); f = null; }
     const enough = f && f.reach >= need;
@@ -2061,7 +2162,8 @@ const Rules = (() => {
     const M = S.map, bit = BIT[cls], woodC = cls === 'track' ? 3 : 1.6, roadC = ROAD_COST[cls], offK = 20 / wq;
     if (!fillBlock || fillBlock.length !== N) fillBlock = new Uint8Array(N);
     const block = fillBlock, road = roadW(M);
-    for (let c = 0; c < N; c++) block[c] = (g[c] & bit) !== 0 || occ[c] !== 0 ? 1 : 0;
+    if (cls === 'naval') { const sea = M.sea; for (let c = 0; c < N; c++) block[c] = !sea[c] || occ[c] !== 0 ? 1 : 0; }
+    else for (let c = 0; c < N; c++) block[c] = (g[c] & bit) !== 0 || occ[c] !== 0 ? 1 : 0;
     const dist = f.dist, dir = f.dir;
     dist.fill(Infinity); dir.fill(-1);
     let n = 0;
@@ -2188,7 +2290,7 @@ const Rules = (() => {
   // world, so drawing a route never changes how the game plays.
   const scratch = new Map();
   function peekField(S, cls, gx, gy, need) {
-    const key = (cls === 'foot' ? 0 : cls === 'veh' ? 1 : 2) * N + gy * W + gx, f = S.fields.get(key), p = S._fields.get(key);
+    const key = (cls === 'foot' ? 0 : cls === 'veh' ? 1 : cls === 'track' ? 2 : 3) * N + gy * W + gx, f = S.fields.get(key), p = S._fields.get(key);
     if (f && p && p.ver === f.ver && p.reach === f.reach && f.reach >= need) return p;
     const wq = goingKey(S, cls), sk = `${key}:${S.occVer}:${wq}`;
     let q = scratch.get(sk);
@@ -2598,7 +2700,7 @@ const Rules = (() => {
       u.a += clamp(diff, -6 * DT * 2, 6 * DT * 2);
       u.v = top;
     } else {
-      const turn = d.move === 'track' ? 2.4 : 2.9;
+      const turn = d.move === 'track' ? 2.4 : d.move === 'naval' ? 1.5 : 2.9;
       u.a += clamp(diff, -turn * DT, turn * DT);
       const ab = Math.abs(diff);
       const align = d.move === 'track' ? clamp(1 - ab / 1.1, 0, 1) : clamp(1 - ab / 1.8, 0.25, 1);
@@ -2620,7 +2722,7 @@ const Rules = (() => {
     // Whatever moves into a cell off the roads wears it.
     if (cNow !== u.lc) {
       u.lc = cNow;
-      if (S.map.roadDist[((u.y | 0) * RES) * VW + (u.x | 0) * RES] >= 2) S.trail[cNow] = Math.min(255, S.trail[cNow] + WEAR[d.move]);
+      if (WEAR[d.move] && S.map.roadDist[((u.y | 0) * RES) * VW + (u.x | 0) * RES] >= 2) S.trail[cNow] = Math.min(255, S.trail[cNow] + WEAR[d.move]);
     }
   }
 
@@ -2911,8 +3013,9 @@ const Rules = (() => {
     }
 
     if (d.cargo && u.ord && u.ord.t === 'harvest') { truckTick(S, u); return; }
-    // A caravan with nothing else to do trades.
+    // A caravan with nothing else to do trades, and a fishing boat fishes.
     if (d.trade && (!u.ord || u.ord.t === 'trade')) { tradeTick(S, u); return; }
+    if (d.fish && (!u.ord || u.ord.t === 'fish')) { fishTick(S, u); return; }
     if (u.ord && u.ord.t === 'bridge') return bridgeGo(S, u, u.ord);
     if (u.ord && u.ord.t === 'mend') return mendGo(S, u, u.ord);
 
@@ -3180,13 +3283,44 @@ const Rules = (() => {
     }
   }
 
+  // Fishing. A boat sails to the nearest shoal and fishes there a while, each boat at its own place round it, then
+  // lands the catch at the nearest of its side's docks and is paid for it.
+  function fishTick(S, u) {
+    let o = u.ord;
+    if (!o || o.t !== 'fish') o = u.ord = { t: 'fish' };
+    const P = S.P[u.team];
+    if (!o.full) {
+      if (o.x === undefined) {
+        let best = null, bd = 1e9;
+        for (const f of S.map.fish || []) { const d = mhypot(f.x - u.x, f.y - u.y); if (d < bd) { bd = d; best = f; } }
+        if (!best) { u.v = 0; return; }
+        const a = (u.id * 2.39996) % TAU, c = goalCells(S, 'naval', clamp((best.x + mcos(a) * 2.5) | 0, 0, W - 1), clamp((best.y + msin(a) * 2.5) | 0, 0, H - 1))[0];
+        o.x = c % W + 0.5; o.y = (c / W | 0) + 0.5; o.left = 10 * HZ;
+      }
+      if (drive(S, u, o.x, o.y, 1.5)) { u.v = 0; if (--o.left <= 0) { o.full = true; o.x = undefined; } }
+      return;
+    }
+    if (o.x === undefined) {
+      let best = null, bd = 1e9;
+      for (const e of S.ents) if (e.b && e.team === u.team && e.kind === 'dock' && e.hp > 0) { const d = mhypot(e.x - u.x, e.y - u.y); if (d < bd) { bd = d; best = e; } }
+      if (!best) { u.v = 0; return; }
+      const c = goalCells(S, 'naval', best.x | 0, best.y | 0)[0];
+      o.x = c % W + 0.5; o.y = (c / W | 0) + 0.5;
+    }
+    if (drive(S, u, o.x, o.y, 2.5)) {
+      const pay = Math.round(u.d.fish * P.income);
+      P.supply += pay; P.stats.mined += pay; S.ev.push({ t: 'trade', team: u.team, x: u.x, y: u.y, n: pay });
+      o.full = false; o.x = undefined;
+    }
+  }
+
   function stepEconomy(S) {
     if (S.tick % HZ === 0) {
       for (const t of S.towns) if (t.owner >= 0) { const P = S.P[t.owner]; P.supply += 5 * P.income; P.oil += 0.25 * P.income; P.stats.townIn += 5 * P.income; P.stats.oilIn += 0.25 * P.income; }
     }
     for (const P of S.P) {
       for (const k in P.cooldown) if (P.cooldown[k] > 0) P.cooldown[k] -= DT;
-      for (const cat of ['bld', 'def', 'inf', 'veh', 'air', 'tech']) {
+      for (const cat of ['bld', 'def', 'inf', 'veh', 'air', 'sea', 'tech']) {
         const q = P.q[cat];
         const item = q[0];
         if (!item) continue;
@@ -3210,7 +3344,7 @@ const Rules = (() => {
   }
 
   function producers(S, P, cat) {
-    const k = cat === 'inf' ? 'barracks' : cat === 'veh' ? 'factory' : 'airfield';
+    const k = cat === 'inf' ? 'barracks' : cat === 'veh' ? 'factory' : cat === 'sea' ? 'dock' : 'airfield';
     return P.counts[k] || 0;
   }
 
@@ -3238,11 +3372,12 @@ const Rules = (() => {
       upgradeSide(S, P.team, item.level);
       return;
     }
-    const need = cat === 'inf' ? 'barracks' : cat === 'veh' ? 'factory' : 'airfield';
+    const need = cat === 'inf' ? 'barracks' : cat === 'veh' ? 'factory' : cat === 'sea' ? 'dock' : 'airfield';
     let best = null, n = 0;
     for (const e of S.ents) if (e.b && e.team === P.team && e.kind === need && e.hp > 0) { n++; if (!best || e.primary) best = e; }
     if (!best) return;
-    const [x, y] = exitOf(S, best);
+    // A ship is launched into the open water nearest its dock.
+    const [x, y] = cat === 'sea' ? (c => [c % W + 0.5, (c / W | 0) + 0.5])(goalCells(S, 'naval', best.x | 0, best.y | 0)[0]) : exitOf(S, best);
     // A unit queued before the age turned comes out in the new age's form.
     const kind = formOf(UNITS[item.kind].line, P.tech) || item.kind, u = spawn(S, kind, P.team, x, y);
     P.stats.made++; P.stats[u.d.cat === 'air' ? 'air' : u.d.cat === 'veh' ? 'veh' : 'inf']++;
@@ -3314,6 +3449,7 @@ const Rules = (() => {
       if (now !== kind) return d.age > P.tech || !now ? 'Needs the ' + AGES[d.age].name + ' Age' : 'Now ' + UNITS[now].name;
     } else if ((d.tech || 1) > P.tech) return 'Needs the ' + AGES[d.tech].name + ' Age';
     if (d.need && !P.counts[d.need]) return 'Needs ' + nameOf(d.need, P.tech);
+    if (d.shore && !S.map.seaCells) return 'Needs open water on the map';
     if (BUILDINGS[kind] && !(P.counts.hq || P.counts.fob)) return 'Needs Headquarters';
     if (d.limit) {
       const made = (P.counts[kind] || 0) + P.q[d.cat].filter(i => i.kind === kind).length;
@@ -3727,7 +3863,8 @@ const AI = (() => {
           if (best) { ax = R.lerp(best.x, b[0], 0.3); ay = R.lerp(best.y, b[1], 0.3); }
         }
         if (it.kind === 'fob') { ax = R.lerp(b[0], foe[0], 0.3); ay = R.lerp(b[1], foe[1], 0.3); }
-        const spot = R.spotFor(S, me.team, it.kind, ax, ay, 26, me.rand);
+        me.dockT = 0;
+        const spot = it.kind === 'dock' ? dockSpot(S, me) : R.spotFor(S, me.team, it.kind, ax, ay, 26, me.rand);
         if (spot) R.push(S, me.team, { c: 'place', kind: it.kind, x: spot[0], y: spot[1] });
         else R.push(S, me.team, { c: 'cancel', cat, i: 0 });
       }
@@ -3747,6 +3884,7 @@ const AI = (() => {
     if (opened(P, BUILDINGS.silo) && !has(P, 'silo') && D_silo(me)) pref.push('silo');
     if (has(P, 'factory') < 2 && P.supply > 3000) pref.push('factory');
     if (has(P, 'refinery') < 3 && P.supply > 2500) pref.push('refinery');
+    if ((S.map.fish || []).length && S.map.seaCells > 300 && !has(P, 'dock') && has(P, 'factory') && P.supply > 800 && dockSpot(S, me)) pref.push('dock');
     for (const k of pref) if (!R.blockedReason(S, me.team, k)) { R.push(S, me.team, { c: 'build', kind: k }); return; }
   }
   const D_silo = me => me.D.silo;
@@ -3820,6 +3958,25 @@ const AI = (() => {
       buy(mix[(me.plan * 3 + (m | 0)) % mix.length]);
     }
     if (air.length && P.q.air.length < 1 && ready('air')) buy(air[me.plan % air.length]);
+    // At a dock: fishing boats for the shoals, then warships, a few more as the army grows.
+    if (has(P, 'dock') && P.q.sea.length < 2) {
+      const boat = R.formOf('fish', P.tech), ship = R.formOf('ship', P.tech), shoals = (S.map.fish || []).length;
+      if (boat && shoals && R.lineCount(P, 'fish') < Math.min(3, shoals) && P.supply > 300) buy(boat);
+      else if (ship && R.lineCount(P, 'ship') < Math.min(6, 1 + count / 10 | 0) && P.supply > 700 && !R.blockedReason(S, me.team, ship)) buy(ship);
+    }
+  }
+  // Where a dock might go: a spot inside the border by the open water nearest home, looked for again now and then.
+  function dockSpot(S, me) {
+    if (me.dockT && S.tick < me.dockT) return me.dockAt || null;
+    me.dockT = S.tick + 30 * HZ; me.dockAt = null;
+    const M = S.map, b = S.bases[me.team], W = M.W, cand = [];
+    for (let c = 0; c < W * M.H; c += 2) if (M.sea[c]) cand.push([Math.hypot(c % W - b[0], (c / W | 0) - b[1]), c % W, c / W | 0]);
+    cand.sort((p, q) => p[0] - q[0]);
+    for (const [, x, y] of cand.slice(0, 60)) {
+      const spot = R.spotFor(S, me.team, 'dock', x, y, 9, me.rand);
+      if (spot) { me.dockAt = spot; break; }
+    }
+    return me.dockAt;
   }
 
   // The minute of the game a commander reaches for its next age, counted from the age the game began in. A game
@@ -4033,7 +4190,7 @@ const AI = (() => {
     bridges(S, me, P);
     powers(S, me, P);
 
-    let army = S.ents.filter(e => e.team === team && !e.b && !e.d.cargo && !e.d.repair && !e.d.engineer && e.drop <= 0);
+    let army = S.ents.filter(e => e.team === team && !e.b && !e.d.cargo && !e.d.repair && !e.d.engineer && !e.d.trade && !e.d.fish && e.drop <= 0);
     army = garrison(S, me, army);
     army = towns(S, me, army);
     const fight = army.filter(u => !(u.ord && u.ord.t === 'capture') && u.d.move !== 'jet');
@@ -4855,6 +5012,19 @@ const Models = (() => {
       g.cyl(0.014, 0.02, 0.62, 0.3, 0, 0, P.steelDk, { axis: 'x', seg: 6 });
       buildings.bunker = [part('body', b), part('turret', t, { pivot: [0, 0.1, 0], aim: true }), part('gun', g, { parent: 'turret', pivot: [0.7, 0.26, 0], recoil: 0.04 })];
     }
+    // Dock: a plank quay on the shore with a crane, bollards, stacked crates and a boathouse under the side's mark.
+    {
+      const b = G(), wood = 0x6a5238, woodDk = 0x4e3a26;
+      b.box(3, 0.3, 3, 0, -0.1, 0, wood);
+      for (let i = 0; i < 6; i++) b.box(3, 0.012, 0.03, 0, 0.2, -1.25 + i * 0.5, woodDk);
+      for (const [x, z] of [[1.3, 1.3], [1.3, -1.3], [-1.3, 1.3], [-1.3, -1.3], [1.3, 0], [-1.3, 0]]) b.cyl(0.07, 0.08, 0.2, x, 0.3, z, woodDk, { seg: 8 });
+      b.box(1.3, 0.62, 1.0, -0.6, 0.2, -0.75, woodDk, T);
+      b.prism([[-0.7, 0], [0, 0.42], [0.7, 0], [0.7, 0.04], [0, 0.46], [-0.7, 0.04]], 1.06, -0.6, 0.82, -0.75, P.rust);
+      b.cyl(0.06, 0.08, 1.3, 0.7, 0.85, 0.6, P.steelDk, { seg: 8 }); b.box(1.3, 0.07, 0.07, 1.05, 1.45, 0.6, P.steelDk, { rz: 0.2 });
+      for (const [x, z, h] of [[0.2, 0.9, 0.28], [0.5, 0.95, 0.22], [0.3, 0.55, 0.24]]) b.box(0.28, h, 0.28, x, 0.2, z, P.sand);
+      mark(b, 0.6, 0.6, -0.6, 0.83, -0.75);
+      buildings.dock = [part('body', b)];
+    }
     {
       const b = G();
       b.box(2, 0.4, 2, 0, -0.34, 0, P.sand);
@@ -5611,6 +5781,81 @@ const Models = (() => {
       // Hover freighter: the hauler's barge with a sealed cargo pod on its bin.
       const c = G(); c.box(1.1, 0.36, 0.7, -0.3, 1.04, 0, A.exo, T); c.box(1.12, 0.04, 0.72, -0.3, 1.0, 0, A.glow, GLOW); mark(c, 0.3, 0.4, -0.3, 1.225, 0);
       units.hovfreight = [part('hull', b), part('pod', c)];
+    }
+    // Ships and boats, their waterline at 0. A hull is a plan with a pointed bow pushed up from the water, and a
+    // deck laid on it; masts carry square sails that take the side's mark.
+    const hull = (g, L, Wd, h, c, deck = A.wood) => {
+      const plan = (k, e) => [[L / 2 - e, 0], [L / 2 - Wd * 0.9, Wd / 2 * k - e], [-L / 2 + e, Wd / 2 * 0.85 * k - e], [-L / 2 + e, -(Wd / 2 * 0.85 * k - e)], [L / 2 - Wd * 0.9, -(Wd / 2 * k - e)]];
+      g.plate(plan(1, 0), h, 0, -0.08, 0, c);
+      g.plate(plan(1, 0.05), 0.02, 0, h - 0.08, 0, deck);
+    };
+    const mast = (g, x, hgt, w, y0) => { g.cyl(0.025, 0.035, hgt, x, y0 + hgt / 2, 0, A.woodDk, { seg: 6 }); g.box(0.03, hgt * 0.55, w, x + 0.03, y0 + hgt * 0.3, 0, A.canvas, T); };
+    {
+      // War galley: a long low hull, a bronze ram, a bank of oars a side and one square sail.
+      const b = G();
+      hull(b, 2.1, 0.5, 0.22, A.wood);
+      b.box(0.24, 0.07, 0.07, 1.1, -0.02, 0, A.bronze);
+      for (let i = 0; i < 6; i++) for (const s of [-1, 1]) b.box(0.035, 0.02, 0.44, 0.55 - i * 0.24, 0.08, s * 0.42, A.woodDk, { ry: s * 0.25 });
+      b.box(0.1, 0.3, 0.1, -1.0, 0.14, 0, A.woodDk);
+      mast(b, 0.05, 0.9, 0.72, 0.14); mark(b, 0.3, 0.26, -0.6, 0.15, 0);
+      units.galley = [part('hull', b)];
+    }
+    {
+      // War cog: a round tubby hull with a castle at each end and one great square sail.
+      const b = G();
+      hull(b, 1.8, 0.7, 0.34, A.wood);
+      b.box(0.42, 0.22, 0.62, 0.55, 0.26, 0, A.woodDk, T); b.box(0.5, 0.32, 0.64, -0.62, 0.26, 0, A.woodDk, T);
+      mast(b, 0, 1.25, 0.86, 0.26);
+      units.cog = [part('hull', b)];
+    }
+    {
+      // Frigate: a long dark hull with a row of gunports and three masts under sail.
+      const b = G();
+      hull(b, 2.6, 0.72, 0.38, A.woodDk, A.wood);
+      b.box(1.7, 0.07, 0.74, -0.1, 0.16, 0, 0x2a2826);
+      for (let i = 0; i < 6; i++) for (const s of [-1, 1]) b.box(0.08, 0.06, 0.02, 0.55 - i * 0.26, 0.17, s * 0.375, A.ivory);
+      mast(b, 0.75, 1.25, 0.72, 0.3); mast(b, 0, 1.5, 0.86, 0.3); mast(b, -0.78, 1.15, 0.66, 0.3);
+      units.frigate = [part('hull', b)];
+    }
+    {
+      // Ironclad: a low iron hull, an armoured casemate with a gun at each end, and a tall funnel.
+      const b = G();
+      hull(b, 2.4, 0.78, 0.22, P.steel, P.steelDk);
+      b.plate([[0.6, 0.26], [-0.6, 0.26], [-0.8, 0], [-0.6, -0.26], [0.6, -0.26], [0.8, 0]], 0.26, -0.05, 0.14, 0, P.steel, T);
+      for (const x of [0.9, -0.95]) b.cyl(0.03, 0.035, 0.46, x, 0.28, 0, P.steelDk, { axis: 'x', seg: 6 });
+      b.cyl(0.09, 0.1, 0.62, -0.05, 0.62, 0, A.coal, { seg: 10 }); mark(b, 0.32, 0.3, -0.05, 0.41, 0);
+      units.ironclad = [part('hull', b)];
+    }
+    {
+      // Destroyer: a long grey hull, a bridge and mast amidships, a gun turret fore and aft and a raked funnel.
+      const b = G(), grey = 0x8c9196, dark = 0x5d6267;
+      hull(b, 2.9, 0.6, 0.3, grey, dark);
+      b.box(0.62, 0.36, 0.42, 0.25, 0.22, 0, grey, T); b.box(0.5, 0.06, 0.44, 0.25, 0.58, 0, dark);
+      b.cyl(0.02, 0.025, 0.7, 0.2, 0.9, 0, dark, { seg: 6 });
+      b.cyl(0.08, 0.1, 0.42, -0.35, 0.4, 0, dark, { seg: 10, rz: 0.15 });
+      for (const [x, r] of [[0.95, 1], [-0.95, -1]]) { b.cyl(0.13, 0.15, 0.12, x, 0.28, 0, grey, { seg: 10 }); b.cyl(0.022, 0.026, 0.42, x + r * 0.26, 0.31, 0, dark, { axis: 'x', seg: 6 }); }
+      mark(b, 0.36, 0.3, -0.85, 0.231, 0);
+      units.destroyer = [part('hull', b)];
+    }
+    {
+      // Rail corvette: an angular composite hull, a sealed pod, a long rail gun and a strip of blue light.
+      const b = G();
+      b.plate([[1.4, 0], [0.4, 0.34], [-1.3, 0.3], [-1.3, -0.3], [0.4, -0.34]], 0.26, 0, -0.08, 0, A.exo);
+      b.plate([[0.5, 0.2], [-0.8, 0.22], [-0.9, 0], [-0.8, -0.22], [0.5, -0.2], [0.8, 0]], 0.24, 0, 0.18, 0, A.exoDk, T);
+      b.box(1.6, 0.05, 0.08, 0.35, 0.44, 0, A.exoDk); b.box(1.5, 0.02, 0.04, 0.35, 0.49, 0, A.glow, GLOW);
+      b.box(0.02, 0.06, 0.62, -1.3, 0.06, 0, A.glow, GLOW); mark(b, 0.34, 0.3, -0.45, 0.425, 0);
+      units.corvette = [part('hull', b)];
+    }
+    {
+      // Fishing boats: a skiff under one sail, a two-masted smack, a steam trawler with its wheelhouse and boom,
+      // and a hover trawler. Each carries a net at the stern.
+      const net = (g, x, y) => g.sph(0.12, x, y, 0, A.rope, { seg: 8, rings: 5, sy: 0.6 });
+      { const b = G(); hull(b, 1.0, 0.36, 0.15, A.wood); mast(b, 0.08, 0.62, 0.42, 0.1); net(b, -0.32, 0.12); mark(b, 0.16, 0.16, -0.2, 0.08, 0); units.skiff = [part('hull', b)]; }
+      { const b = G(); hull(b, 1.35, 0.46, 0.2, A.coatB, A.wood); mast(b, 0.3, 0.8, 0.46, 0.14); mast(b, -0.25, 0.65, 0.4, 0.14); net(b, -0.52, 0.17); units.smack = [part('hull', b)]; }
+      { const b = G(); hull(b, 1.55, 0.52, 0.24, A.coatR, A.woodDk); b.box(0.36, 0.3, 0.36, 0.2, 0.17, 0, A.white, T); b.cyl(0.05, 0.06, 0.34, 0.0, 0.5, 0, A.coal, { seg: 8 });
+        b.cyl(0.02, 0.02, 0.8, -0.35, 0.45, 0, A.woodDk, { seg: 6, rz: 0.7 }); net(b, -0.6, 0.2); units.trawler = [part('hull', b)]; }
+      { const b = G(); b.plate([[0.8, 0], [0.3, 0.27], [-0.7, 0.26], [-0.7, -0.26], [0.3, -0.27]], 0.2, 0, -0.06, 0, A.exo); b.box(0.36, 0.22, 0.34, 0.15, 0.14, 0, A.exoDk, T);
+        b.box(0.02, 0.04, 0.5, -0.7, 0.06, 0, A.glow, GLOW); net(b, -0.45, 0.16); units.hovtrawler = [part('hull', b)]; }
     }
     // Rail artillery: a hover sled with a long rail on a turntable.
     {
@@ -9752,12 +9997,14 @@ const World = (() => {
           pushScreen(onScreen, e, x, gh + 0.4, y, 0.6);
           continue;
         }
-        const air = Rules.isAir(e), L = e.d.r * 0.9;
-        const z = air ? gh * 0 + Math.max(gh, M.water) + e.z : gh;
+        const air = Rules.isAir(e), naval = e.d.move === 'naval', L = e.d.r * 0.9;
+        // A ship rides on the water, rising and falling a little with the swell.
+        const z = air ? gh * 0 + Math.max(gh, M.water) + e.z : naval ? M.water + waterRise.value + 0.04 * Math.sin(now * 1.6 + e.id) : gh;
         if (!air) {
           const cA = Math.cos(-yaw), sA = Math.sin(-yaw);
           const hf = heightAt(M, x + cA * L, y + sA * L), hb = heightAt(M, x - cA * L, y - sA * L), hl = heightAt(M, x - sA * L * 0.7, y + cA * L * 0.7), hr = heightAt(M, x + sA * L * 0.7, y - cA * L * 0.7);
-          const tp = Math.atan2(hf - hb, L * 2), tr = Math.atan2(hl - hr, L * 1.4), k = 1 - Math.exp(-dt * 10);
+          const k = 1 - Math.exp(-dt * 10);
+          const tp = naval ? 0.03 * Math.sin(now * 1.3 + e.id) : Math.atan2(hf - hb, L * 2), tr = naval ? 0.05 * Math.sin(now * 1.05 + e.id * 2) : Math.atan2(hl - hr, L * 1.4);
           r.pitch += (tp - r.pitch) * k; r.roll += (tr - r.roll) * k;
           compose(m1, x, z, y, yaw, r.pitch, -r.roll, US);
           // A beast or walker rides up and down on its stride, and a gallop rocks it fore and aft. A gun runs back as
@@ -9779,8 +10026,8 @@ const World = (() => {
         if (r.morph !== undefined && r.morph < 0.45) { r.morph += dt; const k = Math.min(1, r.morph / 0.45); m3.makeScale(1, 0.55 + 0.45 * (1 - (1 - k) ** 3), 1); m1.multiply(m3); }
         drawParts(sets[e.kind], m1, color, e, r, now);
         if (!air) {
-          // Dust behind what moves, and tracks in the ground.
-          if (e.v > 0.8) {
+          // Dust behind what moves on land, and tracks in the ground.
+          if (e.v > 0.8 && !naval) {
             r.dust -= dt;
             if (r.dust <= 0) {
               r.dust = 0.13;
@@ -10629,6 +10876,9 @@ const Hud = (() => {
       case 'eng': g.moveTo(-a, -b * 0.4); g.lineTo(a, -b * 0.4); g.moveTo(-a, -b * 0.4); g.lineTo(-a, b); g.moveTo(0, -b * 0.4); g.lineTo(0, b); g.moveTo(a, -b * 0.4); g.lineTo(a, b); break;
       case 'snp': cross(); dot(b * 0.3); break;
       case 'hero': g.moveTo(-a * 0.3, -b); g.lineTo(a * 0.5, -b * 0.1); g.lineTo(-a * 0.1, b * 0.1); g.lineTo(a * 0.3, b); break;
+      case 'ship': g.moveTo(-a, -b * 0.1); g.lineTo(a * 0.7, -b * 0.1); g.lineTo(a, -b * 0.5); g.moveTo(-a, -b * 0.1); g.lineTo(-a * 0.7, b * 0.5); g.lineTo(a * 0.6, b * 0.5); g.lineTo(a * 0.7, -b * 0.1); g.moveTo(-a * 0.1, -b * 0.1); g.lineTo(-a * 0.1, -b); break;
+      case 'boat': g.moveTo(-a * 0.8, 0); g.lineTo(a * 0.8, 0); g.lineTo(a * 0.5, b * 0.5); g.lineTo(-a * 0.5, b * 0.5); g.closePath(); g.moveTo(0, 0); g.lineTo(0, -b * 0.9); g.lineTo(a * 0.5, -b * 0.1); break;
+      case 'dock': g.rect(-a * 0.8, -b * 0.2, a * 1.6, b * 0.5); g.moveTo(-a * 0.5, -b * 0.2); g.lineTo(-a * 0.5, -b * 0.9); g.lineTo(a * 0.5, -b * 0.9); break;
       case 'trade': g.rect(-a * 0.7, -b * 0.4, a * 1.4, b * 0.9); g.moveTo(-a * 0.7, -b * 0.4); g.lineTo(a * 0.7, b * 0.5); g.moveTo(a * 0.7, -b * 0.4); g.lineTo(-a * 0.7, b * 0.5); break;
       case 'sup': case 'sup2': g.moveTo(-a, b * 0.5); g.lineTo(a, b * 0.5); if (sym === 'sup2') { g.moveTo(0, -b); g.lineTo(0, b * 0.2); g.moveTo(-a * 0.4, -b * 0.4); g.lineTo(a * 0.4, -b * 0.4); } break;
       case 'rec': g.moveTo(-a, b); g.lineTo(a, -b); break;
@@ -10678,6 +10928,8 @@ const Hud = (() => {
       case 'chariot': beast(3.4, 0.2, 2.6, 1.4); box(-7.2, -2.2, 5.4, 3); ring(-4.6, 3, 2.4); ln([[-1.8, -0.6], [1, -0.2]]); dot(-4.6, -4.8, 1.3); ln([[-4.6, -3.5], [-4.6, -2.2]]); break;
       case 'elephant': g.beginPath(); g.ellipse(-1.5, -0.4, 5.6, 3.4, 0, 0, 6.3); g.fill(); for (const x of [-5.4, -2.2, 1.4]) box(x, 1.5, 2.2, 4.3); dot(4.6, -1.4, 2.8); g.lineWidth = 1.8; ln([[6.8, -0.4], [7.8, 2.6], [7.2, 5.4]]); g.lineWidth = 1.1; ln([[5.6, 1.2], [8.2, 1.6]]); box(-4, -6.6, 4.8, 2.2); break;
       case 'cart': case 'cart2': beast(4.2, 0, 2.4, 1.3); box(-7.6, -2.6, 7.2, 3.6); ring(-4, 3, 2.4); ln([[-0.4, -0.6], [2, -0.6]]); if (sym === 'cart2') { g.fillStyle = bg; box(-5.4, -1.3, 3, 1); box(-4.4, -2.3, 1, 3); } break;
+      case 'ship': poly([[-8, 0], [6, 0], [8, -2.5], [-8, -1]]); poly([[-7, 1], [6, 1], [4, 4], [-6, 4]]); ln([[-1, -1], [-1, -7]]); ln([[-1, -6.5], [3.5, -2]]); break;
+      case 'boat': poly([[-6, 1], [6, 1], [4, 4], [-4, 4]]); ln([[0, 1], [0, -6]]); ln([[0, -5.5], [4, -0.5]]); break;
       case 'trade': box(-7, -3, 6, 5); box(0, -1.5, 5, 3.5); dot(-4.5, 3.5, 1.6); dot(2.5, 3.5, 1.6); ln([[5.5, 0], [8, 0]]); break;
       case 'sup': box(-7, -3, 9, 5); box(2.5, -1, 4.5, 3); dot(-4.5, 3.5, 1.6); dot(4, 3.5, 1.6); break;
       case 'sup2': box(-7, -3, 9, 5); box(2.5, -1, 4.5, 3); dot(-4.5, 3.5, 1.6); dot(4, 3.5, 1.6); g.fillStyle = bg; box(-4, -2.4, 3, 0.9); box(-3, -3.4, 0.9, 3); break;
@@ -10751,15 +11003,15 @@ const Hud = (() => {
 
     const TABS = [
       { id: 'bld', label: 'Base', key: 'Z' }, { id: 'def', label: 'Guns', key: 'X' }, { id: 'inf', label: 'Men', key: 'C' },
-      { id: 'veh', label: 'Armor', key: 'V' }, { id: 'air', label: 'Air', key: 'B' }, { id: 'pow', label: 'Calls', key: 'N' },
+      { id: 'veh', label: 'Armor', key: 'V' }, { id: 'air', label: 'Air', key: 'B' }, { id: 'sea', label: 'Sea', key: ',' }, { id: 'pow', label: 'Calls', key: 'N' },
     ];
     // Everything a side may come to build; the sidebar shows what its age has opened.
     const ALL = {
-      bld: ['power', 'refinery', 'barracks', 'factory', 'radar', 'derrick', 'fob', 'airfield', 'silo'],
+      bld: ['power', 'refinery', 'barracks', 'factory', 'radar', 'derrick', 'fob', 'airfield', 'dock', 'silo'],
       def: ['bunker', 'atgun', 'sam', 'rail'],
       pow: ['tech', 'flare', 'uav', 'barrage', 'para', 'launch'],
     };
-    const LISTS = { bld: [], def: [], inf: [], veh: [], air: [], pow: [] };
+    const LISTS = { bld: [], def: [], inf: [], veh: [], air: [], sea: [], pow: [] };
     const KEYS = 'QWERTYUIO';
     // The cards show only what the side's age has opened: one card for each line, in its form for that age, and
     // the buildings, defences and calls of that age.
@@ -10768,7 +11020,7 @@ const Hud = (() => {
     function lineLists(age) {
       if (age === listAge) return;
       listAge = age;
-      for (const cat of ['inf', 'veh', 'air']) LISTS[cat] = Rules.LINE_ORDER[cat].map(l => Rules.formOf(l, age)).filter(Boolean);
+      for (const cat of ['inf', 'veh', 'air', 'sea']) LISTS[cat] = Rules.LINE_ORDER[cat].map(l => Rules.formOf(l, age)).filter(Boolean);
       const opened = k => k === 'tech' || ((k === 'launch' ? BUILDINGS.silo : BUILDINGS[k] || POWERS[k]).tech || 1) <= age;
       for (const cat in ALL) LISTS[cat] = ALL[cat].filter(opened);
     }
@@ -10782,6 +11034,10 @@ const Hud = (() => {
       tabs.appendChild(b);
     });
     function pickTab(id) {
+      // The Sea tab shows only on a map with open water, and the Dock only there too.
+      const wet = !!(S() && S().map.seaCells > 200);
+      $('tab-sea').hidden = !wet;
+      if (id === 'sea' && !wet) id = 'bld';
       state.tab = id;
       lineLists(P() ? P().tech : 1);
       for (const t of TABS) $('tab-' + t.id).classList.toggle('on', t.id === id);
@@ -11289,7 +11545,7 @@ const Hud = (() => {
         }
         return;
       }
-      const tabKey = { KeyZ: 'bld', KeyX: 'def', KeyC: 'inf', KeyV: 'veh', KeyB: 'air', KeyN: 'pow' }[k];
+      const tabKey = { KeyZ: 'bld', KeyX: 'def', KeyC: 'inf', KeyV: 'veh', KeyB: 'air', Comma: 'sea', KeyN: 'pow' }[k];
       if (tabKey) { pickTab(tabKey); return; }
       const slot = { KeyQ: 0, KeyW: 1, KeyE: 2, KeyR: 3, KeyT: 4, KeyY: 5, KeyU: 6, KeyI: 7, KeyO: 8 }[k];
       if (slot !== undefined) { const c = LISTS[state.tab][slot]; if (c) camClick(c, e.shiftKey ? 5 : 1); return; }
