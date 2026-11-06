@@ -2676,9 +2676,9 @@ const World = (() => {
       camera.updateMatrixWorld();
     }
 
-    // A machine that has had to give up pixels (scale under 0.75) also gets the smaller shadow map.
+    // A machine that has had to give up the most pixels it may (scale under 0.8) also gets the smaller shadow map.
     function resize(w, h, dpr, scale = 1) {
-      const sm = low || scale < 0.75 ? 2048 : 4096;
+      const sm = low || scale < 0.8 ? 2048 : 4096;
       if (sun.shadow.mapSize.x !== sm) { sun.shadow.mapSize.set(sm, sm); if (sun.shadow.map) { sun.shadow.map.dispose(); sun.shadow.map = null; } }
       world.vw = w; world.vh = h;
       renderer.setPixelRatio(1);
