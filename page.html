@@ -422,13 +422,14 @@ body[data-look="ink"] #menu, body[data-look="ink"] #watch, body[data-look="ink"]
 #maps button small { font: 13px var(--mono); opacity: .8; white-space: nowrap; }
 .preview { margin-top: 8px; }
 #preview { width: 100%; aspect-ratio: 1; display: block; border: 1.5px solid var(--ink); background: var(--paper-hi); }
-#map-about, #age-about { margin: 6px 0 0; font: 500 15px/1.25 var(--ui); color: var(--ink-dim); text-wrap: pretty; }
+#map-about, #age-about, #weather-about { margin: 6px 0 0; font: 500 15px/1.25 var(--ui); color: var(--ink-dim); text-wrap: pretty; }
 #age-about { min-height: 2.5em; }
 /* The game's own choices stand under the players: the theatre and the age it begins in. */
 .rules { margin-top: 14px; display: grid; gap: 4px; }
 .rules h3 { margin: 8px 0 2px; }
 #m-age { grid-template-columns: repeat(6, 1fr); }
-body[data-look="ink"] #age-about, body[data-look="ink"] #map-about { font-family: var(--label); font-style: italic; font-weight: 400; }
+#m-weather { grid-template-columns: repeat(4, 1fr); }
+body[data-look="ink"] #age-about, body[data-look="ink"] #map-about, body[data-look="ink"] #weather-about { font-family: var(--label); font-style: italic; font-weight: 400; }
 .seedrow { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin: 8px 0 14px; font: 500 16px var(--ui); }
 .seedrow b { font: 15px var(--mono); }
 #slots { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
@@ -562,6 +563,9 @@ body[data-look="ink"] .sheet { box-shadow: 4px 4px 0 var(--ink); }
             <h3>Starting age</h3>
             <div id="m-age" class="pick three"><button data-v="1">Ancient</button><button data-v="2">Medieval</button><button data-v="3">Gunpowder</button><button data-v="4">Industrial</button><button data-v="5">Modern</button><button data-v="6">Future</button></div>
             <p id="age-about"></p>
+            <h3>Weather</h3>
+            <div id="m-weather" class="pick three"><button data-v="random">Random</button><button data-v="mild">Mild</button><button data-v="harsh">Harsh</button><button data-v="off">Off</button></div>
+            <p id="weather-about"></p>
           </div>
           <div id="chat" hidden><div id="chat-log"></div><input id="chat-in" maxlength="200" placeholder="Say something, then Enter" autocomplete="off" spellcheck="false"></div>
         </section>

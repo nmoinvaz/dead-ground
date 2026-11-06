@@ -1148,8 +1148,8 @@ const Hud = (() => {
       return labelF;
     }
     // The weather and the hour in a corner, with what the weather does, and a word of what is coming.
-    const SKY_NAME = { clear: 'Fair', cloud: 'Overcast', rain: 'Rain', storm: 'Storm', fog: 'Fog', snow: 'Snow' };
-    const SKY_NOTE = { rain: 'Wheels bog down off the roads', storm: 'Aircraft grounded', fog: 'Sight cut short', snow: 'Everyone slowed' };
+    const SKY_NAME = { clear: 'Fair', cloud: 'Overcast', rain: 'Rain', storm: 'Storm', fog: 'Fog', snow: 'Snow', sand: 'Dust storm', blizzard: 'Blizzard' };
+    const SKY_NOTE = { rain: 'Wheels bog down off the roads', storm: 'Aircraft grounded', fog: 'Sight cut short', snow: 'Everyone slowed', sand: 'Sight cut, aircraft grounded', blizzard: 'Everyone slowed, aircraft grounded' };
     const hourName = d => d < 0.05 || d >= 0.95 ? 'Dawn' : d < 0.3 ? 'Morning' : d < 0.5 ? 'Midday' : d < 0.7 ? 'Afternoon' : d < 0.8 ? 'Dusk' : 'Night';
     function drawSkyNote(s) {
       const w = Rules.sky(s), ink = inked();
