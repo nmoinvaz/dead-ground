@@ -66,6 +66,27 @@ const Looks = (() => {
           a.xyz /= a.w; b.xyz /= b.w;
           return mix(a.xz, b.xz, (y - a.y) / (b.y - a.y));
         }`,
+      // The clouds, drawn as a cartoonist draws fair-weather cumulus: each a cluster of four round puffs, at most one
+      // to a cell of 22 units, the cells drifting with the wind. uCloudT, the share of sky they cover, sets how many
+      // cells hold a cloud and how big it is, and each cloud swells in or melts away as that share passes its own
+      // mark. The pass declares uCloud and uCloudT.
+      CLOUD: `
+        float cloudAt(vec2 xz) {
+          vec2 q = xz / 22.0 - uCloud * (1.0 / (0.006 * 22.0)), b = floor(q - 0.5);
+          float cov = clamp((uCloudT - 0.1) * 2.0, 0.0, 1.0), d = 0.0;
+          for (int j = 0; j < 2; j++) for (int i = 0; i < 2; i++) {
+            vec2 c = b + vec2(float(i), float(j));
+            float h = fract(sin(dot(c, vec2(127.1, 311.7))) * 43758.5453), size = smoothstep(0.0, 0.15, cov - h * 0.95);
+            if (size <= 0.0) continue;
+            vec2 m = c + 0.5 + (vec2(fract(h * 17.31), fract(h * 41.17)) - 0.5) * 0.12;
+            for (int k = 0; k < 4; k++) {
+              float hk = fract(h * (13.7 + float(k) * 7.31)), r = (0.1 + 0.07 * hk) * (0.75 + 0.5 * cov) * size;
+              vec2 o = (vec2(fract(hk * 23.1), fract(hk * 57.7)) - 0.5) * 0.3;
+              d = max(d, 1.0 - smoothstep(r * 0.82, r, length(q - m - o)));
+            }
+          }
+          return d;
+        }`,
       // Value noise, its fractal sum, and luminance.
       NOISE: `
         float hash(vec2 p) { p = fract(p * vec2(123.34, 456.21)); p += dot(p, p + 45.32); return fract(p.x * p.y); }

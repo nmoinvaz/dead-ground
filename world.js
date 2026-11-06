@@ -335,8 +335,9 @@ const World = (() => {
         attribute float aRoad; varying float vR; varying vec3 vW;
         void main() { vR = aRoad; vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }`, fragmentShader: `
         uniform sampler2D tDetail, tTrail; uniform vec2 uCloud; uniform float uMap, uCloudT; varying float vR; varying vec3 vW;
+        ${Looks.GL.CLOUD}
         void main() {
-          float cl = 1.0 - smoothstep(uCloudT, uCloudT + 0.32, texture2D(tDetail, vW.xz * 0.006 + uCloud).r);
+          float cl = cloudAt(vW.xz);
           float fb = texture2D(tDetail, vW.xz * 0.013 + uCloud * 0.7 + 0.37).g;
           gl_FragColor = vec4(min(vR, 20.0), cl, fb, texture2D(tTrail, vW.xz / uMap).r);
         }` });
@@ -1525,7 +1526,7 @@ const World = (() => {
       const U = SH.uWind.value;
       U.x += (w.wind[0] - U.x) * k; U.y += (w.wind[1] - U.y) * k;
       SH.uCloud.value.x += (U.x * 0.008 + 0.0004) * dt; SH.uCloud.value.y += U.y * 0.008 * dt;
-      SH.uCloudK.value = clamp(0.2 + 0.55 * sky.cloud + 0.6 * sky.rain + 0.2 * sky.fog + 0.3 * sky.snow + 0.2 * sky.sand + 0.6 * sky.blizzard, 0, 1);
+      SH.uCloudK.value = clamp(0.35 + 0.45 * sky.cloud + 0.6 * sky.rain + 0.2 * sky.fog + 0.3 * sky.snow + 0.2 * sky.sand + 0.6 * sky.blizzard, 0, 1);
       // How much of the sky the clouds cover: a few in fair weather, broken cloud when overcast, a lid in rain.
       SH.uCloudT.value = clamp(0.2 + 0.18 * sky.cloud + 0.3 * sky.rain + 0.1 * sky.fog + 0.22 * sky.snow + 0.05 * sky.sand + 0.3 * sky.blizzard, 0.15, 0.55);
       SH.uSnowC.value = sky.cover;
@@ -1544,7 +1545,7 @@ const World = (() => {
       // The look's own sun, or its light's, or the hour's.
       sky.sun = style.sun ? style.sun({ cam, day: d, light, SUN, sunAt }) : light ? light.sun : sunAt(d);
       // The clouds as seen from above, see-through, greyer as the weather worsens and hidden in fog or blown sand.
-      sky.cloudA = clamp(0.3 + 0.2 * sky.cloud + 0.15 * sky.rain + 0.1 * sky.snow + 0.15 * sky.blizzard - 0.35 * sky.fog - 0.3 * sky.sand, 0, 0.5) * (1 - 0.5 * sky.night);
+      sky.cloudA = clamp(0.42 + 0.15 * sky.cloud + 0.15 * sky.rain + 0.1 * sky.snow + 0.15 * sky.blizzard - 0.35 * sky.fog - 0.3 * sky.sand, 0, 0.5) * (1 - 0.5 * sky.night);
       sky.cloudG = clamp(sky.rain + 0.5 * sky.storm + 0.6 * sky.blizzard + 0.3 * sky.snow, 0, 1);
       // Shafts of sun through gaps in broken cloud, longest and strongest with the sun low, none by night.
       const up = sky.sun[1] / Math.hypot(...sky.sun), sunUp = clamp(up * 4, 0, 1) * (1 - 0.45 * smooth(0.55, 0.9, up)) * (1 - sky.night);
