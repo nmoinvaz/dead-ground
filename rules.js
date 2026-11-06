@@ -1057,7 +1057,7 @@ const Rules = (() => {
     return {
       v: 1, seed: S.seed, layout: S.layout, seats: S.seats, pos: S.pos, age0: S.age0, theatre: S.theatre, weather: S.weather, tick: S.tick, rs: S.rs, next: S.next, occVer: S.occVer, oreVer: S.oreVer, terrVer: S.terrVer, dirty: !!S.dirty, over: S.over,
       ents: S.ents.map(plain), towns: S.towns, shots: S.shots, sweeps: S.sweeps, flights: S.flights, occLog: S.occLog,
-      fields: [...S.fields].map(([k, f]) => [k, f.ver, f.used, f.made, f.reach]),
+      fields: [...S.fields].map(([k, f]) => [k, f.ver, f.used, f.made, f.reach, f.wq]),
       ore: b64.en(new Uint8Array(S.ore.buffer.slice(0))),
       P: S.P.map(P => { const o = plain(P); o.vis = bits(P.vis); o.seen = bits(P.seen); o.q = {}; for (const c in P.q) o.q[c] = P.q[c].map(it => { const j = Object.assign({}, it); delete j.cost; return j; }); return o; }),
       // The ground and the trees as pairs of cell and value, only where they differ from the map's start.
@@ -1072,7 +1072,7 @@ const Rules = (() => {
     Object.assign(S, { tick: o.tick, rs: o.rs, next: o.next, occVer: o.occVer, oreVer: o.oreVer, terrVer: o.terrVer, dirty: o.dirty, over: o.over, shots: o.shots, sweeps: o.sweeps, flights: o.flights, occLog: o.occLog || [] });
     S.towns = o.towns.map(t => Object.assign({}, t));
     S.ore = new Uint16Array(b64.de(o.ore).buffer);
-    S.fields = new Map(o.fields.map(([k, v, u, m, r]) => [k, { ver: v, used: u, made: m, reach: r }]));
+    S.fields = new Map(o.fields.map(([k, v, u, m, r, q]) => [k, { ver: v, used: u, made: m, reach: r, wq: q ?? 20 }]));
     S.P = o.P.map(p => {
       const P = Object.assign(freshPlayer(p.team), p);
       P.stats = Object.assign(freshStats(), p.stats);
@@ -1335,12 +1335,14 @@ const Rules = (() => {
   // need is how far from the goal the asker stands. A field reaches some way past that and is made again,
   // further out, for someone beyond it. After the ground changes a field is kept three seconds more before
   // it is made again, and at most four are made in a step.
+  // The weather's going off the roads for a class, in twentieths, so a field is made again as the going changes.
+  const goingKey = (S, cls) => Math.round(offGoing(cls === 'veh' ? 'wheel' : cls, sky(S)) * 20);
   function field(S, cls, gx, gy, need = 0) {
-    const key = (cls === 'foot' ? 0 : cls === 'veh' ? 1 : 2) * N + gy * W + gx;
+    const key = (cls === 'foot' ? 0 : cls === 'veh' ? 1 : 2) * N + gy * W + gx, wq = goingKey(S, cls);
     let f = S.fields.get(key);
     if (f && f.ver < oldestOcc(S)) { S.fields.delete(key); S._fields.delete(key); f = null; }
     const enough = f && f.reach >= need;
-    if (enough && (f.ver === S.occVer || S.fieldQueue >= 4 || S.tick - f.made < 60)) { f.used = S.tick; return built(S, key, f, cls, gx, gy); }
+    if (enough && ((f.ver === S.occVer && f.wq === wq) || S.fieldQueue >= 4 || S.tick - f.made < 60)) { f.used = S.tick; return built(S, key, f, cls, gx, gy); }
     if (S.fieldQueue >= 4) return null;
     S.fieldQueue++;
     if (!f) {
@@ -1349,20 +1351,20 @@ const Rules = (() => {
         for (const [k, v] of S.fields) if (v.used < age) { age = v.used; oldest = k; }
         S.fields.delete(oldest); S._fields.delete(oldest);
       }
-      f = { ver: 0, used: 0, made: 0, reach: 0 };
+      f = { ver: 0, used: 0, made: 0, reach: 0, wq: 20 };
       S.fields.set(key, f);
     }
-    f.reach = Math.max(f.ver === S.occVer ? f.reach : 0, Math.fround(need * 1.5 + 32));
-    f.ver = S.occVer; f.used = S.tick; f.made = S.tick;
+    f.reach = Math.max(f.ver === S.occVer && f.wq === wq ? f.reach : 0, Math.fround(need * 1.5 + 32));
+    f.ver = S.occVer; f.used = S.tick; f.made = S.tick; f.wq = wq;
     return built(S, key, f, cls, gx, gy);
   }
   function built(S, key, f, cls, gx, gy) {
     let p = S._fields.get(key);
-    if (p && p.ver === f.ver && p.reach === f.reach) return p;
+    if (p && p.ver === f.ver && p.reach === f.reach && p.wq === f.wq) return p;
     if (!p) { p = { dist: new Float32Array(N), dir: new Int8Array(N) }; S._fields.set(key, p); }
-    p.ver = f.ver; p.reach = f.reach;
+    p.ver = f.ver; p.reach = f.reach; p.wq = f.wq;
     const [occ, gnd] = stateAt(S, f.ver);
-    fill(S, p, cls, gx, gy, occ, gnd, f.reach);
+    fill(S, p, cls, gx, gy, occ, gnd, f.reach, f.wq);
     return p;
   }
   // How much of a cell is road, 1 on the carriageway fading to 0 at its verge, from the distance at its middle.
@@ -1375,10 +1377,11 @@ const Rules = (() => {
   // The distance from a point to the nearest road's middle line.
   const roadDistAt = (M, x, y) => M.roadDist[clamp(Math.round(y * RES), 0, VH - 1) * VW + clamp(Math.round(x * RES), 0, VW - 1)];
   // Dijkstra from the goal over a grid of what blocks this class, with each step costing the time it takes, so
-  // roads and worn tracks are cheaper, and woods and fords dearer.
+  // roads and worn tracks are cheaper, and woods and fords dearer. Off the roads the weather's going, wq in
+  // twentieths, makes open ground and young tracks dearer, while a hardened track and a road stay firm.
   let fillBlock = null;
-  function fill(S, f, cls, gx, gy, occ, g, reach = Infinity) {
-    const M = S.map, bit = BIT[cls], woodC = cls === 'track' ? 3 : 1.6, roadC = ROAD_COST[cls];
+  function fill(S, f, cls, gx, gy, occ, g, reach = Infinity, wq = 20) {
+    const M = S.map, bit = BIT[cls], woodC = cls === 'track' ? 3 : 1.6, roadC = ROAD_COST[cls], offK = 20 / wq;
     if (!fillBlock || fillBlock.length !== N) fillBlock = new Uint8Array(N);
     const block = fillBlock, road = roadW(M);
     for (let c = 0; c < N; c++) block[c] = (g[c] & bit) !== 0 || occ[c] !== 0 ? 1 : 0;
@@ -1421,7 +1424,7 @@ const Rules = (() => {
         if (block[m]) continue;
         if ((i & 1) && (block[y * W + nx] || block[ny * W + x])) continue;
         // Rounded to the array's own precision, so a cell is never queued again for the same distance.
-        const gm = g[m], rw = road[m], off = TRACK_COST[(gm >> 5) & 3], here = rw > 0 ? off + (roadC - off) * rw : off;
+        const gm = g[m], rw = road[m], lv = (gm >> 5) & 3, off = lv >= 3 ? TRACK_COST[3] : TRACK_COST[lv] * offK, here = rw > 0 ? off + (roadC - off) * rw : off;
         const nd = Math.fround(dc + COST[i] * here * (gm & 8 ? woodC : 1) * (gm & 16 ? 2 : 1));
         if (nd < dist[m]) { dist[m] = nd; dir[m] = (i + 4) & 7; push(m, nd); }
       }
