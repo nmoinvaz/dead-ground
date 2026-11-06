@@ -168,7 +168,8 @@ const Hud = (() => {
       pow: ['tech', 'flare', 'uav', 'barrage', 'para', 'launch'],
     };
     const LISTS = { bld: [], def: [], inf: [], veh: [], air: [], sea: [], pow: [] };
-    const KEYS = 'QWERTYUIO';
+    // The build keys run along the top row, past P, which pauses, to [ for a tenth picture.
+    const KEYS = 'QWERTYUIO[';
     // The cards show only what the side's age has opened: one card for each line, in its form for that age, and
     // the buildings, defences and calls of that age.
     const sameLine = (a, b) => a === b || (!!UNITS[a] && !!UNITS[b] && UNITS[a].line === UNITS[b].line);
@@ -218,7 +219,7 @@ const Hud = (() => {
       LISTS[state.tab].forEach((k, i) => {
         const b = document.createElement('button'), info = camInfo(k), img = state.cameos[k];
         b.className = 'cam'; b.dataset.kind = k;
-        b.innerHTML = `<canvas width="4" height="3"></canvas><b class="nm"></b><em class="ct"></em><u class="qty"></u><s class="key">${KEYS[i]}</s><span class="state"></span>`;
+        b.innerHTML = `<canvas width="4" height="3"></canvas><b class="nm"></b><em class="ct"></em><u class="qty"></u><s class="key">${KEYS[i] || ''}</s><span class="state"></span>`;
         // A card a new age brought is drawn in, after those before it, and marked new for a few seconds.
         if (state.fresh && state.fresh.has(k) && performance.now() < state.freshUntil) {
           b.classList.add('fresh'); b.style.animationDelay = `${i * 70}ms`;
@@ -703,7 +704,7 @@ const Hud = (() => {
       }
       const tabKey = { KeyZ: 'bld', KeyX: 'def', KeyC: 'inf', KeyV: 'veh', KeyB: 'air', Comma: 'sea', KeyN: 'pow' }[k];
       if (tabKey) { pickTab(tabKey); return; }
-      const slot = { KeyQ: 0, KeyW: 1, KeyE: 2, KeyR: 3, KeyT: 4, KeyY: 5, KeyU: 6, KeyI: 7, KeyO: 8 }[k];
+      const slot = { KeyQ: 0, KeyW: 1, KeyE: 2, KeyR: 3, KeyT: 4, KeyY: 5, KeyU: 6, KeyI: 7, KeyO: 8, BracketLeft: 9 }[k];
       if (slot !== undefined) { const c = LISTS[state.tab][slot]; if (c) camClick(c, e.shiftKey ? 5 : 1); return; }
       if (k === 'KeyA') { if (orderIds().length) enter({ type: 'amove' }), showBanner('Attack-move: click a spot', true); return; }
       if (k === 'KeyS') { const ids = orderIds(); if (ids.length) game.order(s, t, { c: 'stop', ids }); return; }
