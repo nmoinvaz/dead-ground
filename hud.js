@@ -729,12 +729,6 @@ const Hud = (() => {
         say(names[game.inkStyle] + '.');
         return;
       }
-      if (k === 'KeyL') {
-        const order = Looks.list(), next = order[(order.findIndex(l => l.name === world.look) + 1) % order.length];
-        game.look = next.name; world.setLook(game.look); if (game.pictures) game.pictures();
-        try { localStorage.setItem('dg-look', game.look); } catch (e) { /* no store */ }
-        say(next.said); return;
-      }
       if (k === 'Equal' || k === 'NumpadAdd') { game.setSpeed(1); return; }
       if (k === 'Minus' || k === 'NumpadSubtract') { game.setSpeed(-1); return; }
       if (k === 'Comma') { world.cam.yaw -= Math.PI / 12; return; }

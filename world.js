@@ -218,7 +218,7 @@ const World = (() => {
     }
     SH.tDetail.value = makeDetail();
 
-    let style = Looks.get('daylight'), inkStyle = 8, roadStyle = 3, oreStyle = 4;
+    let style = Looks.get('ink'), inkStyle = 8, roadStyle = 3, oreStyle = 4;
     // The kind of thing being drawn into the line passes, shared with the pass's material, and whether it sways.
     const catU = { value: 1 }, catRef = { mat: null, norm: null }, swayU = { value: 0 };
     const maskMat = new THREE.MeshBasicMaterial({ color: 0xffffff });

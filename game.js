@@ -439,13 +439,7 @@ const Game = (() => {
       pictures();
     }
     darkQ?.addEventListener?.('change', applyScheme);
-    // The settings panel, from the gear at the top right: the look, Daylight among them, and the paper's scheme.
-    $('s-look').innerHTML = Looks.all().map(l => `<button data-v="${l.name}">${l.title}</button>`).join('');
-    const markLook = () => $('s-look').querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.v === world.look));
-    $('s-look').querySelectorAll('button').forEach(b => b.addEventListener('click', () => {
-      G.look = b.dataset.v; world.setLook(G.look); markLook(); pictures(); audio.ui('click');
-      store.set('dg-look', G.look);
-    }));
+    // The settings panel, from the gear at the top right: the paper's scheme and the picture's size.
     $('s-scheme').querySelectorAll('button').forEach(b => b.addEventListener('click', () => {
       scheme = b.dataset.v; applyScheme(); audio.ui('click');
       store.set('dg-paper', scheme);
@@ -470,7 +464,7 @@ const Game = (() => {
     setInterval(checkUpdate, 60000);
     document.addEventListener('visibilitychange', () => { if (!document.hidden) checkUpdate(); });
     setTimeout(checkUpdate, 5000);
-    const setOpen = open => { $('settings').hidden = !open; $('b-set').setAttribute('aria-expanded', String(open)); if (open) markLook(); };
+    const setOpen = open => { $('settings').hidden = !open; $('b-set').setAttribute('aria-expanded', String(open)); };
     $('b-set').addEventListener('click', e => { e.stopPropagation(); setOpen($('settings').hidden); audio.ui('click'); });
     document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('settings').hidden) setOpen(false); });
     document.addEventListener('pointerdown', e => { if (!$('settings').hidden && !$('settings').contains(e.target) && e.target !== $('b-set')) setOpen(false); });
