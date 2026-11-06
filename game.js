@@ -100,7 +100,7 @@ const Game = (() => {
       menuEnter() { if (!$('t-main').hidden) $('b-skirmish').click(); else if (!$('t-setup').hidden && !$('deploy').hidden && !$('deploy').disabled) $('deploy').click(); },
     };
     const SPEEDS = [0.5, 1, 1.5, 2, 3];
-    const SLOT_CSS = ['#6fb0ff', '#ff7a60', '#6fd47f', '#b98af0', '#ffae52', '#4fd8d4', '#ff7ac0', '#c99a6c'];
+    const SLOT_CSS = ['#6fb0ff', '#ee3a22', '#6fd47f', '#b98af0', '#ffae52', '#4fd8d4', '#cdf044', '#c99a6c'];
     const LEVELS = ['recruit', 'regular', 'veteran'];
     const THEATRES = { desert: 'Salt Flats', steppe: 'Black Steppe', winter: 'White Pass' };
     const store = { get(k, d = '') { try { return localStorage.getItem(k) ?? d; } catch (e) { return d; } }, set(k, v) { try { if (v === null) localStorage.removeItem(k); else localStorage.setItem(k, v); } catch (e) { /* no store */ } } };

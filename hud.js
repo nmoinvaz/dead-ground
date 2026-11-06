@@ -5,8 +5,8 @@ const Hud = (() => {
   // The map's size is read from the world being shown, since a duel and the shared world differ.
   let W = 128, H = 128;
   // Each slot's colour on the overlay and its plate behind a pictogram, light enough to read on dark ground.
-  const SLOT_CSS = ['#6fb0ff', '#ff7a60', '#6fd47f', '#b98af0', '#ffae52', '#4fd8d4', '#ff7ac0', '#c99a6c'];
-  const SLOT_PLATE = ['#2f6fd6', '#c8402f', '#2f9a48', '#7a48c8', '#d8781a', '#1c9a98', '#c83c8a', '#7a5230'];
+  const SLOT_CSS = ['#6fb0ff', '#ee3a22', '#6fd47f', '#b98af0', '#ffae52', '#4fd8d4', '#cdf044', '#c99a6c'];
+  const SLOT_PLATE = ['#2f6fd6', '#c8402f', '#2f9a48', '#7a48c8', '#d8781a', '#1c9a98', '#9a9612', '#7a5230'];
   const $ = id => document.getElementById(id);
   const fmt = n => Math.floor(n).toLocaleString('en-US');
 
