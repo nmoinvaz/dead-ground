@@ -267,6 +267,8 @@ const Rules = (() => {
 
   // Support calls, made from a radar station.
   const POWERS = {
+    // A flare needs no radar: anyone may light the ground, most use by night.
+    flare: { name: 'Flare', sym: 'flare', cost: 60, cd: 30, tech: 1, r: 8, life: 20, free: true, names: ['Fire Pots', 'Fire Pots', 'Star Shell', 'Star Shell', 'Flare', 'Light Drone'], note: 'Lights a patch of ground for twenty seconds. Most use by night.' },
     uav: { name: 'UAV Sweep', sym: 'uav', cost: 150, cd: 60, tech: 4, r: 14, life: 15, names: [0, 0, 0, 'Recon Flight', 'UAV Sweep', 'UAV Sweep'], note: 'Lights up a patch of the map for a while.' },
     barrage: { name: 'Artillery Barrage', sym: 'art', cost: 500, cd: 120, tech: 3, r: 6, names: [0, 0, 'Cannon Barrage', 'Artillery Barrage', 'Artillery Barrage', 'Orbital Barrage'], note: 'Twelve heavy shells on one spot.' },
     para: { name: 'Paradrop', sym: 'par', cost: 600, cd: 150, tech: 5, r: 4, note: 'Three squads of infantry, anywhere you can see.' },
@@ -887,6 +889,12 @@ const Rules = (() => {
   }
   // The time of day, from 0 at dawn round to 1. A day lasts twenty minutes and a game starts early in the morning.
   const dayAt = t => (t / (HZ * 1200) + 0.03) % 1;
+  // How dark it is, 0 by day to 1 in the dead of night, rising through dusk and falling at first light, as the
+  // picture's own night does.
+  function nightAt(t) {
+    const d = dayAt(t);
+    return d < 0.07 ? (0.07 - d) / 0.07 * 0.3 : d < 0.78 ? 0 : d < 0.85 ? (d - 0.78) / 0.07 : d < 0.94 ? 1 : 1 - (d - 0.94) / 0.06 * 0.7;
+  }
   // A side's running totals. made, lost, killed and razed count units and buildings. mined is supply from
   // trucks, townIn supply from towns and oilIn oil from towns and derricks. killV and lostV are the worth of
   // what was destroyed. inf, veh and air count units made by kind, and built the buildings placed.
@@ -895,7 +903,7 @@ const Rules = (() => {
     return {
       team, supply: o.supply || 3500, oil: o.oil || 250, tech: 1, income: 1, carried: 0,
       q: { bld: [], def: [], inf: [], veh: [], air: [], tech: [] }, prod: 0, use: 0, low: false, vis: new Uint8Array(N), seen: new Uint8Array(N),
-      counts: {}, cooldown: { uav: 0, barrage: 0, para: 0 }, stats: freshStats(), spoke: {}, hints: {}, exposed: false,
+      counts: {}, cooldown: { flare: 0, uav: 0, barrage: 0, para: 0 }, stats: freshStats(), spoke: {}, hints: {}, exposed: false,
       silo: 0, alive: true, shield: 0, born: 0,
     };
   }
@@ -1275,16 +1283,19 @@ const Rules = (() => {
         }
       }
     };
-    // Fog, storms and blown sand shorten everyone's sight. Radar sweeps see through them.
-    const w = sky(S), fk = Math.max(0.4, 1 - 0.45 * w.fog - 0.12 * w.storm - 0.4 * w.sand), fa = Math.max(0.5, 1 - 0.3 * w.fog - 0.3 * w.sand);
+    // Fog, storms and blown sand shorten everyone's sight. Radar sweeps and flares see through them. By night a
+    // unit sees two fifths less, a building a little less by its lamps, and a building that fights not at all, by
+    // its searchlight.
+    const w = sky(S), n = nightAt(S.tick), fk = Math.max(0.4, 1 - 0.45 * w.fog - 0.12 * w.storm - 0.4 * w.sand), fa = Math.max(0.5, 1 - 0.3 * w.fog - 0.3 * w.sand);
+    const nu = 1 - 0.4 * n, nb = 1 - 0.15 * n;
     for (const e of S.ents) {
       if (e.hp <= 0) continue;
       const P = S.P[e.team];
-      if (e.b) light(P, e.x, e.y, (e.d.sight + Math.max(e.w, e.h) / 2) * fk, 3, false);
-      else if (e.d.move === 'air' || e.d.move === 'jet') light(P, e.x, e.y, e.d.sight * fa, 0, true);
-      else light(P, e.x, e.y, e.d.sight * fk * (e.cov >= 0 ? 1.2 : 1), 1.1, false);
+      if (e.b) light(P, e.x, e.y, (e.d.sight + Math.max(e.w, e.h) / 2) * fk * (armOf(S, e) ? 1 : nb), 3, false);
+      else if (e.d.move === 'air' || e.d.move === 'jet') light(P, e.x, e.y, e.d.sight * fa * (1 - 0.3 * n), 0, true);
+      else light(P, e.x, e.y, e.d.sight * fk * nu * (e.cov >= 0 ? 1.2 : 1), 1.1, false);
     }
-    for (const t of S.towns) if (t.owner >= 0) light(S.P[t.owner], t.x, t.y, 9 * fk, 2, false);
+    for (const t of S.towns) if (t.owner >= 0) light(S.P[t.owner], t.x, t.y, 9 * fk * (1 - 0.25 * n), 2, false);
     for (const s of S.sweeps) if (s.until > S.tick) light(S.P[s.team], s.x, s.y, s.r, 0, true);
     // A unit or building that has fired lately is seen by the side it fired on, wherever it stands, by its flash.
     for (const e of S.ents) if (e.hp > 0 && e.firedUntil > S.tick && S.P[e.firedOn]) light(S.P[e.firedOn], e.x, e.y, e.b ? Math.max(e.w, e.h) / 2 + 0.5 : 0.8, 0, true);
@@ -2743,12 +2754,15 @@ const Rules = (() => {
 
   function callPower(S, team, name, x, y) {
     const P = S.P[team], d = POWERS[name];
-    if (!d || P.cooldown[name] > 0 || P.tech < d.tech || !P.counts.radar || P.low || P.supply < d.cost) return;
+    if (!d || P.cooldown[name] > 0 || P.tech < d.tech || (!d.free && (!P.counts.radar || P.low)) || P.supply < d.cost) return;
     P.supply -= d.cost; P.stats.spent += d.cost;
     P.cooldown[name] = d.cd;
     if (name === 'uav') {
       S.sweeps.push({ team, x, y, r: d.r, until: S.tick + d.life * HZ });
       S.ev.push({ t: 'uav', team, x, y, dur: d.life });
+    } else if (name === 'flare') {
+      S.sweeps.push({ team, x, y, r: d.r, until: S.tick + d.life * HZ, flare: S.tick });
+      S.ev.push({ t: 'flare', team, x, y, dur: d.life });
     } else if (name === 'barrage') {
       for (let i = 0; i < 12; i++) {
         const delay = 1.5 + i * 0.28, a = S.rand() * TAU, r = Math.sqrt(S.rand()) * d.r, sx = x + mcos(a) * r, sy = y + msin(a) * r;
@@ -2947,7 +2961,7 @@ const Rules = (() => {
     newGame, step, push, spawn, addBuilding, scoreOf, worth, SERIES, pickFrom, fits, spotFor, roomy, blockedReason, near, rehash, seenBy, terrainAt, heightAt, los, isAir, armed, cellOf, summary, exitOf,
     mulberry, noiser, clamp, lerp, smooth, angleTo, toXY, toUV, gap, setSize, save, load, hashOf, restartSlot, razeSlot, makeMap, mapFor, layoutFor,
     msin, mcos, matan2, mhypot,
-    BRIDGE_HP, SPELL, SKIES, WEATHERS, skyOf, offGoing, route, weatherAt, sky, dayAt, spellOf, bridgeAt, clsOf, houseHp, hurtBridge, ignite, shielded,
+    BRIDGE_HP, SPELL, SKIES, WEATHERS, nightAt, skyOf, offGoing, route, weatherAt, sky, dayAt, spellOf, bridgeAt, clsOf, houseHp, hurtBridge, ignite, shielded,
     coverPoints, coverNear, COVER_R, COVER_ARC,
   };
 })();

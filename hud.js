@@ -42,6 +42,7 @@ const Hud = (() => {
       case 'hel': g.moveTo(-a, -b); g.lineTo(a, b); g.lineTo(a, -b); g.lineTo(-a, b); g.closePath(); break;
       case 'jet': g.moveTo(0, -b); g.lineTo(a, b * 0.6); g.lineTo(0, b * 0.1); g.lineTo(-a, b * 0.6); g.closePath(); break;
       case 'uav': g.moveTo(-a, -b * 0.6); g.lineTo(0, b * 0.6); g.lineTo(a, -b * 0.6); break;
+      case 'flare': for (let i = 0; i < 8; i++) { const an = i * 0.785; g.moveTo(Math.cos(an) * a * 0.3, Math.sin(an) * b * 0.3); g.lineTo(Math.cos(an) * a, Math.sin(an) * b); } break;
       case 'par': g.arc(0, 0, a * 0.7, Math.PI, 0); g.moveTo(-a * 0.7, 0); g.lineTo(0, b); g.lineTo(a * 0.7, 0); break;
       default: g.rect(-a * 0.5, -b * 0.5, a, b);
     }
@@ -90,6 +91,7 @@ const Hud = (() => {
       case 'aa': box(-6.5, 0, 13, 3.5); box(-2.5, -2.5, 5, 2.5); ln([[0, -2], [5, -7]]); ln([[1.5, -2], [6.5, -7]]); break;
       case 'art': box(-7, 0, 14, 3); dot(-4.5, 4, 1.4); dot(4.5, 4, 1.4); g.save(); g.rotate(-0.45); box(-5, -4.5, 9, 3.5); g.restore(); break;
       case 'siege': ln([[-7, 5], [7, 5]]); ln([[-4.5, 5], [-0.5, -3], [3.5, 5]]); g.lineWidth = 1.8; ln([[-6, -5.4], [5, 1.4]]); dot(-6, -5.6, 1.8); dot(-5, 5, 1.4); dot(5, 5, 1.4); break;
+      case 'flare': for (let i = 0; i < 8; i++) { const an = i * 0.785, r0 = 1.6, r1 = i % 2 ? 4.5 : 6.5; ln([[Math.cos(an) * r0, Math.sin(an) * r0], [Math.cos(an) * r1, Math.sin(an) * r1]]); } dot(0, 0, 1.4); break;
       case 'uav': ln([[-5, -4], [5, 4]]); ln([[5, -4], [-5, 4]]); for (const [a, b] of [[-5, -4], [5, 4], [5, -4], [-5, 4]]) dot(a, b, 1.6); break;
       case 'hel': ln([[-7.5, -4], [7.5, -4]]); ln([[0, -4], [0, -2]]); g.beginPath(); g.ellipse(1, 0.5, 4, 2.4, 0, 0, 6.3); g.fill(); ln([[-2.5, 0.5], [-7.5, -1.5]]); break;
       case 'jet': poly([[7.5, 0], [-5, -6], [-3, 0], [-5, 6]]); break;
@@ -156,7 +158,7 @@ const Hud = (() => {
     const ALL = {
       bld: ['power', 'refinery', 'barracks', 'factory', 'radar', 'derrick', 'fob', 'airfield', 'silo'],
       def: ['bunker', 'atgun', 'sam', 'rail'],
-      pow: ['tech', 'uav', 'barrage', 'para', 'launch'],
+      pow: ['tech', 'flare', 'uav', 'barrage', 'para', 'launch'],
     };
     const LISTS = { bld: [], def: [], inf: [], veh: [], air: [], pow: [] };
     const KEYS = 'QWERTYUIO';
@@ -244,7 +246,7 @@ const Hud = (() => {
       if (k === 'launch') { const si = s.ents.find(e => e.b && e.team === t && e.kind === 'silo' && e.charge >= e.d.charge); if (si) enter({ type: 'launch' }); return; }
       if (POWERS[k]) {
         const d = POWERS[k];
-        if (p.cooldown[k] > 0 || p.tech < d.tech || !p.counts.radar || p.supply < d.cost) { game.audio.ui('deny'); return; }
+        if (p.cooldown[k] > 0 || p.tech < d.tech || (!d.free && !p.counts.radar) || p.supply < d.cost) { game.audio.ui('deny'); return; }
         enter({ type: 'power', name: k });
         return;
       }
@@ -290,7 +292,7 @@ const Hud = (() => {
           off = !si; if (si) { prog = si.charge / si.d.charge; ready = prog >= 1; if (ready) prog = 0; label = ready ? 'FIRE' : si ? Math.ceil(si.d.charge - si.charge) + 's' : ''; }
         } else if (POWERS[k]) {
           const cd = p.cooldown[k], d = POWERS[k];
-          off = !p.counts.radar || p.tech < d.tech;
+          off = (!d.free && !p.counts.radar) || p.tech < d.tech;
           if (cd > 0) { prog = 1 - cd / d.cd; label = Math.ceil(cd) + 's'; }
         } else {
           off = !!Rules.blockedReason(s, t, k);
@@ -1191,7 +1193,7 @@ const Hud = (() => {
     const hourName = d => d < 0.05 || d >= 0.95 ? 'Dawn' : d < 0.3 ? 'Morning' : d < 0.5 ? 'Midday' : d < 0.7 ? 'Afternoon' : d < 0.8 ? 'Dusk' : 'Night';
     function drawSkyNote(s) {
       const w = Rules.sky(s), ink = inked();
-      let note = SKY_NOTE[w.kind] || '';
+      let note = SKY_NOTE[w.kind] || (Rules.nightAt(s.tick) > 0.5 ? 'Night: sight cut short, flares light the way' : '');
       if (s.flooded) note = note ? note + '. Fords flooded' : 'Fords flooded';
       if (w.next !== w.kind && w.left < 40 * HZ) note = (SKY_NAME[w.next] || w.next) + ' coming';
       // A newcomer's protection, counting down.
@@ -1207,6 +1209,37 @@ const Hud = (() => {
       if (ink) { og.strokeStyle = 'rgba(31,26,22,0.85)'; og.lineWidth = 1; og.strokeRect(x - tw - 13.5, y + 0.5, tw + 13, bh - 1); }
       og.fillStyle = ink ? '#2a231c' : '#e8e0c8'; og.font = f1; og.fillText(top, x - 7, y + 12);
       if (note) { og.fillStyle = ink ? '#8a3a22' : '#f0b060'; og.font = f2; og.fillText(note, x - 7, y + 29); }
+      og.restore();
+    }
+    // Night: a flare burns as a bright star over a pool of warm light, and each building that fights sweeps a
+    // searchlight round it. Drawn as light added to the page, they show only as the dark comes on.
+    function drawNight(s, t) {
+      const n = Rules.nightAt(s.tick);
+      if (n < 0.05) return;
+      og.save(); og.globalCompositeOperation = 'lighter';
+      for (const w of s.sweeps) {
+        if (!w.flare || w.until <= s.tick || (t >= 0 && w.team !== t && !(s.P[t] && s.P[t].vis[Rules.cellOf(w.x, w.y)]))) continue;
+        const left = (w.until - s.tick) / (20 * HZ), [x, y] = world.project(w.x, Rules.heightAt(s.map, w.x, w.y), w.y), r = w.r * world.ppu(w.x, 0, w.y);
+        const fl = 0.85 + 0.15 * Math.sin(performance.now() / 70 + w.flare), a = n * Math.min(1, left * 4) * fl;
+        const gr = og.createRadialGradient(x, y, 0, x, y, r);
+        gr.addColorStop(0, `rgba(255,214,140,${0.42 * a})`); gr.addColorStop(0.6, `rgba(255,170,90,${0.16 * a})`); gr.addColorStop(1, 'rgba(255,150,80,0)');
+        og.fillStyle = gr; og.beginPath(); og.ellipse(x, y, r, r * 0.8, 0, 0, 6.283); og.fill();
+        // The flare itself hangs over the pool and sinks as it burns.
+        const [fx, fy] = world.project(w.x, Rules.heightAt(s.map, w.x, w.y) + 3 + 5 * left, w.y);
+        og.fillStyle = `rgba(255,240,200,${0.9 * a})`; og.beginPath(); og.arc(fx, fy, 3.2, 0, 6.283); og.fill();
+      }
+      for (const o of world.onScreen) {
+        const e = o.e;
+        if (!e.b || e.hp <= 0 || !Rules.armOf(s, e)) continue;
+        const reach = (e.d.sight || 8) * 0.9, sweep = performance.now() / 2600 + e.id * 1.7, an = Math.sin(sweep) * 1.6 + e.id;
+        const ex = e.x + Math.cos(an) * reach, ey = e.y + Math.sin(an) * reach, [bx, by] = world.project(ex, Rules.heightAt(s.map, ex, ey), ey);
+        const [ax, ay] = world.project(e.x, Rules.heightAt(s.map, e.x, e.y) + 1.5, e.y), half = 0.22 * reach * world.ppu(ex, 0, ey);
+        const dx = bx - ax, dy = by - ay, L = Math.hypot(dx, dy) || 1, nx = -dy / L * half, ny = dx / L * half;
+        const gr = og.createLinearGradient(ax, ay, bx, by);
+        gr.addColorStop(0, `rgba(255,236,190,${0.3 * n})`); gr.addColorStop(1, `rgba(255,236,190,${0.05 * n})`);
+        og.fillStyle = gr; og.beginPath(); og.moveTo(ax, ay); og.lineTo(bx + nx, by + ny); og.lineTo(bx - nx, by - ny); og.closePath(); og.fill();
+        og.fillStyle = `rgba(255,236,190,${0.18 * n})`; og.beginPath(); og.ellipse(bx, by, half, half * 0.7, 0, 0, 6.283); og.fill();
+      }
       og.restore();
     }
     // A fallen bridge: its outline as what was, dotted orange while it is being rebuilt, and C4 counting down.
@@ -1421,7 +1454,7 @@ const Hud = (() => {
       }
 
       if (inked()) { drawGhostPlan(s, t, selected); drawKey(); drawInk(s, t); drawTactical(s, t); }
-      drawBridges(s, t); drawWires(); drawFires(); drawBirds(); drawLightning(dt);
+      drawNight(s, t); drawBridges(s, t); drawWires(); drawFires(); drawBirds(); drawLightning(dt);
       if (game.playing) { drawSkyNote(s); drawGroundTip(s, dt); }
 
       for (let i = state.marks.length - 1; i >= 0; i--) {

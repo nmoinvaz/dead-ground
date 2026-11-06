@@ -280,6 +280,14 @@ const AI = (() => {
   }
 
   function powers(S, me, P) {
+    // By night a commander lights the ground ahead of its army with a flare now and then.
+    if (R.nightAt(S.tick) > 0.6 && (P.cooldown.flare || 0) <= 0 && P.supply > 300 && me.rand() < 0.02) {
+      const army = S.ents.filter(e => e.team === me.team && !e.b && e.hp > 0 && R.armed(e)), foe = foeOf(S, me);
+      if (army.length >= 4 && foe >= 0) {
+        const cx = army.reduce((a, e) => a + e.x, 0) / army.length, cy = army.reduce((a, e) => a + e.y, 0) / army.length, t = S.bases[foe], d = Math.hypot(t[0] - cx, t[1] - cy) || 1;
+        R.push(S, me.team, { c: 'power', name: 'flare', x: cx + (t[0] - cx) / d * 8, y: cy + (t[1] - cy) / d * 8 });
+      }
+    }
     if (!me.D.power || !has(P, 'radar') || S.tick - me.lastPower < me.D.gap * HZ) return;
     // An easier commander calls no powers before it can call a barrage.
     if (me.level !== 'veteran' && !opened(P, POWERS.barrage)) return;
