@@ -2164,9 +2164,12 @@ const World = (() => {
         const z = air ? gh * 0 + Math.max(gh, M.water) + e.z : naval ? M.water + waterRise.value + 0.04 * Math.sin(now * 1.6 + e.id) : gh;
         if (!air) {
           const cA = Math.cos(-yaw), sA = Math.sin(-yaw);
-          const hf = heightAt(M, x + cA * L, y + sA * L), hb = heightAt(M, x - cA * L, y - sA * L), hl = heightAt(M, x - sA * L * 0.7, y + cA * L * 0.7), hr = heightAt(M, x + sA * L * 0.7, y - cA * L * 0.7);
-          const k = 1 - Math.exp(-dt * 10);
-          const tp = naval ? 0.03 * Math.sin(now * 1.3 + e.id) : Math.atan2(hf - hb, L * 2), tr = naval ? 0.05 * Math.sin(now * 1.05 + e.id * 2) : Math.atan2(hl - hr, L * 1.4);
+          // A unit leans with the ground under its four sides. On a bridge, a side past the deck's edge is taken
+          // as level with the deck, not the bank below, and no unit leans more than a fifth of a right angle each way.
+          const deck = gh > terrainAt(M, x, y) + 0.05, hAt = (px, py) => { const v = heightAt(M, px, py); return deck && v < gh - 0.1 ? gh : v; };
+          const hf = hAt(x + cA * L, y + sA * L), hb = hAt(x - cA * L, y - sA * L), hl = hAt(x - sA * L * 0.7, y + cA * L * 0.7), hr = hAt(x + sA * L * 0.7, y - cA * L * 0.7);
+          const k = 1 - Math.exp(-dt * 10), lim = v => clamp(v, -0.35, 0.35);
+          const tp = naval ? 0.03 * Math.sin(now * 1.3 + e.id) : lim(Math.atan2(hf - hb, L * 2)), tr = naval ? 0.05 * Math.sin(now * 1.05 + e.id * 2) : lim(Math.atan2(hl - hr, L * 1.4));
           r.pitch += (tp - r.pitch) * k; r.roll += (tr - r.roll) * k;
           compose(m1, x, z, y, yaw, r.pitch, -r.roll, US);
           // A beast or walker rides up and down on its stride, and a gallop rocks it fore and aft. A gun runs back as
