@@ -1589,7 +1589,8 @@ const Hud = (() => {
       card.style.width = room < 330 ? '' : `${Math.min(460, room)}px`;
       ageT.forEach(clearTimeout);
       card.hidden = false; card.classList.remove('show', 'gone'); void card.offsetWidth; card.classList.add('show');
-      ageT = [setTimeout(() => card.classList.add('gone'), 4300), setTimeout(() => { card.hidden = true; card.classList.remove('show', 'gone'); }, 5000)];
+      // It stays twelve seconds, long enough to read the new forms through, then fades.
+      ageT = [setTimeout(() => card.classList.add('gone'), 12000), setTimeout(() => { card.hidden = true; card.classList.remove('show', 'gone'); }, 12700)];
     }
     // The cards an age brings: the lines' new forms, and the buildings and calls it opens.
     function freshen(was, age) {
