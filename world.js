@@ -404,6 +404,8 @@ const World = (() => {
         get time() { return SH.uTime.value; }, get camera() { return camera; }, get cam() { return cam; }, get sky() { return sky; },
         get theme() { return theme; }, get center() { return [CX, CY]; }, get waterLevel() { return (M ? M.water : -0.15) + waterRise.value; },
         get opts() { return { ink: inkStyle, road: roadStyle, ore: oreStyle }; },
+        // Each side's colour, as numbers.
+        get sides() { return teamCol.map(c => c.getHex()); },
         // Whether roads carry modern markings, from the Industrial Age.
         get marked() { return worldAge() >= MOTOR_AGE; },
         // Where the low sun's light comes in from, across the screen.
