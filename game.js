@@ -141,6 +141,7 @@ const Game = (() => {
       fitKey = key;
       world.resize(w, h, px[0] / w, scale, px, ovPx);
       hud.layoutMini();
+      $('s-pic-note').textContent = `Drawn at ${px[0]} by ${px[1]}${scale < 1 ? `, ${Math.round(scale * 100)}% of full size` : ', full size'}.`;
     }
     window.addEventListener('resize', fit);
     new ResizeObserver(fit).observe(view);
@@ -338,21 +339,29 @@ const Game = (() => {
       c.dist += (64 - c.dist) * dt * 0.12;
     }
 
-    // The picture's resolution follows the machine. Slow frames are taken as held up by drawing, so the picture gives
-    // up pixels a step at a time; frames that keep pace win them back, up to just under the size found too slow, and
-    // a while later past it. Frames filled by the page's own work are a slow processor's, and fewer pixels would not
-    // help it.
+    // The picture is drawn at full size unless the player picks Faster in the settings, kept in the browser; a phone
+    // starts on Faster. Then the resolution follows the machine. Slow frames are taken as held up by drawing, so the
+    // picture gives up pixels a step at a time; frames that keep pace win them back, up to just under the size found
+    // too slow, and a while later past it. Frames filled by the page's own work are a slow processor's, and fewer
+    // pixels would not help it.
+    let picture = store.get('dg-picture', mobile ? 'fast' : 'sharp');
     const RES = { ft: 1 / 60, wk: 0, t: 0, ceil: 1, calm: 0 };
+    function setPicture(v) {
+      picture = v; store.set('dg-picture', v);
+      Object.assign(RES, { t: 0, ceil: 1, calm: 0 });
+      if (v !== 'fast' && scale !== 1) { scale = 1; fit(); }
+      $('s-pic').querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.v === picture));
+    }
     function tune(dt, work) {
-      if (dt > 0.5 || document.hidden) return;
+      if (picture !== 'fast' || dt > 0.5 || document.hidden) return;
       RES.ft += (dt - RES.ft) * 0.05; RES.wk += (work - RES.wk) * 0.05;
       RES.t += dt; RES.calm += dt;
       if (RES.calm > 45 && RES.ceil < 1) { RES.ceil = Math.min(1, RES.ceil + 0.1); RES.calm = 0; }
       // Two seconds after a change, so the averages hold the new size.
       if (RES.t < 2) return;
-      // Never under three quarters of full size on a desktop, as below that the pen lines go soft, and only once
-      // the frame rate falls under about 33, a twentieth or a tenth at a time.
-      const lo = mobile ? 0.6 : 0.75, was = scale;
+      // Never under three fifths of full size, and only once the frame rate falls under about 33, a twentieth or a
+      // tenth at a time.
+      const lo = 0.6, was = scale;
       if (RES.ft > 0.03 && RES.wk < RES.ft * 0.85 && scale > lo) {
         scale = Math.max(lo, Math.round(scale * Math.max(0.9, Math.sqrt(0.025 / RES.ft)) * 20) / 20);
         RES.ceil = Math.max(lo, was - 0.05); RES.calm = 0;
@@ -441,6 +450,8 @@ const Game = (() => {
       scheme = b.dataset.v; applyScheme(); audio.ui('click');
       store.set('dg-paper', scheme);
     }));
+    $('s-pic').querySelectorAll('button').forEach(b => b.addEventListener('click', () => { setPicture(b.dataset.v); audio.ui('click'); }));
+    setPicture(picture);
     // A newer build on the site. The page asks a minute apart and whenever it comes back into view, and offers a
     // reload; the game in hand is saved as the page goes and comes back after it. Only a stamped page served from
     // the site asks, as a file or an artifact has no version to read.

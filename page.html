@@ -185,6 +185,7 @@ body[data-look="ink"][data-scheme="dark"] #end, body[data-look="ink"][data-schem
 #update:hover b, #update:focus-visible b { color: var(--redink, #a3301e); }
 /* Which build this page is, from the source commit it was made from. */
 #build { margin: 10px 0 0; font: 12px var(--mono); opacity: .7; }
+#s-pic-note { margin: 5px 0 0; font: 12px var(--mono); opacity: .7; }
 /* The boot screen shows before the page knows its look, so it is drawn as the pen and ink look a game opens in:
    Jost on light paper. */
 #loading { position: absolute; inset: 0; z-index: 20; background: #f2e8d2; display: flex; align-items: center; justify-content: center; font: 500 20px "Jost", "Futura", "Trebuchet MS", sans-serif; letter-spacing: .32em; color: #1f1a16; }
@@ -518,6 +519,7 @@ body[data-look="ink"] .sheet { box-shadow: 4px 4px 0 var(--ink); }
     <div id="settings" hidden role="dialog" aria-label="Settings">
       <div class="choice"><h2>Look</h2><div id="s-look" class="two"></div></div>
       <div class="choice"><h2>Paper</h2><div id="s-scheme"><button data-v="light">Light</button><button data-v="dark">Dark</button><button data-v="auto">As the system</button></div></div>
+      <div class="choice"><h2>Picture</h2><div id="s-pic" class="two"><button data-v="sharp">Sharp</button><button data-v="fast">Faster</button></div><p id="s-pic-note"></p></div>
       <p id="build">Build __BUILD__</p>
     </div>
     <div id="banner" hidden></div>
