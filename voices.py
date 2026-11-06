@@ -21,7 +21,7 @@ HERALD = ['The work is done', 'At your command', 'To arms, we are attacked', 'Ou
           'A building has fallen']
 BOTH = ['The Ancient Age', 'The Medieval Age', 'The Gunpowder Age', 'The Industrial Age', 'The Modern Age',
         'The Future Age', 'Rain', 'Storm. Aircraft grounded', 'Fog', 'Snow', 'Storm warning',
-        'Dust storm. Aircraft grounded', 'Dust storm warning', 'Bridge destroyed']
+        'Dust storm. Aircraft grounded', 'Dust storm warning', 'Storm passing', 'Dust storm passing', 'Bridge destroyed']
 
 # Who speaks, how fast, and what the sound passes through.
 VOICES = {
