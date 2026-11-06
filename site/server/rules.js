@@ -275,8 +275,12 @@ const Rules = (() => {
   // Tracks. Ground units wear the cells they move into, tracks most and feet least. Worn ground hardens a step at a
   // time at each of these marks into a track that is quicker going and that paths prefer. Left alone it grows back.
   const WEAR = { foot: 5, wheel: 10, track: 14 }, TRACK_AT = [30, 75, 140], TRACK_GO = [1, 1.04, 1.08, 1.12];
+  // Roads are quicker going, wheels most. A way costs the time it takes, and a known way, a road or a worn track,
+  // a little less again, as drivers and marchers keep to the ways they know.
+  const ROAD_GO = { foot: 1.15, wheel: 1.3, track: 1.2 }, HABIT = [1, 0.92, 0.88, 0.85], ROAD_HABIT = 0.88;
+  const ROAD_COST = { foot: Math.fround(ROAD_HABIT / ROAD_GO.foot), veh: Math.fround(ROAD_HABIT / ROAD_GO.wheel), track: Math.fround(ROAD_HABIT / ROAD_GO.track) };
   // Each change of a track makes the shared ways be worked out again, so tracks change only every 45 seconds.
-  const TRACK_COST = TRACK_GO.map(g => 1 / g), TRACK_EVERY = 45 * HZ;
+  const TRACK_COST = TRACK_GO.map((g, i) => Math.fround(HABIT[i] / g)), TRACK_EVERY = 45 * HZ;
 
   // The record kept for the closing report. Each side's figures are sampled every HIST_EVERY ticks. At HIST_MAX
   // samples every other one goes and the gap doubles, so a long game's record stays small.
@@ -802,44 +806,85 @@ const Rules = (() => {
   // Weather comes in spells of three minutes. A spell's kind follows from the seed and its number alone, so
   // every copy of the world has the same sky and nothing about it is saved. A game's first two are clear.
   const SPELL = 180 * HZ, BLEND = 24 * HZ;
-  const WIND = { clear: 0.45, cloud: 0.6, rain: 0.7, storm: 1, fog: 0.12, snow: 0.4 };
+  const WIND = { clear: 0.45, cloud: 0.6, rain: 0.7, storm: 1, fog: 0.12, snow: 0.4, sand: 1.15, blizzard: 1.05 };
+  // The share of spells of each kind in a hundred, by theatre: dust storms on the salt flats and blizzards in the
+  // pass. `any` is the one mix every game had before theatres had their own, kept for older saves and checks.
+  const SKIES = {
+    any: { clear: 36, cloud: 14, rain: 16, storm: 9, fog: 14, snow: 11 },
+    desert: { clear: 52, cloud: 12, rain: 6, storm: 4, fog: 4, sand: 22 },
+    steppe: { clear: 32, cloud: 16, rain: 20, storm: 12, fog: 16, snow: 4 },
+    winter: { clear: 28, cloud: 18, fog: 14, snow: 28, blizzard: 12 },
+  };
+  // A game's weather setting weighs the kinds: mild keeps the harsh ones away, harsh brings them often, and off
+  // leaves the sky clear.
+  const WEATHERS = {
+    random: {},
+    mild: { clear: 1.6, cloud: 1.3, rain: 0.7, fog: 0.6, snow: 0.5, storm: 0, sand: 0, blizzard: 0 },
+    harsh: { clear: 0.4, cloud: 0.6, rain: 1.3, fog: 1.3, snow: 1.4, storm: 2, sand: 1.8, blizzard: 2 },
+    off: { cloud: 0, rain: 0, storm: 0, fog: 0, snow: 0, sand: 0, blizzard: 0 },
+  };
+  const SKY_KINDS = ['clear', 'cloud', 'rain', 'storm', 'fog', 'snow', 'sand', 'blizzard'];
+  // The kinds a theatre and setting allow, each with the top of its share, and the whole. Whole numbers, so every
+  // copy of the world picks the same.
+  function skyTable(theatre, weather) {
+    const base = SKIES[theatre] || SKIES.any, k = WEATHERS[weather] || WEATHERS.random, cum = [];
+    let total = 0;
+    for (const kd of SKY_KINDS) {
+      const n = Math.round((base[kd] || 0) * (k[kd] ?? 1));
+      if (n > 0) { total += n; cum.push([kd, total]); }
+    }
+    return { cum, total };
+  }
+  const ANY_SKY = skyTable('any', 'random');
+  const skyOf = S => S._sky || (S._sky = skyTable(S.theatre, S.weather));
   function spellHash(seed, k) {
     let h = Math.imul((seed | 0) ^ 0x9e3779b9, 0x85ebca6b) ^ Math.imul(k | 0, 0xc2b2ae35);
     h ^= h >>> 13; h = Math.imul(h, 0x27d4eb2f); h ^= h >>> 15;
     return h >>> 0;
   }
-  function spellOf(seed, k) {
+  function spellOf(seed, k, tab = ANY_SKY) {
     if (k < 2) return 'clear';
-    const r = spellHash(seed, k) % 100;
-    return r < 36 ? 'clear' : r < 50 ? 'cloud' : r < 66 ? 'rain' : r < 75 ? 'storm' : r < 89 ? 'fog' : 'snow';
+    const r = spellHash(seed, k) % tab.total;
+    for (const [kd, top] of tab.cum) if (r < top) return kd;
+    return 'clear';
   }
+  // Spells that keep every aircraft on the ground.
+  const GROUNDING = { storm: 1, sand: 1, blizzard: 1 };
   // How much a spell holds at a tick. It rises over BLEND across its start and falls across its end, so two
   // spells of one kind in a row join without a seam.
   const spellW = (k, t) => clamp((t - (k * SPELL - BLEND / 2)) / BLEND, 0, 1) * clamp(((k + 1) * SPELL + BLEND / 2 - t) / BLEND, 0, 1);
-  function weatherAt(seed, t) {
-    const k = Math.floor(t / SPELL), o = { clear: 0, cloud: 0, rain: 0, storm: 0, fog: 0, snow: 0, wind: [0, 0], flood: 0, cover: 0, kind: spellOf(seed, k), next: spellOf(seed, k + 1), left: (k + 1) * SPELL - t };
+  function weatherAt(seed, t, tab = ANY_SKY) {
+    const k = Math.floor(t / SPELL), o = { clear: 0, cloud: 0, rain: 0, storm: 0, fog: 0, snow: 0, sand: 0, blizzard: 0, wind: [0, 0], flood: 0, cover: 0, kind: spellOf(seed, k, tab), next: spellOf(seed, k + 1, tab), left: (k + 1) * SPELL - t };
     for (let j = k - 1; j <= k + 1; j++) {
       const w = spellW(j, t);
       if (w <= 0) continue;
-      const kd = spellOf(seed, j), a = (spellHash(seed + 77, j) % 6283) / 1000;
+      const kd = spellOf(seed, j, tab), a = (spellHash(seed + 77, j) % 6283) / 1000;
       o[kd] += w;
       o.wind[0] += mcos(a) * WIND[kd] * w; o.wind[1] += msin(a) * WIND[kd] * w;
     }
     o.rain = Math.min(1, o.rain + o.storm);
     // Rivers rise through a spell of rain or storm and go down over the next one and a half. Snow lies over
-    // most of its spell and melts over the next.
+    // most of its spell and melts over the next, and a blizzard lays it faster.
     for (let j = k - 3; j <= k; j++) {
-      const kd = spellOf(seed, j), rv = kd === 'storm' ? 1 : kd === 'rain' ? 0.55 : 0, snow = kd === 'snow';
+      const kd = spellOf(seed, j, tab), rv = kd === 'storm' ? 1 : kd === 'rain' ? 0.55 : 0, snow = kd === 'snow' || kd === 'blizzard';
       if (!rv && !snow) continue;
-      const tau = t - j * SPELL, up = clamp(tau / (SPELL * (snow ? 0.6 : 0.8)), 0, 1), down = tau > SPELL ? clamp(1 - (tau - SPELL) / (SPELL * (snow ? 1 : 1.5)), 0, 1) : 1;
+      const tau = t - j * SPELL, up = clamp(tau / (SPELL * (kd === 'blizzard' ? 0.35 : snow ? 0.6 : 0.8)), 0, 1), down = tau > SPELL ? clamp(1 - (tau - SPELL) / (SPELL * (snow ? 1 : 1.5)), 0, 1) : 1;
       if (snow) o.cover += up * down; else o.flood += rv * up * down;
     }
     o.cover = Math.min(1, o.cover);
-    // A storm keeps every aircraft on the ground.
-    o.grounded = o.storm > 0.5;
+    // A storm, a dust storm or a blizzard keeps every aircraft on the ground.
+    o.grounded = o.storm > 0.5 || o.sand > 0.5 || o.blizzard > 0.5;
     return o;
   }
-  const sky = S => S._wx && S._wx.at === S.tick ? S._wx : (S._wx = Object.assign(weatherAt(S.seed, S.tick), { at: S.tick }));
+  const sky = S => S._wx && S._wx.at === S.tick ? S._wx : (S._wx = Object.assign(weatherAt(S.seed, S.tick, skyOf(S)), { at: S.tick }));
+  // How fast a kind of mover goes off the roads in the weather, before any worn track. Mud bogs wheels down, snow
+  // and blizzards slow everyone, and blown sand slows men and wheels.
+  function offGoing(move, w) {
+    const g = move === 'wheel' ? 1 - 0.24 * w.rain - 0.2 * w.snow - 0.25 * w.sand - 0.35 * w.blizzard
+      : move === 'track' ? 1 - 0.12 * w.storm - 0.1 * w.snow - 0.1 * w.sand - 0.25 * w.blizzard
+        : 1 - 0.18 * w.snow - 0.2 * w.sand - 0.35 * w.blizzard;
+    return Math.max(0.3, g);
+  }
   // The time of day, from 0 at dawn round to 1. A day lasts twenty minutes and a game starts early in the morning.
   const dayAt = t => (t / (HZ * 1200) + 0.03) % 1;
   // A side's running totals. made, lost, killed and razed count units and buildings. mined is supply from
@@ -879,6 +924,8 @@ const Rules = (() => {
       terr: new Int8Array(N).fill(-1), infl: [], terrVer: 0, townOwnerVer: 0,
       ore: new Uint16Array(M.ore), oreVer: 0,
       P: [], bases: pos.map(p => M.bases[p]), faces: pos.map(p => M.faces[p]), seats, pos, _fields: new Map(), age0: clamp(o.age | 0 || 1, 1, MAX_AGE),
+      // The theatre's weather and the game's setting for it. A game made without them has the one old mix.
+      theatre: SKIES[o.theatre] ? o.theatre : 'any', weather: WEATHERS[o.weather] ? o.weather : 'random',
       // The ground as it now is, which woods, bridges and fords change, and what has happened to the trees,
       // bridges and houses.
       gnd: new Uint8Array(M.ground), gndVer: 0, wood: new Uint8Array(N), woodVer: 0, burn: [], crush: [],
@@ -1008,9 +1055,9 @@ const Rules = (() => {
   const plain = e => { const o = {}; for (const k in e) if (k !== 'd' && k[0] !== '_') o[k] = e[k]; return o; };
   function save(S) {
     return {
-      v: 1, seed: S.seed, layout: S.layout, seats: S.seats, pos: S.pos, age0: S.age0, tick: S.tick, rs: S.rs, next: S.next, occVer: S.occVer, oreVer: S.oreVer, terrVer: S.terrVer, dirty: !!S.dirty, over: S.over,
+      v: 1, seed: S.seed, layout: S.layout, seats: S.seats, pos: S.pos, age0: S.age0, theatre: S.theatre, weather: S.weather, tick: S.tick, rs: S.rs, next: S.next, occVer: S.occVer, oreVer: S.oreVer, terrVer: S.terrVer, dirty: !!S.dirty, over: S.over,
       ents: S.ents.map(plain), towns: S.towns, shots: S.shots, sweeps: S.sweeps, flights: S.flights, occLog: S.occLog,
-      fields: [...S.fields].map(([k, f]) => [k, f.ver, f.used, f.made, f.reach]),
+      fields: [...S.fields].map(([k, f]) => [k, f.ver, f.used, f.made, f.reach, f.wq]),
       ore: b64.en(new Uint8Array(S.ore.buffer.slice(0))),
       P: S.P.map(P => { const o = plain(P); o.vis = bits(P.vis); o.seen = bits(P.seen); o.q = {}; for (const c in P.q) o.q[c] = P.q[c].map(it => { const j = Object.assign({}, it); delete j.cost; return j; }); return o; }),
       // The ground and the trees as pairs of cell and value, only where they differ from the map's start.
@@ -1020,12 +1067,12 @@ const Rules = (() => {
   }
   function diffs(a, base) { const o = []; for (let c = 0; c < a.length; c++) if (a[c] !== (base ? base[c] : 0)) o.push(c, a[c]); return o; }
   function load(o) {
-    const S = newGame({ seed: o.seed, layout: o.layout, seats: o.seats, pos: o.pos, age: o.age0 || 5, empty: true });
+    const S = newGame({ seed: o.seed, layout: o.layout, seats: o.seats, pos: o.pos, age: o.age0 || 5, theatre: o.theatre, weather: o.weather, empty: true });
     if (S.seed !== o.seed) throw new Error('map seed mismatch');
     Object.assign(S, { tick: o.tick, rs: o.rs, next: o.next, occVer: o.occVer, oreVer: o.oreVer, terrVer: o.terrVer, dirty: o.dirty, over: o.over, shots: o.shots, sweeps: o.sweeps, flights: o.flights, occLog: o.occLog || [] });
     S.towns = o.towns.map(t => Object.assign({}, t));
     S.ore = new Uint16Array(b64.de(o.ore).buffer);
-    S.fields = new Map(o.fields.map(([k, v, u, m, r]) => [k, { ver: v, used: u, made: m, reach: r }]));
+    S.fields = new Map(o.fields.map(([k, v, u, m, r, q]) => [k, { ver: v, used: u, made: m, reach: r, wq: q ?? 20 }]));
     S.P = o.P.map(p => {
       const P = Object.assign(freshPlayer(p.team), p);
       P.stats = Object.assign(freshStats(), p.stats);
@@ -1228,8 +1275,8 @@ const Rules = (() => {
         }
       }
     };
-    // Fog and storm shorten everyone's sight. Radar sweeps see through them.
-    const w = sky(S), fk = 1 - 0.45 * w.fog - 0.12 * w.storm, fa = 1 - 0.3 * w.fog;
+    // Fog, storms, blown sand and blizzards shorten everyone's sight. Radar sweeps see through them.
+    const w = sky(S), fk = Math.max(0.4, 1 - 0.45 * w.fog - 0.12 * w.storm - 0.4 * w.sand - 0.45 * w.blizzard), fa = Math.max(0.5, 1 - 0.3 * w.fog - 0.3 * w.sand - 0.3 * w.blizzard);
     for (const e of S.ents) {
       if (e.hp <= 0) continue;
       const P = S.P[e.team];
@@ -1288,12 +1335,14 @@ const Rules = (() => {
   // need is how far from the goal the asker stands. A field reaches some way past that and is made again,
   // further out, for someone beyond it. After the ground changes a field is kept three seconds more before
   // it is made again, and at most four are made in a step.
+  // The weather's going off the roads for a class, in twentieths, so a field is made again as the going changes.
+  const goingKey = (S, cls) => Math.round(offGoing(cls === 'veh' ? 'wheel' : cls, sky(S)) * 20);
   function field(S, cls, gx, gy, need = 0) {
-    const key = (cls === 'foot' ? 0 : cls === 'veh' ? 1 : 2) * N + gy * W + gx;
+    const key = (cls === 'foot' ? 0 : cls === 'veh' ? 1 : 2) * N + gy * W + gx, wq = goingKey(S, cls);
     let f = S.fields.get(key);
     if (f && f.ver < oldestOcc(S)) { S.fields.delete(key); S._fields.delete(key); f = null; }
     const enough = f && f.reach >= need;
-    if (enough && (f.ver === S.occVer || S.fieldQueue >= 4 || S.tick - f.made < 60)) { f.used = S.tick; return built(S, key, f, cls, gx, gy); }
+    if (enough && ((f.ver === S.occVer && f.wq === wq) || S.fieldQueue >= 4 || S.tick - f.made < 60)) { f.used = S.tick; return built(S, key, f, cls, gx, gy); }
     if (S.fieldQueue >= 4) return null;
     S.fieldQueue++;
     if (!f) {
@@ -1302,30 +1351,39 @@ const Rules = (() => {
         for (const [k, v] of S.fields) if (v.used < age) { age = v.used; oldest = k; }
         S.fields.delete(oldest); S._fields.delete(oldest);
       }
-      f = { ver: 0, used: 0, made: 0, reach: 0 };
+      f = { ver: 0, used: 0, made: 0, reach: 0, wq: 20 };
       S.fields.set(key, f);
     }
-    f.reach = Math.max(f.ver === S.occVer ? f.reach : 0, Math.fround(need * 1.5 + 32));
-    f.ver = S.occVer; f.used = S.tick; f.made = S.tick;
+    f.reach = Math.max(f.ver === S.occVer && f.wq === wq ? f.reach : 0, Math.fround(need * 1.5 + 32));
+    f.ver = S.occVer; f.used = S.tick; f.made = S.tick; f.wq = wq;
     return built(S, key, f, cls, gx, gy);
   }
   function built(S, key, f, cls, gx, gy) {
     let p = S._fields.get(key);
-    if (p && p.ver === f.ver && p.reach === f.reach) return p;
+    if (p && p.ver === f.ver && p.reach === f.reach && p.wq === f.wq) return p;
     if (!p) { p = { dist: new Float32Array(N), dir: new Int8Array(N) }; S._fields.set(key, p); }
-    p.ver = f.ver; p.reach = f.reach;
+    p.ver = f.ver; p.reach = f.reach; p.wq = f.wq;
     const [occ, gnd] = stateAt(S, f.ver);
-    fill(S, p, cls, gx, gy, occ, gnd, f.reach);
+    fill(S, p, cls, gx, gy, occ, gnd, f.reach, f.wq);
     return p;
   }
-  // Dijkstra from the goal over a grid of what blocks this class, with roads and worn tracks a little cheaper, and
-  // woods and fords dearer.
+  // How much of a cell is road, 1 on the carriageway fading to 0 at its verge, from the distance at its middle.
+  function roadW(M) {
+    if (M.roadW) return M.roadW;
+    const rw = M.roadW = new Float32Array(N);
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) rw[y * W + x] = 1 - smooth(0.9, 1.6, M.roadDist[(y * RES + 1) * VW + x * RES + 1]);
+    return rw;
+  }
+  // The distance from a point to the nearest road's middle line.
+  const roadDistAt = (M, x, y) => M.roadDist[clamp(Math.round(y * RES), 0, VH - 1) * VW + clamp(Math.round(x * RES), 0, VW - 1)];
+  // Dijkstra from the goal over a grid of what blocks this class, with each step costing the time it takes, so
+  // roads and worn tracks are cheaper, and woods and fords dearer. Off the roads the weather's going, wq in
+  // twentieths, makes open ground and young tracks dearer, while a hardened track and a road stay firm.
   let fillBlock = null;
-  function fill(S, f, cls, gx, gy, occ, g, reach = Infinity) {
-    const M = S.map, bit = BIT[cls], woodC = cls === 'track' ? 3 : 1.6;
-    if (!M.roadCell) { M.roadCell = new Uint8Array(N); for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) M.roadCell[y * W + x] = M.roadDist[(y * RES) * VW + x * RES] < 2 ? 1 : 0; }
+  function fill(S, f, cls, gx, gy, occ, g, reach = Infinity, wq = 20) {
+    const M = S.map, bit = BIT[cls], woodC = cls === 'track' ? 3 : 1.6, roadC = ROAD_COST[cls], offK = 20 / wq;
     if (!fillBlock || fillBlock.length !== N) fillBlock = new Uint8Array(N);
-    const block = fillBlock, road = M.roadCell;
+    const block = fillBlock, road = roadW(M);
     for (let c = 0; c < N; c++) block[c] = (g[c] & bit) !== 0 || occ[c] !== 0 ? 1 : 0;
     const dist = f.dist, dir = f.dir;
     dist.fill(Infinity); dir.fill(-1);
@@ -1366,7 +1424,8 @@ const Rules = (() => {
         if (block[m]) continue;
         if ((i & 1) && (block[y * W + nx] || block[ny * W + x])) continue;
         // Rounded to the array's own precision, so a cell is never queued again for the same distance.
-        const gm = g[m], nd = Math.fround(dc + COST[i] * (road[m] ? 0.8 : TRACK_COST[(gm >> 5) & 3]) * (gm & 8 ? woodC : 1) * (gm & 16 ? 2 : 1));
+        const gm = g[m], rw = road[m], lv = (gm >> 5) & 3, off = lv >= 3 ? TRACK_COST[3] : TRACK_COST[lv] * offK, here = rw > 0 ? off + (roadC - off) * rw : off;
+        const nd = Math.fround(dc + COST[i] * here * (gm & 8 ? woodC : 1) * (gm & 16 ? 2 : 1));
         if (nd < dist[m]) { dist[m] = nd; dir[m] = (i + 4) & 7; push(m, nd); }
       }
     }
@@ -1400,7 +1459,7 @@ const Rules = (() => {
   // Looks ahead along the field for the farthest point in a straight, clear line.
   function waypoint(S, u, tx, ty) {
     const cls = clsOf(u), far = mhypot(tx - u.x, ty - u.y);
-    if (far < 16 && lineClear(S, cls, u.x, u.y, tx, ty) && !tracksBetween(S, u.x, u.y, tx, ty)) return [tx, ty];
+    if (far < 16 && lineClear(S, cls, u.x, u.y, tx, ty) && (far < 8 || !waysBetween(S, u.x, u.y, tx, ty))) return [tx, ty];
     // From afar the way leads to the middle of the goal's block of four by four cells, so a group and
     // anyone going near the same place share one field. Close in it leads to the goal's own cell.
     const q = far > 24;
@@ -1423,25 +1482,39 @@ const Rules = (() => {
       return [best % W + 0.5, (best / W | 0) + 0.5];
     }
     let bx = u.x, by = u.y, wx = (c % W) + 0.5, wy = (c / W | 0) + 0.5;
-    // The look ahead stops where the going changes, so a way that keeps to a track follows its bends.
-    const lv0 = S.gnd[c] & 96;
+    // The look ahead stops where a track's going changes, so a way that keeps to a track follows its bends. On a
+    // road it keeps within the road's verge and stops where the way leaves it. Off a road it aims two cells along
+    // a road it joins, so it merges at a slant.
+    const M = S.map, rw = roadW(M), lv0 = S.gnd[c] & 96, on0 = rw[c] > 0.5, lane = on0 ? Math.max(1.2, roadDistAt(M, bx, by)) : 0;
+    let joined = -1;
     for (let i = 0; i < 10; i++) {
       const dir = f.dir[c];
       if (dir < 0) break;
       const x = c % W + FDX[dir], y = (c / W | 0) + FDY[dir];
       c = y * W + x;
-      const px = x + 0.5, py = y + 0.5;
-      if (lineClear(S, cls, bx, by, px, py)) { wx = px; wy = py; } else break;
-      if ((S.gnd[c] & 96) !== lv0) break;
+      const px = x + 0.5, py = y + 0.5, on = rw[c] > 0.5;
+      // The next cell along the field is always taken, so a man on a bend still moves on.
+      if (lineClear(S, cls, bx, by, px, py) && (!on0 || !i || laneClear(M, bx, by, px, py, lane))) { wx = px; wy = py; } else break;
+      if ((S.gnd[c] & 96) !== lv0 && !on) break;
+      if (on0 && !on) break;
+      if (!on0 && on && joined < 0) joined = i;
+      if (joined >= 0 && i >= joined + 2) break;
     }
     return [wx, wy];
   }
-  // Whether a beaten or hardened track lies near the way between two points, so the way is found rather than
-  // taken straight.
-  function tracksBetween(S, ax, ay, bx, by) {
+  // Whether the straight way between two points stays within `lane` of a road's middle line.
+  function laneClear(M, ax, ay, bx, by, lane) {
+    const n = Math.ceil(mhypot(bx - ax, by - ay) * 2);
+    for (let i = 1; i <= n; i++) { const t = i / n; if (roadDistAt(M, lerp(ax, bx, t), lerp(ay, by, t)) > lane) return false; }
+    return true;
+  }
+  // Whether a road or a worn track lies near the way between two points, so the way is found rather than taken
+  // straight.
+  function waysBetween(S, ax, ay, bx, by) {
+    const rw = roadW(S.map);
     const x0 = Math.max(0, (Math.min(ax, bx) | 0) - 2), x1 = Math.min(W - 1, (Math.max(ax, bx) | 0) + 2);
     const y0 = Math.max(0, (Math.min(ay, by) | 0) - 2), y1 = Math.min(H - 1, (Math.max(ay, by) | 0) + 2);
-    for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) if ((S.gnd[y * W + x] & 96) >= 64) return true;
+    for (let y = y0; y <= y1; y++) for (let x = x0; x <= x1; x++) { const c = y * W + x; if ((S.gnd[c] & 96) || rw[c] > 0.5) return true; }
     return false;
   }
 
@@ -1654,7 +1727,7 @@ const Rules = (() => {
   // with the wind and not at all in rain or snow, then leaves the ground burnt and open.
   function ignite(S, x, y, r, p) {
     const w = sky(S);
-    p *= 1 - 0.8 * Math.min(1, w.rain + w.snow);
+    p *= 1 - 0.8 * Math.min(1, w.rain + w.snow + w.blizzard);
     if (p <= 0 || S.burn.length >= 400) return;
     for (let cy = Math.max(0, (y - r) | 0); cy <= Math.min(H - 1, (y + r) | 0); cy++) for (let cx = Math.max(0, (x - r) | 0); cx <= Math.min(W - 1, (x + r) | 0); cx++) {
       const c = cy * W + cx;
@@ -1668,7 +1741,7 @@ const Rules = (() => {
   const D8 = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, 1], [1, -1], [-1, -1]];
   function stepFire(S) {
     if (!S.burn.length) return;
-    const w = sky(S), wet = Math.min(1, w.rain + w.snow), spread = 0.06 * (1 - wet), out = [];
+    const w = sky(S), wet = Math.min(1, w.rain + w.snow + w.blizzard), spread = 0.06 * (1 - wet), out = [];
     for (let i = S.burn.length - 1; i >= 0; i--) {
       const b = S.burn[i], c = b[0], x = c % W, y = c / W | 0;
       b[1] -= 10 * (1 + wet * 3);
@@ -1779,11 +1852,13 @@ const Rules = (() => {
     dx += sx * 1.6; dy += sy * 1.6;
     const mag = mhypot(dx, dy) || 1;
     dx /= mag; dy /= mag;
-    const onRoad = S.map.roadDist[((u.y | 0) * RES) * VW + (u.x | 0) * RES] < 2, here = S.gnd[cellOf(u.x, u.y)], w = sky(S);
+    const rk = 1 - smooth(0.9, 1.6, roadDistAt(S.map, u.x, u.y)), here = S.gnd[cellOf(u.x, u.y)], w = sky(S);
     // Mud after rain bogs wheels down off the roads, snow slows everyone, and woods and fords slow what is in them.
-    // A worn track is quicker going, and a hardened one is as firm as a road in the wet.
+    // A worn track is quicker going, and a hardened one is as firm as a road in the wet. The road's own going
+    // fades out across its verge.
     const tl = (here >> 5) & 3;
-    let going = onRoad ? 1.15 : (tl >= 3 ? 1 : d.move === 'wheel' ? 1 - 0.24 * w.rain - 0.2 * w.snow : d.move === 'track' ? 1 - 0.12 * w.storm - 0.1 * w.snow : 1 - 0.18 * w.snow) * TRACK_GO[tl];
+    let going = (tl >= 3 ? 1 : offGoing(d.move, w)) * TRACK_GO[tl];
+    if (rk > 0) going = lerp(going, ROAD_GO[d.move], rk);
     if (here & 16) going *= 0.5;
     if ((here & 8) && d.move === 'foot') going *= 0.75;
     const top = d.speed * speedScale * going;
@@ -2699,12 +2774,13 @@ const Rules = (() => {
     }
     // The sky turns at the start of a spell, and a storm is called half a minute before it comes.
     if (S.tick > 0 && S.tick % SPELL === 0) {
-      const k = S.tick / SPELL, now = spellOf(S.seed, k), was = spellOf(S.seed, k - 1);
+      const k = S.tick / SPELL, now = spellOf(S.seed, k, skyOf(S)), was = spellOf(S.seed, k - 1, skyOf(S));
       if (now !== was) S.ev.push({ t: 'weather', kind: now, was });
     }
+    // Half a minute's warning of weather that grounds the aircraft, as stormsoon, sandsoon or blizzardsoon.
     if ((S.tick + 30 * HZ) % SPELL === 0) {
-      const k = (S.tick + 30 * HZ) / SPELL;
-      if (spellOf(S.seed, k) === 'storm' && spellOf(S.seed, k - 1) !== 'storm') S.ev.push({ t: 'weather', kind: 'stormsoon' });
+      const k = (S.tick + 30 * HZ) / SPELL, next = spellOf(S.seed, k, skyOf(S));
+      if (GROUNDING[next] && !GROUNDING[spellOf(S.seed, k - 1, skyOf(S))]) S.ev.push({ t: 'weather', kind: next + 'soon' });
     }
   }
 
@@ -2815,7 +2891,7 @@ const Rules = (() => {
     newGame, step, push, spawn, addBuilding, scoreOf, worth, SERIES, pickFrom, fits, spotFor, roomy, blockedReason, near, rehash, seenBy, terrainAt, heightAt, los, isAir, armed, cellOf, summary, exitOf,
     mulberry, noiser, clamp, lerp, smooth, angleTo, toXY, toUV, gap, setSize, save, load, hashOf, restartSlot, razeSlot, makeMap, mapFor, layoutFor,
     msin, mcos, matan2, mhypot,
-    BRIDGE_HP, SPELL, weatherAt, sky, dayAt, spellOf, bridgeAt, clsOf, houseHp, hurtBridge, ignite, shielded,
+    BRIDGE_HP, SPELL, SKIES, WEATHERS, skyOf, offGoing, weatherAt, sky, dayAt, spellOf, bridgeAt, clsOf, houseHp, hurtBridge, ignite, shielded,
     coverPoints, coverNear, COVER_R, COVER_ARC,
   };
 })();
