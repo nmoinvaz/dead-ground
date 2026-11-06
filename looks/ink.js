@@ -418,22 +418,26 @@
             lineK = max(max(heavy, swell * (1.0 - step(0.6, a))), max(detail, max(edge * 0.55 * (1.0 - bankZone) * isG, max(rEdge * 0.9 * isG, bankL * step(0.001, dep + 0.05) * (isG + isW)))));
             // The washes: the land green, roads and bridge decks pink, water lilac with white ripples, canopies in
             // three greens, roofs cream and walls warm grey by which way they face.
-            vec3 base = mix(paperC, dk ? vec3(0.2, 0.2, 0.195) : SOFT_G, isG);
+            vec3 base = mix(paperC, dk ? vec3(0.13, 0.19, 0.125) : SOFT_G, isG);
             // Layer tints by height, pale green lowland to cream to tan upland, the slopes away from the light shaded
             // in a cool sepia and the slopes toward it lifted a little, and the contours in sepia. On dark paper the
             // tints are greys, near black in the lowland to a mid grey upland, mottled in broad patches.
             vec3 tint = hyps < 0.5 ? mix(vec3(0.84, 0.90, 0.80), vec3(0.94, 0.93, 0.82), hyps * 2.0) : mix(vec3(0.94, 0.93, 0.82), vec3(0.88, 0.80, 0.64), hyps * 2.0 - 1.0);
             if (dk) {
-              tint = hyps < 0.5 ? mix(vec3(0.15, 0.155, 0.15), vec3(0.225, 0.225, 0.215), hyps * 2.0) : mix(vec3(0.225, 0.225, 0.215), vec3(0.34, 0.33, 0.31), hyps * 2.0 - 1.0);
-              tint *= 0.86 + 0.28 * (noise(Wl * 0.055) * 0.65 + noise(Wl * 0.16 + 5.0) * 0.35);
+              // The light paper's layers in the dark: its pale green as a deep green in the lowland, lighter green
+              // and olive up the slopes, and its tan as a warm earth on the heights, each rise its own shade.
+              tint = hyps < 0.33 ? mix(vec3(0.1, 0.16, 0.1), vec3(0.16, 0.235, 0.145), hyps / 0.33)
+                : hyps < 0.66 ? mix(vec3(0.16, 0.235, 0.145), vec3(0.27, 0.29, 0.18), (hyps - 0.33) / 0.33)
+                : mix(vec3(0.27, 0.29, 0.18), vec3(0.45, 0.4, 0.29), (hyps - 0.66) / 0.34);
+              tint *= 0.92 + 0.16 * (noise(Wl * 0.055) * 0.65 + noise(Wl * 0.16 + 5.0) * 0.35);
             }
             vec3 CONT = dk ? vec3(0.52, 0.5, 0.47) : vec3(0.42, 0.33, 0.24);
             // A road takes a third of the tint and the contours cross it faint, so it climbs and falls with the land
             // rather than lying flat over it.
             base = mix(base, tint, isG * (1.0 - onRoad * 0.65));
             // On dark paper a shaded slope sinks toward black and a lit one rises toward mid grey.
-            base = mix(base, base * (dk ? vec3(0.42) : vec3(0.72, 0.70, 0.68)), rfDark * (dk ? 0.8 : 0.65) * isG);
-            base = mix(base, dk ? base + vec3(0.2, 0.2, 0.19) : min(base * 1.05 + 0.03, vec3(1.0)), rfLight * 0.6 * isG);
+            base = mix(base, base * (dk ? vec3(0.36, 0.37, 0.44) : vec3(0.72, 0.70, 0.68)), rfDark * (dk ? 0.95 : 0.65) * isG);
+            base = mix(base, dk ? base + vec3(0.3, 0.27, 0.21) : min(base * 1.05 + 0.03, vec3(1.0)), rfLight * (dk ? 0.85 : 0.6) * isG);
             base = mix(base, CONT, contour * isG * (1.0 - onRoad * 0.55) * (1.0 - wet));
             base = mix(base, base * vec3(0.9, 0.93, 0.97), uWet * isG * 0.7);
             // A raised road's shadow, a narrow band beyond its edge away from the light; none beside a cutting.
@@ -749,8 +753,8 @@
             vec2 gd = vec2(A(vUv + k * vec2(2.5, 0)) - A(vUv - k * vec2(2.5, 0)), A(vUv + k * vec2(0, 2.5)) - A(vUv - k * vec2(0, 2.5)));
             if (length(gd) < 0.04) gd = e1;
             float dash = length(gd) > 0.02 ? step(0.42, fract(dot(p, normalize(vec2(-gd.y, gd.x))) / (6.5 * uK))) : step(0.35, hash(floor(p / (5.0 * uK)) + 17.0));
-            // On dark paper what was keeps its grey a little dimmed, so it does not sink to black.
-            vec3 past = dk ? mix(vec3(dot(baseC, vec3(0.3, 0.59, 0.11))), baseC, 0.3) * 0.85 : mix(paperC, baseC, 0.4);
+            // On dark paper what was is drawn toward the light charcoal of ground not yet seen, so its shades hold.
+            vec3 past = dk ? mix(vec3(0.245, 0.23, 0.205), baseC, 0.5) : mix(paperC, baseC, 0.4);
             // Remembered ore is the brightest thing on dark paper, so it is sunk toward the paper there, and its many
             // small rings are dashed lightly on either paper.
             float oreP = max(max(oA(vUv + k * vec2(1.6, 0)), oA(vUv - k * vec2(1.6, 0))), max(max(oA(vUv + k * vec2(0, 1.6)), oA(vUv - k * vec2(0, 1.6))), oA(vUv)));
@@ -772,7 +776,9 @@
             float cont = (1.0 - smoothstep(0.4 * uK, 1.2 * uK, min(hf, 1.0 - hf) * 0.8 / hw)) * step(0.3, mix(noise(pL * 0.04 / uK + 3.0), noise(pL2 * 0.04 / uK + 5.0), gLf)) * onMap;
             float guide = mix(hatch(pL, 18.0, 70.0, 0.7, 3.0, 0.55) + hatch(pL, 104.0, 95.0, 0.6, 8.0, 0.6), hatch(pL2, 18.0, 70.0, 0.7, 3.0, 0.55) + hatch(pL2, 104.0, 95.0, 0.6, 8.0, 0.6), gLf);
             float rP = (1.0 - smoothstep(0.4 * uK, 1.0 * uK, abs(rdS - 1.3) / rdW)) * onMap;
-            vec3 sketch = mix(paperC, dk ? vec3(0.4, 0.39, 0.37) : vec3(0.5, 0.49, 0.47), clamp(cont * 0.42 + guide * 0.14 + rP * 0.4, 0.0, 1.0));
+            // On dark paper the ground not yet seen is a lighter charcoal than the paper, so it does not sink to black.
+            vec3 skP = dk ? vec3(0.245, 0.23, 0.205) : paperC;
+            vec3 sketch = mix(skP, dk ? vec3(0.5, 0.48, 0.44) : vec3(0.5, 0.49, 0.47), clamp(cont * 0.42 + guide * 0.14 + rP * 0.4, 0.0, 1.0));
             col = mix(sketch, col, seenE);
           }
           // Weather over everything. Fog and morning mist lie in the low ground and drift in banks, and the fog of
