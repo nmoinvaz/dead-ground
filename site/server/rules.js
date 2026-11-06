@@ -958,25 +958,36 @@ const Rules = (() => {
     h ^= h >>> 13; h = Math.imul(h, 0x27d4eb2f); h ^= h >>> 15;
     return h >>> 0;
   }
-  function spellOf(seed, k, tab = ANY_SKY) {
+  function rawSpell(seed, k, tab) {
     if (k < 2) return 'clear';
     const r = spellHash(seed, k) % tab.total;
     for (const [kd, top] of tab.cum) if (r < top) return kd;
     return 'clear';
   }
+  // Heavy weather passes: storms, dust storms, snow and fog hold for HEAVY of their spell, then ease into the kind
+  // named here, and never come two spells running, the second turning to cloud.
+  const EASE = { storm: 'rain', sand: 'cloud', snow: 'cloud', fog: 'cloud' }, HEAVY = 100 * HZ;
+  function spellOf(seed, k, tab = ANY_SKY) {
+    const kd = rawSpell(seed, k, tab);
+    return EASE[kd] && rawSpell(seed, k - 1, tab) === kd ? 'cloud' : kd;
+  }
+  // How much of a heavy spell is still heavy at a tick, falling across BLEND about the end of its heavy part.
+  const heavyW = (k, t) => clamp((k * SPELL + HEAVY + BLEND / 2 - t) / BLEND, 0, 1);
   // Spells that keep every aircraft on the ground.
   const GROUNDING = { storm: 1, sand: 1 };
   // How much a spell holds at a tick. It rises over BLEND across its start and falls across its end, so two
   // spells of one kind in a row join without a seam.
   const spellW = (k, t) => clamp((t - (k * SPELL - BLEND / 2)) / BLEND, 0, 1) * clamp(((k + 1) * SPELL + BLEND / 2 - t) / BLEND, 0, 1);
   function weatherAt(seed, t, tab = ANY_SKY) {
-    const k = Math.floor(t / SPELL), o = { clear: 0, cloud: 0, rain: 0, storm: 0, fog: 0, snow: 0, sand: 0, wind: [0, 0], flood: 0, cover: 0, kind: spellOf(seed, k, tab), next: spellOf(seed, k + 1, tab), left: (k + 1) * SPELL - t };
+    const k = Math.floor(t / SPELL), sk = spellOf(seed, k, tab);
+    const o = { clear: 0, cloud: 0, rain: 0, storm: 0, fog: 0, snow: 0, sand: 0, wind: [0, 0], flood: 0, cover: 0, kind: EASE[sk] && t >= k * SPELL + HEAVY ? EASE[sk] : sk, next: spellOf(seed, k + 1, tab), left: (k + 1) * SPELL - t };
     for (let j = k - 1; j <= k + 1; j++) {
       const w = spellW(j, t);
       if (w <= 0) continue;
-      const kd = spellOf(seed, j, tab), a = (spellHash(seed + 77, j) % 6283) / 1000;
-      o[kd] += w;
-      o.wind[0] += mcos(a) * WIND[kd] * w; o.wind[1] += msin(a) * WIND[kd] * w;
+      const kd = spellOf(seed, j, tab), a = (spellHash(seed + 77, j) % 6283) / 1000, hv = EASE[kd] ? heavyW(j, t) : 1;
+      o[kd] += w * hv;
+      o.wind[0] += mcos(a) * WIND[kd] * w * hv; o.wind[1] += msin(a) * WIND[kd] * w * hv;
+      if (hv < 1) { const e = EASE[kd]; o[e] += w * (1 - hv); o.wind[0] += mcos(a) * WIND[e] * w * (1 - hv); o.wind[1] += msin(a) * WIND[e] * w * (1 - hv); }
     }
     o.rain = Math.min(1, o.rain + o.storm);
     // Rivers rise through a spell of rain or storm and go down over the next one and a half. Snow lies over
@@ -3209,7 +3220,12 @@ const Rules = (() => {
     // The sky turns at the start of a spell, and a storm is called half a minute before it comes.
     if (S.tick > 0 && S.tick % SPELL === 0) {
       const k = S.tick / SPELL, now = spellOf(S.seed, k, skyOf(S)), was = spellOf(S.seed, k - 1, skyOf(S));
-      if (now !== was) S.ev.push({ t: 'weather', kind: now, was });
+      if (now !== (EASE[was] || was)) S.ev.push({ t: 'weather', kind: now, was: EASE[was] || was });
+    }
+    // Heavy weather passes part way through its spell.
+    if (S.tick % SPELL === HEAVY) {
+      const kd = spellOf(S.seed, S.tick / SPELL | 0, skyOf(S));
+      if (EASE[kd]) S.ev.push({ t: 'weather', kind: EASE[kd], was: kd, passed: true });
     }
     // Half a minute's warning of weather that grounds the aircraft, as stormsoon or sandsoon.
     if ((S.tick + 30 * HZ) % SPELL === 0) {
