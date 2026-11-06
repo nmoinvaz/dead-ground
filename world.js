@@ -33,11 +33,12 @@ const World = (() => {
   // A colour for each of the eight slots. A duel uses the first two. Blue, red, green, violet, orange, teal,
   // citron and brown, with no pink, which is only a light red.
   const SLOT_COLORS = [0x2f7ef0, 0xe03a24, 0x2fa84a, 0x8a4fd8, 0xf08a1c, 0x1fb3b3, 0xc8d42a, 0x7a5230];
-  // Each slot's ink in the pen and ink look, a deep one for light paper and a bright one for dark. Red is a
-  // vermilion, so its soft edges on cream stay red, and on dark paper it keeps a middle lightness, since a light red
-  // is pink. The nearest two inks on either paper are about 0.1 apart in OKLab.
+  // Each slot's ink in the pen and ink look, a deep one for light paper and a bright one for dark. Red leans a
+  // little to vermilion, so its soft edges on cream stay red, and orange leans to amber, clear of it. On dark paper
+  // red keeps a middle lightness, since a light red is pink. The nearest two inks on either paper are about 0.1
+  // apart in OKLab.
   const SLOT_INKS = {
-    light: ['#1d4fc4', '#ac3204', '#1e7a32', '#6a2fb0', '#bc6400', '#0a7480', '#7f7c00', '#6a4020'],
+    light: ['#1d4fc4', '#a82a0a', '#1e7a32', '#6a2fb0', '#c07000', '#0a7480', '#7f7c00', '#6a4020'],
     dark: ['#68a8ff', '#ee3a22', '#56cc6c', '#b088f2', '#ff7a1a', '#3fd0cc', '#cdf044', '#a8805a'],
   };
 

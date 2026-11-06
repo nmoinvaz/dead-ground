@@ -526,8 +526,8 @@
               vec3 bldI = uInks == 1 ? (dk ? vec3(0.86, 0.8, 0.7) : vec3(0.22, 0.16, 0.12)) : landI;
               float tN = 1.0 - smoothstep(0.012, 0.025, abs(aN - 0.459));
               inkC = aN > 0.9 ? uInk : aN > 0.62 ? bldI : tN > 0.5 ? treeI : isW > 0.5 ? waterI : landI;
-              // On light paper a close unit's hatching is the side's ink darkened halfway to black, as below.
-              if (!dk && a > 0.9) inkC = mix(mix(uInk, mix(uInk, INK, 0.5), 1.0 - zU), uInk, clamp(lineK / max(cover, 1e-3), 0.0, 1.0));
+              // On light paper a close unit's hatching is its side's ink darkened toward black, as below.
+              if (!dk && a > 0.9) inkC = mix(mix(uInk, mix(uInk, INK, 0.4), 1.0 - zU), uInk, clamp(lineK / max(cover, 1e-3), 0.0, 1.0));
             }
             // On dark paper hatching is laid in a light grey, and only the outlines keep the inks. Units keep their
             // side's ink throughout.
@@ -583,9 +583,9 @@
           // Each side's units drawn in its own ink (1), or their marks laid solid on a black body (2).
           float nearU = smoothstep(0.85, 0.95, max(max(A(uv + k * vec2(2.4, 0.0)), A(uv - k * vec2(2.4, 0.0))), max(max(A(uv + k * vec2(0.0, 2.4)), A(uv - k * vec2(0.0, 2.4))), s0)));
           if (uUnits == 1) {
-            // Lines take the side's ink. On light paper a close unit's hatching takes it darkened halfway to black,
-            // since fine hatching in red mixes to pink by eye. A far unit's solid shade keeps the ink.
-            vec3 sI = sideInk(texture2D(tAnc, vUv), dk), hI = dk ? sI : mix(sI, mix(sI, INK, 0.5), 1.0 - smoothstep(1.2, 1.9, uLev));
+            // Lines take the side's ink. On light paper a close unit's hatching takes it darkened two fifths of the
+            // way to black, since fine hatching in red mixes to pink by eye. A far unit's solid shade keeps the ink.
+            vec3 sI = sideInk(texture2D(tAnc, vUv), dk), hI = dk ? sI : mix(sI, mix(sI, INK, 0.4), 1.0 - smoothstep(1.2, 1.9, uLev));
             vec3 tInk = mix(hI, sI, clamp(lineK / max(cover, 1e-3), 0.0, 1.0));
             col = mix(col, tInk, nearU * smoothstep(0.25, 0.6, cover) * step(0.05, mkx)); mark = 0.0; wash = 0.0;
           }
