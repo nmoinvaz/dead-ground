@@ -540,7 +540,7 @@ body[data-look="ink"] .sheet { box-shadow: 4px 4px 0 var(--ink); }
     <div id="settings" hidden role="dialog" aria-label="Settings">
       <div class="choice"><h2>Paper</h2><div id="s-scheme"><button data-v="light">Light</button><button data-v="dark">Dark</button><button data-v="auto">As the system</button></div></div>
       <div class="choice"><h2>Picture</h2><div id="s-pic" class="two"><button data-v="sharp">Sharp</button><button data-v="fast">Faster</button></div><p id="s-pic-note"></p></div>
-      <p id="build">Build 9032b5a 2026-11-06 17:13</p>
+      <p id="build">Build 8614edf 2026-11-06 17:19</p>
     </div>
     <div id="banner" hidden></div>
     <button id="update" hidden>A new version of Dead Ground is out. <b>Reload</b></button>
@@ -9409,7 +9409,7 @@ const World = (() => {
         m.setColorAt(0, neutral); m.instanceColor.setUsage(THREE.DynamicDrawUsage);
         return add(m);
       };
-      life = { herds: [], cars: [], folk: [], boats: [], flocks: [], birds: [], alarm: [], danger: [], scanT: 0, deerM: mk(sc.deer, 60), carM: mk(sc.car, 32), cartM: mk(sc.cart, 32), folkM: mk(sc.folk, 200), boatM: mk(sc.boat, 12) };
+      life = { herds: [], cars: [], folk: [], boats: [], flocks: [], birds: [], alarm: [], danger: [], rise: [], scanT: 0, deerM: mk(sc.deer, 60), carM: mk(sc.car, 32), cartM: mk(sc.cart, 32), folkM: mk(sc.folk, 200), boatM: mk(sc.boat, 12), armM: mk(new THREE.BoxGeometry(0.62, 0.035, 0.035), 60) };
       for (let i = 0; i < Math.round(4 * scale); i++) { const p = meadow(); if (p) life.herds.push(newHerd(p)); }
       for (let i = 0; i < Math.round(3 * scale); i++) { const p = meadow(true); if (p) life.flocks.push(newFlock(p)); }
       // The roads come in pieces that meet at junctions and at the ends of bridges. Each piece knows which others
@@ -9425,7 +9425,6 @@ const World = (() => {
       }
       const CARS = [0xb8402e, 0x2f5a8a, 0xe8e0cc, 0x5d7a46, 0x3a3a3a, 0xe0b040], long = life.roads.filter(r => r.len > 14);
       for (let i = 0; i < Math.min(long.length, Math.round(8 * scale)); i++) { const r = long[(i * 7) % long.length]; life.cars.push({ r, s: R() * r.len, dir: R() < 0.5 ? 1 : -1, v: 0, wait: R() * 3, col: CARS[i % CARS.length], x: r.pts[0][0], y: r.pts[0][1], a: 0, turn: false, careless: R() < 0.3 }); }
-      const SHIRTS = [0xf4f0e4, 0xc84a3a, 0x5a7ab0, 0xe0c060, 0x7a9a5a, 0xd8a0a0];
       M.towns.forEach((t, ti) => { for (let k = 0; k < 5; k++) life.folk.push({ town: ti, x: t.x + (R() - 0.5) * 5, y: t.y + (R() - 0.5) * 5, tx: t.x, ty: t.y, v: 0, wait: R() * 4, hide: 0, col: SHIRTS[(ti * 5 + k) % SHIRTS.length], a: R() * 6.28, ph: R() * 6 }); });
       for (let tries = 0; life.boats.length < Math.round(2 * scale) && tries < 4000; tries++) {
         const x = 2 + R() * (W - 4), y = 2 + R() * (H - 4);
@@ -9443,6 +9442,7 @@ const World = (() => {
     // Two cars meet: both slew round and stop in a cloud of dust and sparks, one now and then on fire, and the
     // drivers of a car that is not burning often get out and fight it out between the wrecks.
     const DRIVER_SHIRTS = [0xf4f0e4, 0x3a3a3a, 0x5a7ab0, 0xc84a3a, 0x8a6a4c];
+    const SHIRTS = [0xf4f0e4, 0xc84a3a, 0x5a7ab0, 0xe0c060, 0x7a9a5a, 0xd8a0a0];
     function crash(c, o) {
       const burn = Math.random() < 0.25, R = Math.random;
       for (const [k, q] of [[1, c], [-1, o]]) { q.crash = { t: 22 + R() * 14, spin: k * (0.45 + R() * 0.7), roll: (R() - 0.5) * 0.3, burn: burn && q === c, smokeT: 0 }; q.v = 0; }
@@ -9489,6 +9489,49 @@ const World = (() => {
         f.brawl = o.brawl = null;
       }
     }
+    // A town's people turn on soldiers of a side other than the town's own, or, in a town held by nobody, on the
+    // side taking it, or on anyone fighting there.
+    function townFoe(ti, u) {
+      const t = S.towns[ti];
+      return t.owner >= 0 ? u.team !== t.owner : t.capTeam >= 0 ? u.team === t.capTeam : true;
+    }
+    function nearFoe(ti, x, y, r) {
+      let best = null, bd = r;
+      Rules.near(S, x, y, r, u => { if (u.hp > 0 && !u.b && !Rules.isAir(u) && townFoe(ti, u)) { const d = Math.hypot(u.x - x, u.y - y); if (d < bd) { bd = d; best = u; } } });
+      return best;
+    }
+    // A townsman up in arms runs at the nearest foe and goes at it, with a musket from the Gunpowder Age on and a
+    // pitchfork or club before. Nothing he does reaches the rules, but the fire round him may take him, and he
+    // lies where he fell. When the fight moves off or his nerve goes, he is back indoors.
+    function stepFight(f, dt) {
+      const g = f.fight;
+      if (g.delay > 0) { g.delay -= dt; f.v = 0; return; }
+      g.t -= dt;
+      let u = S.byId.get(g.foe);
+      if (!u || u.hp <= 0 || Math.hypot(u.x - f.x, u.y - f.y) > 16) { u = nearFoe(f.town, f.x, f.y, 14); g.foe = u ? u.id : 0; }
+      if (!u || g.t <= 0) { f.fight = null; f.hide = 4; return; }
+      const dx = u.x - f.x, dy = u.y - f.y, d = Math.hypot(dx, dy) || 1e-3, reach = g.gun ? 4.5 : 0.75 + (u.d.r || 0.5);
+      f.a = Math.atan2(dy, dx);
+      if (d > reach) {
+        f.v = 2.2; f.ph += dt * 14; g.swing = 0;
+        const nx = f.x + dx / d * f.v * dt, ny = f.y + dy / d * f.v * dt;
+        if (openAt(nx, ny)) { f.x = nx; f.y = ny; } else { const sx = f.x - dy / d * f.v * dt, sy = f.y + dx / d * f.v * dt; if (openAt(sx, sy)) { f.x = sx; f.y = sy; } }
+      } else {
+        f.v = 0; g.swing += dt;
+        if ((g.shotT -= dt) <= 0 && VIS(f.x, f.y)) {
+          const up = heightAt(M, f.x, f.y) + 0.5, cA = Math.cos(f.a), sA = Math.sin(f.a);
+          if (g.gun) {
+            g.shotT = 1.4 + Math.random() * 2;
+            const mx = f.x + cA * 0.45, my = f.y + sA * 0.45;
+            muzzle(mx, up, my, 0.22); inkAdd({ k: 'star', x: mx, y: up, z: my, life: 0.08, s: 0.24 });
+            for (let i = 0; i < 2; i++) smoke.add(mx, up, my, cA * (0.6 + i * 0.5), 0.3, sA * (0.6 + i * 0.5), 2, 0.18, 0.8, [2.6, 2.6, 2.5, 0.55], [2.6, 2.6, 2.5, 0], i, { drag: 2.5 });
+            streak.add(mx, up, my, u.x + (Math.random() - 0.5) * 0.6, heightAt(M, u.x, u.y) + 0.4, u.y + (Math.random() - 0.5) * 0.6, 0.1, 0.025, FX.bullet);
+          } else { g.shotT = 0.5 + Math.random() * 0.5; inkAdd({ k: 'star', x: u.x - cA * 0.3, y: up, z: u.y - sA * 0.3, life: 0.09, s: 0.22 }); }
+        }
+      }
+      // Caught in the fire. Closer in, the likelier.
+      if (Math.random() < dt * (d < 3 ? 0.06 : 0.025)) { f.fight = null; f.dead = 30; }
+    }
     function roadAt(r, s) {
       s = clamp(s, 0, r.len);
       let k = 1;
@@ -9526,6 +9569,31 @@ const World = (() => {
           const ax = c.x + Math.cos(c.a) * 7, ay = c.y + Math.sin(c.a) * 7;
           Rules.near(S, ax, ay, 9, e => { if (e.hp > 0 && (e.b || e.tgt) && Rules.gap(ax, ay, e) < 8) c.turn = true; });
         }
+        // When soldiers fight in a town, now and then a few of its people come out with what arms they have and
+        // join in. A town rises at most once in a while, and only by day and out of a storm. A town with people
+        // gone refills, slowly, once it is quiet.
+        const ageNow = Math.max(...S.P.map(P => P.tech));
+        M.towns.forEach((t, ti) => {
+          L.rise[ti] = Math.max(0, (L.rise[ti] || 0) - 0.4);
+          const folk = L.folk.filter(f => f.town === ti);
+          if (!L.danger[ti]) {
+            if (folk.length < 5 && Math.random() < 0.01) L.folk.push({ town: ti, x: t.x, y: t.y, tx: t.x, ty: t.y, v: 0, wait: 2, hide: 0, col: SHIRTS[(ti * 5 + folk.length) % SHIRTS.length], a: Math.random() * 6.28, ph: 0 });
+            return;
+          }
+          if (L.rise[ti] > 0 || night > 0.6 || storm > 0.5) return;
+          let fight = false;
+          Rules.near(S, t.x, t.y, 14, u => { if (!fight && u.hp > 0 && !u.b && u.tgt && townFoe(ti, u)) fight = true; });
+          if (!fight) return;
+          L.rise[ti] = 40 + Math.random() * 30;
+          if (Math.random() > 0.5) return;
+          const up = folk.filter(f => !f.fight && !(f.dead > 0));
+          for (const f of up.slice(0, 2 + (Math.random() * 3 | 0))) {
+            const u = nearFoe(ti, f.x, f.y, 16);
+            if (!u) continue;
+            f.hide = 0; f.brawl = null; f.down = 0; f.watch = 0;
+            f.fight = { foe: u.id, t: 18 + Math.random() * 14, delay: 0.5 + Math.random() * 2.5, swing: 0, shotT: Math.random(), gun: ageNow >= 3 };
+          }
+        });
         // Now and then two townsfolk fall out and come to blows, and those near by stop to watch.
         if (night < 0.6 && storm < 0.5) M.towns.forEach((t, ti) => {
           if (L.danger[ti] || Math.random() > 0.4 / 80) return;
@@ -9626,6 +9694,8 @@ const World = (() => {
       }
       // Townsfolk stroll between the houses and go indoors when soldiers come, at night and in a storm.
       for (const f of L.folk) {
+        if (f.dead > 0) { f.v = 0; if ((f.dead -= dt) <= 0) f.gone = true; continue; }
+        if (f.fight) { stepFight(f, dt); continue; }
         if (!f.driver) {
           const inside = L.danger[f.town] || night > 0.6 || storm > 0.5;
           if (f.hide > 0 || inside) { f.hide = inside ? Math.max(f.hide, 4) : f.hide - dt; f.brawl = null; f.down = 0; f.watch = 0; continue; }
@@ -9707,9 +9777,20 @@ const World = (() => {
       CM.count = n; dirty(CM);
       (motor ? L.cartM : L.carM).count = 0;
       n = 0;
+      let na = 0;
       for (const f of L.folk) {
-        if (n >= 200 || f.hide > 0 || L.danger[f.town] || !VIS(f.x, f.y)) continue;
+        if (n >= 200 || !VIS(f.x, f.y)) continue;
+        if (!f.fight && !(f.dead > 0) && (f.hide > 0 || L.danger[f.town])) continue;
         let px = f.x, py = f.y, lean = 0, roll = 0, hop = f.v > 0 ? Math.abs(Math.sin(f.ph)) * 0.03 : 0;
+        // Arms carried at the port, run with, and swung or levelled at the foe.
+        if (f.fight && na < 60) {
+          const g = f.fight, k = g.gun ? 0 : Math.max(0, Math.sin(g.swing * 9));
+          const tilt = g.delay > 0 ? 1.1 : f.v > 0 ? 0.7 : g.gun ? 0.05 : 0.9 - k * 1.1;
+          if (!g.gun && f.v === 0) { px += Math.cos(f.a) * k * 0.1; py += Math.sin(f.a) * k * 0.1; lean = -k * 0.3; }
+          compose(m1, px + Math.cos(f.a) * 0.1, heightAt(M, px, py) + 0.45 + hop, py + Math.sin(f.a) * 0.1, -f.a, tilt, 0, 1);
+          L.armM.setMatrixAt(na, m1); L.armM.setColorAt(na, colA.set(g.gun ? 0x3a2e24 : 0x7a5a3a)); na++;
+        }
+        if (f.dead > 0) roll = 1.45;
         // A swing throws the body forward and back, with a little bounce on the feet.
         if (f.brawl && f.brawl.on) {
           const k = Math.max(0, Math.sin(f.brawl.ph * 7 + (f.brawl.lead ? 0 : 2.2)));
@@ -9721,6 +9802,7 @@ const World = (() => {
         L.folkM.setMatrixAt(n, m1); L.folkM.setColorAt(n, colA.set(f.col)); n++;
       }
       L.folkM.count = n; dirty(L.folkM);
+      L.armM.count = na; dirty(L.armM);
       n = 0;
       for (const b of L.boats) {
         if (n >= 12 || !VIS(b.x, b.y)) continue;
