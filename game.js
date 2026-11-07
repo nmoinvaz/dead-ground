@@ -770,7 +770,9 @@ const Game = (() => {
           if (G.online && G.S) G.names = m.slots.map(s => s.kind === 'human' ? s.name : s.kind === 'ai' ? `Computer (${Rules.DIFFICULTY[s.level].name})` : '');
           // The host set up the next game: everyone still in the game's picture goes back to the room.
           if (m.phase === 'lobby' && net.inGame) backToRoom();
-          if (!net.inGame) { if ($('t-setup').hidden || !was) screen('setup'); renderSetup(); }
+          // A room already at war sends its world next, so the lobby is not shown on the way back in.
+          if (!net.inGame && m.phase !== 'lobby') rejoining(true);
+          else if (!net.inGame) { rejoining(false); if ($('t-setup').hidden || !was) screen('setup'); renderSetup(); }
           drawRoster();
           break;
         }
@@ -778,8 +780,8 @@ const Game = (() => {
         case 'chat': chatLine(m.n, m.s); if (G.online && net.inGame) hud.say(`${m.n}: ${m.s}`); break;
         case 'hello': net.slot = m.slot; net.theme = m.theme || 'desert'; net.map = m.map || 'duel'; net.queue = []; net.hashes.clear(); break;
         case 'ticks': for (const b of m.b) net.queue.push(b); if (m.h) net.hashes.set(m.h[0], m.h[1]); break;
-        case 'gone': net.want = false; net.inRoom = false; net.view = null; store.set(ROOM, null); if (!$('title').hidden && !$('t-setup').hidden) screen('rooms'); toast('That game has closed.'); break;
-        case 'taken': net.want = false; net.inRoom = false; toast('This game was opened in another window.'); break;
+        case 'gone': rejoining(false); net.want = false; net.inRoom = false; net.view = null; store.set(ROOM, null); if (!$('title').hidden && !$('t-setup').hidden) screen('rooms'); toast('That game has closed.'); break;
+        case 'taken': rejoining(false); net.want = false; net.inRoom = false; toast('This game was opened in another window.'); break;
         case 'moved': chatLine('', 'The host moved you out of your seat. You are watching.'); break;
       }
     }
@@ -790,6 +792,15 @@ const Game = (() => {
       log.append(p);
       while (log.children.length > 60) log.firstChild.remove();
       log.scrollTop = log.scrollHeight;
+    }
+    // A plain card over the title while a game is found again, so neither the title nor the lobby flashes by.
+    // If no world comes, the room's own screen shows after a while.
+    let rejoinT = 0;
+    function rejoining(on) {
+      clearTimeout(rejoinT);
+      document.body.classList.toggle('rejoining', on);
+      $('loading').textContent = on ? 'REJOINING' : 'DEPLOYING';
+      if (on) rejoinT = setTimeout(() => { rejoining(false); if (net.inRoom && !net.inGame && net.view) { screen('setup'); renderSetup(); } }, 15000);
     }
     function toast(s) { if (!$('title').hidden) $('go-why').textContent = s; else hud.say(s, 'bad'); const n = $('rooms-none'); if (n && !$('t-rooms').hidden) n.textContent = s; }
     function stepNet() {
@@ -811,6 +822,7 @@ const Game = (() => {
     }
     // The world from the server: a game starting, a player coming back to one, or a fresh copy after a drop.
     function enterWorld(S) {
+      rejoining(false);
       const first = !net.inGame;
       G.online = true; net.inGame = true;
       G.mapKey = net.map; G.theme = net.theme;
@@ -902,16 +914,16 @@ const Game = (() => {
       const again = () => { if (n < 4) setTimeout(() => probe(n + 1), 1500 * (n + 1)); };
       try {
         const r = await fetch('/api/hello', { cache: 'no-store' });
-        if (r.status >= 500) return again();
-        if (!r.ok) return;
+        if (r.status >= 500) return n < 4 ? again() : rejoining(false);
+        if (!r.ok) return rejoining(false);
         const j = await r.json();
-        if (!j.ok) return;
+        if (!j.ok) return rejoining(false);
         hasServer = true;
         $('b-multi').hidden = false;
         // A player who was in a room when the page went comes back to it.
         const code = store.get(ROOM, '');
         if (code && !G.playing) { G.name = G.name || 'Commander'; joinRoom(code); }
-      } catch (e) { again(); }
+      } catch (e) { if (n < 4) again(); else rejoining(false); }
     }
 
     function toTitle() {
@@ -927,6 +939,7 @@ const Game = (() => {
       fit();
       applyScheme();
       if (!restore()) { attract(); screen('main'); }
+      if (store.get(ROOM, '') && !G.playing && /^https?:$/.test(location.protocol)) rejoining(true);
       $('callsign').value = G.name;
       probe();
       const list = [

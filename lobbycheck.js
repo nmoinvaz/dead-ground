@@ -65,11 +65,20 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
   await wait(60000);
   const h1 = await seen(host), g1 = await seen(guest);
   await shot(host, 'game-host'); await shot(guest, 'game-guest');
-  // The host refreshes the page and comes back into the same side.
+  // The host refreshes the page and comes back into the same side, without the lobby showing on the way.
+  await host.evaluateOnNewDocument(() => {
+    window.__sawLobby = false;
+    const t = setInterval(() => {
+      const s = document.getElementById('t-setup'), ti = document.getElementById('title');
+      if (s && ti && !s.hidden && !ti.hidden) window.__sawLobby = true;
+      if (window.__game && window.__game.playing) clearInterval(t);
+    }, 20);
+  });
   await host.reload();
   await host.waitForFunction('document.body.classList.contains("ready") && window.__game && window.__game.playing && window.__game.online', { timeout: 30000 });
   await wait(5000);
   const back = await seen(host), gNow = await seen(guest);
+  back.sawLobby = await host.evaluate(() => window.__sawLobby);
   // The guest leaves; their side is given up.
   await guest.evaluate(() => { document.getElementById('b-pause').click(); });
   await wait(300);
@@ -78,7 +87,7 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
   const h2 = await seen(host);
   const roster = await host.evaluate(() => document.getElementById('roster').innerText);
   await shot(host, 'after-leave');
-  console.log(JSON.stringify({ listed, before, after, start: { host: h0, guest: g0 }, minute: { host: h1, guest: g1 }, back: { team: back.team, tick: back.tick, guestTick: gNow.tick }, afterLeave: { alive: h2.alive, roster }, errors: { host: host.errs, guest: guest.errs } }, null, 1));
+  console.log(JSON.stringify({ listed, before, after, start: { host: h0, guest: g0 }, minute: { host: h1, guest: g1 }, back: { team: back.team, tick: back.tick, guestTick: gNow.tick, sawLobby: back.sawLobby }, afterLeave: { alive: h2.alive, roster }, errors: { host: host.errs, guest: guest.errs } }, null, 1));
   // The host leaves too, so the room closes.
   await host.evaluate(() => { document.getElementById('b-pause').click(); document.getElementById('quit').click(); });
   await wait(2500);
