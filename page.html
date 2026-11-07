@@ -524,6 +524,7 @@ body[data-look="ink"] .sheet { box-shadow: 4px 4px 0 var(--ink); }
         <button id="b-mute" title="Sound (M)" aria-label="Sound">&#9834;</button>
         <button id="b-full" title="Full screen (F)" aria-label="Full screen">&#9974;</button>
         <button id="b-set" title="Settings" aria-label="Settings" aria-expanded="false">&#9881;</button>
+        <button id="b-exit" title="Leave the game" aria-label="Leave the game"><svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 2.5h-4v11h4M10 4.5 13.5 8 10 11.5M13.5 8H6"/></svg></button>
       </div>
     </div>
     <div id="notes"><div id="objective" hidden></div><div id="log"></div></div>
@@ -619,7 +620,7 @@ body[data-look="ink"] .sheet { box-shadow: 4px 4px 0 var(--ink); }
   </div>
 
   <div id="veil" hidden>
-    <h2>Paused</h2>
+    <h2 id="veil-h">Paused</h2>
     <div class="row"><button id="resume">Resume</button><button id="quit">Quit to menu</button></div>
   </div>
 
