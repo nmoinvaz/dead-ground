@@ -531,13 +531,14 @@ body[data-look="ink"] .sheet { box-shadow: 4px 4px 0 var(--ink); }
         <button id="b-mute" title="Sound (M)" aria-label="Sound">&#9834;</button>
         <button id="b-full" title="Full screen (F)" aria-label="Full screen">&#9974;</button>
         <button id="b-set" title="Settings" aria-label="Settings" aria-expanded="false">&#9881;</button>
+        <button id="b-exit" title="Leave the game" aria-label="Leave the game"><svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 2.5h-4v11h4M10 4.5 13.5 8 10 11.5M13.5 8H6"/></svg></button>
       </div>
     </div>
     <div id="notes"><div id="objective" hidden></div><div id="log"></div></div>
     <div id="settings" hidden role="dialog" aria-label="Settings">
       <div class="choice"><h2>Paper</h2><div id="s-scheme"><button data-v="light">Light</button><button data-v="dark">Dark</button><button data-v="auto">As the system</button></div></div>
       <div class="choice"><h2>Picture</h2><div id="s-pic" class="two"><button data-v="sharp">Sharp</button><button data-v="fast">Faster</button></div><p id="s-pic-note"></p></div>
-      <p id="build">Build 773cf54 2026-11-06 16:12</p>
+      <p id="build">Build f392aeb 2026-11-06 16:20</p>
     </div>
     <div id="banner" hidden></div>
     <button id="update" hidden>A new version of Dead Ground is out. <b>Reload</b></button>
@@ -626,7 +627,7 @@ body[data-look="ink"] .sheet { box-shadow: 4px 4px 0 var(--ink); }
   </div>
 
   <div id="veil" hidden>
-    <h2>Paused</h2>
+    <h2 id="veil-h">Paused</h2>
     <div class="row"><button id="resume">Resume</button><button id="quit">Quit to menu</button></div>
   </div>
 
@@ -14531,12 +14532,20 @@ const Game = (() => {
     const mobile = /Mobi|Android|iPhone|iPad/.test(navigator.userAgent) || (navigator.maxTouchPoints > 1 && Math.min(screen.width, screen.height) < 820);
     const params = new URLSearchParams(location.search);
     const world = World.create(THREE, canvas, { low: mobile, keep: params.has('keep') });
+    // The veil's words, for a pause or for leaving. Online nothing waits, so it does not say paused.
+    function veilFor(leave) {
+      $('veil-h').textContent = leave ? 'Leave the game?' : G.online ? 'The battle goes on' : 'Paused';
+      $('resume').textContent = leave ? 'Keep playing' : 'Resume';
+      $('quit').textContent = leave ? 'Leave' : 'Quit to menu';
+    }
     const G = {
       S: null, team: 0, playing: false, paused: false, speed: 1, showHints: true, audio: null, world, theme: 'desert', look: 'ink', online: false, name: '',
       // Each slot's name and the map of the game being played.
       names: [], mapKey: 'duel',
       // Online the world never pauses, so the veil only offers the way out.
-      togglePause() { if (!G.playing) return; if (G.online) { $('veil').hidden = !$('veil').hidden; return; } G.paused = !G.paused; $('veil').hidden = !G.paused; },
+      togglePause() { if (!G.playing) return; veilFor(false); if (G.online) { $('veil').hidden = !$('veil').hidden; return; } G.paused = !G.paused; $('veil').hidden = !G.paused; },
+      // The way out from the bar, one click and a confirmation. A skirmish waits while it is asked.
+      askLeave() { if (!G.playing) return; veilFor(true); if (!G.online) G.paused = true; $('veil').hidden = false; },
       setSpeed(d) { if (G.online) return; const i = Rules.clamp(SPEEDS.indexOf(G.speed) + d, 0, SPEEDS.length - 1); G.speed = SPEEDS[i]; hud.say(`Game speed ${G.speed}x.`); $('speed').textContent = G.speed + 'x'; },
       // Every order goes to the server online, and straight into the rules otherwise.
       order(S, team, c) { if (G.online) send({ t: 'cmd', c }); else Rules.push(S, team, c); },
@@ -15099,6 +15108,7 @@ const Game = (() => {
     $('quit').addEventListener('click', () => { G.paused = false; $('veil').hidden = true; G.playing = false; clearSave(); if (G.online) leaveRoom(); toTitle(); });
     $('resume').addEventListener('click', () => G.togglePause());
     $('b-pause').addEventListener('click', () => G.togglePause());
+    $('b-exit').addEventListener('click', () => { audio.ui('click'); G.askLeave(); });
     $('b-mute').addEventListener('click', () => { audio.wake(); audio.toggle(); $('b-mute').classList.toggle('off', audio.muted); });
     $('b-full').addEventListener('click', () => G.fullscreen());
     $('b-speed').addEventListener('click', () => { const i = SPEEDS.indexOf(G.speed); G.speed = SPEEDS[(i + 1) % SPEEDS.length]; $('speed').textContent = G.speed + 'x'; });
