@@ -456,12 +456,14 @@ body[data-look="ink"] #menu, body[data-look="ink"] #watch, body[data-look="ink"]
 .sheet button:hover:not(:disabled) { background: var(--paper-lo); }
 .sheet button.on, .sheet button.on:hover { background: var(--ink); color: var(--paper); }
 .sheet button:disabled { opacity: .4; }
-.cols { display: grid; grid-template-columns: minmax(250px, 310px) 1fr; gap: 24px; align-items: start; }
+.cols { display: grid; grid-template-columns: minmax(260px, 360px) 1fr; gap: 24px; align-items: start; }
 .pick { display: grid; gap: 4px; }
 .pick.three { grid-template-columns: repeat(3, 1fr); }
 .pick.three button { padding: 4px 2px; }
-#maps button { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; text-align: left; }
-#maps button small { font: 13px var(--mono); opacity: .8; white-space: nowrap; }
+/* Sixteen maps in two columns, each its name over how many it seats, so the picture below stays in view. */
+#maps { grid-template-columns: 1fr 1fr; }
+#maps button { display: flex; flex-direction: column; align-items: flex-start; gap: 0; text-align: left; min-height: 0; padding: 3px 8px; line-height: 1.15; }
+#maps button small { font: 12px var(--mono); opacity: .75; white-space: nowrap; }
 .preview { margin-top: 8px; }
 #preview { width: 100%; aspect-ratio: 1; display: block; border: 1.5px solid var(--ink); background: var(--paper-hi); }
 #map-about, #age-about, #weather-about { margin: 6px 0 0; font: 500 15px/1.25 var(--ui); color: var(--ink-dim); text-wrap: pretty; }
@@ -554,7 +556,7 @@ body[data-look="ink"] .sheet { box-shadow: 4px 4px 0 var(--ink); }
     <div id="settings" hidden role="dialog" aria-label="Settings">
       <div class="choice"><h2>Paper</h2><div id="s-scheme"><button data-v="light">Light</button><button data-v="dark">Dark</button><button data-v="auto">As the system</button></div></div>
       <div class="choice"><h2>Picture</h2><div id="s-pic" class="two"><button data-v="sharp">Sharp</button><button data-v="fast">Faster</button></div><p id="s-pic-note"></p></div>
-      <p id="build">Build 3166544 2026-11-06 17:30</p>
+      <p id="build">Build ed64bcc 2026-11-06 17:54</p>
     </div>
     <div id="banner" hidden></div>
     <button id="update" hidden>A new version of Dead Ground is out. <b>Reload</b></button>
@@ -1039,7 +1041,10 @@ const Rules = (() => {
     wells: [[-64, -16], [-64, 16], [-16, 28], [-26, -50], [-20, -26]],
     bridges: [0, 40, -40],
   };
-  const SIZES = { duel: 128, quad: 192, world: 256, gulf: 128, pass: 128, lakes: 192 };
+  const SIZES = {
+    duel: 128, quad: 192, world: 256, gulf: 128, pass: 128, lakes: 192,
+    greenwood: 128, oldforest: 192, twinlakes: 128, ponds: 192, seas: 128, isles: 192, peaks: 128, highlands: 192, rivers3: 128, crater: 192,
+  };
   // The maps a game may be set on, each a layout and the most sides it seats.
   const MAPS = {
     duel: { name: 'River Duel', layout: 'duel', seats: 2, about: 'Two bases across one river, three bridges and a ford.' },
@@ -1048,6 +1053,16 @@ const Rules = (() => {
     gulf: { name: 'The Gulf', layout: 'gulf', seats: 2, about: 'Two bases either side of a long gulf, with land round both ends. Docks and ships hold the water.' },
     pass: { name: 'High Pass', layout: 'pass', seats: 2, about: 'A steep ridge between two bases, crossed only at three passes.' },
     lakes: { name: 'Lake Country', layout: 'lakes', seats: 4, about: 'Four corners round a great lake, a road all the way round its shore.' },
+    greenwood: { name: 'Greenwood', layout: 'greenwood', seats: 2, about: 'Two bases in deep woods, with roads cut through and clearings round the towns. Tanks keep to the roads.' },
+    oldforest: { name: 'Old Forest', layout: 'oldforest', seats: 4, about: 'Four corners in an old forest, joined by woodland roads and a ring of towns.' },
+    twinlakes: { name: 'Twin Lakes', layout: 'twinlakes', seats: 2, about: 'Two lakes between the bases, a road between them and one round each end. Docks hold the lakes.' },
+    ponds: { name: 'Thousand Lakes', layout: 'ponds', seats: 4, about: 'Four corners in a country of small lakes and ponds that break up every line of march.' },
+    seas: { name: 'Two Seas', layout: 'seas', seats: 2, about: 'A broad land between two seas, each base near a coast. Ships can strike the flanks.' },
+    isles: { name: 'Archipelago', layout: 'isles', seats: 4, about: 'Four islands round a great middle one, joined by long bridges. Ships hold the water between.' },
+    peaks: { name: 'Twin Peaks', layout: 'peaks', seats: 2, about: 'Two mountains between the bases, a valley through the middle and a way round each end.' },
+    highlands: { name: 'Highlands', layout: 'highlands', seats: 4, about: 'Ridges part four corners, crossed by passes, round a plateau each side can climb to.' },
+    rivers3: { name: 'Three Rivers', layout: 'rivers3', seats: 2, about: 'Three rivers between two bases, each with its bridges and a ford. Lines to hold.' },
+    crater: { name: 'Crater Lake', layout: 'crater', seats: 4, about: 'A lake inside a ring of mountains, entered through four gaps, with a base in each corner outside.' },
   };
   // Which of a map's bases each seated slot starts at: spread evenly round the ring. In slot order, or given a
   // random draw rnd, with the ring turned a random step and the sides dealt the places in a random order.
@@ -1065,13 +1080,24 @@ const Rules = (() => {
   // feature is listed with all of its images in a row, so one town's images sit side by side.
   // How wooded a map is beyond the usual: the woods' patches grow wider, start on lower ground and stand thicker.
   // Maps not named keep the usual woods.
-  const WOODS = { quad: 0.7, pass: 1, lakes: 1 };
+  const WOODS = { quad: 0.7, pass: 1, lakes: 1, greenwood: 3, oldforest: 1.3, twinlakes: 0.6, ponds: 0.8, peaks: 0.6, highlands: 0.5, crater: 0.5 };
+  // A point turned a quarter round the middle k times.
+  const turnK = ([x, y], k) => { let dx = x - CX, dy = y - CY; for (let i = 0; i < k; i++) { const t = dx; dx = -dy; dy = t; } return [CX + dx, CY + dy]; };
+  // Round lakes and ponds as a layout's water: how far a point lies past the edge of the nearest, with a bank of
+  // three. The shore falls about five cells beyond each radius.
+  const pools = list => (x, y) => { let d = 1e9; for (const [px, py, r] of list) d = Math.min(d, mhypot(x - px, y - py) - r); return [Math.max(0, d), 3]; };
+  // Round islands in open water: how far a point lies inside the nearest island's radius, nothing out at sea. The
+  // shore falls about six cells inside each radius.
+  const isles = list => (x, y) => { let d = 0; for (const [px, py, r] of list) d = Math.max(d, r - mhypot(x - px, y - py)); return [d, 3]; };
+  // A mountain: cliffs no vehicle climbs round a top `top` high and r across, and foothills beyond.
+  const massif = (d, r, top) => top * (1 - smooth(r - 4, r + 3, d)) + 1.6 * (1 - smooth(r, r + 14, d));
   function layoutFor(kind) {
     const L = { kind, roads: [], bridges: [], towns: [], ore: [], wells: [], bases: [], fords: [] };
     const all = (list, p, extra = []) => { for (const T of L.syms) { const q = T(p); list.push([q[0], q[1], ...extra]); } };
     // A ford's images, each its middle and the unit way along the river.
     const fordAt = (p, q) => { for (const T of L.syms) { const a = T(p), b = T(q), d = mhypot(b[0] - a[0], b[1] - a[1]); L.fords.push([a[0], a[1], (b[0] - a[0]) / d, (b[1] - a[1]) / d]); } };
     const R = (a, b, wig, rep = true) => L.roads.push({ a, b, wig, rep });
+    if (MORE.has(kind)) return moreLayout(kind, L, all, fordAt, R);
     // Lake Country: the four quarters round one great lake, with no rivers or bridges, a road round the shore.
     if (kind === 'lakes') {
       const rot = ([x, y], k) => { let dx = x - CX, dy = y - CY; for (let i = 0; i < k; i++) { const t = dx; dx = -dy; dy = t; } return [CX + dx, CY + dy]; };
@@ -1199,6 +1225,215 @@ const Rules = (() => {
       if (v) L.bridges.push([mirror(a), mirror(b)]);
     }
     fordAt(uvp(riverU(20), 20), uvp(riverU(21), 21));
+    return L;
+  }
+
+  // ---- The second set of maps: woods, lakes, seas, islands, mountains and rivers ----
+  const MORE = new Set(['greenwood', 'oldforest', 'twinlakes', 'ponds', 'seas', 'isles', 'peaks', 'highlands', 'rivers3', 'crater']);
+  function moreLayout(kind, L, all, fordAt, R) {
+    const dry = () => [99, 0];
+    // Two sides on the River Duel's frame, mirrored through the middle.
+    const duel = () => {
+      L.syms = [p => [p[0], p[1]], mirror];
+      L.domain = (x, y) => { const u = toUV(x + 0.5, y + 0.5)[0]; return u < 0 || (u === 0 && x <= y); };
+    };
+    // Four corners, each a quarter turn from the last. polar is in the 256-cell world's units.
+    const sc = W / 256, polar = (r, deg) => [CX + r * sc * mcos(deg * PI / 180), CY + r * sc * msin(deg * PI / 180)];
+    const quad = () => {
+      L.syms = [0, 1, 2, 3].map(k => p => turnK(p, k));
+      L.domain = (x, y) => x + 0.5 - CX > 0 && y + 0.5 - CY > 0;
+    };
+    // A road through the middle is laid as two halves meeting there, each the other's image, so a wandering road
+    // keeps the map exactly symmetric.
+    const uvp = (u, v) => toXY(u, v);
+    // A duel base's own ore and wells, ahead to either side and behind.
+    const duelKit = (u0, v0) => {
+      all(L.ore, uvp(u0 + 7, v0 + 18), [7]); all(L.ore, uvp(u0 + 8, v0 - 19), [6.5]);
+      all(L.wells, uvp(u0 - 4, v0 - 16)); all(L.wells, uvp(u0 - 4, v0 + 16));
+    };
+    // A corner base's own ore and wells, as Four Quarters lays them.
+    const quadKit = b => {
+      const m = mhypot(CX - b[0], CY - b[1]), f = [(CX - b[0]) / m, (CY - b[1]) / m], s = [-f[1], f[0]];
+      all(L.ore, [b[0] + f[0] * 7 + s[0] * 18, b[1] + f[1] * 7 + s[1] * 18], [7]);
+      all(L.ore, [b[0] + f[0] * 7 - s[0] * 19, b[1] + f[1] * 7 - s[1] * 19], [6.5]);
+      all(L.wells, [b[0] - f[0] * 4 + s[0] * 16, b[1] - f[1] * 4 + s[1] * 16]);
+      all(L.wells, [b[0] - f[0] * 4 - s[0] * 16, b[1] - f[1] * 4 - s[1] * 16]);
+    };
+    // Four corners with two towns in each quarter, a ring of roads between them, and a contested field of ore
+    // on each border, as Old Forest, Thousand Lakes and Crater Lake share.
+    const ring = (tIn, inner) => {
+      const C = polar(120, 45), E = polar(95, 90), tOut = polar(100, 67.5);
+      for (const T of L.syms) L.bases.push(T(C));
+      all(L.towns, tOut); all(L.towns, tIn);
+      quadKit(C); all(L.ore, E, [6]);
+      R(C, tOut, 2); R(tOut, E, 2); R(E, turnK(C, 1), 2.5);
+      if (inner) { R(tOut, tIn, 3); R(tIn, turnK(tIn, 1), 4); }
+      return { C, E, tOut };
+    };
+
+    if (kind === 'greenwood') {
+      duel(); L.river = dry;
+      L.bases.push(uvp(-52, 0), mirror(uvp(-52, 0)));
+      const tN = uvp(-24, 38), tS = uvp(-26, -36), tC = uvp(-14, 8), hub = uvp(-44, 0);
+      for (const t of [tN, tS, tC]) all(L.towns, t);
+      duelKit(-52, 0);
+      [[-30, 18, 6], [-18, -18, 5.5], [-30, 46, 5], [-34, -46, 5], [-4, 26, 5]].forEach(o => all(L.ore, uvp(o[0], o[1]), [o[2]]));
+      [[-16, 28], [-28, -52], [-20, -26]].forEach(o => all(L.wells, uvp(o[0], o[1])));
+      R(hub, tN, 2.5); R(hub, tS, 2.5); R(hub, tC, 2); R(tN, mirror(tS), 3); R(tC, [CX, CY], 1.5);
+    } else if (kind === 'oldforest') {
+      quad(); L.river = dry;
+      ring(polar(52, 67.5), true);
+      all(L.ore, polar(30, 67.5), [5]); all(L.ore, polar(78, 62), [5]);
+      all(L.wells, polar(70, 56)); all(L.wells, polar(72, 77));
+    } else if (kind === 'twinlakes' || kind === 'peaks') {
+      // Two lakes, or two mountains, between the bases, with a way between them and one round each end.
+      duel();
+      const lakes = kind === 'twinlakes';
+      const P = lakes ? uvp(0, 30) : uvp(-6, 30), Q = mirror(P);
+      if (lakes) { L.lake = true; L.river = pools([[P[0], P[1], 12], [Q[0], Q[1], 12]]); L.fish = []; all(L.fish, uvp(0, 30)); all(L.fish, uvp(4, 22)); }
+      else { L.river = dry; L.wall = (x, y) => Math.max(massif(mhypot(x - P[0], y - P[1]), 14, 7.5), massif(mhypot(x - Q[0], y - Q[1]), 14, 7.5)); }
+      L.bases.push(uvp(-56, 0), mirror(uvp(-56, 0)));
+      const tN = uvp(-16, 60), tS = uvp(-16, -60), tC = uvp(-28, 4), hub = uvp(-48, 0);
+      for (const t of [tN, tS, tC]) all(L.towns, t);
+      duelKit(-56, 0);
+      [[-36, 30, 5.5], [-34, -30, 5.5], [-10, 4, 5]].forEach(o => all(L.ore, uvp(o[0], o[1]), [o[2]]));
+      [[-26, 46], [-26, -46], [-20, -12]].forEach(o => all(L.wells, uvp(o[0], o[1])));
+      R(hub, tN, 3); R(hub, tS, 3); R(hub, tC, 2); R(tN, mirror(tS), 2.5); R(tC, [CX, CY], 1);
+    } else if (kind === 'ponds') {
+      quad(); L.lake = true;
+      const { C, E, tOut } = ring(polar(52, 67.5), true);
+      all(L.ore, polar(30, 67.5), [5]); all(L.ore, polar(78, 62), [5]);
+      all(L.wells, polar(70, 56)); all(L.wells, polar(72, 77));
+      // Ponds wherever they leave the bases, towns, ore, wells and roads clear, a dozen to a quarter, the same
+      // in every quarter. Their places are fixed; only the land round them changes with the seed.
+      const rnd = mulberry(917), ponds = [], tIn = polar(52, 67.5);
+      const clear = [[...C, 32], [...tOut, 14], [...tIn, 14], ...L.ore.map(o => [o[0], o[1], o[2] + 5]), ...L.wells.map(w => [w[0], w[1], 7])];
+      const segs = [[C, tOut], [tOut, E], [E, turnK(C, 1)], [tOut, tIn], [tIn, turnK(tIn, 1)]].flatMap(([a, b]) => L.syms.map(T => [T(a), T(b)]));
+      const segD = (p, a, b) => { const dx = b[0] - a[0], dy = b[1] - a[1], t = clamp(((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / (dx * dx + dy * dy), 0, 1); return mhypot(p[0] - a[0] - dx * t, p[1] - a[1] - dy * t); };
+      for (let tries = 0; tries < 600 && ponds.length < 12; tries++) {
+        const p = [CX + 4 + rnd() * (W / 2 - 10), CY + 4 + rnd() * (H / 2 - 10)], r = 2.5 + rnd() * 3.5;
+        const imgs = L.syms.map(T => T(p));
+        if (imgs.some(q => clear.some(c => mhypot(q[0] - c[0], q[1] - c[1]) < c[2] + r + 6))) continue;
+        if (imgs.some(q => segs.some(([a, b]) => segD(q, a, b) < r + 10))) continue;
+        if (imgs.some(q => ponds.some(o => mhypot(q[0] - o[0], q[1] - o[1]) < r + o[2] + 12))) continue;
+        for (const q of imgs) ponds.push([q[0], q[1], r]);
+      }
+      L.river = pools(ponds);
+    } else if (kind === 'seas') {
+      // Land between two seas, its coasts wandering, each base nearer the one.
+      duel(); L.lake = true;
+      L.river = (x, y) => { const [u, v] = toUV(x, y); return [Math.max(0, 42 + 3 * mcos(u * 0.07) + 3 * Math.sign(v) * msin(u * 0.05) - Math.abs(v)), 3]; };
+      L.bases.push(uvp(-50, 6), mirror(uvp(-50, 6)));
+      const tN = uvp(-22, 20), tS = uvp(-26, -18), tC = uvp(-6, 4), hub = uvp(-42, 4);
+      for (const t of [tN, tS, tC]) all(L.towns, t);
+      all(L.ore, uvp(-40, 18), [6.5]); all(L.ore, uvp(-42, -12), [6.5]);
+      all(L.wells, uvp(-58, 18)); all(L.wells, uvp(-58, -8));
+      [[-28, 2, 5.5], [-12, -16, 5], [-10, 22, 5]].forEach(o => all(L.ore, uvp(o[0], o[1]), [o[2]]));
+      [[-34, -24], [-16, 12]].forEach(o => all(L.wells, uvp(o[0], o[1])));
+      L.fish = []; [[-12, 56], [18, 52], [0, 66]].forEach(o => all(L.fish, uvp(o[0], o[1])));
+      R(hub, tN, 2.5); R(hub, tS, 2.5); R(hub, tC, 2); R(tN, mirror(tS), 3); R(tC, [CX, CY], 1);
+    } else if (kind === 'isles') {
+      // A great island in the middle and one at each corner, with a small one on each border, all in open sea.
+      // Long bridges join each corner to the middle and to the small islands either side of it.
+      quad(); L.lake = true;
+      const C = polar(110, 45), T90 = polar(100, 90), T0 = polar(100, 0), O = [CX, CY];
+      const rC = 30, rT = 13, rO = 28, pad = 6;
+      const isl = [[...O, rO + pad]];
+      for (const T of L.syms) { const c = T(C), t = T(T90); isl.push([c[0], c[1], rC + pad], [t[0], t[1], rT + pad]); }
+      L.river = isles(isl);
+      for (const T of L.syms) L.bases.push(T(C));
+      const tO = polar(22, 67.5);
+      all(L.towns, T90); all(L.towns, tO);
+      quadKit(C); all(L.ore, polar(16, 22.5), [4.5]); all(L.ore, polar(28, 0), [4]);
+      all(L.wells, polar(14, 30));
+      L.fish = []; all(L.fish, polar(70, 70)); all(L.fish, polar(62, 22));
+      // Each bridge runs between two islands, its ends four cells in from either shore.
+      const span = (P, rp, Q, rq) => {
+        const d = mhypot(Q[0] - P[0], Q[1] - P[1]), u = [(Q[0] - P[0]) / d, (Q[1] - P[1]) / d];
+        const a = [P[0] + u[0] * (rp - 4), P[1] + u[1] * (rp - 4)], b = [Q[0] - u[0] * (rq - 4), Q[1] - u[1] * (rq - 4)];
+        for (const T of L.syms) L.bridges.push([T(a), T(b)]);
+        R(a, b, 0);
+        return [a, b];
+      };
+      const [a1, b1] = span(C, rC, T90, rT), [a2, b2] = span(C, rC, T0, rT), [a3, b3] = span(C, rC, O, rO);
+      R(C, a1, 1); R(C, a2, 1); R(C, a3, 1); R(b1, T90, 0.5); R(b3, tO, 1); R(tO, turnK(tO, 1), 2);
+      R(b2, polar(100, 0), 0.5);
+    } else if (kind === 'highlands') {
+      // A plateau in the middle with a ramp up from each corner, and ridges out along the borders, each broken
+      // by a pass.
+      quad(); L.river = dry;
+      const rp = 38 * sc, ramps = [45, 135, 225, 315].map(a => a * PI / 180);
+      L.wall = (x, y) => {
+        const dx = x - CX, dy = y - CY, r = mhypot(dx, dy), a = matan2(dy, dx);
+        let da = 9;
+        for (const q of ramps) { let e = Math.abs(a - q) % TAU; if (e > PI) e = TAU - e; da = Math.min(da, e); }
+        const w = lerp(16, 5, smooth(0.14, 0.3, da)), top = 3.6 * (1 - smooth(rp - w / 2, rp + w / 2, r));
+        const db = Math.min(Math.abs(dx), Math.abs(dy)), along = Math.max(Math.abs(dx), Math.abs(dy));
+        const gap = 1 - smooth(86 * sc, 91 * sc, along) * (1 - smooth(104 * sc, 109 * sc, along));
+        // A sharp crest that rises and falls along its length, so it reads as rock and not a raised road.
+        const crest = 1 + 0.22 * msin(along * 0.31) + 0.14 * msin(along * 0.83 + 1);
+        const ridge = 7 * crest * (1 - smooth(0.5, 6, db)) * smooth(42 * sc, 52 * sc, along) * gap;
+        return Math.max(top, ridge);
+      };
+      const C = polar(120, 45), tOut = polar(100, 62), tIn = polar(24, 67.5), P90 = polar(97, 90), Q = polar(100, 22.5);
+      for (const T of L.syms) L.bases.push(T(C));
+      all(L.towns, tOut); all(L.towns, tIn);
+      quadKit(C); all(L.ore, polar(98, 78), [5]); all(L.ore, polar(30, 22.5), [5]);
+      all(L.wells, polar(70, 56)); all(L.wells, polar(74, 30));
+      R(C, tOut, 2); R(tOut, P90, 2); R(turnK(P90, 3), Q, 2); R(Q, C, 2);
+      R(C, polar(36, 45), 1); R(polar(36, 45), tIn, 1); R(tIn, turnK(tIn, 1), 2);
+    } else if (kind === 'rivers3') {
+      // Three rivers across the line between the bases, the middle one its own mirror image and the outer two
+      // each other's.
+      duel();
+      const off = [-26, 0, 26], course = (u0, v) => u0 + (u0 ? 0.6 : 1) * riverU(v);
+      L.river = (x, y) => {
+        const [u, v] = toUV(x, y);
+        let d = 1e9;
+        for (const u0 of off) d = Math.min(d, Math.abs(u - course(u0, v)));
+        return [d, 2 + 0.6 * mcos(v * 0.09)];
+      };
+      L.bases.push(uvp(-62, 0), mirror(uvp(-62, 0)));
+      duelKit(-62, 0);
+      const tA = uvp(-44, 36), tB = uvp(-13, -26), tC = uvp(-13, 30), hub = uvp(-54, 0);
+      for (const t of [tA, tB, tC]) all(L.towns, t);
+      [[-44, -32, 5.5], [-12, 2, 5], [-40, 52, 4.5]].forEach(o => all(L.ore, uvp(o[0], o[1]), [o[2]]));
+      [[-36, 16], [-14, -44]].forEach(o => all(L.wells, uvp(o[0], o[1])));
+      // Bridges: the middle river at the middle and either flank, the near outer river at two places, with a
+      // ford between them.
+      const across = (u0, v, half) => { const c = course(u0, v); return [uvp(c - half, v), uvp(c + half, v)]; };
+      const keep = new Set();
+      const bridge = (u0, v) => {
+        const [a, b] = across(u0, v, 8.5);
+        const k = Math.round(a[0] + b[0]) + ',' + Math.round(a[1] + b[1]);
+        if (!keep.has(k)) { keep.add(k); L.bridges.push([a, b]); L.bridges.push([mirror(a), mirror(b)]); }
+        R(a, b, 0, !(u0 === 0 && v === 0));
+        return [a, b];
+      };
+      const [m0a] = bridge(0, 0), [m1a] = bridge(0, 40), [m2a] = bridge(0, -40);
+      const [o1a, o1b] = bridge(-26, 22), [o2a, o2b] = bridge(-26, -30);
+      fordAt(uvp(course(-26, -4), -4), uvp(course(-26, -3), -3));
+      R(hub, tA, 2); R(tA, o1a, 2); R(o1b, tC, 1.5); R(tC, m1a, 1.5);
+      R(hub, o2a, 2.5); R(o2b, tB, 1.5); R(tB, m2a, 1.5); R(tB, m0a, 2); R(tC, m0a, 2);
+    } else if (kind === 'crater') {
+      // A lake inside a ring of mountains, with a gap in the ring toward each corner.
+      quad(); L.lake = true;
+      L.river = pools([[CX, CY, 18]]);
+      const rr = 50, gaps = [45, 135, 225, 315].map(a => a * PI / 180);
+      L.wall = (x, y) => {
+        const dx = x - CX, dy = y - CY, r = mhypot(dx, dy), a = matan2(dy, dx);
+        let da = 9;
+        for (const q of gaps) { let e = Math.abs(a - q) % TAU; if (e > PI) e = TAU - e; da = Math.min(da, e); }
+        return 6.5 * (1 - smooth(3, 7.5, Math.abs(r - rr))) * smooth(0.14, 0.24, da);
+      };
+      const tIn = polar(48, 67.5);
+      ring(tIn, false);
+      all(L.ore, polar(50, 22.5), [4.5]); all(L.ore, polar(84, 64), [5]);
+      all(L.wells, polar(82, 56)); all(L.wells, polar(86, 78)); all(L.wells, polar(46, 0));
+      L.fish = []; all(L.fish, polar(10, 22.5));
+      const gapIn = polar(52, 45), gapOut = polar(84, 45);
+      R(polar(120, 45), gapOut, 1.5); R(gapOut, gapIn, 0.5); R(gapIn, tIn, 1.5); R(tIn, polar(50, 112.5), 2); R(polar(50, 112.5), turnK(tIn, 1), 2);
+    }
     return L;
   }
 
