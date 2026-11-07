@@ -451,12 +451,14 @@ body[data-look="ink"] #menu, body[data-look="ink"] #watch, body[data-look="ink"]
 .sheet button:hover:not(:disabled) { background: var(--paper-lo); }
 .sheet button.on, .sheet button.on:hover { background: var(--ink); color: var(--paper); }
 .sheet button:disabled { opacity: .4; }
-.cols { display: grid; grid-template-columns: minmax(250px, 310px) 1fr; gap: 24px; align-items: start; }
+.cols { display: grid; grid-template-columns: minmax(260px, 360px) 1fr; gap: 24px; align-items: start; }
 .pick { display: grid; gap: 4px; }
 .pick.three { grid-template-columns: repeat(3, 1fr); }
 .pick.three button { padding: 4px 2px; }
-#maps button { display: flex; justify-content: space-between; align-items: baseline; gap: 8px; text-align: left; }
-#maps button small { font: 13px var(--mono); opacity: .8; white-space: nowrap; }
+/* Sixteen maps in two columns, each its name over how many it seats, so the picture below stays in view. */
+#maps { grid-template-columns: 1fr 1fr; }
+#maps button { display: flex; flex-direction: column; align-items: flex-start; gap: 0; text-align: left; min-height: 0; padding: 3px 8px; line-height: 1.15; }
+#maps button small { font: 12px var(--mono); opacity: .75; white-space: nowrap; }
 .preview { margin-top: 8px; }
 #preview { width: 100%; aspect-ratio: 1; display: block; border: 1.5px solid var(--ink); background: var(--paper-hi); }
 #map-about, #age-about, #weather-about { margin: 6px 0 0; font: 500 15px/1.25 var(--ui); color: var(--ink-dim); text-wrap: pretty; }

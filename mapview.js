@@ -1,5 +1,5 @@
 #!/usr/bin/env node
-// Draws a map as the rules see it. node mapview.js seed out.png [duel|world]
+// Draws a map as the rules see it, woods in dark green. node mapview.js seed out.png [layout]
 const R = require('./rules.js');
 const { createCanvas } = require('/Users/nathan/Source/film-studio/node_modules/@napi-rs/canvas');
 const fs = require('fs');
@@ -7,7 +7,7 @@ const S = R.newGame({ seed: +process.argv[2] || 1, layout: process.argv[4] || 'd
 const c = createCanvas(R.W * Z, R.H * Z), g = c.getContext('2d');
 for (let y = 0; y < R.H; y++) for (let x = 0; x < R.W; x++) {
   const h = R.terrainAt(M, x + .5, y + .5), b = M.ground[y * R.W + x], v = Math.max(0, Math.min(1, (h + 1) / 9)) * 255 | 0;
-  g.fillStyle = b === 7 && h < 0.2 ? '#2a5a80' : b === 7 ? '#203018' : (b & 1) ? `rgb(${v},${v * .5 | 0},${v * .4 | 0})` : (b & 4) ? `rgb(${v},${v},${v * .7 | 0})` : `rgb(${v * .8 | 0},${v | 0},${v * .7 | 0})`;
+  g.fillStyle = b === 7 && h < 0.2 ? '#2a5a80' : (b & 8) ? '#2f5a26' : b === 7 ? '#203018' : (b & 1) ? `rgb(${v},${v * .5 | 0},${v * .4 | 0})` : (b & 4) ? `rgb(${v},${v},${v * .7 | 0})` : `rgb(${v * .8 | 0},${v | 0},${v * .7 | 0})`;
   if (M.ore[y * R.W + x]) g.fillStyle = '#e8c030';
   if (S.terr[y * R.W + x] >= 0) g.globalAlpha = 1;
   g.fillRect(x * Z, y * Z, Z, Z);
