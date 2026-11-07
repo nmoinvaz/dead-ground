@@ -194,7 +194,8 @@ export class Room {
     const code = url.pathname.split('/').pop();
     const pair = new WebSocketPair(), client = pair[0], server = pair[1];
     server.accept();
-    const k = { ws: server, code, slot: -1, id: '', name: '', ready: false, backlog: null, n: 0, nT: 0, seen: Date.now() };
+    // pk names the connection to the others for voice; the player's own id stays private.
+    const k = { ws: server, code, slot: -1, id: '', name: '', ready: false, backlog: null, n: 0, nT: 0, seen: Date.now(), pk: crypto.randomUUID().slice(0, 12), voice: false };
     this.socks.add(k);
     server.addEventListener('message', ev => { try { this.onMessage(k, ev.data); } catch (e) { console.log('message failed', e.message); } });
     server.addEventListener('close', () => this.onClose(k));
@@ -227,10 +228,20 @@ export class Room {
       case 'surrender': if (this.phase === 'game' && this.mine(k) && this.S.P[k.slot].alive) { this.pending.push({ team: k.slot, c: { c: 'raze' }, at: this.S.tick }); this.slots[k.slot].out = true; this.tell(); } break;
       case 'resync': if (this.S && (this.phase === 'game' || this.phase === 'over') && k.ready) this.welcome(k); break;
       case 'leave': this.leave(k); break;
+      // Voice runs between the players' own pages. The room keeps who is on it and passes the offers, answers
+      // and routes between them, only between two who are both on.
+      case 'voice': k.voice = !!m.on; this.voices(); break;
+      case 'rtc': if (k.voice && m.d && typeof m.to === 'string') { const o = [...this.socks].find(q => q.pk === m.to && q.voice && q.id); if (o) this.send(o, JSON.stringify({ t: 'rtc', from: k.pk, d: m.d })); } break;
       case 'ping': this.send(k, JSON.stringify({ t: 'pong', tick: this.S ? this.S.tick : 0, at: m.at })); break;
     }
   }
   mine(k) { return k.slot >= 0 && this.slots[k.slot] && this.slots[k.slot].kind === 'human' && this.slots[k.slot].id === k.id; }
+  // Who is on voice, told to everyone in the room.
+  voices() {
+    const list = [...this.socks].filter(o => o.id && o.voice).map(o => ({ pk: o.pk, slot: o.slot, n: o.name }));
+    const s = JSON.stringify({ t: 'voices', list });
+    for (const o of this.socks) if (o.id) this.send(o, s);
+  }
 
   join(k, m) {
     k.id = cleanId(m.id) || crypto.randomUUID(); k.name = cleanName(m.name);
@@ -260,6 +271,8 @@ export class Room {
     if (!this.host || !this.slots.some(s => s.kind === 'human' && s.id === this.host)) this.host = k.slot >= 0 ? k.id : this.host;
     this.emptySince = 0;
     this.send(k, JSON.stringify({ t: 'chatlog', list: this.chat }));
+    this.send(k, JSON.stringify({ t: 'you', pk: k.pk }));
+    this.voices();
     this.tell();
     this.saveRoom();
     if (this.phase === 'game' || this.phase === 'over') { this.welcome(k); this.run(); }
@@ -293,6 +306,7 @@ export class Room {
   }
 
   afterLeaving() {
+    this.voices();
     const people = [...this.socks].filter(o => o.id);
     // The host's part passes to the next person seated.
     if (!people.some(o => o.id === this.host)) { const next = people.find(o => o.slot >= 0) || people[0]; if (next) this.host = next.id; }
