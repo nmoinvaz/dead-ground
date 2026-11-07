@@ -670,6 +670,17 @@
               col *= mix(vec3(1.0), shadeB / vec3(0.949, 0.910, 0.824), smoothstep(0.85, 0.95, s0));
               tInk = mix(bodyC * 0.5, mix(sI, INK, 0.6), lk);
             }
+            // On dark paper the body is filled with a deep shade of the side's colour by face, and the line is
+            // laid a little greyed and dimmed over it, so a unit is a solid figure and not bright hatching over
+            // bare ground. A wreck is filled in soot.
+            if (dk) {
+              vec3 nU = texture2D(tNorm, uv).xyz * 2.0 - 1.0;
+              float face = dot(nU, uUpV) > 0.6 ? 1.0 : nU.x < 0.0 ? 0.8 : 0.62;
+              vec3 deep = mix(sI, vec3(dot(sI, vec3(0.3, 0.59, 0.11))), 0.3) * 0.52 * face;
+              deep = mix(deep, vec3(0.29, 0.27, 0.24) * face, 1.0 - smoothstep(0.08, 0.15, aw0.w));
+              col = mix(col, deep, smoothstep(0.85, 0.95, s0));
+              tInk = mix(vec3(dot(tInk, vec3(0.3, 0.59, 0.11))), tInk, 0.8) * 0.8;
+            }
             col = mix(col, tInk, nearU * smoothstep(0.25, 0.6, cover) * (dk ? step(0.05, mkx) : 1.0)); mark = 0.0; wash = 0.0;
           }
           if (uUnits == 2) { col = mix(col, hue * 0.85, mark * nearU); mark = 0.0; wash = 0.0; }
