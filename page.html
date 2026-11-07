@@ -266,6 +266,18 @@ body:not(.in-game) #top, body:not(.in-game) #side, body:not(.in-game) #sel, body
 #roster .down { opacity: .45; text-decoration: line-through; }
 #net { position: absolute; top: 50%; left: 50%; transform: translate(-50%, -50%); padding: 10px 18px; background: rgba(12,14,9,.86); border: 1px solid var(--amber); font: 20px var(--display); color: var(--amber); letter-spacing: .06em; z-index: 4; }
 body.online #b-speed { visibility: hidden; }
+/* Chat and voice, in a game with other people. */
+body:not(.online) #b-chat, body:not(.online) #b-voice, body:not(.online) #gchat { display: none; }
+#b-voice.on { color: var(--good); }
+#gchat { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; margin-top: 4px; }
+#gchat-log { display: flex; flex-direction: column; align-items: flex-start; gap: 3px; }
+#gchat-log .line b { margin-right: 6px; }
+#gchat-in { pointer-events: auto; width: min(360px, 100%); font: 500 15px var(--ui); padding: 4px 8px; background: rgba(12,14,9,.85); color: var(--stencil); border: 1px solid var(--edge); outline: none; }
+#roster .mic { font-size: 11px; opacity: .55; }
+#roster .mic.talk { opacity: 1; color: var(--good); }
+body[data-look="ink"] #gchat-in { background: var(--paper); color: var(--ink); border: 1.5px solid var(--ink); }
+body[data-look="ink"][data-scheme="dark"] #gchat-in { background: rgba(43,39,34,.95); }
+body[data-look="ink"] #b-voice.on { color: var(--redink); }
 body[data-look="ink"] #roster { background: rgba(250,244,228,.92); border: 1.5px solid var(--ink); color: var(--ink); box-shadow: 2px 2px 0 rgba(31,26,22,.4); }
 body[data-look="ink"] #roster .cpu span { color: var(--ink-dim); }
 body[data-look="ink"] #net { background: var(--paper-hi); border: 2px solid var(--ink); color: var(--redink); }
@@ -526,10 +538,12 @@ body[data-look="ink"] .sheet { box-shadow: 4px 4px 0 var(--ink); }
         <button id="b-mute" title="Sound (M)" aria-label="Sound">&#9834;</button>
         <button id="b-full" title="Full screen (F)" aria-label="Full screen">&#9974;</button>
         <button id="b-set" title="Settings" aria-label="Settings" aria-expanded="false">&#9881;</button>
+        <button id="b-chat" title="Chat (Enter)" aria-label="Chat"><svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><path d="M2.5 3.5h11v7h-6l-3 2.5v-2.5h-2z"/></svg></button>
+        <button id="b-voice" title="Voice chat" aria-label="Voice chat" aria-pressed="false"><svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"><rect x="6" y="2" width="4" height="7.5" rx="2"/><path d="M3.8 7.5a4.2 4.2 0 0 0 8.4 0M8 11.7V14M5.8 14h4.4"/></svg></button>
         <button id="b-exit" title="Leave the game" aria-label="Leave the game"><svg viewBox="0 0 16 16" width="15" height="15" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M6.5 2.5h-4v11h4M10 4.5 13.5 8 10 11.5M13.5 8H6"/></svg></button>
       </div>
     </div>
-    <div id="notes"><div id="objective" hidden></div><div id="log"></div></div>
+    <div id="notes"><div id="objective" hidden></div><div id="log"></div><div id="gchat"><div id="gchat-log"></div><input id="gchat-in" maxlength="200" placeholder="Say to everyone. Enter sends, Esc closes." autocomplete="off" spellcheck="false" hidden></div></div>
     <div id="settings" hidden role="dialog" aria-label="Settings">
       <div class="choice"><h2>Paper</h2><div id="s-scheme"><button data-v="light">Light</button><button data-v="dark">Dark</button><button data-v="auto">As the system</button></div></div>
       <div class="choice"><h2>Picture</h2><div id="s-pic" class="two"><button data-v="sharp">Sharp</button><button data-v="fast">Faster</button></div><p id="s-pic-note"></p></div>
@@ -569,6 +583,7 @@ body[data-look="ink"] .sheet { box-shadow: 4px 4px 0 var(--ink); }
         <dt>Ctrl 1-9</dt><dd>Set a group, then 1-9 picks it</dd>
         <dt>Arrows</dt><dd>Move the view; on a trackpad swipe to move and pinch to zoom</dd>
         <dt>K</dt><dd>Another pen technique</dd>
+        <dt>Enter</dt><dd>In a game with other people, say something to everyone; the microphone in the bar puts you on voice</dd>
       </dl>
       <div id="credit">x.com/nmnvzr &middot; Opus 5.5</div>
     </div>

@@ -782,7 +782,10 @@ const Game = (() => {
           break;
         }
         case 'chatlog': $('chat-log').innerHTML = ''; for (const c of m.list) chatLine(c.n, c.s); break;
-        case 'chat': chatLine(m.n, m.s); if (G.online && net.inGame) hud.say(`${m.n}: ${m.s}`); break;
+        case 'chat': chatLine(m.n, m.s); if (G.online && net.inGame) gameChat(m.n, m.s); break;
+        case 'you': vc.me = m.pk; if (vc.on) { for (const pk of [...vc.peers.keys()]) dropPeer(pk); send({ t: 'voice', on: true }); } break;
+        case 'voices': onVoices(m.list || []); break;
+        case 'rtc': onRtc(m.from, m.d); break;
         case 'hello': net.slot = m.slot; net.theme = m.theme || 'desert'; net.map = m.map || 'duel'; net.queue = []; net.hashes.clear(); break;
         case 'ticks': for (const b of m.b) net.queue.push(b); if (m.h) net.hashes.set(m.h[0], m.h[1]); break;
         case 'gone': rejoining(false); net.want = false; net.inRoom = false; net.view = null; store.set(ROOM, null); if (!$('title').hidden && !$('t-setup').hidden) screen('rooms'); toast('That game has closed.'); break;
@@ -790,6 +793,119 @@ const Game = (() => {
         case 'moved': chatLine('', 'The host moved you out of your seat. You are watching.'); break;
       }
     }
+    // ---- Chat and voice in a game ----
+
+    // Lines said in a game show under the log a little longer than its notes. Enter, or the bar's button, opens a
+    // line to say one.
+    function gameChat(n, s) {
+      const log = $('gchat-log'), d = document.createElement('div'), b = document.createElement('b');
+      d.className = 'line'; b.textContent = n + ':'; d.append(b, document.createTextNode(s));
+      log.append(d);
+      while (log.children.length > 6) log.firstChild.remove();
+      setTimeout(() => d.classList.add('gone'), 15000);
+      setTimeout(() => d.remove(), 15800);
+    }
+    function openChat() { if (!G.online || !G.playing) return; const i = $('gchat-in'); i.hidden = false; i.focus(); }
+    function closeChat() { const i = $('gchat-in'); i.value = ''; i.hidden = true; i.blur(); }
+    $('gchat-in').addEventListener('keydown', e => {
+      e.stopPropagation();
+      if (e.key === 'Enter') { e.preventDefault(); const s = $('gchat-in').value.trim(); if (s) send({ t: 'chat', s }); closeChat(); }
+      else if (e.key === 'Escape') { e.preventDefault(); closeChat(); }
+    });
+    $('gchat-in').addEventListener('blur', () => { if (!$('gchat-in').value) $('gchat-in').hidden = true; });
+    $('b-chat').addEventListener('click', () => { audio.ui('click'); openChat(); });
+    document.addEventListener('keydown', e => {
+      if (e.target && /INPUT|SELECT|TEXTAREA/.test(e.target.tagName)) return;
+      if (e.key === 'Enter' && G.online && G.playing) { e.preventDefault(); openChat(); }
+    });
+
+    // Voice runs between the players' own pages. Each player on voice is linked to every other who is, and of two,
+    // the one whose key sorts first calls. Routes are found through a public STUN server with no relay, so two
+    // players both behind strict firewalls may not hear each other.
+    const RTC = { iceServers: [{ urls: 'stun:stun.cloudflare.com:3478' }] };
+    const MIC_SVG = '<svg viewBox="0 0 16 16" width="11" height="11" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="6" y="2" width="4" height="7.5" rx="2"/><path d="M3.8 7.5a4.2 4.2 0 0 0 8.4 0M8 11.7V14"/></svg>';
+    const vc = { on: false, stream: null, me: '', list: [], peers: new Map(), ctx: null, mine: null };
+    async function voiceToggle() {
+      if (vc.on) { voiceOff(); hud.say('Voice off.'); return; }
+      try { vc.stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true } }); }
+      catch (e) { hud.say('There is no microphone to speak with, or it was not allowed.', 'bad'); return; }
+      vc.on = true; $('b-voice').classList.add('on'); $('b-voice').setAttribute('aria-pressed', 'true');
+      vc.mine = { an: null }; listen(vc.mine, vc.stream);
+      send({ t: 'voice', on: true });
+      hud.say('Voice on. Everyone else on voice can hear you.', 'good');
+    }
+    function voiceOff() {
+      if (!vc.on) return;
+      vc.on = false; send({ t: 'voice', on: false });
+      for (const pk of [...vc.peers.keys()]) dropPeer(pk);
+      if (vc.stream) for (const t of vc.stream.getTracks()) t.stop();
+      vc.stream = null; vc.mine = null;
+      $('b-voice').classList.remove('on'); $('b-voice').setAttribute('aria-pressed', 'false');
+      drawRoster();
+    }
+    function peerFor(pk) {
+      let p = vc.peers.get(pk);
+      if (p) return p;
+      const pc = new RTCPeerConnection(RTC);
+      p = { pc, audio: new Audio(), an: null, chain: Promise.resolve() };
+      p.audio.autoplay = true;
+      vc.peers.set(pk, p);
+      for (const t of vc.stream.getTracks()) pc.addTrack(t, vc.stream);
+      pc.onicecandidate = e => { if (e.candidate) send({ t: 'rtc', to: pk, d: { c: e.candidate.toJSON() } }); };
+      pc.ontrack = e => { p.audio.srcObject = e.streams[0]; p.audio.play().catch(() => { /* waits for a gesture */ }); listen(p, e.streams[0]); };
+      pc.onconnectionstatechange = () => { if (pc.connectionState === 'failed' && vc.peers.get(pk) === p) dropPeer(pk); };
+      return p;
+    }
+    function dropPeer(pk) {
+      const p = vc.peers.get(pk);
+      if (!p) return;
+      try { p.pc.close(); } catch (e) { /* closed */ }
+      p.audio.srcObject = null;
+      vc.peers.delete(pk);
+    }
+    async function call(pk) {
+      const p = peerFor(pk);
+      await p.pc.setLocalDescription(await p.pc.createOffer());
+      send({ t: 'rtc', to: pk, d: { sdp: p.pc.localDescription.toJSON() } });
+    }
+    // Each peer's messages are taken in turn, so a route never comes before the offer it belongs to.
+    function onRtc(from, d) {
+      if (!vc.on || !d || !vc.list.some(v => v.pk === from)) return;
+      const p = peerFor(from);
+      p.chain = p.chain.then(async () => {
+        if (d.sdp) {
+          await p.pc.setRemoteDescription(d.sdp);
+          if (d.sdp.type === 'offer') { await p.pc.setLocalDescription(await p.pc.createAnswer()); send({ t: 'rtc', to: from, d: { sdp: p.pc.localDescription.toJSON() } }); }
+        } else if (d.c) await p.pc.addIceCandidate(d.c).catch(() => { /* stale */ });
+      }).catch(e => console.log('voice', e.message));
+    }
+    function onVoices(list) {
+      vc.list = list;
+      if (vc.on && vc.me) {
+        for (const pk of [...vc.peers.keys()]) if (!list.some(v => v.pk === pk)) dropPeer(pk);
+        for (const v of list) if (v.pk !== vc.me && !vc.peers.has(v.pk) && vc.me < v.pk) call(v.pk).catch(e => console.log('voice', e.message));
+      }
+      drawRoster();
+    }
+    // Who is speaking, from the loudness of each voice, shown by their name in the roster.
+    function listen(p, stream) {
+      try {
+        vc.ctx = vc.ctx || new AudioContext();
+        const an = vc.ctx.createAnalyser();
+        an.fftSize = 512; vc.ctx.createMediaStreamSource(stream).connect(an);
+        p.an = an; p.buf = new Uint8Array(an.fftSize);
+      } catch (e) { /* no meter */ }
+    }
+    const loud = p => { if (!p || !p.an) return false; p.an.getByteTimeDomainData(p.buf); let s = 0; for (const v of p.buf) s += (v - 128) ** 2; return Math.sqrt(s / p.buf.length) > 6; };
+    setInterval(() => {
+      if (!vc.on) return;
+      for (const el of document.querySelectorAll('#roster .mic')) {
+        const pk = el.dataset.pk;
+        el.classList.toggle('talk', pk === vc.me ? loud(vc.mine) : loud(vc.peers.get(pk)));
+      }
+    }, 200);
+    $('b-voice').addEventListener('click', () => { audio.ui('click'); voiceToggle(); });
+
     function chatLine(n, s) {
       const log = $('chat-log'), p = document.createElement('div');
       if (n) { const b = document.createElement('b'); b.textContent = n + ':'; p.append(b, document.createTextNode(s)); }
@@ -853,6 +969,7 @@ const Game = (() => {
       attract();
     }
     function leaveRoom() {
+      voiceOff();
       if (net.ws) send({ t: 'leave' });
       net.want = false; net.inRoom = false; net.inGame = false; net.view = null;
       if (net.ws) { const ws = net.ws; net.ws = null; setTimeout(() => { try { ws.close(); } catch (e) { /* gone */ } }, 200); }
@@ -873,7 +990,11 @@ const Game = (() => {
         dot.style.background = SLOT_CSS[t];
         nm.textContent = youName(t) + (S.P[t].forfeit ? ' (forfeited)' : t !== G.team && s && s.left ? ' (left)' : t !== G.team && s && s.away ? ' (away)' : '');
         row.className = (S.P[t].alive ? '' : 'down ') + (G.names[t] && G.names[t].startsWith('Computer') ? 'cpu' : '');
-        row.append(dot, nm); box.append(row);
+        row.append(dot, nm);
+        // A small microphone by each name on voice, lit while they speak.
+        const on = G.online && vc.list.find(q => q.slot === t);
+        if (on) { const mic = document.createElement('span'); mic.className = 'mic'; mic.dataset.pk = on.pk; mic.innerHTML = MIC_SVG; mic.title = 'On voice'; row.append(mic); }
+        box.append(row);
       }
     }
 
@@ -958,7 +1079,7 @@ const Game = (() => {
       pictures();
       document.body.classList.add('ready');
       G.save = saveGame;
-      window.__game = G; window.__hud = hud; window.__net = net;
+      window.__game = G; window.__hud = hud; window.__net = net; window.__voice = vc;
       requestAnimationFrame(loop);
     }
     return { boot, G };
