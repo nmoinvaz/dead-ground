@@ -734,9 +734,12 @@ const Models = (() => {
       buildings.bunker = [part('body', b), part('turret', t, { pivot: [0, 0.1, 0], aim: true }), part('gun', g, { parent: 'turret', pivot: [0.7, 0.26, 0], recoil: 0.04 })];
     }
     // Dock: a plank quay on the shore with a crane, bollards, stacked crates and a boathouse under the side's mark.
+    // Piles round its edge carry it out over the water; on the bank they go into the ground.
     {
       const b = G(), wood = 0x6a5238, woodDk = 0x4e3a26;
       b.box(3, 0.3, 3, 0, -0.1, 0, wood);
+      const ps = [-1.4, -0.47, 0.47, 1.4];
+      for (const x of ps) for (const z of ps) if (Math.abs(x) > 1 || Math.abs(z) > 1) b.cyl(0.08, 0.09, 1.6, x, -0.9, z, woodDk, { seg: 6 });
       for (let i = 0; i < 6; i++) b.box(3, 0.012, 0.03, 0, 0.2, -1.25 + i * 0.5, woodDk);
       for (const [x, z] of [[1.3, 1.3], [1.3, -1.3], [-1.3, 1.3], [-1.3, -1.3], [1.3, 0], [-1.3, 0]]) b.cyl(0.07, 0.08, 0.2, x, 0.3, z, woodDk, { seg: 8 });
       b.box(1.3, 0.62, 1.0, -0.6, 0.2, -0.75, woodDk, T);

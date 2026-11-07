@@ -2095,6 +2095,8 @@ const World = (() => {
             let lo = 99;
             for (let cy = e.cy; cy <= e.cy + e.h; cy += e.h) for (let cx = e.cx; cx <= e.cx + e.w; cx += e.w) lo = Math.min(lo, terrainAt(M, cx, cy));
             r.y0 = Math.max(lo + 0.04, r.y0 - 0.1);
+            // A dock's deck stands on its piles clear of the water it juts over.
+            if (e.d.shore) r.y0 = Math.max(r.y0, M.water + 0.12);
             const dx = CX - e.x, dy = CY - e.y, wide = e.w === e.h && !e.d.weapons;
             r.yaw = !wide ? (dx < 0 ? Math.PI : 0) : Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 0 : Math.PI) : (dy > 0 ? -Math.PI / 2 : Math.PI / 2);
             if (e.d.weapons) r.yaw = 0;

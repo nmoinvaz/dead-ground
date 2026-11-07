@@ -1320,12 +1320,7 @@ const Rules = (() => {
       const w = M.wells.find(e => e.x === cx + 1 && e.y === cy + 1);
       if (!w) return false;
     }
-    // A dock stands on the shore, with open water within five cells of it.
-    if (d.shore) {
-      let n = 0;
-      for (let y = Math.max(0, cy - 5); y < Math.min(H, cy + d.h + 5); y++) for (let x = Math.max(0, cx - 5); x < Math.min(W, cx + d.w + 5); x++) n += M.sea[y * W + x];
-      if (n < 4) return false;
-    }
+    if (d.shore) return shoreFits(S, team, d, cx, cy, ignoreTerr);
     for (let y = cy; y < cy + d.h; y++) for (let x = cx; x < cx + d.w; x++) {
       const c = y * W + x;
       if (S.occ[c] || (S.gnd[c] & 4)) return false;
@@ -1333,6 +1328,36 @@ const Rules = (() => {
       if (!ignoreTerr && S.terr[c] !== team) return false;
     }
     return true;
+  }
+
+  // A dock juts off the shore, its back on the bank and its front out over the water, with open water close
+  // beyond. A cliff, a ford or a bridge will not take it. It need not stand inside the border, only within
+  // SHORE_REACH cells of it and outside every other side's. The ground's bits call every cell at the water's edge
+  // a cliff, so the bank's own fall across each cell is measured instead.
+  const SHORE_REACH = 10;
+  function shoreFits(S, team, d, cx, cy, ignoreTerr) {
+    const M = S.map, h = M.h;
+    let dry = 0, wet = 0;
+    for (let y = cy; y < cy + d.h; y++) for (let x = cx; x < cx + d.w; x++) {
+      const c = y * W + x, v = (y * RES + 1) * VW + x * RES + 1;
+      if (S.occ[c] || S.ore[c] || M.deck[v] > 0 || (S.gnd[c] & 16)) return false;
+      if (!ignoreTerr && S.terr[c] >= 0 && S.terr[c] !== team) return false;
+      if (h[v] < M.water) wet++;
+      else if (h[v] > M.water + 0.05) {
+        let hi = -99, lo = 99;
+        for (let b = 0; b <= RES; b++) for (let a = 0; a <= RES; a++) { const z = h[(y * RES + b) * VW + x * RES + a]; hi = Math.max(hi, z); lo = Math.min(lo, z); }
+        if (hi - lo > 1.4) return false;
+        dry++;
+      }
+    }
+    if (dry < 3 || wet < 2) return false;
+    let open = 0;
+    for (let y = Math.max(0, cy - 4); y < Math.min(H, cy + d.h + 4); y++) for (let x = Math.max(0, cx - 4); x < Math.min(W, cx + d.w + 4); x++) open += M.sea[y * W + x];
+    if (open < 16) return false;
+    if (ignoreTerr) return true;
+    const R = SHORE_REACH;
+    for (let y = Math.max(0, cy - R); y < Math.min(H, cy + d.h + R); y++) for (let x = Math.max(0, cx - R); x < Math.min(W, cx + d.w + R); x++) if (S.terr[y * W + x] === team) return true;
+    return false;
   }
 
   // Lays a building on its cells. Units standing there are pushed out by the movement code.

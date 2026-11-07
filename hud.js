@@ -364,6 +364,15 @@ const Hud = (() => {
         for (const w of S().map.wells) { const r = Math.hypot(w.x - p.x, w.y - p.y); if (r < bd) { bd = r; best = w; } }
         if (best) { x = best.x - 1; y = best.y - 1; }
       }
+      // A dock finds the water's edge itself: the nearest place within three cells that takes it.
+      if (d.shore && !Rules.fits(S(), team(), m.kind, x, y)) {
+        let bd = 99, bx = x, by = y;
+        for (let dy = -3; dy <= 3; dy++) for (let dx = -3; dx <= 3; dx++) {
+          const r = dx * dx + dy * dy;
+          if (r < bd && Rules.fits(S(), team(), m.kind, x + dx, y + dy)) { bd = r; bx = x + dx; by = y + dy; }
+        }
+        x = bx; y = by;
+      }
       world.setGhost({ kind: m.kind, x, y, ok: Rules.fits(S(), team(), m.kind, x, y) });
       state.ghost = { x, y };
     }
@@ -508,7 +517,7 @@ const Hud = (() => {
           game.order(S(), team(), { c: 'place', kind: m.kind, x: q.x, y: q.y });
           game.audio.ui('place');
           leave();
-        } else { game.audio.ui('deny'); say('That ground will not take it. Stay inside your border, on flat open ground.'); }
+        } else { game.audio.ui('deny'); say(BUILDINGS[m.kind].shore ? 'A dock goes at the water\'s edge by open water, near your border.' : 'That ground will not take it. Stay inside your border, on flat open ground.'); }
       } else if (m.type === 'power') {
         game.order(S(), team(), { c: 'power', name: m.name, x: g.x, y: g.y }); marker(g.x, g.y, '#ffa040'); game.audio.ui('click'); leave();
       } else if (m.type === 'launch') {
