@@ -202,6 +202,8 @@ body[data-look="ink"][data-scheme="dark"] #end, body[data-look="ink"][data-schem
    Jost on light paper. */
 #loading { position: absolute; inset: 0; z-index: 20; background: #f2e8d2; display: flex; align-items: center; justify-content: center; font: 500 20px "Jost", "Futura", "Trebuchet MS", sans-serif; letter-spacing: .32em; color: #1f1a16; }
 body.ready #loading { display: none; }
+body.ready.rejoining #loading { display: flex; }
+body[data-scheme="dark"] #loading { background: #1a1814; color: #e8e0d0; }
 
 #end { background: rgba(5,6,3,.76); align-items: center; justify-content: center; }
 #end > div { width: min(900px, calc(100% - 32px)); max-height: calc(100% - 32px); box-sizing: border-box; overflow: auto; touch-action: pan-y; background: linear-gradient(#3a3f31, #262a20); border: 1px solid #000; box-shadow: inset 0 1px 0 var(--steel-hi), 0 12px 40px #000; padding: 20px 22px; display: flex; flex-direction: column; gap: 12px; }
@@ -538,7 +540,7 @@ body[data-look="ink"] .sheet { box-shadow: 4px 4px 0 var(--ink); }
     <div id="settings" hidden role="dialog" aria-label="Settings">
       <div class="choice"><h2>Paper</h2><div id="s-scheme"><button data-v="light">Light</button><button data-v="dark">Dark</button><button data-v="auto">As the system</button></div></div>
       <div class="choice"><h2>Picture</h2><div id="s-pic" class="two"><button data-v="sharp">Sharp</button><button data-v="fast">Faster</button></div><p id="s-pic-note"></p></div>
-      <p id="build">Build f392aeb 2026-11-06 16:20</p>
+      <p id="build">Build 53b47a1 2026-11-06 16:37</p>
     </div>
     <div id="banner" hidden></div>
     <button id="update" hidden>A new version of Dead Ground is out. <b>Reload</b></button>
@@ -3746,9 +3748,10 @@ const Rules = (() => {
     } else if (c.c === 'raze') {
       if (!S.P[team].alive) return;
       razeSlot(S, team);
-      S.P[team].alive = false;
+      // Given up, not beaten, so the others are told so.
+      S.P[team].alive = false; S.P[team].forfeit = true;
       territory(S); recount(S);
-      S.ev.push({ t: 'fallen', team });
+      S.ev.push({ t: 'fallen', team, forfeit: true });
       mark(S, team, 'out');
     } else if (c.c === 'launch') {
       const s = S.ents.find(e => e.b && e.team === team && e.kind === 'silo' && e.hp > 0 && e.charge >= e.d.charge);
@@ -14532,11 +14535,13 @@ const Game = (() => {
     const mobile = /Mobi|Android|iPhone|iPad/.test(navigator.userAgent) || (navigator.maxTouchPoints > 1 && Math.min(screen.width, screen.height) < 820);
     const params = new URLSearchParams(location.search);
     const world = World.create(THREE, canvas, { low: mobile, keep: params.has('keep') });
-    // The veil's words, for a pause or for leaving. Online nothing waits, so it does not say paused.
+    // The veil's words, for a pause or for leaving. Online nothing waits, so it does not say paused, and a player
+    // still in the fight who leaves forfeits, so it says that.
     function veilFor(leave) {
-      $('veil-h').textContent = leave ? 'Leave the game?' : G.online ? 'The battle goes on' : 'Paused';
+      const forfeits = G.online && G.S && G.team >= 0 && G.S.P[G.team] && G.S.P[G.team].alive;
+      $('veil-h').textContent = leave ? (forfeits ? 'Forfeit the game?' : 'Leave the game?') : G.online ? 'The battle goes on' : 'Paused';
       $('resume').textContent = leave ? 'Keep playing' : 'Resume';
-      $('quit').textContent = leave ? 'Leave' : 'Quit to menu';
+      $('quit').textContent = forfeits ? 'Forfeit' : leave ? 'Leave' : 'Quit to menu';
     }
     const G = {
       S: null, team: 0, playing: false, paused: false, speed: 1, showHints: true, audio: null, world, theme: 'desert', look: 'ink', online: false, name: '',
@@ -14711,6 +14716,9 @@ const Game = (() => {
         clearSave();
         const won = S.over.winner === G.team && G.team >= 0;
         $('end-title').textContent = won ? 'Mission Accomplished' : me ? 'Mission Failed' : `${G.names[S.over.winner] || 'Nobody'} won`;
+        // Sides that gave up are named, so a win by forfeit reads as one.
+        const quit = S.P.filter(P => P.forfeit && P.team !== G.team).map(P => G.names[P.team]).filter(Boolean);
+        if (quit.length) $('end-sub').textContent = `${quit.join(', ')} forfeited · ` + $('end-sub').textContent;
         $('end').className = won ? 'won' : 'lost';
         $('watch').hidden = true;
         audio.play(won ? 'won' : 'lost', { gain: 0.8 });
@@ -14758,7 +14766,7 @@ const Game = (() => {
           case 'over': if (G.playing) setTimeout(outcome, 1800); drawRoster(); break;
           case 'fallen':
             if (G.playing && e.team === G.team) setTimeout(outcome, 1800);
-            else if (G.playing && G.names[e.team]) hud.say(`${G.names[e.team]} is out.`, 'good');
+            else if (G.playing && G.names[e.team]) hud.say(e.forfeit ? `${G.names[e.team]} has forfeited the game.` : `${G.names[e.team]} is out.`, 'good');
             drawRoster();
             break;
           case 'weather': if (G.playing) { const v = e.passed ? SKY_PASS[e.was] : SKY_SAY[e.kind]; if (v && !(e.kind === 'cloud' && e.was === 'clear')) { hud.say(v[0], v[1]); if (v[2]) audio.voice('sky', v[2], oldAge()); } } break;
@@ -15173,7 +15181,9 @@ const Game = (() => {
           if (G.online && G.S) G.names = m.slots.map(s => s.kind === 'human' ? s.name : s.kind === 'ai' ? `Computer (${Rules.DIFFICULTY[s.level].name})` : '');
           // The host set up the next game: everyone still in the game's picture goes back to the room.
           if (m.phase === 'lobby' && net.inGame) backToRoom();
-          if (!net.inGame) { if ($('t-setup').hidden || !was) screen('setup'); renderSetup(); }
+          // A room already at war sends its world next, so the lobby is not shown on the way back in.
+          if (!net.inGame && m.phase !== 'lobby') rejoining(true);
+          else if (!net.inGame) { rejoining(false); if ($('t-setup').hidden || !was) screen('setup'); renderSetup(); }
           drawRoster();
           break;
         }
@@ -15181,8 +15191,8 @@ const Game = (() => {
         case 'chat': chatLine(m.n, m.s); if (G.online && net.inGame) hud.say(`${m.n}: ${m.s}`); break;
         case 'hello': net.slot = m.slot; net.theme = m.theme || 'desert'; net.map = m.map || 'duel'; net.queue = []; net.hashes.clear(); break;
         case 'ticks': for (const b of m.b) net.queue.push(b); if (m.h) net.hashes.set(m.h[0], m.h[1]); break;
-        case 'gone': net.want = false; net.inRoom = false; net.view = null; store.set(ROOM, null); if (!$('title').hidden && !$('t-setup').hidden) screen('rooms'); toast('That game has closed.'); break;
-        case 'taken': net.want = false; net.inRoom = false; toast('This game was opened in another window.'); break;
+        case 'gone': rejoining(false); net.want = false; net.inRoom = false; net.view = null; store.set(ROOM, null); if (!$('title').hidden && !$('t-setup').hidden) screen('rooms'); toast('That game has closed.'); break;
+        case 'taken': rejoining(false); net.want = false; net.inRoom = false; toast('This game was opened in another window.'); break;
         case 'moved': chatLine('', 'The host moved you out of your seat. You are watching.'); break;
       }
     }
@@ -15193,6 +15203,15 @@ const Game = (() => {
       log.append(p);
       while (log.children.length > 60) log.firstChild.remove();
       log.scrollTop = log.scrollHeight;
+    }
+    // A plain card over the title while a game is found again, so neither the title nor the lobby flashes by.
+    // If no world comes, the room's own screen shows after a while.
+    let rejoinT = 0;
+    function rejoining(on) {
+      clearTimeout(rejoinT);
+      document.body.classList.toggle('rejoining', on);
+      $('loading').textContent = on ? 'REJOINING' : 'DEPLOYING';
+      if (on) rejoinT = setTimeout(() => { rejoining(false); if (net.inRoom && !net.inGame && net.view) { screen('setup'); renderSetup(); } }, 15000);
     }
     function toast(s) { if (!$('title').hidden) $('go-why').textContent = s; else hud.say(s, 'bad'); const n = $('rooms-none'); if (n && !$('t-rooms').hidden) n.textContent = s; }
     function stepNet() {
@@ -15214,6 +15233,7 @@ const Game = (() => {
     }
     // The world from the server: a game starting, a player coming back to one, or a fresh copy after a drop.
     function enterWorld(S) {
+      rejoining(false);
       const first = !net.inGame;
       G.online = true; net.inGame = true;
       G.mapKey = net.map; G.theme = net.theme;
@@ -15257,7 +15277,7 @@ const Game = (() => {
       for (const t of S.seats) {
         const row = document.createElement('div'), dot = document.createElement('i'), nm = document.createElement('span'), s = v && v.slots[t];
         dot.style.background = SLOT_CSS[t];
-        nm.textContent = youName(t) + (t !== G.team && s && s.left ? ' (left)' : t !== G.team && s && s.away ? ' (away)' : '');
+        nm.textContent = youName(t) + (S.P[t].forfeit ? ' (forfeited)' : t !== G.team && s && s.left ? ' (left)' : t !== G.team && s && s.away ? ' (away)' : '');
         row.className = (S.P[t].alive ? '' : 'down ') + (G.names[t] && G.names[t].startsWith('Computer') ? 'cpu' : '');
         row.append(dot, nm); box.append(row);
       }
@@ -15305,16 +15325,16 @@ const Game = (() => {
       const again = () => { if (n < 4) setTimeout(() => probe(n + 1), 1500 * (n + 1)); };
       try {
         const r = await fetch('/api/hello', { cache: 'no-store' });
-        if (r.status >= 500) return again();
-        if (!r.ok) return;
+        if (r.status >= 500) return n < 4 ? again() : rejoining(false);
+        if (!r.ok) return rejoining(false);
         const j = await r.json();
-        if (!j.ok) return;
+        if (!j.ok) return rejoining(false);
         hasServer = true;
         $('b-multi').hidden = false;
         // A player who was in a room when the page went comes back to it.
         const code = store.get(ROOM, '');
         if (code && !G.playing) { G.name = G.name || 'Commander'; joinRoom(code); }
-      } catch (e) { again(); }
+      } catch (e) { if (n < 4) again(); else rejoining(false); }
     }
 
     function toTitle() {
@@ -15330,6 +15350,7 @@ const Game = (() => {
       fit();
       applyScheme();
       if (!restore()) { attract(); screen('main'); }
+      if (store.get(ROOM, '') && !G.playing && /^https?:$/.test(location.protocol)) rejoining(true);
       $('callsign').value = G.name;
       probe();
       const list = [
