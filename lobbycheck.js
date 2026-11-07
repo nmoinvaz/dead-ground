@@ -79,15 +79,17 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
   await wait(5000);
   const back = await seen(host), gNow = await seen(guest);
   back.sawLobby = await host.evaluate(() => window.__sawLobby);
-  // The guest leaves; their side is given up.
+  // The guest leaves; their side is given up, and the host is told.
+  await host.evaluate(() => { const h = window.__hud, say = h.say; window.__said = []; h.say = (t, k) => { window.__said.push(t); return say(t, k); }; });
   await guest.evaluate(() => { document.getElementById('b-pause').click(); });
   await wait(300);
   await guest.evaluate(() => document.getElementById('quit').click());
   await wait(4000);
   const h2 = await seen(host);
   const roster = await host.evaluate(() => document.getElementById('roster').innerText);
+  h2.told = await host.evaluate(() => window.__said.filter(t => /forfeit|out\./.test(t)));
   await shot(host, 'after-leave');
-  console.log(JSON.stringify({ listed, before, after, start: { host: h0, guest: g0 }, minute: { host: h1, guest: g1 }, back: { team: back.team, tick: back.tick, guestTick: gNow.tick, sawLobby: back.sawLobby }, afterLeave: { alive: h2.alive, roster }, errors: { host: host.errs, guest: guest.errs } }, null, 1));
+  console.log(JSON.stringify({ listed, before, after, start: { host: h0, guest: g0 }, minute: { host: h1, guest: g1 }, back: { team: back.team, tick: back.tick, guestTick: gNow.tick, sawLobby: back.sawLobby }, afterLeave: { alive: h2.alive, roster, told: h2.told }, errors: { host: host.errs, guest: guest.errs } }, null, 1));
   // The host leaves too, so the room closes.
   await host.evaluate(() => { document.getElementById('b-pause').click(); document.getElementById('quit').click(); });
   await wait(2500);

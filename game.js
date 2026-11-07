@@ -129,11 +129,13 @@ const Game = (() => {
     const mobile = /Mobi|Android|iPhone|iPad/.test(navigator.userAgent) || (navigator.maxTouchPoints > 1 && Math.min(screen.width, screen.height) < 820);
     const params = new URLSearchParams(location.search);
     const world = World.create(THREE, canvas, { low: mobile, keep: params.has('keep') });
-    // The veil's words, for a pause or for leaving. Online nothing waits, so it does not say paused.
+    // The veil's words, for a pause or for leaving. Online nothing waits, so it does not say paused, and a player
+    // still in the fight who leaves forfeits, so it says that.
     function veilFor(leave) {
-      $('veil-h').textContent = leave ? 'Leave the game?' : G.online ? 'The battle goes on' : 'Paused';
+      const forfeits = G.online && G.S && G.team >= 0 && G.S.P[G.team] && G.S.P[G.team].alive;
+      $('veil-h').textContent = leave ? (forfeits ? 'Forfeit the game?' : 'Leave the game?') : G.online ? 'The battle goes on' : 'Paused';
       $('resume').textContent = leave ? 'Keep playing' : 'Resume';
-      $('quit').textContent = leave ? 'Leave' : 'Quit to menu';
+      $('quit').textContent = forfeits ? 'Forfeit' : leave ? 'Leave' : 'Quit to menu';
     }
     const G = {
       S: null, team: 0, playing: false, paused: false, speed: 1, showHints: true, audio: null, world, theme: 'desert', look: 'ink', online: false, name: '',
@@ -308,6 +310,9 @@ const Game = (() => {
         clearSave();
         const won = S.over.winner === G.team && G.team >= 0;
         $('end-title').textContent = won ? 'Mission Accomplished' : me ? 'Mission Failed' : `${G.names[S.over.winner] || 'Nobody'} won`;
+        // Sides that gave up are named, so a win by forfeit reads as one.
+        const quit = S.P.filter(P => P.forfeit && P.team !== G.team).map(P => G.names[P.team]).filter(Boolean);
+        if (quit.length) $('end-sub').textContent = `${quit.join(', ')} forfeited · ` + $('end-sub').textContent;
         $('end').className = won ? 'won' : 'lost';
         $('watch').hidden = true;
         audio.play(won ? 'won' : 'lost', { gain: 0.8 });
@@ -355,7 +360,7 @@ const Game = (() => {
           case 'over': if (G.playing) setTimeout(outcome, 1800); drawRoster(); break;
           case 'fallen':
             if (G.playing && e.team === G.team) setTimeout(outcome, 1800);
-            else if (G.playing && G.names[e.team]) hud.say(`${G.names[e.team]} is out.`, 'good');
+            else if (G.playing && G.names[e.team]) hud.say(e.forfeit ? `${G.names[e.team]} has forfeited the game.` : `${G.names[e.team]} is out.`, 'good');
             drawRoster();
             break;
           case 'weather': if (G.playing) { const v = e.passed ? SKY_PASS[e.was] : SKY_SAY[e.kind]; if (v && !(e.kind === 'cloud' && e.was === 'clear')) { hud.say(v[0], v[1]); if (v[2]) audio.voice('sky', v[2], oldAge()); } } break;
@@ -866,7 +871,7 @@ const Game = (() => {
       for (const t of S.seats) {
         const row = document.createElement('div'), dot = document.createElement('i'), nm = document.createElement('span'), s = v && v.slots[t];
         dot.style.background = SLOT_CSS[t];
-        nm.textContent = youName(t) + (t !== G.team && s && s.left ? ' (left)' : t !== G.team && s && s.away ? ' (away)' : '');
+        nm.textContent = youName(t) + (S.P[t].forfeit ? ' (forfeited)' : t !== G.team && s && s.left ? ' (left)' : t !== G.team && s && s.away ? ' (away)' : '');
         row.className = (S.P[t].alive ? '' : 'down ') + (G.names[t] && G.names[t].startsWith('Computer') ? 'cpu' : '');
         row.append(dot, nm); box.append(row);
       }

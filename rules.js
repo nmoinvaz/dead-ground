@@ -3107,9 +3107,10 @@ const Rules = (() => {
     } else if (c.c === 'raze') {
       if (!S.P[team].alive) return;
       razeSlot(S, team);
-      S.P[team].alive = false;
+      // Given up, not beaten, so the others are told so.
+      S.P[team].alive = false; S.P[team].forfeit = true;
       territory(S); recount(S);
-      S.ev.push({ t: 'fallen', team });
+      S.ev.push({ t: 'fallen', team, forfeit: true });
       mark(S, team, 'out');
     } else if (c.c === 'launch') {
       const s = S.ents.find(e => e.b && e.team === team && e.kind === 'silo' && e.hp > 0 && e.charge >= e.d.charge);
