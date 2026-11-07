@@ -65,7 +65,7 @@
         const vec3 ROOF = vec3(0.969, 0.953, 0.918), WALL_L = vec3(0.894, 0.863, 0.796), WALL_R = vec3(0.804, 0.757, 0.671);
         const vec3 WAS = vec3(0.427, 0.51, 0.678);
         // The dark scheme's own palette: warm charcoal paper and pale ink, the page's CSS paper and ink.
-        const vec3 DPAPER = vec3(0.15, 0.137, 0.118), DINK = vec3(0.91, 0.88, 0.81);
+        const vec3 DPAPER = vec3(0.15, 0.137, 0.118), DINK = vec3(0.91, 0.88, 0.81), SLATE = vec3(0.215, 0.235, 0.27);
         ${GL.NOISE}
         float L(vec2 uv) { return dot(texture2D(t, uv).rgb, vec3(0.299, 0.587, 0.114)); }
         float A(vec2 uv) { return texture2D(tSubj, uv).a; }
@@ -753,8 +753,9 @@
             vec2 gd = vec2(A(vUv + k * vec2(2.5, 0)) - A(vUv - k * vec2(2.5, 0)), A(vUv + k * vec2(0, 2.5)) - A(vUv - k * vec2(0, 2.5)));
             if (length(gd) < 0.04) gd = e1;
             float dash = length(gd) > 0.02 ? step(0.42, fract(dot(p, normalize(vec2(-gd.y, gd.x))) / (6.5 * uK))) : step(0.35, hash(floor(p / (5.0 * uK)) + 17.0));
-            // On dark paper what was is drawn toward the light charcoal of ground not yet seen, so its shades hold.
-            vec3 past = dk ? mix(vec3(0.245, 0.23, 0.205), baseC, 0.5) : mix(paperC, baseC, 0.4);
+            // On dark paper what was is drawn toward the slate of ground not yet seen, half greyed, so its shades
+            // hold and its earth is not taken for the brown of the heights now seen.
+            vec3 past = dk ? mix(SLATE, mix(vec3(dot(baseC, vec3(0.3, 0.59, 0.11))), baseC, 0.55), 0.5) : mix(paperC, baseC, 0.4);
             // Remembered ore is the brightest thing on dark paper, so it is sunk toward the paper there, and its many
             // small rings are dashed lightly on either paper.
             float oreP = max(max(oA(vUv + k * vec2(1.6, 0)), oA(vUv - k * vec2(1.6, 0))), max(max(oA(vUv + k * vec2(0, 1.6)), oA(vUv - k * vec2(0, 1.6))), oA(vUv)));
@@ -776,9 +777,10 @@
             float cont = (1.0 - smoothstep(0.4 * uK, 1.2 * uK, min(hf, 1.0 - hf) * 0.8 / hw)) * step(0.3, mix(noise(pL * 0.04 / uK + 3.0), noise(pL2 * 0.04 / uK + 5.0), gLf)) * onMap;
             float guide = mix(hatch(pL, 18.0, 70.0, 0.7, 3.0, 0.55) + hatch(pL, 104.0, 95.0, 0.6, 8.0, 0.6), hatch(pL2, 18.0, 70.0, 0.7, 3.0, 0.55) + hatch(pL2, 104.0, 95.0, 0.6, 8.0, 0.6), gLf);
             float rP = (1.0 - smoothstep(0.4 * uK, 1.0 * uK, abs(rdS - 1.3) / rdW)) * onMap;
-            // On dark paper the ground not yet seen is a lighter charcoal than the paper, so it does not sink to black.
-            vec3 skP = dk ? vec3(0.245, 0.23, 0.205) : paperC;
-            vec3 sketch = mix(skP, dk ? vec3(0.5, 0.48, 0.44) : vec3(0.5, 0.49, 0.47), clamp(cont * 0.42 + guide * 0.14 + rP * 0.4, 0.0, 1.0));
+            // On dark paper the ground not yet seen is a cool slate, lighter than the paper so it does not sink to
+            // black, and blue so it is not taken for the brown of high ground.
+            vec3 skP = dk ? SLATE : paperC;
+            vec3 sketch = mix(skP, dk ? vec3(0.47, 0.51, 0.58) : vec3(0.5, 0.49, 0.47), clamp(cont * 0.42 + guide * 0.14 + rP * 0.4, 0.0, 1.0));
             col = mix(sketch, col, seenE);
           }
           // Weather over everything. Fog and morning mist lie in the low ground and drift in banks, and the fog of
