@@ -1784,7 +1784,7 @@ const Hud = (() => {
           const kinds = Object.keys(groups), first = list[0], mine = first.team === team();
           let html = '<div class="who">';
           if (kinds.length === 1 && list.length === 1) {
-            html += `<div class="one"><img src="${state.cameos[picKey(first)] || ''}"${axoImg(first.kind)} alt=""><div><h3>${first.d.name}</h3><div class="hp"><i id="hp1"></i></div><p id="stat1"></p></div></div>`;
+            html += `<div class="one"><img src="${state.cameos[picKey(first)] || ''}"${axoImg(first.kind)} alt=""><div><h3>${Rules.nameOf(first.kind, S().P[first.team] ? S().P[first.team].tech : 1)}</h3><div class="hp"><i id="hp1"></i></div><p id="stat1"></p></div></div>`;
           } else {
             html += '<div class="many">' + kinds.map(k => `<button data-k="${k}"><img src="${state.cameos[picKey(groups[k][0])] || ''}"${axoImg(k)} alt=""><b>${groups[k].length}</b></button>`).join('') + '</div>';
           }
