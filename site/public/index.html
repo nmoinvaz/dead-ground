@@ -66,6 +66,7 @@ body[data-look="ink"][data-scheme="dark"] #end, body[data-look="ink"][data-schem
 .gauge label { font: 600 12px var(--ui); letter-spacing: .09em; text-transform: uppercase; color: var(--dim); }
 .led { font: 20px/1 var(--mono); color: var(--amber); text-shadow: 0 0 8px rgba(255,170,40,.5); font-variant-numeric: tabular-nums; min-width: 3.2ch; text-align: right; }
 .led.small { font-size: 15px; min-width: 0; }
+.led.inf { font-family: var(--ui); font-size: 26px; line-height: .7; }
 .gauge.grow { flex: 0 1 170px; min-width: 96px; }
 #pwrtrack { flex: 1; height: 8px; background: #0b0c08; border: 1px solid #000; position: relative; min-width: 32px; }
 #pwrbar { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: var(--good); transition: width .3s; }
@@ -486,14 +487,15 @@ body[data-look="ink"] #menu, body[data-look="ink"] #watch, body[data-look="ink"]
 #maps button small { font: 12px var(--mono); opacity: .75; white-space: nowrap; }
 .preview { margin-top: 8px; }
 #preview { width: 100%; aspect-ratio: 1; display: block; border: 1.5px solid var(--ink); background: var(--paper-hi); }
-#map-about, #age-about, #weather-about { margin: 6px 0 0; font: 500 15px/1.25 var(--ui); color: var(--ink-dim); text-wrap: pretty; }
+#map-about, #age-about, #weather-about, #res-about { margin: 6px 0 0; font: 500 15px/1.25 var(--ui); color: var(--ink-dim); text-wrap: pretty; }
 #age-about { min-height: 2.5em; }
 /* The game's own choices stand under the players: the theatre and the age it begins in. */
 .rules { margin-top: 14px; display: grid; gap: 4px; }
 .rules h3 { margin: 8px 0 2px; }
 #m-age { grid-template-columns: repeat(6, 1fr); }
 #m-weather { grid-template-columns: repeat(4, 1fr); }
-body[data-look="ink"] #age-about, body[data-look="ink"] #map-about, body[data-look="ink"] #weather-about { font-family: var(--label); font-style: italic; font-weight: 400; }
+#m-res { grid-template-columns: repeat(2, 1fr); }
+body[data-look="ink"] #age-about, body[data-look="ink"] #map-about, body[data-look="ink"] #weather-about, body[data-look="ink"] #res-about { font-family: var(--label); font-style: italic; font-weight: 400; }
 .seedrow { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin: 8px 0 14px; font: 500 16px var(--ui); }
 .seedrow b { font: 15px var(--mono); }
 #slots { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
@@ -578,7 +580,7 @@ body[data-look="ink"] .sheet { box-shadow: 4px 4px 0 var(--ink); }
       <div class="choice"><h2>Picture</h2><div id="s-pic" class="two"><button data-v="sharp">Sharp</button><button data-v="fast">Faster</button></div><p id="s-pic-note"></p></div>
       <div class="choice"><h2>Ore, oil and power</h2><div id="s-gauges" class="two"><button data-v="side">In the sidebar</button><button data-v="top">In the top bar</button></div></div>
       <div class="choice"><h2>Music</h2><div id="s-music" class="two"><button data-v="on">On</button><button data-v="off">Off</button></div></div>
-      <p id="build">Build b4ba1d1 2026-11-08 12:07</p>
+      <p id="build">Build 6bdae45 2026-11-08 12:18</p>
     </div>
     <div id="banner" hidden></div>
     <button id="update" hidden>A new version of Dead Ground is out. <b>Reload</b></button>
@@ -644,6 +646,9 @@ body[data-look="ink"] .sheet { box-shadow: 4px 4px 0 var(--ink); }
             <h3>Weather</h3>
             <div id="m-weather" class="pick three"><button data-v="random">Random</button><button data-v="mild">Mild</button><button data-v="harsh">Harsh</button><button data-v="off">Off</button></div>
             <p id="weather-about"></p>
+            <h3>Resources</h3>
+            <div id="m-res" class="pick two"><button data-v="std">Standard</button><button data-v="free">Unlimited</button></div>
+            <p id="res-about"></p>
           </div>
           <div id="chat" hidden><div id="chat-log"></div><input id="chat-in" maxlength="200" placeholder="Say something, then Enter" autocomplete="off" spellcheck="false"></div>
         </section>
@@ -947,7 +952,7 @@ const Rules = (() => {
     { name: 'Modern', cost: 2000, oil: 150, time: 35, note: 'Tanks, helicopters, jets, drones and the missile silo.' },
     { name: 'Future', cost: 2800, oil: 400, time: 45, note: 'Exo troopers, mechs, hover craft, railguns and the titan.' },
   ];
-  const MAX_AGE = AGES.length - 1, POWER_AGE = 4, START_SUPPLY = [0, 2000, 2400, 2800, 3200, 3500, 4000];
+  const MAX_AGE = AGES.length - 1, POWER_AGE = 4, START_SUPPLY = [0, 2000, 2400, 2800, 3200, 3500, 4000], FREE_STOCK = 99999;
   const TECH = {};
   for (let a = 2; a <= MAX_AGE; a++) TECH[a] = { name: AGES[a].name + ' Age', cost: AGES[a].cost, oil: AGES[a].oil, time: AGES[a].time, note: AGES[a].note };
   // Each building's name in each age, the age it first stands in, and a defence's weapon in each age.
@@ -1976,6 +1981,8 @@ const Rules = (() => {
       P: [], bases: pos.map(p => M.bases[p]), faces: pos.map(p => M.faces[p]), seats, pos, _fields: new Map(), age0: clamp(o.age | 0 || 1, 1, MAX_AGE),
       // The theatre's weather and the game's setting for it. A game made without them has the one old mix.
       theatre: SKIES[o.theatre] ? o.theatre : 'any', weather: WEATHERS[o.weather] ? o.weather : 'random',
+      // Unlimited: no side ever runs short of ore, oil or power, so only build times and the fighting count.
+      free: !!o.free,
       // The ground as it now is, which woods, bridges and fords change, and what has happened to the trees,
       // bridges and houses.
       gnd: new Uint8Array(M.ground), gndVer: 0, wood: new Uint8Array(N), woodVer: 0, burn: [], crush: [],
@@ -2136,7 +2143,7 @@ const Rules = (() => {
   const plain = e => { const o = {}; for (const k in e) if (k !== 'd' && k[0] !== '_') o[k] = e[k]; return o; };
   function save(S) {
     return {
-      v: 1, seed: S.seed, layout: S.layout, seats: S.seats, pos: S.pos, age0: S.age0, theatre: S.theatre, weather: S.weather, tick: S.tick, rs: S.rs, next: S.next, occVer: S.occVer, oreVer: S.oreVer, terrVer: S.terrVer, dirty: !!S.dirty, over: S.over,
+      v: 1, seed: S.seed, layout: S.layout, seats: S.seats, pos: S.pos, age0: S.age0, theatre: S.theatre, weather: S.weather, free: S.free, tick: S.tick, rs: S.rs, next: S.next, occVer: S.occVer, oreVer: S.oreVer, terrVer: S.terrVer, dirty: !!S.dirty, over: S.over,
       ents: S.ents.map(plain), towns: S.towns, shots: S.shots, sweeps: S.sweeps, flights: S.flights, occLog: S.occLog,
       fields: [...S.fields].map(([k, f]) => [k, f.ver, f.used, f.made, f.reach, f.wq]),
       ore: b64.en(new Uint8Array(S.ore.buffer.slice(0))),
@@ -2148,7 +2155,7 @@ const Rules = (() => {
   }
   function diffs(a, base) { const o = []; for (let c = 0; c < a.length; c++) if (a[c] !== (base ? base[c] : 0)) o.push(c, a[c]); return o; }
   function load(o) {
-    const S = newGame({ seed: o.seed, layout: o.layout, seats: o.seats, pos: o.pos, age: o.age0 || 5, theatre: o.theatre, weather: o.weather, empty: true });
+    const S = newGame({ seed: o.seed, layout: o.layout, seats: o.seats, pos: o.pos, age: o.age0 || 5, theatre: o.theatre, weather: o.weather, free: o.free, empty: true });
     if (S.seed !== o.seed) throw new Error('map seed mismatch');
     Object.assign(S, { tick: o.tick, rs: o.rs, next: o.next, occVer: o.occVer, oreVer: o.oreVer, terrVer: o.terrVer, dirty: o.dirty, over: o.over, shots: o.shots, sweeps: o.sweeps, flights: o.flights, occLog: o.occLog || [] });
     S.towns = o.towns.map(t => Object.assign({}, t));
@@ -2317,7 +2324,7 @@ const Rules = (() => {
     }
     for (const P of S.P) {
       const was = P.low;
-      P.low = P.tech >= POWER_AGE && P.use > P.prod;
+      P.low = !S.free && P.tech >= POWER_AGE && P.use > P.prod;
       if (P.low && !was) ownEvent(S, P.team, 'lowpower');
     }
   }
@@ -4181,6 +4188,8 @@ const Rules = (() => {
     S.fieldQueue = 0;
     for (const a of S.ais) a.tick(S);
     rehash(S);
+    // Unlimited: every side's stores are filled each tick before anything is paid for.
+    if (S.free) for (const P of S.P) { P.supply = FREE_STOCK; P.oil = FREE_STOCK; }
     for (const q of S.cmds) {
       if (S.keepLog) S.log.push({ tick: S.tick, team: q.team, c: q.c });
       // A bad command is dropped the same way everywhere, so the world goes on.
@@ -13181,7 +13190,9 @@ const Hud = (() => {
       const s = S(), p = P();
       const shownS = ro.sup < 0 ? p.supply : ro.sup + (p.supply - ro.sup) * 0.5, shownO = ro.oil < 0 ? p.oil : ro.oil + (p.oil - ro.oil) * 0.5;
       ro.sup = shownS; ro.oil = shownO;
-      $('sup').textContent = fmt(shownS); $('oil').textContent = fmt(shownO);
+      // Unlimited stores read as such, not as the stock the rules keep them at.
+      $('sup').textContent = s.free ? '∞' : fmt(shownS); $('oil').textContent = s.free ? '∞' : fmt(shownO);
+      $('sup').classList.toggle('inf', !!s.free); $('oil').classList.toggle('inf', !!s.free);
       const left = p.prod ? clamp(p.use / p.prod, 0, 1.2) : 1;
       const bar = $('pwrbar');
       bar.style.width = Math.min(100, left * 100) + '%';
@@ -14861,6 +14872,8 @@ const Game = (() => {
   // What a theatre's weather brings under a setting, for the set-up.
   const SKY_OF = { desert: 'Dust storms, little rain and no snow.', steppe: 'Rain, thunderstorms and fog, with a little snow.', winter: 'Deep snow and fog, and no rain.' };
   const WEATHER_OF = { random: 'In their usual measure.', mild: 'Mostly fair, with no storms of any kind.', harsh: 'Often, and the storms come hard.' };
+  // What each choice of resources means, for the set-up.
+  const RES_NOTE = { std: 'Ore, oil and power are dug, pumped and built for, and everything costs.', free: 'Nothing costs a thing and power never runs short. Only build times and the fighting count.' };
   const weatherNote = (theme, w) => w === 'off' ? 'Fair skies all game.' : `${SKY_OF[theme] || ''} ${WEATHER_OF[w] || ''}`;
 
   function bestVoice(vs) {
@@ -15134,7 +15147,7 @@ const Game = (() => {
       const m = Rules.MAPS[sk.map], seats = [], you = sk.slots.findIndex(s => s.kind === 'you');
       sk.slots.forEach((s, t) => { if (s.kind === 'you' || s.kind === 'ai') seats.push(t); });
       if (seats.length < 2 || you < 0) return;
-      const S = Rules.newGame({ seed: params.has('seed') ? +params.get('seed') : sk.seed, layout: m.layout, seats, shuffle: Math.random, age: sk.age || 1, theatre: sk.theme, weather: sk.weather || 'random' });
+      const S = Rules.newGame({ seed: params.has('seed') ? +params.get('seed') : sk.seed, layout: m.layout, seats, shuffle: Math.random, age: sk.age || 1, theatre: sk.theme, weather: sk.weather || 'random', free: sk.res === 'free' });
       sk.slots.forEach((s, t) => { if (s.kind === 'ai') S.ais.push(AI.create(t, s.level, S.seed + t)); });
       G.names = sk.slots.map(s => s.kind === 'you' ? (G.name || 'You') : s.kind === 'ai' ? `Computer (${Rules.DIFFICULTY[s.level].name})` : '');
       G.theme = sk.theme; G.mapKey = sk.map; G.online = false;
@@ -15142,7 +15155,7 @@ const Game = (() => {
       enterPlay(S, G.theme, you);
       saveT = 0;
       const foes = seats.length - 1;
-      hud.say(`Deployed: ${m.name}, ${THEATRES[G.theme]}, the ${Rules.AGES[S.age0].name} Age. ${foes === 1 ? 'One enemy' : foes + ' enemies'} on the map. Good hunting, Commander.`);
+      hud.say(`Deployed: ${m.name}, ${THEATRES[G.theme]}, the ${Rules.AGES[S.age0].name} Age${S.free ? ', unlimited resources' : ''}. ${foes === 1 ? 'One enemy' : foes + ' enemies'} on the map. Good hunting, Commander.`);
     }
 
     // A game against the computer is kept in the browser, so a refresh or a closed tab loses nothing. The world, the
@@ -15476,7 +15489,7 @@ const Game = (() => {
     // which: a skirmish changes here, a room asks the server, and only its host may.
     function setupView() {
       if (net.view && net.inRoom) return Object.assign({ mode: 'room' }, net.view);
-      return { mode: 'skirmish', map: sk.map, seed: sk.seed, theme: sk.theme, age: sk.age || 1, weather: sk.weather || 'random', phase: 'lobby', host: true, you: sk.slots.findIndex(s => s.kind === 'you'), slots: sk.slots.map(s => s.kind === 'you' ? { kind: 'human', name: G.name || 'You', you: true } : s), watch: [] };
+      return { mode: 'skirmish', map: sk.map, seed: sk.seed, theme: sk.theme, age: sk.age || 1, weather: sk.weather || 'random', res: sk.res || 'std', phase: 'lobby', host: true, you: sk.slots.findIndex(s => s.kind === 'you'), slots: sk.slots.map(s => s.kind === 'you' ? { kind: 'human', name: G.name || 'You', you: true } : s), watch: [] };
     }
     function renderSetup() {
       const v = setupView(), room = v.mode === 'room', edit = v.host && v.phase === 'lobby', m = Rules.MAPS[v.map];
@@ -15498,6 +15511,8 @@ const Game = (() => {
       $('age-about').textContent = Rules.AGES[v.age || 1].note;
       $('m-weather').querySelectorAll('button').forEach(b => { const on = b.dataset.v === (v.weather || 'random'); b.classList.toggle('on', on); b.disabled = !edit && !on; });
       $('weather-about').textContent = weatherNote(v.theme, v.weather || 'random');
+      $('m-res').querySelectorAll('button').forEach(b => { const on = b.dataset.v === (v.res || 'std'); b.classList.toggle('on', on); b.disabled = !edit && !on; });
+      $('res-about').textContent = RES_NOTE[v.res || 'std'];
       drawPreview(v.map, v.seed, v.slots);
       // The slots.
       const list = $('slots');
@@ -15579,6 +15594,7 @@ const Game = (() => {
     $('m-theme').querySelectorAll('button').forEach(b => b.addEventListener('click', () => { if (b.disabled) return; audio.ui('click'); change({ theme: b.dataset.v }); }));
     $('m-age').querySelectorAll('button').forEach(b => b.addEventListener('click', () => { if (b.disabled) return; audio.ui('click'); change({ age: +b.dataset.v }); }));
     $('m-weather').querySelectorAll('button').forEach(b => b.addEventListener('click', () => { if (b.disabled) return; audio.ui('click'); change({ weather: b.dataset.v }); }));
+    $('m-res').querySelectorAll('button').forEach(b => b.addEventListener('click', () => { if (b.disabled) return; audio.ui('click'); change({ res: b.dataset.v }); }));
     $('reseed').addEventListener('click', () => { audio.ui('click'); change({ seed: newSeed() }); });
     $('b-skirmish').addEventListener('click', () => { audio.wake(); audio.ui('click'); net.inRoom = false; screen('setup'); renderSetup(); });
     $('setup-back').addEventListener('click', () => { audio.ui('click'); if (net.inRoom) { leaveRoom(); screen('rooms'); } else screen('main'); });

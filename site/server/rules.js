@@ -264,7 +264,7 @@ const Rules = (() => {
     { name: 'Modern', cost: 2000, oil: 150, time: 35, note: 'Tanks, helicopters, jets, drones and the missile silo.' },
     { name: 'Future', cost: 2800, oil: 400, time: 45, note: 'Exo troopers, mechs, hover craft, railguns and the titan.' },
   ];
-  const MAX_AGE = AGES.length - 1, POWER_AGE = 4, START_SUPPLY = [0, 2000, 2400, 2800, 3200, 3500, 4000];
+  const MAX_AGE = AGES.length - 1, POWER_AGE = 4, START_SUPPLY = [0, 2000, 2400, 2800, 3200, 3500, 4000], FREE_STOCK = 99999;
   const TECH = {};
   for (let a = 2; a <= MAX_AGE; a++) TECH[a] = { name: AGES[a].name + ' Age', cost: AGES[a].cost, oil: AGES[a].oil, time: AGES[a].time, note: AGES[a].note };
   // Each building's name in each age, the age it first stands in, and a defence's weapon in each age.
@@ -1293,6 +1293,8 @@ const Rules = (() => {
       P: [], bases: pos.map(p => M.bases[p]), faces: pos.map(p => M.faces[p]), seats, pos, _fields: new Map(), age0: clamp(o.age | 0 || 1, 1, MAX_AGE),
       // The theatre's weather and the game's setting for it. A game made without them has the one old mix.
       theatre: SKIES[o.theatre] ? o.theatre : 'any', weather: WEATHERS[o.weather] ? o.weather : 'random',
+      // Unlimited: no side ever runs short of ore, oil or power, so only build times and the fighting count.
+      free: !!o.free,
       // The ground as it now is, which woods, bridges and fords change, and what has happened to the trees,
       // bridges and houses.
       gnd: new Uint8Array(M.ground), gndVer: 0, wood: new Uint8Array(N), woodVer: 0, burn: [], crush: [],
@@ -1453,7 +1455,7 @@ const Rules = (() => {
   const plain = e => { const o = {}; for (const k in e) if (k !== 'd' && k[0] !== '_') o[k] = e[k]; return o; };
   function save(S) {
     return {
-      v: 1, seed: S.seed, layout: S.layout, seats: S.seats, pos: S.pos, age0: S.age0, theatre: S.theatre, weather: S.weather, tick: S.tick, rs: S.rs, next: S.next, occVer: S.occVer, oreVer: S.oreVer, terrVer: S.terrVer, dirty: !!S.dirty, over: S.over,
+      v: 1, seed: S.seed, layout: S.layout, seats: S.seats, pos: S.pos, age0: S.age0, theatre: S.theatre, weather: S.weather, free: S.free, tick: S.tick, rs: S.rs, next: S.next, occVer: S.occVer, oreVer: S.oreVer, terrVer: S.terrVer, dirty: !!S.dirty, over: S.over,
       ents: S.ents.map(plain), towns: S.towns, shots: S.shots, sweeps: S.sweeps, flights: S.flights, occLog: S.occLog,
       fields: [...S.fields].map(([k, f]) => [k, f.ver, f.used, f.made, f.reach, f.wq]),
       ore: b64.en(new Uint8Array(S.ore.buffer.slice(0))),
@@ -1465,7 +1467,7 @@ const Rules = (() => {
   }
   function diffs(a, base) { const o = []; for (let c = 0; c < a.length; c++) if (a[c] !== (base ? base[c] : 0)) o.push(c, a[c]); return o; }
   function load(o) {
-    const S = newGame({ seed: o.seed, layout: o.layout, seats: o.seats, pos: o.pos, age: o.age0 || 5, theatre: o.theatre, weather: o.weather, empty: true });
+    const S = newGame({ seed: o.seed, layout: o.layout, seats: o.seats, pos: o.pos, age: o.age0 || 5, theatre: o.theatre, weather: o.weather, free: o.free, empty: true });
     if (S.seed !== o.seed) throw new Error('map seed mismatch');
     Object.assign(S, { tick: o.tick, rs: o.rs, next: o.next, occVer: o.occVer, oreVer: o.oreVer, terrVer: o.terrVer, dirty: o.dirty, over: o.over, shots: o.shots, sweeps: o.sweeps, flights: o.flights, occLog: o.occLog || [] });
     S.towns = o.towns.map(t => Object.assign({}, t));
@@ -1634,7 +1636,7 @@ const Rules = (() => {
     }
     for (const P of S.P) {
       const was = P.low;
-      P.low = P.tech >= POWER_AGE && P.use > P.prod;
+      P.low = !S.free && P.tech >= POWER_AGE && P.use > P.prod;
       if (P.low && !was) ownEvent(S, P.team, 'lowpower');
     }
   }
@@ -3498,6 +3500,8 @@ const Rules = (() => {
     S.fieldQueue = 0;
     for (const a of S.ais) a.tick(S);
     rehash(S);
+    // Unlimited: every side's stores are filled each tick before anything is paid for.
+    if (S.free) for (const P of S.P) { P.supply = FREE_STOCK; P.oil = FREE_STOCK; }
     for (const q of S.cmds) {
       if (S.keepLog) S.log.push({ tick: S.tick, team: q.team, c: q.c });
       // A bad command is dropped the same way everywhere, so the world goes on.
