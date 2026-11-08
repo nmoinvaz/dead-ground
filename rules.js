@@ -450,6 +450,8 @@ const Rules = (() => {
   // feature is listed with all of its images in a row, so one town's images sit side by side.
   // How wooded a map is beyond the usual: the woods' patches grow wider, start on lower ground and stand thicker.
   // Maps not named keep the usual woods.
+  // The treeline: woods thin out over TREE_BAND of height round TREE_LINE and stand no higher.
+  const TREE_LINE = 8.6, TREE_BAND = 1.2;
   const WOODS = { quad: 0.7, pass: 1, lakes: 1, greenwood: 3, oldforest: 1.3, twinlakes: 0.6, ponds: 0.8, peaks: 0.6, highlands: 0.5, crater: 0.5 };
   // A point turned a quarter round the middle k times.
   const turnK = ([x, y], k) => { let dx = x - CX, dy = y - CY; for (let i = 0; i < k; i++) { const t = dx; dx = -dy; dy = t; } return [CX + dx, CY + dy]; };
@@ -996,6 +998,12 @@ const Rules = (() => {
       const wk = WOODS[kind] || 0, wood = sym(x, y, wk ? 0.06 / (1 + 0.6 * wk) : 0.06, 3), r = rand();
       const place = (k, s) => {
         const px = x + 0.25 + rand() * 0.5, py = y + 0.25 + rand() * 0.5;
+        // Woods thin out up the mountains and stop at the treeline. Each place draws its dice as before, so the
+        // rest of the map is laid as it always was, and decides once for all its copies, so the map stays fair.
+        if (k === 'tree' && hAt(px, py) > TREE_LINE + ((Math.imul(x, 73856093) ^ Math.imul(y, 19349663)) >>> 0) % 1024 / 1024 * TREE_BAND - TREE_BAND / 2) {
+          for (let i = 0; i < L.syms.length; i++) rand();
+          return;
+        }
         for (const T of L.syms) {
           const [qx, qy] = T([px, py]);
           scatter.push({ k, x: qx, y: qy, s, a: rand() * TAU });
