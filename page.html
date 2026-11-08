@@ -131,6 +131,8 @@ body[data-look="ink"][data-scheme="dark"] #end, body[data-look="ink"][data-schem
 #sel .forms button:hover { color: var(--amber); }
 #sel .forms button.on { color: var(--amber); border-color: var(--amber-dim); }
 #sel .forms svg { width: 24px; height: 16px; fill: currentColor; }
+#sel .stances > div { grid-template-columns: repeat(4, 32px); }
+#sel .stances svg { fill: none; }
 
 /* The sidebar. */
 #side { flex: 0 0 var(--side); width: var(--side); display: flex; flex-direction: column; gap: 6px; padding: 8px; padding-top: calc(8px + env(safe-area-inset-top, 0px)); padding-right: max(8px, env(safe-area-inset-right, 0px)); padding-bottom: calc(8px + env(safe-area-inset-bottom, 0px)); box-sizing: border-box; background: repeating-linear-gradient(90deg, #0000 0 3px, rgba(255,255,255,.012) 3px 4px), linear-gradient(180deg, var(--steel), #2f3328 60%, #272a21); border-left: 2px solid var(--edge); box-shadow: inset 1px 0 0 var(--steel-hi); min-height: 0; overflow: hidden; }
@@ -607,6 +609,7 @@ body[data-look="ink"] .sheet { box-shadow: 4px 4px 0 var(--ink); }
         <dt>Alt</dt><dd>With right-click, attack the one enemy alone</dd>
         <dt>A / S</dt><dd>Attack-move, stop</dd>
         <dt>D</dt><dd>Next formation for the selected units: line, block, column, wedge, square, loose</dd>
+        <dt>L</dt><dd>Next stance: seek and destroy, aggressive, defensive, or hold ground</dd>
         <dt>Ctrl 1-9</dt><dd>Set a group, then 1-9 picks it</dd>
         <dt>Arrows</dt><dd>Move the view; on a trackpad swipe to move and pinch to zoom</dd>
         <dt>K</dt><dd>Another pen technique</dd>

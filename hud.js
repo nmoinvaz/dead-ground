@@ -723,6 +723,12 @@ const Hud = (() => {
         if (us.length > 1) setForm(F[(F.indexOf(Rules.formOfGroup(us)) + (e.shiftKey ? F.length - 1 : 1)) % F.length]);
         return;
       }
+      // L steps through the stances, Shift+L back.
+      if (k === 'KeyL') {
+        const us = stanceUnits(), T = Rules.STANCES;
+        if (us.length) setStance(T[(T.indexOf(us[0].st || 'def') + (e.shiftKey ? T.length - 1 : 1)) % T.length]);
+        return;
+      }
       if (k === 'KeyG') { const b = state.sel.find(q => alive(q) && q.b); if (b) game.order(s, t, { c: 'repair', id: b.id }); return; }
       if (k === 'Delete') { const b = state.sel.find(q => alive(q) && q.b); if (b) game.order(s, t, { c: 'sell', id: b.id }); return; }
       if (k === 'Space') { e.preventDefault(); const a = state.lastAlert; if (a) world.focus(a.x, a.y); return; }
@@ -1712,6 +1718,24 @@ const Hud = (() => {
       square: dots([[6, 3], [12, 3], [18, 3], [6, 8], [18, 8], [6, 13], [12, 13], [18, 13]]).replace('</svg>', '<circle cx="12" cy="8" r="1.4" fill="none" stroke="currentColor" stroke-width="1"/></svg>'),
       loose: dots([[3, 3], [12, 2.5], [21, 3.5], [7, 8.5], [17, 8], [3, 13.5], [12, 13], [21, 13.5]]),
     };
+    // The stances, how a unit with no orders fights, drawn as a sight, a charge, a shield and a planted flag.
+    const STANCE_NAME = { hunt: 'Seek and destroy', aggr: 'Aggressive', def: 'Defensive', hold: 'Hold ground' };
+    const STANCE_NOTE = { hunt: 'hunts down the nearest enemy, anywhere', aggr: 'chases what it sees as far as it takes', def: 'chases a little, then goes back to its post', hold: 'fires from where it stands and never moves to fight' };
+    const line = d => `<svg viewBox="0 0 24 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
+    const STANCE_ICON = {
+      hunt: line('<circle cx="12" cy="8" r="4.5"/><path d="M12 1.5v3M12 11.5v3M5.5 8h3M15.5 8h3"/>'),
+      aggr: line('<path d="M7 9.5 12 4.5l5 5M7 13.5 12 8.5l5 5"/>'),
+      def: line('<path d="M12 2 17.5 4v4.2c0 3-2.4 5.2-5.5 6.3-3.1-1.1-5.5-3.3-5.5-6.3V4z"/>'),
+      hold: line('<path d="M10 14.5V2l6 2.6-6 2.6M6 14.5h10"/>'),
+    };
+    // The selected units a stance takes in: the player's own armed units on the ground or the water.
+    const stanceUnits = () => state.sel.filter(e => alive(e) && !e.b && e.team === team() && !Rules.isAir(e) && !e.d.cargo && (e.d.weapons || []).length);
+    function setStance(v) {
+      const us = stanceUnits();
+      if (!us.length) return;
+      game.order(S(), team(), { c: 'stance', ids: us.map(u => u.id), v });
+      say(`${STANCE_NAME[v]}.`);
+    }
     // The selected units a formation takes in: the player's own, on the ground.
     const formUnits = () => state.sel.filter(e => alive(e) && !e.b && e.team === team() && !Rules.isAir(e));
     function setForm(f) {
@@ -1723,7 +1747,9 @@ const Hud = (() => {
     function updateSelPanel() {
       state.sel = state.sel.filter(alive);
       const fu = formUnits(), form = fu.length > 1 ? Rules.formOfGroup(fu) : '';
-      const box = $('sel'), list = state.sel, key = list.map(e => e.id).join() + (list[0] ? (list[0].repairing ? 'r' : '') + (list[0].team) : '') + form;
+      // The stance the selection shares, or none when it is mixed.
+      const su = stanceUnits(), stance = su.length ? (su.every(u => (u.st || 'def') === (su[0].st || 'def')) ? su[0].st || 'def' : 'mixed') : '';
+      const box = $('sel'), list = state.sel, key = list.map(e => e.id).join() + (list[0] ? (list[0].repairing ? 'r' : '') + (list[0].team) : '') + form + stance;
       if (key !== state.selKey) {
         state.selKey = key;
         box.hidden = !list.length;
@@ -1748,9 +1774,10 @@ const Hud = (() => {
             html += '<button id="a-clear">Clear</button>';
           }
           html += '</div>';
+          if (stance) html += `<div class="forms stances"><h4>Stance <kbd>L</kbd></h4><div>${Rules.STANCES.map(v => `<button data-st="${v}" class="${v === stance ? 'on' : ''}" title="${STANCE_NAME[v]}: ${STANCE_NOTE[v]}" aria-label="${STANCE_NAME[v]}">${STANCE_ICON[v]}</button>`).join('')}</div></div>`;
           if (form) html += `<div class="forms"><h4>Formation <kbd>D</kbd></h4><div>${Rules.FORMS.map(f => `<button data-f="${f}" class="${f === form ? 'on' : ''}" title="${FORM_NAME[f]}" aria-label="${FORM_NAME[f]}">${FORM_ICON[f]}</button>`).join('')}</div></div>`;
           box.innerHTML = html;
-          box.querySelectorAll('.forms button').forEach(b => b.addEventListener('click', () => setForm(b.dataset.f)));
+          box.querySelectorAll('.forms button').forEach(b => b.addEventListener('click', () => b.dataset.st ? setStance(b.dataset.st) : setForm(b.dataset.f)));
           box.querySelectorAll('.many button').forEach(b => b.addEventListener('click', () => select(state.sel.filter(e => e.kind === b.dataset.k))));
           const on = (id, fn) => { const b = document.getElementById(id); if (b) b.addEventListener('click', fn); };
           on('a-rep', () => game.order(S(), team(), { c: 'repair', id: first.id }));

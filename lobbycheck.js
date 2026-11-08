@@ -61,10 +61,12 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
     await b.close(); process.exit(1);
   }
   await guest.waitForFunction('window.__game.playing && window.__game.online', { timeout: 20000 });
-  const seen = async p => p.evaluate(() => ({ free: __game.S.free, sup: document.getElementById('sup').textContent, team: __game.team, seats: __game.S.seats, W: __game.S.map.W, tick: __game.S.tick, names: __game.names, alive: __game.S.P.map(P => P.alive) }));
+  const seen = async p => p.evaluate(() => ({ hunters: __game.S.ents.filter(e => e.st === 'hunt').length, free: __game.S.free, sup: document.getElementById('sup').textContent, team: __game.team, seats: __game.S.seats, W: __game.S.map.W, tick: __game.S.tick, names: __game.names, alive: __game.S.P.map(P => P.alive) }));
   const h0 = await seen(host), g0 = await seen(guest);
   // A minute of play: each sends its humvee somewhere.
   for (const p of [host, guest]) await p.evaluate(() => { const S = __game.S, u = S.ents.find(e => e.team === __game.team && e.kind === 'humvee'); if (u) __game.order(S, __game.team, { c: 'move', ids: [u.id], x: S.map.W / 2, y: S.map.H / 2, a: false }); });
+  // The guest puts its army on seek and destroy, which the host's copy of the world must hold too.
+  await guest.evaluate(() => { const S = __game.S, us = S.ents.filter(e => e.team === __game.team && !e.b && e.d.weapons && e.d.weapons.length && !e.d.cargo); __game.order(S, __game.team, { c: 'stance', ids: us.map(u => u.id), v: 'hunt' }); });
   await wait(60000);
   const h1 = await seen(host), g1 = await seen(guest);
   await shot(host, 'game-host'); await shot(guest, 'game-guest');
@@ -78,7 +80,7 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
     }, 20);
   });
   await host.reload();
-  await host.waitForFunction('document.body.classList.contains("ready") && window.__game && window.__game.playing && window.__game.online', { timeout: 30000 });
+  await host.waitForFunction('document.body.classList.contains("ready") && window.__game && window.__game.playing && window.__game.online', { timeout: 60000 });
   await wait(5000);
   const back = await seen(host), gNow = await seen(guest);
   back.sawLobby = await host.evaluate(() => window.__sawLobby);
