@@ -158,7 +158,7 @@ const Hud = (() => {
     const S = () => game.S, team = () => Math.max(0, game.team), P = () => game.S.P[team()];
 
     const TABS = [
-      { id: 'bld', label: 'Base', key: 'Z' }, { id: 'def', label: 'Guns', key: 'X' }, { id: 'inf', label: 'Men', key: 'C' },
+      { id: 'bld', label: 'Base', key: 'Z' }, { id: 'def', label: 'Defence', key: 'X' }, { id: 'inf', label: 'Men', key: 'C' },
       { id: 'veh', label: 'Armor', key: 'V' }, { id: 'air', label: 'Air', key: 'B' }, { id: 'sea', label: 'Sea', key: ',' }, { id: 'pow', label: 'Calls', key: 'N' },
     ];
     // Everything a side may come to build; the sidebar shows what its age has opened.

@@ -140,7 +140,7 @@ body[data-look="ink"][data-scheme="dark"] #end, body[data-look="ink"][data-schem
 #stats { display: grid; grid-template-columns: 1.7fr 1fr; gap: 4px; font: 11px var(--ui); letter-spacing: .08em; color: var(--dim); text-transform: uppercase; }
 #stats div { display: flex; justify-content: space-between; align-items: baseline; gap: 6px; min-width: 0; background: #1b1d15; padding: 1px 5px; border: 1px solid #0a0b07; }
 #stats b { font: 12px var(--mono); color: var(--amber); min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-#tabs { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; gap: 2px; }
+#tabs { display: grid; grid-auto-flow: column; grid-auto-columns: auto; gap: 2px; }
 .tab { position: relative; padding: 4px 0 3px; background: linear-gradient(#2f3328, #1d1f17); border: 1px solid #0a0b07; font: 600 12px var(--ui); letter-spacing: .03em; color: var(--dim); text-transform: uppercase; }
 .tab:hover { color: var(--stencil); }
 .tab.on { background: linear-gradient(#59442a, #3b2c17); color: var(--amber); border-color: #1c1409; }
@@ -369,7 +369,7 @@ body[data-look="ink"] #sel .forms button.on { color: var(--paper); background: v
 body[data-look="ink"] #sel .many b { color: var(--redink); text-shadow: 0 0 2px var(--paper), 0 0 2px var(--paper); }
 body[data-look="ink"] #stats { color: var(--ink-dim); }
 body[data-look="ink"] #stats b { color: var(--redink); }
-body[data-look="ink"] .tab { background: var(--paper-hi); border: 1px solid var(--ink); color: var(--ink-dim); font-family: var(--display); font-weight: 400; font-size: 13px; text-transform: none; }
+body[data-look="ink"] .tab { background: var(--paper-hi); border: 1px solid var(--ink); color: var(--ink-dim); font-family: var(--display); font-weight: 400; font-size: 12px; letter-spacing: 0; text-transform: none; }
 body[data-look="ink"] .tab:hover { color: var(--ink); }
 body[data-look="ink"] .tab.on { background: var(--ink); color: var(--paper); border-color: var(--ink); }
 body[data-look="ink"] .tab.lit i { background: var(--redink); box-shadow: none; }
