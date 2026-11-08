@@ -45,6 +45,7 @@ body[data-look="ink"][data-scheme="dark"] #ov, body[data-look="ink"][data-scheme
 /* The pictures of things to build and of the selected unit, turned over to pale lines and laid on the dark paper
    with screen, as the light scheme lays them with multiply. The portrait's own ground is white so it turns dark. */
 body[data-look="ink"][data-scheme="dark"] .cam::before { filter: grayscale(1) contrast(1.5) brightness(1.08) invert(.93); mix-blend-mode: screen; }
+body[data-look="ink"][data-scheme="dark"] #sel .ups button.busy { background: linear-gradient(90deg, rgba(224,122,98,.34) var(--p, 0%), var(--paper-hi) var(--p, 0%)); }
 body[data-look="ink"][data-scheme="dark"] #sel img { background: #fff; border-color: #1f1a16; filter: grayscale(1) contrast(1.45) brightness(1.06) invert(.93); mix-blend-mode: screen; }
 body[data-look="ink"][data-scheme="dark"] #side { background: repeating-linear-gradient(135deg, rgba(232,224,207,.035) 0 1px, transparent 1px 7px), var(--paper); }
 body[data-look="ink"][data-scheme="dark"] .gauge, body[data-look="ink"][data-scheme="dark"] .tools button, body[data-look="ink"][data-scheme="dark"] #sel, body[data-look="ink"][data-scheme="dark"] #stats div, body[data-look="ink"][data-scheme="dark"] #banner { box-shadow: 2px 2px 0 rgba(0,0,0,.5); }
@@ -138,6 +139,13 @@ body[data-look="ink"][data-scheme="dark"] #end, body[data-look="ink"][data-schem
 #sel .forms svg { width: 24px; height: 16px; fill: currentColor; }
 #sel .stances > div { grid-template-columns: repeat(4, 32px); }
 #sel .stances svg { fill: none; }
+#sel .ups { display: flex; flex-direction: column; gap: 3px; justify-content: center; }
+#sel .ups h4 { margin: 0; font: 600 12px var(--ui); letter-spacing: .03em; color: var(--dim); white-space: nowrap; }
+#sel .ups button { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; min-width: 200px; min-height: 24px; padding: 2px 8px; background: #191b13; border: 1px solid #000; font: 600 13px var(--ui); letter-spacing: .02em; white-space: nowrap; text-align: left; }
+#sel .ups button span { font: 11px var(--mono); color: var(--amber); }
+#sel .ups button:hover:not(:disabled) { color: var(--amber); }
+#sel .ups button:disabled { opacity: .5; cursor: default; }
+#sel .ups button.busy { border-color: var(--amber-dim); background: linear-gradient(90deg, rgba(255,190,80,.28) var(--p, 0%), #191b13 var(--p, 0%)); }
 
 /* The sidebar. */
 #side { flex: 0 0 var(--side); width: var(--side); display: flex; flex-direction: column; gap: 6px; padding: 8px; padding-top: calc(8px + env(safe-area-inset-top, 0px)); padding-right: max(8px, env(safe-area-inset-right, 0px)); padding-bottom: calc(8px + env(safe-area-inset-bottom, 0px)); box-sizing: border-box; background: repeating-linear-gradient(90deg, #0000 0 3px, rgba(255,255,255,.012) 3px 4px), linear-gradient(180deg, var(--steel), #2f3328 60%, #272a21); border-left: 2px solid var(--edge); box-shadow: inset 1px 0 0 var(--steel-hi); min-height: 0; overflow: hidden; }
@@ -380,6 +388,11 @@ body[data-look="ink"] #sel .forms h4 { color: var(--ink-dim); font-family: var(-
 body[data-look="ink"] #sel .forms button { background: var(--paper-hi); border: 1px solid var(--ink); color: var(--ink); }
 body[data-look="ink"] #sel .forms button:hover { color: var(--redink); }
 body[data-look="ink"] #sel .forms button.on { color: var(--paper); background: var(--ink); }
+body[data-look="ink"] #sel .ups h4 { color: var(--ink-dim); font-family: var(--display); font-weight: 400; font-size: 14px; letter-spacing: .02em; }
+body[data-look="ink"] #sel .ups button { background: var(--paper-hi); border: 1px solid var(--ink); color: var(--ink); }
+body[data-look="ink"] #sel .ups button span { color: var(--redink); }
+body[data-look="ink"] #sel .ups button:hover:not(:disabled) { color: var(--redink); }
+body[data-look="ink"] #sel .ups button.busy { background: linear-gradient(90deg, rgba(160,40,30,.2) var(--p, 0%), var(--paper-hi) var(--p, 0%)); }
 body[data-look="ink"] #sel .many b { color: var(--redink); text-shadow: 0 0 2px var(--paper), 0 0 2px var(--paper); }
 body[data-look="ink"] #stats { color: var(--ink-dim); }
 body[data-look="ink"] #stats b { color: var(--redink); }
@@ -582,7 +595,7 @@ body[data-look="ink"] .sheet { box-shadow: 4px 4px 0 var(--ink); }
       <div class="choice"><h2>Picture</h2><div id="s-pic" class="two"><button data-v="sharp">Sharp</button><button data-v="fast">Faster</button></div><p id="s-pic-note"></p></div>
       <div class="choice"><h2>Ore, oil and power</h2><div id="s-gauges" class="two"><button data-v="side">In the sidebar</button><button data-v="top">In the top bar</button></div></div>
       <div class="choice"><h2>Music</h2><div id="s-music" class="two"><button data-v="on">On</button><button data-v="off">Off</button></div></div>
-      <p id="build">Build 9966cbf 2026-11-08 12:39</p>
+      <p id="build">Build a9e73c1 2026-11-08 15:37</p>
     </div>
     <div id="banner" hidden></div>
     <button id="update" hidden>A new version of Dead Ground is out. <b>Reload</b></button>
@@ -993,6 +1006,33 @@ const Rules = (() => {
     para: { name: 'Paradrop', sym: 'par', cost: 600, cd: 150, tech: 5, r: 4, note: 'Three squads of infantry, anywhere you can see.' },
   };
 
+  // Upgrades, researched at a building and kept by the side. Each has three tiers, which the Ancient, Gunpowder and
+  // Modern ages open, and each tier adds k again. at names the building, or 'def' for every defence. s scales the
+  // tier's cost, and note says what n percent buys, n being the sum of the tiers.
+  const UPGRADES = {
+    range: { name: 'Range', at: 'def', k: 0.15, s: 1, names: ['Fire Arrows', 'Rifled Barrels', 'Fire Control Radar'], note: 'Defences reach {n}% farther.' },
+    hard: { name: 'Hardening', at: 'def', k: 0.3, s: 1, names: ['Stone Walls', 'Earthworks', 'Reinforced Concrete'], note: 'Defences stand {n}% more damage.' },
+    drill: { name: 'Drill', at: 'barracks', k: 0.2, s: 1, names: ['Drill Yard', 'Drill Sergeants', 'Boot Camp'], note: 'Infantry train {n}% faster.' },
+    plate: { name: 'Armour Plate', at: 'factory', k: 0.15, s: 1.2, names: ['Barding', 'Armour Plate', 'Composite Armour'], note: 'Vehicles stand {n}% more damage.' },
+    carts: { name: 'Bigger Carts', at: 'refinery', k: 0.25, s: 1, names: ['Bigger Carts', 'Ore Wagons', 'Heavy Haulers'], note: 'Carts and trucks carry {n}% more ore.' },
+    relay: { name: 'Signal Relay', at: 'radar', k: 0.25, s: 0.8, names: ['Signal Fires', 'Semaphore', 'Satellite Uplink'], note: 'Support calls recharge {n}% faster.' },
+    border: { name: 'Wider Border', at: 'hq', k: 0.25, s: 1.5, names: ['Boundary Stones', 'Land Survey', 'Frontier Posts'], note: 'Headquarters and forward bases push the border {n}% farther.' },
+  };
+  const UP_AGE = [1, 3, 5], UP_COST = [{ cost: 250, time: 20 }, { cost: 600, time: 30 }, { cost: 1200, oil: 100, time: 40 }];
+  const own = (o, k) => typeof k === 'string' && Object.prototype.hasOwnProperty.call(o, k);
+  const upCost = (k, tier) => { const c = UP_COST[tier - 1], s = UPGRADES[k].s; return { cost: c.cost * s, oil: (c.oil || 0) * s, time: c.time }; };
+  const upNote = (k, tier) => UPGRADES[k].note.replace('{n}', Math.round(UPGRADES[k].k * tier * 100));
+  // The upgrades a kind of building offers.
+  const upsAt = kind => Object.keys(UPGRADES).filter(k => UPGRADES[k].at === kind || (UPGRADES[k].at === 'def' && BUILDINGS[kind] && BUILDINGS[kind].cat === 'def'));
+  // What a side's tiers of an upgrade multiply by, one with none.
+  const upK = (S, team, k) => { const P = S.P[team]; return 1 + UPGRADES[k].k * ((P && P.up && P.up[k]) || 0); };
+  // The most a thing stands, hardened or plated as its side has paid for.
+  const hpOf = (S, team, d) => d.cat === 'def' ? Math.round(d.hp * upK(S, team, 'hard')) : d.cat === 'veh' ? Math.round(d.hp * upK(S, team, 'plate')) : d.hp;
+  // A weapon's reach from what fires it, farther from a defence of a side with Range.
+  const rangeOf = (S, e, wn) => WEAPONS[wn].r * (e.b && e.d.cat === 'def' ? upK(S, e.team, 'range') : 1);
+  // What a cart or truck carries.
+  const capOf = (S, u) => u.d.cargo * upK(S, u.team, 'carts');
+
   // Tracks. Ground units wear the cells they move into, tracks most and feet least. Worn ground hardens a step at a
   // time at each of these marks into a track that is quicker going and that paths prefer. Left alone it grows back.
   const WEAR = { foot: 5, wheel: 10, track: 14 }, TRACK_AT = [30, 75, 140], TRACK_GO = [1, 1.04, 1.08, 1.12];
@@ -1019,14 +1059,15 @@ const Rules = (() => {
   const DIFFICULTY = {
     // ageEvery is the minutes between reaching for each next age, up to maxAge, and rich, if set, the supply over an
     // age's cost that sends for it up to half that early. gap is seconds between powers.
-    // ramp caps the army at ramp[0] units plus ramp[1] a minute. def is the most defences it builds.
+    // ramp caps the army at ramp[0] units plus ramp[1] a minute. def is the most defences it builds. ups is how many
+    // lines of upgrade it buys.
     // delay is the seconds before the first wave. raid, if set, is how long a wave stays out before it goes
     // home. pulse, if set, says whether units built during a wave guard home instead of joining it.
-    recruit: { think: 4, income: 0.55, wave: 2600, grow: 300, delay: 720, power: false, maxAge: 5, apm: 1, ageEvery: 8, gap: 90, silo: false, ramp: [4, 0.8], def: 2, name: 'Recruit' },
-    regular: { think: 3, income: 0.7, wave: 2600, grow: 400, delay: 420, power: true, maxAge: 6, apm: 2, ageEvery: 6, gap: 120, silo: false, ramp: [6, 1.6], def: 3, name: 'Regular' },
-    veteran: { think: 0.75, income: 1, wave: 1500, grow: 1100, delay: 360, power: true, maxAge: 6, apm: 8, ageEvery: 3.5, rich: 3000, gap: 20, silo: true, ramp: [8, 3], def: 8, name: 'Veteran' },
+    recruit: { think: 4, income: 0.55, wave: 2600, grow: 300, delay: 720, power: false, maxAge: 5, apm: 1, ageEvery: 8, gap: 90, silo: false, ramp: [4, 0.8], def: 2, ups: 1, name: 'Recruit' },
+    regular: { think: 3, income: 0.7, wave: 2600, grow: 400, delay: 420, power: true, maxAge: 6, apm: 2, ageEvery: 6, gap: 120, silo: false, ramp: [6, 1.6], def: 3, ups: 4, name: 'Regular' },
+    veteran: { think: 0.75, income: 1, wave: 1500, grow: 1100, delay: 360, power: true, maxAge: 6, apm: 8, ageEvery: 3.5, rich: 3000, gap: 20, silo: true, ramp: [8, 3], def: 8, ups: 7, name: 'Veteran' },
     // Holds a player's base while they are away: builds and defends, never sets out.
-    keeper: { think: 3, income: 1, wave: 1e9, grow: 0, delay: 1e9, power: false, maxAge: 6, apm: 2, ageEvery: 6, gap: 90, silo: false, ramp: [8, 1], def: 6, stay: true, name: 'Keeper' },
+    keeper: { think: 3, income: 1, wave: 1e9, grow: 0, delay: 1e9, power: false, maxAge: 6, apm: 2, ageEvery: 6, gap: 90, silo: false, ramp: [8, 1], def: 6, stay: true, ups: 5, name: 'Keeper' },
   };
 
   // Seeded numbers and value noise.
@@ -1953,7 +1994,7 @@ const Rules = (() => {
     return {
       team, supply: o.supply || 3500, oil: o.oil || 250, tech: 1, income: 1, carried: 0,
       q: { bld: [], def: [], inf: [], veh: [], air: [], sea: [], tech: [] }, prod: 0, use: 0, low: false, vis: new Uint8Array(N), seen: new Uint8Array(N),
-      counts: {}, cooldown: { flare: 0, uav: 0, barrage: 0, para: 0 }, stats: freshStats(), spoke: {}, hints: {}, exposed: false,
+      counts: {}, cooldown: { flare: 0, uav: 0, barrage: 0, para: 0 }, stats: freshStats(), spoke: {}, hints: {}, exposed: false, up: {},
       silo: 0, alive: true, shield: 0, born: 0,
     };
   }
@@ -2224,9 +2265,9 @@ const Rules = (() => {
   }
 
   function spawn(S, kind, team, x, y, o = {}) {
-    const d = UNITS[kind];
+    const d = UNITS[kind], hp = hpOf(S, team, d);
     const u = {
-      id: S.next++, kind, team, d, b: false, x, y, px: x, py: y, a: S.faces[team] || 0, pa: 0, ta: S.faces[team] || 0, pta: 0, v: 0, hp: d.hp, max: d.hp,
+      id: S.next++, kind, team, d, b: false, x, y, px: x, py: y, a: S.faces[team] || 0, pa: 0, ta: S.faces[team] || 0, pta: 0, v: 0, hp, max: hp,
       ord: null, tgt: 0, cd: d.weapons.map(() => 0), z: d.alt || 0, xp: 0, vet: 0, wx: x, wy: y, wpT: 0, stuck: 0, lx: x, ly: y, flash: 0, fired: 0, anim: 0, home: null, born: S.tick,
       cargo: 0, state: 0, aimT: 0, under: 0, slot: null, life: d.life || 0, salvo: 0, salvoT: 0, ammo: d.bombs ? d.bombs.n : 0, drop: 0, cov: -1,
     };
@@ -2288,9 +2329,9 @@ const Rules = (() => {
 
   // Lays a building on its cells. Units standing there are pushed out by the movement code.
   function addBuilding(S, kind, team, cx, cy, instant) {
-    const d = BUILDINGS[kind];
+    const d = BUILDINGS[kind], hp = hpOf(S, team, d);
     const e = {
-      id: S.next++, kind, team, d, b: true, cx, cy, w: d.w, h: d.h, x: cx + d.w / 2, y: cy + d.h / 2, hp: d.hp, max: d.hp, born: instant ? -1e6 : S.tick,
+      id: S.next++, kind, team, d, b: true, cx, cy, w: d.w, h: d.h, x: cx + d.w / 2, y: cy + d.h / 2, hp, max: hp, born: instant ? -1e6 : S.tick,
       repairing: false, tgt: 0, cd: d.weapons ? d.weapons.map(() => 0) : d.arms ? [0] : [], ta: S.faces[team] || 0, pta: 0, rally: null, flash: 0, fired: 0, charge: 0, under: 0, c4: 0,
     };
     S.ents.push(e); S.byId.set(e.id, e);
@@ -2342,7 +2383,7 @@ const Rules = (() => {
         if (v > A[c]) A[c] = v;
       }
     };
-    for (const e of S.ents) if (e.b && e.hp > 0) stamp(S.infl[e.team], e.x, e.y, e.d.terr);
+    for (const e of S.ents) if (e.b && e.hp > 0) stamp(S.infl[e.team], e.x, e.y, e.kind === 'hq' || e.kind === 'fob' ? e.d.terr * upK(S, e.team, 'border') : e.d.terr);
     for (const t of S.towns) if (t.owner >= 0) stamp(S.infl[t.owner], t.x, t.y, t.r);
     // A cell is a side's where its reach is greatest. A tie between the greatest is nobody's.
     const n = S.infl.length, I = S.infl;
@@ -2736,7 +2777,7 @@ const Rules = (() => {
     const up = (s.b ? terrainAt(S.map, s.x, s.y) : heightAt(S.map, s.x, s.y)) - (t.b ? terrainAt(S.map, t.x, t.y) : heightAt(S.map, t.x, t.y));
     // Height lends reach: a ground unit above its target fires a tenth farther for each unit of height it has over
     // it past the first third, up to a third farther from a hilltop.
-    const reach = w.r * (1 + 0.1 * (isAir(s) ? 0 : clamp(up - 0.3, 0, 3.5))) + slack;
+    const reach = rangeOf(S, s, wn) * (1 + 0.1 * (isAir(s) ? 0 : clamp(up - 0.3, 0, 3.5))) + slack;
     return d <= reach && (!w.min || d >= w.min);
   }
   function clearShot(S, s, wn, t) {
@@ -3175,7 +3216,7 @@ const Rules = (() => {
   }
 
   function truckTick(S, u) {
-    const o = u.ord, cap = u.d.cargo;
+    const o = u.ord, cap = capOf(S, u);
     if (o.phase === 'unload') {
       const r = S.byId.get(o.ref);
       if (!r || r.hp <= 0) { o.phase = null; return; }
@@ -3515,9 +3556,11 @@ const Rules = (() => {
         t.hp = Math.min(t.max, t.hp + t.max * 0.5);
         S.ev.push({ t: 'fixed', id: t.id, x: t.x, y: t.y });
       } else if (t.hp < t.max * 0.5) {
-        const was = t.team;
+        const was = t.team, m = hpOf(S, u.team, t.d);
         t.team = u.team;
         t.tgt = 0;
+        // It stands as its new side's hardening has it, and what it was working on is lost.
+        t.hp *= m / t.max; t.max = m; t.up = null;
         S.ev.push({ t: 'captured', id: t.id, x: t.x, y: t.y, team: u.team, from: was });
         ownEvent(S, u.team, 'captured'); ownEvent(S, was, 'lostbuilding');
         territory(S); recount(S);
@@ -3594,7 +3637,7 @@ const Rules = (() => {
     if (t && (t.hp <= 0 || atPeace(S, e.team, t.team) || !seenBy(S, e.team, t) || !inRange(S, e, arm, t))) { t = null; e.tgt = 0; }
     if (!t && S.tick % 10 === e.id % 10) {
       let best = null, bd = Infinity;
-      const wn = arm, R = WEAPONS[wn].r;
+      const wn = arm, R = rangeOf(S, e, wn);
       near(S, e.x, e.y, R + 1, o => {
         if (o.team === e.team || o.hp <= 0 || o.drop > 0 || atPeace(S, e.team, o.team) || !canHit(wn, o) || !seenBy(S, e.team, o)) return;
         const d = gap(e.x, e.y, o);
@@ -3615,9 +3658,43 @@ const Rules = (() => {
     }
   }
 
+  // An upgrade under way at a building is paid for as it goes, like anything in a queue, and slowed by low power.
+  function upTick(S, P, e) {
+    const o = e.up, d = upCost(o.k, o.tier), rate = DT / d.time * (P.low ? 0.5 : 1), pay = d.cost * rate, payOil = d.oil * rate;
+    if (P.supply < pay || P.oil < payOil) { if (!o.short) { o.short = true; ownEvent(S, P.team, P.supply < pay ? 'nosupply' : 'nooil'); } return; }
+    o.short = false;
+    P.supply -= pay; P.oil -= payOil; o.paid += pay; o.paidOil += payOil; P.stats.spent += pay; P.stats.spentOil += payOil;
+    o.prog += rate;
+    if (o.prog >= 1) { e.up = null; upgraded(S, P, o.k, o.tier, e); }
+  }
+  // A tier done. What already stands of the side takes it at once, keeping its share of health.
+  function upgraded(S, P, k, tier, at) {
+    P.up[k] = tier;
+    if (k === 'hard' || k === 'plate') {
+      const cat = k === 'hard' ? 'def' : 'veh';
+      for (const e of S.ents) if (e.team === P.team && e.hp > 0 && e.d.cat === cat) { const m = hpOf(S, P.team, e.d); e.hp *= m / e.max; e.max = m; }
+    }
+    if (k === 'border') territory(S);
+    S.ev.push({ t: 'upgraded', team: P.team, k, tier, id: at.id, x: at.x, y: at.y });
+  }
+  // Why a building cannot start an upgrade's next tier, or null when it can. One building at a time may work on
+  // each upgrade, and each building on one upgrade at a time.
+  function upBlocked(S, team, k, e) {
+    const P = S.P[team];
+    if (!own(UPGRADES, k)) return 'No such upgrade';
+    if (e && !upsAt(e.kind).includes(k)) return 'Not here';
+    const tier = (P.up[k] || 0) + 1;
+    if (tier > UP_AGE.length) return 'Done';
+    if (P.tech < UP_AGE[tier - 1]) return 'Needs the ' + AGES[UP_AGE[tier - 1]].name + ' Age';
+    if (S.ents.some(o => o.b && o.team === team && o.hp > 0 && o.up && o.up.k === k)) return 'Under way';
+    if (e && e.up) return 'Busy';
+    return null;
+  }
+
   function stepBuilding(S, e) {
     const P = S.P[e.team];
     if (e.d.weapons || e.d.arms) bldTurret(S, e);
+    if (e.up) upTick(S, P, e);
     if (e.repairing && e.hp < e.max) {
       const rate = e.max * 0.04 * DT, price = (e.d.cost || 2000) * 0.5 * (rate / e.max);
       if (P.supply >= price) { P.supply -= price; P.stats.spent += price; e.hp = Math.min(e.max, e.hp + rate); }
@@ -3724,7 +3801,8 @@ const Rules = (() => {
       for (const t of S.towns) if (t.owner >= 0) { const P = S.P[t.owner]; P.supply += 5 * P.income; P.oil += 0.25 * P.income; P.stats.townIn += 5 * P.income; P.stats.oilIn += 0.25 * P.income; }
     }
     for (const P of S.P) {
-      for (const k in P.cooldown) if (P.cooldown[k] > 0) P.cooldown[k] -= DT;
+      const relay = upK(S, P.team, 'relay');
+      for (const k in P.cooldown) if (P.cooldown[k] > 0) P.cooldown[k] -= DT * relay;
       for (const cat of ['bld', 'def', 'inf', 'veh', 'air', 'sea', 'tech']) {
         const q = P.q[cat];
         const item = q[0];
@@ -3734,7 +3812,7 @@ const Rules = (() => {
         const d = item.cost;
         const c = cat === 'tech' ? 1 : cat === 'bld' || cat === 'def' ? 1 : producers(S, P, cat);
         if (c <= 0) continue;
-        const rate = DT / d.time * (1 + 0.5 * (c - 1)) * (P.low ? 0.5 : 1);
+        const rate = DT / d.time * (1 + 0.5 * (c - 1)) * (P.low ? 0.5 : 1) * (cat === 'inf' ? upK(S, P.team, 'drill') : 1);
         const pay = (d.cost || 0) * rate, payOil = (d.oil || 0) * rate;
         if (P.supply < pay || P.oil < payOil) { if (!item.short) { item.short = true; ownEvent(S, P.team, P.supply < pay ? 'nosupply' : 'nooil'); } continue; }
         item.short = false;
@@ -3759,9 +3837,9 @@ const Rules = (() => {
       if (u.team !== team || u.b || u.hp <= 0 || !u.d.line) continue;
       const k = formOf(u.d.line, age);
       if (!k || k === u.kind) continue;
-      const d = UNITS[k], f = u.hp / u.max;
-      u.kind = k; u.d = d; u.max = d.hp; u.hp = Math.max(1, d.hp * f); u.cd = d.weapons.map(() => 0);
-      if (d.cargo) u.cargo = Math.min(u.cargo, d.cargo);
+      const d = UNITS[k], f = u.hp / u.max, m = hpOf(S, team, d);
+      u.kind = k; u.d = d; u.max = m; u.hp = Math.max(1, m * f); u.cd = d.weapons.map(() => 0);
+      if (d.cargo) u.cargo = Math.min(u.cargo, capOf(S, u));
       if (d.bombs) u.ammo = d.bombs.n;
       if (d.alt) u.z = Math.max(u.z, d.alt * 0.5);
       S.ev.push({ t: 'upgrade', id: u.id, kind: k, team, x: u.x, y: u.y });
@@ -4057,6 +4135,15 @@ const Rules = (() => {
       const lv = P.tech + 1, d = TECH[lv];
       if (!d || P.q.tech.length || !P.counts.hq) return;
       P.q.tech.push({ kind: 'tech' + lv, level: lv, cost: d, prog: 0, paid: 0, paidOil: 0 });
+    } else if (c.c === 'upgrade') {
+      const e = S.byId.get(c.id);
+      if (!e || !e.b || e.team !== team || e.hp <= 0 || upBlocked(S, team, c.k, e)) return;
+      e.up = { k: c.k, tier: (P.up[c.k] || 0) + 1, prog: 0, paid: 0, paidOil: 0 };
+    } else if (c.c === 'unupgrade') {
+      const e = S.byId.get(c.id);
+      if (!e || !e.b || e.team !== team || !e.up) return;
+      P.supply += e.up.paid; P.oil += e.up.paidOil; P.stats.spent -= e.up.paid; P.stats.spentOil -= e.up.paidOil;
+      e.up = null;
     } else if (c.c === 'hold') {
       const it = P.q[c.cat][c.i];
       if (it && it.prog < 1) it.hold = !it.hold;
@@ -4076,6 +4163,8 @@ const Rules = (() => {
       if (!e || !e.b || e.team !== team || e.hp <= 0) return;
       const P2 = S.P[team];
       P2.supply += (e.d.cost || 0) * 0.5 * (e.hp / e.max);
+      // An upgrade under way is paid back in full, as a cancelled one is.
+      if (e.up) { P2.supply += e.up.paid; P2.oil += e.up.paidOil; P2.stats.spent -= e.up.paid; P2.stats.spentOil -= e.up.paidOil; e.up = null; }
       e.hp = 0;
       S.ev.push({ t: 'sold', id: e.id, x: e.x, y: e.y });
       kill(S, e, team);
@@ -4333,6 +4422,7 @@ const Rules = (() => {
     msin, mcos, matan2, mhypot,
     BRIDGE_HP, SPELL, SKIES, WEATHERS, nightAt, skyOf, offGoing, route, weatherAt, sky, dayAt, spellOf, bridgeAt, clsOf, houseHp, hurtBridge, ignite, shielded,
     coverPoints, coverNear, COVER_R, COVER_ARC, FORMS, formOfGroup, STANCES,
+    UPGRADES, UP_AGE, upCost, upNote, upsAt, upK, upBlocked, hpOf, rangeOf, capOf,
   };
 })();
 if (typeof module !== 'undefined') module.exports = Rules;
@@ -4524,6 +4614,22 @@ const AI = (() => {
     // A level with `rich` reaches for an age up to half an age's time early when it has that much more than it costs.
     if (m < due && !(me.D.rich && m >= due - me.D.ageEvery / 2 && P.supply > d.cost + me.D.rich)) return;
     if (P.supply > d.cost + 400 && P.oil >= d.oil * 0.8) R.push(S, me.team, { c: 'research' });
+  }
+
+  // Upgrades, one at a time, when there is supply to spare: the first `ups` lines of this order, each tier as its
+  // age opens it.
+  const UP_ORDER = ['carts', 'drill', 'plate', 'hard', 'range', 'border', 'relay'];
+  function upgrades(S, me, P) {
+    const n = me.D.ups || 0;
+    if (!n || S.ents.some(e => e.b && e.team === me.team && e.up)) return;
+    for (const k of UP_ORDER.slice(0, n)) {
+      const at = S.ents.find(e => e.b && e.team === me.team && e.hp > 0 && !e.up && R.upsAt(e.kind).includes(k));
+      if (!at || R.upBlocked(S, me.team, k, at)) continue;
+      const d = R.upCost(k, (P.up[k] || 0) + 1);
+      if (P.supply < d.cost + 1500 || P.oil < d.oil + 150) return;
+      R.push(S, me.team, { c: 'upgrade', id: at.id, k });
+      return;
+    }
   }
 
   function towns(S, me, army) {
@@ -4720,6 +4826,7 @@ const AI = (() => {
     buildNext(S, me, P);
     defendNext(S, me, P);
     research(S, me, P);
+    upgrades(S, me, P);
     trainNext(S, me, P);
     repairs(S, me);
     bridges(S, me, P);
@@ -10544,7 +10651,7 @@ const World = (() => {
           m3.makeTranslation(d.door * open * 1.1, 0, 0); m2.multiply(m3);
           mOut.multiplyMatrices(base, m2); emit(p, mOut, color);
         } else if (d.load) {
-          const k = (ent.cargo || 0) / (ent.d.cargo || 1);
+          const k = Math.min(1, (ent.cargo || 0) / (Rules.capOf(S, ent) || 1));
           if (k < 0.06) continue;
           m3.makeTranslation(0, 0.86 * (1 - k * 0.0), 0); m2.multiply(m3);
           m3.makeScale(1, 0.4 + 0.8 * k, 1); m2.multiply(m3);
@@ -13337,12 +13444,37 @@ const Hud = (() => {
       game.order(S(), team(), { c: 'form', ids: us.map(u => u.id), f });
       say(`${FORM_NAME[f]} formation.`);
     }
+    // The upgrades a building of the player's offers, each as its next tier: what it costs, or how far along it is
+    // here, or why it cannot start. A tier at work here is cancelled by a second click.
+    function upState(e) {
+      const p = P();
+      return Rules.upsAt(e.kind).map(k => {
+        const tier = (p.up[k] || 0) + 1, here = e.up && e.up.k === k;
+        return { k, tier, here, why: here ? null : Rules.upBlocked(S(), team(), k, e) };
+      });
+    }
+    function upsHtml(e) {
+      const ups = upState(e);
+      if (!ups.length) return '';
+      const btn = u => {
+        const d = Rules.UPGRADES[u.k];
+        if (u.why === 'Done') return `<button disabled title="${d.name}: ${Rules.upNote(u.k, 3)}"><b>${d.names[2]}</b><span>Done</span></button>`;
+        const c = Rules.upCost(u.k, u.tier), name = d.names[u.tier - 1], note = Rules.upNote(u.k, u.tier);
+        const cost = `${fmt(c.cost)}${c.oil ? ` · ${fmt(c.oil)} oil` : ''}`;
+        const why = u.why === 'Under way' ? 'Under way elsewhere' : u.why && u.why.startsWith('Needs the') ? u.why.slice(10) : u.why;
+        return `<button data-up="${u.k}" class="${u.here ? 'busy' : ''}"${u.why ? ' disabled' : ''} title="${d.name}, tier ${u.tier} of 3: ${note}${u.here ? ' Click to cancel.' : ''}"><b>${name}</b><span>${u.here ? 'Cancel' : why || cost}</span></button>`;
+      };
+      return `<div class="ups"><h4>Upgrades</h4>${ups.map(btn).join('')}</div>`;
+    }
     function updateSelPanel() {
       state.sel = state.sel.filter(alive);
       const fu = formUnits(), form = fu.length > 1 ? Rules.formOfGroup(fu) : '';
       // The stance the selection shares, or none when it is mixed.
       const su = stanceUnits(), stance = su.length ? (su.every(u => (u.st || 'def') === (su[0].st || 'def')) ? su[0].st || 'def' : 'mixed') : '';
-      const box = $('sel'), list = state.sel, key = list.map(e => e.id).join() + (list[0] ? (list[0].repairing ? 'r' : '') + (list[0].team) : '') + form + stance;
+      // A building of the player's alone shows its upgrades, which redraw as any changes state.
+      const one = state.sel.length === 1 && state.sel[0].b && state.sel[0].team === team() ? state.sel[0] : null;
+      const ups = one ? upState(one).map(u => u.tier + (u.here ? 'h' : '') + (u.why || '')).join() : '';
+      const box = $('sel'), list = state.sel, key = list.map(e => e.id).join() + (list[0] ? (list[0].repairing ? 'r' : '') + (list[0].team) : '') + form + stance + ups;
       if (key !== state.selKey) {
         state.selKey = key;
         box.hidden = !list.length;
@@ -13352,7 +13484,7 @@ const Hud = (() => {
           const kinds = Object.keys(groups), first = list[0], mine = first.team === team();
           let html = '<div class="who">';
           if (kinds.length === 1 && list.length === 1) {
-            html += `<div class="one"><img src="${state.cameos[picKey(first)] || ''}"${axoImg(first.kind)} alt=""><div><h3>${first.d.name}</h3><div class="hp"><i id="hp1"></i></div><p id="stat1"></p></div></div>`;
+            html += `<div class="one"><img src="${state.cameos[picKey(first)] || ''}"${axoImg(first.kind)} alt=""><div><h3>${Rules.nameOf(first.kind, S().P[first.team] ? S().P[first.team].tech : 1)}</h3><div class="hp"><i id="hp1"></i></div><p id="stat1"></p></div></div>`;
           } else {
             html += '<div class="many">' + kinds.map(k => `<button data-k="${k}"><img src="${state.cameos[picKey(groups[k][0])] || ''}"${axoImg(k)} alt=""><b>${groups[k].length}</b></button>`).join('') + '</div>';
           }
@@ -13367,11 +13499,16 @@ const Hud = (() => {
             html += '<button id="a-clear">Clear</button>';
           }
           html += '</div>';
+          if (one) html += upsHtml(one);
           if (stance) html += `<div class="forms stances"><h4>Stance <kbd>L</kbd></h4><div>${Rules.STANCES.map(v => `<button data-st="${v}" class="${v === stance ? 'on' : ''}" title="${STANCE_NAME[v]}: ${STANCE_NOTE[v]}" aria-label="${STANCE_NAME[v]}">${STANCE_ICON[v]}</button>`).join('')}</div></div>`;
           if (form) html += `<div class="forms"><h4>Formation <kbd>D</kbd></h4><div>${Rules.FORMS.map(f => `<button data-f="${f}" class="${f === form ? 'on' : ''}" title="${FORM_NAME[f]}" aria-label="${FORM_NAME[f]}">${FORM_ICON[f]}</button>`).join('')}</div></div>`;
           box.innerHTML = html;
           box.querySelectorAll('.forms button').forEach(b => b.addEventListener('click', () => b.dataset.st ? setStance(b.dataset.st) : setForm(b.dataset.f)));
           box.querySelectorAll('.many button').forEach(b => b.addEventListener('click', () => select(state.sel.filter(e => e.kind === b.dataset.k))));
+          box.querySelectorAll('.ups button[data-up]').forEach(b => b.addEventListener('click', () => {
+            if (b.classList.contains('busy')) game.order(S(), team(), { c: 'unupgrade', id: first.id });
+            else { game.order(S(), team(), { c: 'upgrade', id: first.id, k: b.dataset.up }); game.audio.ui('click'); }
+          }));
           const on = (id, fn) => { const b = document.getElementById(id); if (b) b.addEventListener('click', fn); };
           on('a-rep', () => game.order(S(), team(), { c: 'repair', id: first.id }));
           on('a-sell', () => { game.order(S(), team(), { c: 'sell', id: first.id }); select([]); });
@@ -13385,11 +13522,13 @@ const Hud = (() => {
         if (hp) hp.style.width = e.hp / e.max * 100 + '%';
         if (st) {
           let t = `${Math.ceil(e.hp)}/${e.max}`;
-          if (e.d.cargo) t += ` · load ${Math.round(e.cargo)}/${e.d.cargo}`;
+          if (e.d.cargo) t += ` · load ${Math.round(e.cargo)}/${Math.round(Rules.capOf(S(), e))}`;
           if (e.vet) t += ` · ${'★'.repeat(e.vet)}`;
           if (e.b && e.d.power) t += ` · ${e.d.power > 0 ? '+' : ''}${e.d.power} pw`;
           if (st.textContent !== t) st.textContent = t;
         }
+        const busy = e.up && box.querySelector('.ups .busy');
+        if (busy) busy.style.setProperty('--p', (e.up.prog * 100).toFixed(1) + '%');
       }
     }
 
@@ -14913,7 +15052,7 @@ const Game = (() => {
     buildready: ['Construction complete', ''], unitready: ['Unit ready', ''], lowpower: ['Low power', 'bad'], baseattack: ['Our base is under attack', 'bad'],
     truckattack: ['Ore truck under attack', 'bad'], nosupply: ['Insufficient supply', 'bad'], nooil: ['Insufficient oil', 'bad'], newtech: ['New technology available', ''],
     towntaken: ['Town captured', 'good'], townlost: ['Town lost', 'bad'], captured: ['Building captured', 'good'], lostbuilding: ['Building lost', 'bad'],
-    siloready: ['Missile ready', 'good'], missile: ['Warning, missile launch detected', 'bad'],
+    siloready: ['Missile ready', 'good'], missile: ['Warning, missile launch detected', 'bad'], upgraded: ['Upgrade complete', 'good'],
   };
   // The same calls before the Industrial Age, as a herald or a captain would give them, so the early ages do not
   // speak like a radio.
@@ -14921,6 +15060,7 @@ const Game = (() => {
     buildready: ['The work is done', ''], unitready: ['At your command', ''], baseattack: ['To arms, we are attacked', 'bad'],
     truckattack: ['Our carts are attacked', 'bad'], nosupply: ['We lack the supplies', 'bad'], newtech: ['New learning is ours', ''],
     towntaken: ['The town is ours', 'good'], townlost: ['The town is lost', 'bad'], captured: ['It is ours now', 'good'], lostbuilding: ['A building has fallen', 'bad'],
+    upgraded: ['Our craft is bettered', 'good'],
   };
   // What each turn of the weather means, written and spoken.
   const SKY_SAY = {
@@ -15310,6 +15450,8 @@ const Game = (() => {
             else if (G.playing && e.team === G.team) { const v = (oldAge() && VOICE_OLD[e.line]) || VOICE[e.line]; if (v) { hud.say(v[0] + '.', v[1]); audio.voice(e.line, v[0], oldAge()); } }
             break;
           case 'alert': if (G.playing && e.team === G.team) hud.alert(e.x, e.y); break;
+          // A finished tier names itself and what the side now has, and the call says only that it is done.
+          case 'upgraded': if (G.playing && e.team === G.team) { const v = (oldAge() && VOICE_OLD.upgraded) || VOICE.upgraded; hud.say(`${Rules.UPGRADES[e.k].names[e.tier - 1]}. ${Rules.upNote(e.k, e.tier)}`, 'good'); audio.voice('upgraded', v[0], oldAge()); } break;
           case 'trade': if (G.playing && e.team === G.team) hud.pop(e.x, e.y, '+' + e.n); break;
           case 'hint': if (G.playing && e.team === G.team && e.hint === 'attrition') hud.say('Attrition: troops wear down abroad. A Support Truck stops it.', 'bad'); break;
           case 'launch': if (G.playing && e.team === G.team) audio.play('launch', { gain: 0.9 }); break;

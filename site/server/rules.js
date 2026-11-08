@@ -302,6 +302,33 @@ const Rules = (() => {
     para: { name: 'Paradrop', sym: 'par', cost: 600, cd: 150, tech: 5, r: 4, note: 'Three squads of infantry, anywhere you can see.' },
   };
 
+  // Upgrades, researched at a building and kept by the side. Each has three tiers, which the Ancient, Gunpowder and
+  // Modern ages open, and each tier adds k again. at names the building, or 'def' for every defence. s scales the
+  // tier's cost, and note says what n percent buys, n being the sum of the tiers.
+  const UPGRADES = {
+    range: { name: 'Range', at: 'def', k: 0.15, s: 1, names: ['Fire Arrows', 'Rifled Barrels', 'Fire Control Radar'], note: 'Defences reach {n}% farther.' },
+    hard: { name: 'Hardening', at: 'def', k: 0.3, s: 1, names: ['Stone Walls', 'Earthworks', 'Reinforced Concrete'], note: 'Defences stand {n}% more damage.' },
+    drill: { name: 'Drill', at: 'barracks', k: 0.2, s: 1, names: ['Drill Yard', 'Drill Sergeants', 'Boot Camp'], note: 'Infantry train {n}% faster.' },
+    plate: { name: 'Armour Plate', at: 'factory', k: 0.15, s: 1.2, names: ['Barding', 'Armour Plate', 'Composite Armour'], note: 'Vehicles stand {n}% more damage.' },
+    carts: { name: 'Bigger Carts', at: 'refinery', k: 0.25, s: 1, names: ['Bigger Carts', 'Ore Wagons', 'Heavy Haulers'], note: 'Carts and trucks carry {n}% more ore.' },
+    relay: { name: 'Signal Relay', at: 'radar', k: 0.25, s: 0.8, names: ['Signal Fires', 'Semaphore', 'Satellite Uplink'], note: 'Support calls recharge {n}% faster.' },
+    border: { name: 'Wider Border', at: 'hq', k: 0.25, s: 1.5, names: ['Boundary Stones', 'Land Survey', 'Frontier Posts'], note: 'Headquarters and forward bases push the border {n}% farther.' },
+  };
+  const UP_AGE = [1, 3, 5], UP_COST = [{ cost: 250, time: 20 }, { cost: 600, time: 30 }, { cost: 1200, oil: 100, time: 40 }];
+  const own = (o, k) => typeof k === 'string' && Object.prototype.hasOwnProperty.call(o, k);
+  const upCost = (k, tier) => { const c = UP_COST[tier - 1], s = UPGRADES[k].s; return { cost: c.cost * s, oil: (c.oil || 0) * s, time: c.time }; };
+  const upNote = (k, tier) => UPGRADES[k].note.replace('{n}', Math.round(UPGRADES[k].k * tier * 100));
+  // The upgrades a kind of building offers.
+  const upsAt = kind => Object.keys(UPGRADES).filter(k => UPGRADES[k].at === kind || (UPGRADES[k].at === 'def' && BUILDINGS[kind] && BUILDINGS[kind].cat === 'def'));
+  // What a side's tiers of an upgrade multiply by, one with none.
+  const upK = (S, team, k) => { const P = S.P[team]; return 1 + UPGRADES[k].k * ((P && P.up && P.up[k]) || 0); };
+  // The most a thing stands, hardened or plated as its side has paid for.
+  const hpOf = (S, team, d) => d.cat === 'def' ? Math.round(d.hp * upK(S, team, 'hard')) : d.cat === 'veh' ? Math.round(d.hp * upK(S, team, 'plate')) : d.hp;
+  // A weapon's reach from what fires it, farther from a defence of a side with Range.
+  const rangeOf = (S, e, wn) => WEAPONS[wn].r * (e.b && e.d.cat === 'def' ? upK(S, e.team, 'range') : 1);
+  // What a cart or truck carries.
+  const capOf = (S, u) => u.d.cargo * upK(S, u.team, 'carts');
+
   // Tracks. Ground units wear the cells they move into, tracks most and feet least. Worn ground hardens a step at a
   // time at each of these marks into a track that is quicker going and that paths prefer. Left alone it grows back.
   const WEAR = { foot: 5, wheel: 10, track: 14 }, TRACK_AT = [30, 75, 140], TRACK_GO = [1, 1.04, 1.08, 1.12];
@@ -328,14 +355,15 @@ const Rules = (() => {
   const DIFFICULTY = {
     // ageEvery is the minutes between reaching for each next age, up to maxAge, and rich, if set, the supply over an
     // age's cost that sends for it up to half that early. gap is seconds between powers.
-    // ramp caps the army at ramp[0] units plus ramp[1] a minute. def is the most defences it builds.
+    // ramp caps the army at ramp[0] units plus ramp[1] a minute. def is the most defences it builds. ups is how many
+    // lines of upgrade it buys.
     // delay is the seconds before the first wave. raid, if set, is how long a wave stays out before it goes
     // home. pulse, if set, says whether units built during a wave guard home instead of joining it.
-    recruit: { think: 4, income: 0.55, wave: 2600, grow: 300, delay: 720, power: false, maxAge: 5, apm: 1, ageEvery: 8, gap: 90, silo: false, ramp: [4, 0.8], def: 2, name: 'Recruit' },
-    regular: { think: 3, income: 0.7, wave: 2600, grow: 400, delay: 420, power: true, maxAge: 6, apm: 2, ageEvery: 6, gap: 120, silo: false, ramp: [6, 1.6], def: 3, name: 'Regular' },
-    veteran: { think: 0.75, income: 1, wave: 1500, grow: 1100, delay: 360, power: true, maxAge: 6, apm: 8, ageEvery: 3.5, rich: 3000, gap: 20, silo: true, ramp: [8, 3], def: 8, name: 'Veteran' },
+    recruit: { think: 4, income: 0.55, wave: 2600, grow: 300, delay: 720, power: false, maxAge: 5, apm: 1, ageEvery: 8, gap: 90, silo: false, ramp: [4, 0.8], def: 2, ups: 1, name: 'Recruit' },
+    regular: { think: 3, income: 0.7, wave: 2600, grow: 400, delay: 420, power: true, maxAge: 6, apm: 2, ageEvery: 6, gap: 120, silo: false, ramp: [6, 1.6], def: 3, ups: 4, name: 'Regular' },
+    veteran: { think: 0.75, income: 1, wave: 1500, grow: 1100, delay: 360, power: true, maxAge: 6, apm: 8, ageEvery: 3.5, rich: 3000, gap: 20, silo: true, ramp: [8, 3], def: 8, ups: 7, name: 'Veteran' },
     // Holds a player's base while they are away: builds and defends, never sets out.
-    keeper: { think: 3, income: 1, wave: 1e9, grow: 0, delay: 1e9, power: false, maxAge: 6, apm: 2, ageEvery: 6, gap: 90, silo: false, ramp: [8, 1], def: 6, stay: true, name: 'Keeper' },
+    keeper: { think: 3, income: 1, wave: 1e9, grow: 0, delay: 1e9, power: false, maxAge: 6, apm: 2, ageEvery: 6, gap: 90, silo: false, ramp: [8, 1], def: 6, stay: true, ups: 5, name: 'Keeper' },
   };
 
   // Seeded numbers and value noise.
@@ -1262,7 +1290,7 @@ const Rules = (() => {
     return {
       team, supply: o.supply || 3500, oil: o.oil || 250, tech: 1, income: 1, carried: 0,
       q: { bld: [], def: [], inf: [], veh: [], air: [], sea: [], tech: [] }, prod: 0, use: 0, low: false, vis: new Uint8Array(N), seen: new Uint8Array(N),
-      counts: {}, cooldown: { flare: 0, uav: 0, barrage: 0, para: 0 }, stats: freshStats(), spoke: {}, hints: {}, exposed: false,
+      counts: {}, cooldown: { flare: 0, uav: 0, barrage: 0, para: 0 }, stats: freshStats(), spoke: {}, hints: {}, exposed: false, up: {},
       silo: 0, alive: true, shield: 0, born: 0,
     };
   }
@@ -1533,9 +1561,9 @@ const Rules = (() => {
   }
 
   function spawn(S, kind, team, x, y, o = {}) {
-    const d = UNITS[kind];
+    const d = UNITS[kind], hp = hpOf(S, team, d);
     const u = {
-      id: S.next++, kind, team, d, b: false, x, y, px: x, py: y, a: S.faces[team] || 0, pa: 0, ta: S.faces[team] || 0, pta: 0, v: 0, hp: d.hp, max: d.hp,
+      id: S.next++, kind, team, d, b: false, x, y, px: x, py: y, a: S.faces[team] || 0, pa: 0, ta: S.faces[team] || 0, pta: 0, v: 0, hp, max: hp,
       ord: null, tgt: 0, cd: d.weapons.map(() => 0), z: d.alt || 0, xp: 0, vet: 0, wx: x, wy: y, wpT: 0, stuck: 0, lx: x, ly: y, flash: 0, fired: 0, anim: 0, home: null, born: S.tick,
       cargo: 0, state: 0, aimT: 0, under: 0, slot: null, life: d.life || 0, salvo: 0, salvoT: 0, ammo: d.bombs ? d.bombs.n : 0, drop: 0, cov: -1,
     };
@@ -1597,9 +1625,9 @@ const Rules = (() => {
 
   // Lays a building on its cells. Units standing there are pushed out by the movement code.
   function addBuilding(S, kind, team, cx, cy, instant) {
-    const d = BUILDINGS[kind];
+    const d = BUILDINGS[kind], hp = hpOf(S, team, d);
     const e = {
-      id: S.next++, kind, team, d, b: true, cx, cy, w: d.w, h: d.h, x: cx + d.w / 2, y: cy + d.h / 2, hp: d.hp, max: d.hp, born: instant ? -1e6 : S.tick,
+      id: S.next++, kind, team, d, b: true, cx, cy, w: d.w, h: d.h, x: cx + d.w / 2, y: cy + d.h / 2, hp, max: hp, born: instant ? -1e6 : S.tick,
       repairing: false, tgt: 0, cd: d.weapons ? d.weapons.map(() => 0) : d.arms ? [0] : [], ta: S.faces[team] || 0, pta: 0, rally: null, flash: 0, fired: 0, charge: 0, under: 0, c4: 0,
     };
     S.ents.push(e); S.byId.set(e.id, e);
@@ -1651,7 +1679,7 @@ const Rules = (() => {
         if (v > A[c]) A[c] = v;
       }
     };
-    for (const e of S.ents) if (e.b && e.hp > 0) stamp(S.infl[e.team], e.x, e.y, e.d.terr);
+    for (const e of S.ents) if (e.b && e.hp > 0) stamp(S.infl[e.team], e.x, e.y, e.kind === 'hq' || e.kind === 'fob' ? e.d.terr * upK(S, e.team, 'border') : e.d.terr);
     for (const t of S.towns) if (t.owner >= 0) stamp(S.infl[t.owner], t.x, t.y, t.r);
     // A cell is a side's where its reach is greatest. A tie between the greatest is nobody's.
     const n = S.infl.length, I = S.infl;
@@ -2045,7 +2073,7 @@ const Rules = (() => {
     const up = (s.b ? terrainAt(S.map, s.x, s.y) : heightAt(S.map, s.x, s.y)) - (t.b ? terrainAt(S.map, t.x, t.y) : heightAt(S.map, t.x, t.y));
     // Height lends reach: a ground unit above its target fires a tenth farther for each unit of height it has over
     // it past the first third, up to a third farther from a hilltop.
-    const reach = w.r * (1 + 0.1 * (isAir(s) ? 0 : clamp(up - 0.3, 0, 3.5))) + slack;
+    const reach = rangeOf(S, s, wn) * (1 + 0.1 * (isAir(s) ? 0 : clamp(up - 0.3, 0, 3.5))) + slack;
     return d <= reach && (!w.min || d >= w.min);
   }
   function clearShot(S, s, wn, t) {
@@ -2484,7 +2512,7 @@ const Rules = (() => {
   }
 
   function truckTick(S, u) {
-    const o = u.ord, cap = u.d.cargo;
+    const o = u.ord, cap = capOf(S, u);
     if (o.phase === 'unload') {
       const r = S.byId.get(o.ref);
       if (!r || r.hp <= 0) { o.phase = null; return; }
@@ -2824,9 +2852,11 @@ const Rules = (() => {
         t.hp = Math.min(t.max, t.hp + t.max * 0.5);
         S.ev.push({ t: 'fixed', id: t.id, x: t.x, y: t.y });
       } else if (t.hp < t.max * 0.5) {
-        const was = t.team;
+        const was = t.team, m = hpOf(S, u.team, t.d);
         t.team = u.team;
         t.tgt = 0;
+        // It stands as its new side's hardening has it, and what it was working on is lost.
+        t.hp *= m / t.max; t.max = m; t.up = null;
         S.ev.push({ t: 'captured', id: t.id, x: t.x, y: t.y, team: u.team, from: was });
         ownEvent(S, u.team, 'captured'); ownEvent(S, was, 'lostbuilding');
         territory(S); recount(S);
@@ -2903,7 +2933,7 @@ const Rules = (() => {
     if (t && (t.hp <= 0 || atPeace(S, e.team, t.team) || !seenBy(S, e.team, t) || !inRange(S, e, arm, t))) { t = null; e.tgt = 0; }
     if (!t && S.tick % 10 === e.id % 10) {
       let best = null, bd = Infinity;
-      const wn = arm, R = WEAPONS[wn].r;
+      const wn = arm, R = rangeOf(S, e, wn);
       near(S, e.x, e.y, R + 1, o => {
         if (o.team === e.team || o.hp <= 0 || o.drop > 0 || atPeace(S, e.team, o.team) || !canHit(wn, o) || !seenBy(S, e.team, o)) return;
         const d = gap(e.x, e.y, o);
@@ -2924,9 +2954,43 @@ const Rules = (() => {
     }
   }
 
+  // An upgrade under way at a building is paid for as it goes, like anything in a queue, and slowed by low power.
+  function upTick(S, P, e) {
+    const o = e.up, d = upCost(o.k, o.tier), rate = DT / d.time * (P.low ? 0.5 : 1), pay = d.cost * rate, payOil = d.oil * rate;
+    if (P.supply < pay || P.oil < payOil) { if (!o.short) { o.short = true; ownEvent(S, P.team, P.supply < pay ? 'nosupply' : 'nooil'); } return; }
+    o.short = false;
+    P.supply -= pay; P.oil -= payOil; o.paid += pay; o.paidOil += payOil; P.stats.spent += pay; P.stats.spentOil += payOil;
+    o.prog += rate;
+    if (o.prog >= 1) { e.up = null; upgraded(S, P, o.k, o.tier, e); }
+  }
+  // A tier done. What already stands of the side takes it at once, keeping its share of health.
+  function upgraded(S, P, k, tier, at) {
+    P.up[k] = tier;
+    if (k === 'hard' || k === 'plate') {
+      const cat = k === 'hard' ? 'def' : 'veh';
+      for (const e of S.ents) if (e.team === P.team && e.hp > 0 && e.d.cat === cat) { const m = hpOf(S, P.team, e.d); e.hp *= m / e.max; e.max = m; }
+    }
+    if (k === 'border') territory(S);
+    S.ev.push({ t: 'upgraded', team: P.team, k, tier, id: at.id, x: at.x, y: at.y });
+  }
+  // Why a building cannot start an upgrade's next tier, or null when it can. One building at a time may work on
+  // each upgrade, and each building on one upgrade at a time.
+  function upBlocked(S, team, k, e) {
+    const P = S.P[team];
+    if (!own(UPGRADES, k)) return 'No such upgrade';
+    if (e && !upsAt(e.kind).includes(k)) return 'Not here';
+    const tier = (P.up[k] || 0) + 1;
+    if (tier > UP_AGE.length) return 'Done';
+    if (P.tech < UP_AGE[tier - 1]) return 'Needs the ' + AGES[UP_AGE[tier - 1]].name + ' Age';
+    if (S.ents.some(o => o.b && o.team === team && o.hp > 0 && o.up && o.up.k === k)) return 'Under way';
+    if (e && e.up) return 'Busy';
+    return null;
+  }
+
   function stepBuilding(S, e) {
     const P = S.P[e.team];
     if (e.d.weapons || e.d.arms) bldTurret(S, e);
+    if (e.up) upTick(S, P, e);
     if (e.repairing && e.hp < e.max) {
       const rate = e.max * 0.04 * DT, price = (e.d.cost || 2000) * 0.5 * (rate / e.max);
       if (P.supply >= price) { P.supply -= price; P.stats.spent += price; e.hp = Math.min(e.max, e.hp + rate); }
@@ -3033,7 +3097,8 @@ const Rules = (() => {
       for (const t of S.towns) if (t.owner >= 0) { const P = S.P[t.owner]; P.supply += 5 * P.income; P.oil += 0.25 * P.income; P.stats.townIn += 5 * P.income; P.stats.oilIn += 0.25 * P.income; }
     }
     for (const P of S.P) {
-      for (const k in P.cooldown) if (P.cooldown[k] > 0) P.cooldown[k] -= DT;
+      const relay = upK(S, P.team, 'relay');
+      for (const k in P.cooldown) if (P.cooldown[k] > 0) P.cooldown[k] -= DT * relay;
       for (const cat of ['bld', 'def', 'inf', 'veh', 'air', 'sea', 'tech']) {
         const q = P.q[cat];
         const item = q[0];
@@ -3043,7 +3108,7 @@ const Rules = (() => {
         const d = item.cost;
         const c = cat === 'tech' ? 1 : cat === 'bld' || cat === 'def' ? 1 : producers(S, P, cat);
         if (c <= 0) continue;
-        const rate = DT / d.time * (1 + 0.5 * (c - 1)) * (P.low ? 0.5 : 1);
+        const rate = DT / d.time * (1 + 0.5 * (c - 1)) * (P.low ? 0.5 : 1) * (cat === 'inf' ? upK(S, P.team, 'drill') : 1);
         const pay = (d.cost || 0) * rate, payOil = (d.oil || 0) * rate;
         if (P.supply < pay || P.oil < payOil) { if (!item.short) { item.short = true; ownEvent(S, P.team, P.supply < pay ? 'nosupply' : 'nooil'); } continue; }
         item.short = false;
@@ -3068,9 +3133,9 @@ const Rules = (() => {
       if (u.team !== team || u.b || u.hp <= 0 || !u.d.line) continue;
       const k = formOf(u.d.line, age);
       if (!k || k === u.kind) continue;
-      const d = UNITS[k], f = u.hp / u.max;
-      u.kind = k; u.d = d; u.max = d.hp; u.hp = Math.max(1, d.hp * f); u.cd = d.weapons.map(() => 0);
-      if (d.cargo) u.cargo = Math.min(u.cargo, d.cargo);
+      const d = UNITS[k], f = u.hp / u.max, m = hpOf(S, team, d);
+      u.kind = k; u.d = d; u.max = m; u.hp = Math.max(1, m * f); u.cd = d.weapons.map(() => 0);
+      if (d.cargo) u.cargo = Math.min(u.cargo, capOf(S, u));
       if (d.bombs) u.ammo = d.bombs.n;
       if (d.alt) u.z = Math.max(u.z, d.alt * 0.5);
       S.ev.push({ t: 'upgrade', id: u.id, kind: k, team, x: u.x, y: u.y });
@@ -3366,6 +3431,15 @@ const Rules = (() => {
       const lv = P.tech + 1, d = TECH[lv];
       if (!d || P.q.tech.length || !P.counts.hq) return;
       P.q.tech.push({ kind: 'tech' + lv, level: lv, cost: d, prog: 0, paid: 0, paidOil: 0 });
+    } else if (c.c === 'upgrade') {
+      const e = S.byId.get(c.id);
+      if (!e || !e.b || e.team !== team || e.hp <= 0 || upBlocked(S, team, c.k, e)) return;
+      e.up = { k: c.k, tier: (P.up[c.k] || 0) + 1, prog: 0, paid: 0, paidOil: 0 };
+    } else if (c.c === 'unupgrade') {
+      const e = S.byId.get(c.id);
+      if (!e || !e.b || e.team !== team || !e.up) return;
+      P.supply += e.up.paid; P.oil += e.up.paidOil; P.stats.spent -= e.up.paid; P.stats.spentOil -= e.up.paidOil;
+      e.up = null;
     } else if (c.c === 'hold') {
       const it = P.q[c.cat][c.i];
       if (it && it.prog < 1) it.hold = !it.hold;
@@ -3385,6 +3459,8 @@ const Rules = (() => {
       if (!e || !e.b || e.team !== team || e.hp <= 0) return;
       const P2 = S.P[team];
       P2.supply += (e.d.cost || 0) * 0.5 * (e.hp / e.max);
+      // An upgrade under way is paid back in full, as a cancelled one is.
+      if (e.up) { P2.supply += e.up.paid; P2.oil += e.up.paidOil; P2.stats.spent -= e.up.paid; P2.stats.spentOil -= e.up.paidOil; e.up = null; }
       e.hp = 0;
       S.ev.push({ t: 'sold', id: e.id, x: e.x, y: e.y });
       kill(S, e, team);
@@ -3642,6 +3718,7 @@ const Rules = (() => {
     msin, mcos, matan2, mhypot,
     BRIDGE_HP, SPELL, SKIES, WEATHERS, nightAt, skyOf, offGoing, route, weatherAt, sky, dayAt, spellOf, bridgeAt, clsOf, houseHp, hurtBridge, ignite, shielded,
     coverPoints, coverNear, COVER_R, COVER_ARC, FORMS, formOfGroup, STANCES,
+    UPGRADES, UP_AGE, upCost, upNote, upsAt, upK, upBlocked, hpOf, rangeOf, capOf,
   };
 })();
 if (typeof module !== 'undefined') module.exports = Rules;

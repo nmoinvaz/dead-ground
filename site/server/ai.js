@@ -185,6 +185,22 @@ const AI = (() => {
     if (P.supply > d.cost + 400 && P.oil >= d.oil * 0.8) R.push(S, me.team, { c: 'research' });
   }
 
+  // Upgrades, one at a time, when there is supply to spare: the first `ups` lines of this order, each tier as its
+  // age opens it.
+  const UP_ORDER = ['carts', 'drill', 'plate', 'hard', 'range', 'border', 'relay'];
+  function upgrades(S, me, P) {
+    const n = me.D.ups || 0;
+    if (!n || S.ents.some(e => e.b && e.team === me.team && e.up)) return;
+    for (const k of UP_ORDER.slice(0, n)) {
+      const at = S.ents.find(e => e.b && e.team === me.team && e.hp > 0 && !e.up && R.upsAt(e.kind).includes(k));
+      if (!at || R.upBlocked(S, me.team, k, at)) continue;
+      const d = R.upCost(k, (P.up[k] || 0) + 1);
+      if (P.supply < d.cost + 1500 || P.oil < d.oil + 150) return;
+      R.push(S, me.team, { c: 'upgrade', id: at.id, k });
+      return;
+    }
+  }
+
   function towns(S, me, army) {
     const rifles = army.filter(u => u.d.capture && (!u.ord || u.ord.t === 'capture'));
     if (!rifles.length) return army;
@@ -379,6 +395,7 @@ const AI = (() => {
     buildNext(S, me, P);
     defendNext(S, me, P);
     research(S, me, P);
+    upgrades(S, me, P);
     trainNext(S, me, P);
     repairs(S, me);
     bridges(S, me, P);
