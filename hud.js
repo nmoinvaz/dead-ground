@@ -1636,7 +1636,9 @@ const Hud = (() => {
       const s = S(), p = P();
       const shownS = ro.sup < 0 ? p.supply : ro.sup + (p.supply - ro.sup) * 0.5, shownO = ro.oil < 0 ? p.oil : ro.oil + (p.oil - ro.oil) * 0.5;
       ro.sup = shownS; ro.oil = shownO;
-      $('sup').textContent = fmt(shownS); $('oil').textContent = fmt(shownO);
+      // Unlimited stores read as such, not as the stock the rules keep them at.
+      $('sup').textContent = s.free ? '∞' : fmt(shownS); $('oil').textContent = s.free ? '∞' : fmt(shownO);
+      $('sup').classList.toggle('inf', !!s.free); $('oil').classList.toggle('inf', !!s.free);
       const left = p.prod ? clamp(p.use / p.prod, 0, 1.2) : 1;
       const bar = $('pwrbar');
       bar.style.width = Math.min(100, left * 100) + '%';

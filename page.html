@@ -61,6 +61,7 @@ body[data-look="ink"][data-scheme="dark"] #end, body[data-look="ink"][data-schem
 .gauge label { font: 600 12px var(--ui); letter-spacing: .09em; text-transform: uppercase; color: var(--dim); }
 .led { font: 20px/1 var(--mono); color: var(--amber); text-shadow: 0 0 8px rgba(255,170,40,.5); font-variant-numeric: tabular-nums; min-width: 3.2ch; text-align: right; }
 .led.small { font-size: 15px; min-width: 0; }
+.led.inf { font-family: var(--ui); font-size: 26px; line-height: .7; }
 .gauge.grow { flex: 0 1 170px; min-width: 96px; }
 #pwrtrack { flex: 1; height: 8px; background: #0b0c08; border: 1px solid #000; position: relative; min-width: 32px; }
 #pwrbar { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: var(--good); transition: width .3s; }
@@ -481,14 +482,15 @@ body[data-look="ink"] #menu, body[data-look="ink"] #watch, body[data-look="ink"]
 #maps button small { font: 12px var(--mono); opacity: .75; white-space: nowrap; }
 .preview { margin-top: 8px; }
 #preview { width: 100%; aspect-ratio: 1; display: block; border: 1.5px solid var(--ink); background: var(--paper-hi); }
-#map-about, #age-about, #weather-about { margin: 6px 0 0; font: 500 15px/1.25 var(--ui); color: var(--ink-dim); text-wrap: pretty; }
+#map-about, #age-about, #weather-about, #res-about { margin: 6px 0 0; font: 500 15px/1.25 var(--ui); color: var(--ink-dim); text-wrap: pretty; }
 #age-about { min-height: 2.5em; }
 /* The game's own choices stand under the players: the theatre and the age it begins in. */
 .rules { margin-top: 14px; display: grid; gap: 4px; }
 .rules h3 { margin: 8px 0 2px; }
 #m-age { grid-template-columns: repeat(6, 1fr); }
 #m-weather { grid-template-columns: repeat(4, 1fr); }
-body[data-look="ink"] #age-about, body[data-look="ink"] #map-about, body[data-look="ink"] #weather-about { font-family: var(--label); font-style: italic; font-weight: 400; }
+#m-res { grid-template-columns: repeat(2, 1fr); }
+body[data-look="ink"] #age-about, body[data-look="ink"] #map-about, body[data-look="ink"] #weather-about, body[data-look="ink"] #res-about { font-family: var(--label); font-style: italic; font-weight: 400; }
 .seedrow { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin: 8px 0 14px; font: 500 16px var(--ui); }
 .seedrow b { font: 15px var(--mono); }
 #slots { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
@@ -637,6 +639,9 @@ body[data-look="ink"] .sheet { box-shadow: 4px 4px 0 var(--ink); }
             <h3>Weather</h3>
             <div id="m-weather" class="pick three"><button data-v="random">Random</button><button data-v="mild">Mild</button><button data-v="harsh">Harsh</button><button data-v="off">Off</button></div>
             <p id="weather-about"></p>
+            <h3>Resources</h3>
+            <div id="m-res" class="pick two"><button data-v="std">Standard</button><button data-v="free">Unlimited</button></div>
+            <p id="res-about"></p>
           </div>
           <div id="chat" hidden><div id="chat-log"></div><input id="chat-in" maxlength="200" placeholder="Say something, then Enter" autocomplete="off" spellcheck="false"></div>
         </section>

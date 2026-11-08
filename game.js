@@ -31,6 +31,8 @@ const Game = (() => {
   // What a theatre's weather brings under a setting, for the set-up.
   const SKY_OF = { desert: 'Dust storms, little rain and no snow.', steppe: 'Rain, thunderstorms and fog, with a little snow.', winter: 'Deep snow and fog, and no rain.' };
   const WEATHER_OF = { random: 'In their usual measure.', mild: 'Mostly fair, with no storms of any kind.', harsh: 'Often, and the storms come hard.' };
+  // What each choice of resources means, for the set-up.
+  const RES_NOTE = { std: 'Ore, oil and power are dug, pumped and built for, and everything costs.', free: 'Nothing costs a thing and power never runs short. Only build times and the fighting count.' };
   const weatherNote = (theme, w) => w === 'off' ? 'Fair skies all game.' : `${SKY_OF[theme] || ''} ${WEATHER_OF[w] || ''}`;
 
   function bestVoice(vs) {
@@ -304,7 +306,7 @@ const Game = (() => {
       const m = Rules.MAPS[sk.map], seats = [], you = sk.slots.findIndex(s => s.kind === 'you');
       sk.slots.forEach((s, t) => { if (s.kind === 'you' || s.kind === 'ai') seats.push(t); });
       if (seats.length < 2 || you < 0) return;
-      const S = Rules.newGame({ seed: params.has('seed') ? +params.get('seed') : sk.seed, layout: m.layout, seats, shuffle: Math.random, age: sk.age || 1, theatre: sk.theme, weather: sk.weather || 'random' });
+      const S = Rules.newGame({ seed: params.has('seed') ? +params.get('seed') : sk.seed, layout: m.layout, seats, shuffle: Math.random, age: sk.age || 1, theatre: sk.theme, weather: sk.weather || 'random', free: sk.res === 'free' });
       sk.slots.forEach((s, t) => { if (s.kind === 'ai') S.ais.push(AI.create(t, s.level, S.seed + t)); });
       G.names = sk.slots.map(s => s.kind === 'you' ? (G.name || 'You') : s.kind === 'ai' ? `Computer (${Rules.DIFFICULTY[s.level].name})` : '');
       G.theme = sk.theme; G.mapKey = sk.map; G.online = false;
@@ -312,7 +314,7 @@ const Game = (() => {
       enterPlay(S, G.theme, you);
       saveT = 0;
       const foes = seats.length - 1;
-      hud.say(`Deployed: ${m.name}, ${THEATRES[G.theme]}, the ${Rules.AGES[S.age0].name} Age. ${foes === 1 ? 'One enemy' : foes + ' enemies'} on the map. Good hunting, Commander.`);
+      hud.say(`Deployed: ${m.name}, ${THEATRES[G.theme]}, the ${Rules.AGES[S.age0].name} Age${S.free ? ', unlimited resources' : ''}. ${foes === 1 ? 'One enemy' : foes + ' enemies'} on the map. Good hunting, Commander.`);
     }
 
     // A game against the computer is kept in the browser, so a refresh or a closed tab loses nothing. The world, the
@@ -646,7 +648,7 @@ const Game = (() => {
     // which: a skirmish changes here, a room asks the server, and only its host may.
     function setupView() {
       if (net.view && net.inRoom) return Object.assign({ mode: 'room' }, net.view);
-      return { mode: 'skirmish', map: sk.map, seed: sk.seed, theme: sk.theme, age: sk.age || 1, weather: sk.weather || 'random', phase: 'lobby', host: true, you: sk.slots.findIndex(s => s.kind === 'you'), slots: sk.slots.map(s => s.kind === 'you' ? { kind: 'human', name: G.name || 'You', you: true } : s), watch: [] };
+      return { mode: 'skirmish', map: sk.map, seed: sk.seed, theme: sk.theme, age: sk.age || 1, weather: sk.weather || 'random', res: sk.res || 'std', phase: 'lobby', host: true, you: sk.slots.findIndex(s => s.kind === 'you'), slots: sk.slots.map(s => s.kind === 'you' ? { kind: 'human', name: G.name || 'You', you: true } : s), watch: [] };
     }
     function renderSetup() {
       const v = setupView(), room = v.mode === 'room', edit = v.host && v.phase === 'lobby', m = Rules.MAPS[v.map];
@@ -668,6 +670,8 @@ const Game = (() => {
       $('age-about').textContent = Rules.AGES[v.age || 1].note;
       $('m-weather').querySelectorAll('button').forEach(b => { const on = b.dataset.v === (v.weather || 'random'); b.classList.toggle('on', on); b.disabled = !edit && !on; });
       $('weather-about').textContent = weatherNote(v.theme, v.weather || 'random');
+      $('m-res').querySelectorAll('button').forEach(b => { const on = b.dataset.v === (v.res || 'std'); b.classList.toggle('on', on); b.disabled = !edit && !on; });
+      $('res-about').textContent = RES_NOTE[v.res || 'std'];
       drawPreview(v.map, v.seed, v.slots);
       // The slots.
       const list = $('slots');
@@ -749,6 +753,7 @@ const Game = (() => {
     $('m-theme').querySelectorAll('button').forEach(b => b.addEventListener('click', () => { if (b.disabled) return; audio.ui('click'); change({ theme: b.dataset.v }); }));
     $('m-age').querySelectorAll('button').forEach(b => b.addEventListener('click', () => { if (b.disabled) return; audio.ui('click'); change({ age: +b.dataset.v }); }));
     $('m-weather').querySelectorAll('button').forEach(b => b.addEventListener('click', () => { if (b.disabled) return; audio.ui('click'); change({ weather: b.dataset.v }); }));
+    $('m-res').querySelectorAll('button').forEach(b => b.addEventListener('click', () => { if (b.disabled) return; audio.ui('click'); change({ res: b.dataset.v }); }));
     $('reseed').addEventListener('click', () => { audio.ui('click'); change({ seed: newSeed() }); });
     $('b-skirmish').addEventListener('click', () => { audio.wake(); audio.ui('click'); net.inRoom = false; screen('setup'); renderSetup(); });
     $('setup-back').addEventListener('click', () => { audio.ui('click'); if (net.inRoom) { leaveRoom(); screen('rooms'); } else screen('main'); });

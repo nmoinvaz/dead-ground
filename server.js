@@ -8,7 +8,7 @@ import AI from './ai.js';
 const HZ = R.HZ;
 const LEVELS = ['recruit', 'regular', 'veteran'];
 const THEMES = ['desert', 'steppe', 'winter'];
-const WEATHERS = ['random', 'mild', 'harsh', 'off'];
+const WEATHERS = ['random', 'mild', 'harsh', 'off'], RESOURCES = ['std', 'free'];
 // A player who drops out of a game has this long to come back before a computer takes their side over.
 const GRACE = 90 * 1000;
 // A room nobody is in closes after this long.
@@ -109,7 +109,7 @@ export class Room {
   async restore() {
     const o = await this.ctx.storage.get('room');
     if (!o) return;
-    Object.assign(this, { code: o.code, title: o.title, map: o.map, seed: o.seed, theme: o.theme, age: o.age || 1, weather: o.weather || 'random', host: o.host, slots: o.slots, phase: o.phase, made: o.made });
+    Object.assign(this, { code: o.code, title: o.title, map: o.map, seed: o.seed, theme: o.theme, age: o.age || 1, weather: o.weather || 'random', res: o.res || 'std', host: o.host, slots: o.slots, phase: o.phase, made: o.made });
     if (this.phase !== 'game') { if (this.phase === 'over') this.phase = 'lobby'; return; }
     try {
       const meta = await this.ctx.storage.get('meta');
@@ -127,7 +127,7 @@ export class Room {
     } catch (e) { console.log('restore failed', e.message); this.phase = 'lobby'; this.S = null; }
   }
   saveRoom() {
-    return this.ctx.storage.put('room', { code: this.code, title: this.title, map: this.map, seed: this.seed, theme: this.theme, age: this.age, weather: this.weather, host: this.host, slots: this.slots, phase: this.phase, made: this.made });
+    return this.ctx.storage.put('room', { code: this.code, title: this.title, map: this.map, seed: this.seed, theme: this.theme, age: this.age, weather: this.weather, res: this.res, host: this.host, slots: this.slots, phase: this.phase, made: this.made });
   }
   async persist() {
     if (this.saving || !this.S) return;
@@ -156,7 +156,7 @@ export class Room {
   view(k) {
     const mapD = R.MAPS[this.map];
     return {
-      t: 'room', code: this.code, title: this.title, phase: this.phase, map: this.map, seed: this.seed, theme: this.theme, age: this.age || 1, weather: this.weather || 'random',
+      t: 'room', code: this.code, title: this.title, phase: this.phase, map: this.map, seed: this.seed, theme: this.theme, age: this.age || 1, weather: this.weather || 'random', res: this.res || 'std',
       seats: mapD.seats, you: k.slot, host: k.id === this.host,
       slots: this.slots.map(s => ({ kind: s.kind, level: s.level, name: s.kind === 'human' ? s.name : '', ready: !!s.ready, away: !!s.away, left: !!s.left, host: s.kind === 'human' && s.id === this.host, out: !!s.out })),
       watch: [...this.socks].filter(o => o.slot < 0 && o.id).map(o => o.name),
@@ -249,7 +249,7 @@ export class Room {
       // Only a player who asks to open the room may; anyone else has found a room that has closed.
       if (!m.create) { this.send(k, JSON.stringify({ t: 'gone' })); k.id = ''; return; }
       this.code = k.code; this.title = cleanText(m.title, 32) || `${k.name}'s game`; this.made = Date.now();
-      this.map = R.MAPS[m.map] ? m.map : 'duel'; this.seed = (Date.now() % 99991) + 1; this.theme = 'desert'; this.age = 1; this.weather = 'random'; this.host = k.id;
+      this.map = R.MAPS[m.map] ? m.map : 'duel'; this.seed = (Date.now() % 99991) + 1; this.theme = 'desert'; this.age = 1; this.weather = 'random'; this.res = 'std'; this.host = k.id;
       this.slots = this.blank(R.MAPS[this.map].seats);
       this.slots[1] = { kind: 'ai', level: 'regular' };
       this.phase = 'lobby';
@@ -328,6 +328,7 @@ export class Room {
     if (typeof m.title === 'string') this.title = cleanText(m.title, 32) || this.title;
     if (THEMES.includes(m.theme)) this.theme = m.theme;
     if (WEATHERS.includes(m.weather)) this.weather = m.weather;
+    if (RESOURCES.includes(m.res)) this.res = m.res;
     if (m.age !== undefined) { const a = Math.round(+m.age); if (a >= 1 && a <= R.MAX_AGE) this.age = a; }
     if (m.seed !== undefined) { const s = Math.round(+m.seed); if (s >= 1 && s <= 99999) this.seed = s; }
     if (R.MAPS[m.map] && m.map !== this.map) {
@@ -368,7 +369,7 @@ export class Room {
     this.slots.forEach((s, t) => { if (s.kind === 'human' || s.kind === 'ai') seats.push(t); });
     const waiting = this.slots.some(s => s.kind === 'human' && s.id !== this.host && !s.ready);
     if (seats.length < 2 || waiting) return;
-    this.S = R.newGame({ seed: this.seed, layout: R.MAPS[this.map].layout, seats, shuffle: Math.random, age: this.age || 1, theatre: this.theme, weather: this.weather });
+    this.S = R.newGame({ seed: this.seed, layout: R.MAPS[this.map].layout, seats, shuffle: Math.random, age: this.age || 1, theatre: this.theme, weather: this.weather, free: this.res === 'free' });
     this.S.ev.length = 0;
     this.ais = this.slots.map((s, t) => s.kind === 'ai' ? AI.create(t, s.level, this.seed + t) : null);
     for (const s of this.slots) { s.out = false; s.left = false; s.away = 0; }

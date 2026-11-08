@@ -35,6 +35,9 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
   await wait(1200);
   await host.evaluate(() => { const s = document.querySelectorAll('#slots select')[1]; s.value = 'ai:veteran'; s.dispatchEvent(new Event('change')); });
   await wait(800);
+  // Unlimited resources, which both sides' games must then hold.
+  await host.evaluate(() => document.querySelector('#m-res [data-v=free]').click());
+  await wait(800);
   await shot(host, 'room-host');
 
   await guest.click('#b-multi');
@@ -58,7 +61,7 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
     await b.close(); process.exit(1);
   }
   await guest.waitForFunction('window.__game.playing && window.__game.online', { timeout: 20000 });
-  const seen = async p => p.evaluate(() => ({ team: __game.team, seats: __game.S.seats, W: __game.S.map.W, tick: __game.S.tick, names: __game.names, alive: __game.S.P.map(P => P.alive) }));
+  const seen = async p => p.evaluate(() => ({ free: __game.S.free, sup: document.getElementById('sup').textContent, team: __game.team, seats: __game.S.seats, W: __game.S.map.W, tick: __game.S.tick, names: __game.names, alive: __game.S.P.map(P => P.alive) }));
   const h0 = await seen(host), g0 = await seen(guest);
   // A minute of play: each sends its humvee somewhere.
   for (const p of [host, guest]) await p.evaluate(() => { const S = __game.S, u = S.ents.find(e => e.team === __game.team && e.kind === 'humvee'); if (u) __game.order(S, __game.team, { c: 'move', ids: [u.id], x: S.map.W / 2, y: S.map.H / 2, a: false }); });
