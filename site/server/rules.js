@@ -2141,7 +2141,8 @@ const Rules = (() => {
     if (!a || a.hp <= 0 || a.team === t.team || a.drop > 0) return;
     t.ansT = S.tick;
     near(S, t.x, t.y, ANS_R, o => {
-      if (o.b || o.team !== t.team || o.hp <= 0 || o.drop > 0 || o.ord || o.cov >= 0 || S.tick < (o.calm || 0)) return;
+      // A squad in cover holds it, unless it is aggressive or hunting.
+      if (o.b || o.team !== t.team || o.hp <= 0 || o.drop > 0 || o.ord || (o.cov >= 0 && !o.st) || (o.cov >= 0 && o.st === 'def') || o.st === 'hold' || S.tick < (o.calm || 0)) return;
       if (!armed(o) || o.d.cargo || o.d.engineer || o.d.move === 'jet' || mhypot(o.x - t.x, o.y - t.y) > ANS_R) return;
       const c = o.tgt && S.byId.get(o.tgt);
       if (c && c.hp > 0 && !c.b) return;
@@ -2711,9 +2712,9 @@ const Rules = (() => {
     let t = u.tgt ? S.byId.get(u.tgt) : null;
     if (t && (t.hp <= 0 || atPeace(S, u.team, t.team) || (!seenBy(S, u.team, t) && !(o && (o.t === 'attack' || o.t === 'group'))))) { t = null; u.tgt = 0; }
 
-    const free = !o || o.t === 'amove' || o.t === 'capture';
+    const free = !o || o.t === 'amove' || o.t === 'capture', st = u.st || 'def';
     if (armed(u) && free && !t && S.tick % 10 === u.id % 10) {
-      const f = acquire(S, u, d.sight, !o && u.cov >= 0);
+      const f = acquire(S, u, d.sight, (!o && u.cov >= 0 && st === 'def') || st === 'hold');
       if (f) { t = f; u.tgt = f.id; if (!o && !u.home) u.home = [u.x, u.y]; }
     }
     // Vehicles with a turret shoot on the move at what they pass.
@@ -2733,7 +2734,9 @@ const Rules = (() => {
       // An engineer sent to mend unasked turns to the next hurt building if its own is made whole first.
       if (o.fix && t && t.hp >= t.max) { t = fixFor(S, u); if (t) o.id = t.id; }
       // A unit answering fire gives up a chase past its leash and goes home.
-      if (o.ans && u.home && mhypot(u.x - u.home[0], u.y - u.home[1]) > ANS_LEASH) { t = null; u.calm = S.tick + 8 * HZ; }
+      if (o.ans && st === 'def' && u.home && mhypot(u.x - u.home[0], u.y - u.home[1]) > ANS_LEASH) { t = null; u.calm = S.tick + 8 * HZ; }
+      // A unit on any other stance chases with no leash, but not into the dark.
+      if (o.ans && st !== 'def' && t && !seenBy(S, u.team, t)) t = null;
       if (!t || t.hp <= 0 || (t.team === u.team && !d.engineer) || atPeace(S, u.team, t.team)) { u.ord = null; u.tgt = 0; t = null; o = null; }
       else u.tgt = t.id;
     }
@@ -2753,14 +2756,19 @@ const Rules = (() => {
     if (!o) {
       if (t && !armed(u)) { u.tgt = 0; u.v = 0; }
       else if (t && !shoot) {
-        // A squad in cover holds it. Anyone else chases a little, then goes back to where it stood.
+        // A defensive squad in cover holds it, and so does a unit holding its ground. A defensive unit chases a
+        // little, then goes back to where it stood, and an aggressive one or a hunter chases as far as it takes.
         const h = u.home || [u.x, u.y];
-        if (u.cov >= 0) { u.tgt = 0; t = null; u.v = 0; }
-        else if (mhypot(u.x - h[0], u.y - h[1]) < 9) drive(S, u, t.x, t.y, Math.max(WEAPONS[d.weapons[0]].r * 0.85, 1));
+        if ((u.cov >= 0 && st === 'def') || st === 'hold') { u.tgt = 0; t = null; u.v = 0; }
+        else if (st !== 'def' || mhypot(u.x - h[0], u.y - h[1]) < 9) drive(S, u, t.x, t.y, Math.max(WEAPONS[d.weapons[0]].r * 0.85, 1));
         else { u.tgt = 0; t = null; }
-      } else if (!t && u.home) {
+      } else if (!t && u.home && st === 'def') {
         if (drive(S, u, u.home[0], u.home[1], 0.6)) u.home = null;
-      } else u.v = 0;
+      } else {
+        u.v = 0;
+        if (st !== 'def') u.home = null;
+        if (st === 'hunt' && armed(u) && S.tick % (2 * HZ) === u.id % (2 * HZ)) seek(S, u);
+      }
       return;
     }
 
@@ -3109,6 +3117,26 @@ const Rules = (() => {
   // The formations a group can keep, as the selection panel offers them. Block is the one a group falls into of
   // itself; the others the player picks, and each unit keeps its own until told otherwise.
   const FORMS = ['line', 'block', 'column', 'wedge', 'square', 'loose'];
+  // How a unit with no orders fights: seek and destroy, aggressive, defensive (the default) or holding its ground.
+  const STANCES = ['hunt', 'aggr', 'def', 'hold'];
+  // Seek and destroy: an idle hunter attack-moves on the nearest enemy its side can see and it can hurt, or else on
+  // the nearest base of a side still in the game.
+  function seek(S, u) {
+    let best = null, bd = Infinity;
+    for (const e of S.ents) {
+      if (e.team === u.team || e.team < 0 || e.hp <= 0 || e.drop > 0 || atPeace(S, u.team, e.team) || !seenBy(S, u.team, e)) continue;
+      if (!u.d.weapons.some(wn => canHit(wn, e))) continue;
+      const dd = mhypot(e.x - u.x, e.y - u.y);
+      if (dd < bd) { bd = dd; best = e; }
+    }
+    if (!best) for (const t of S.seats) {
+      const b = S.bases[t];
+      if (t === u.team || !S.P[t] || !S.P[t].alive || atPeace(S, u.team, t) || !b) continue;
+      const dd = mhypot(b[0] - u.x, b[1] - u.y);
+      if (dd < bd) { bd = dd; best = { x: b[0], y: b[1] }; }
+    }
+    if (best) { u.ord = { t: 'amove', x: best.x, y: best.y }; u.wpT = 0; u.stuck = 0; u.home = null; }
+  }
   // A unit's place from front to back: 0 in front for melee and heavy armour, 2 behind, or inside a square, for
   // the unarmed, artillery and the long-ranged, and 1 between.
   function rankOf(u) {
@@ -3306,6 +3334,14 @@ const Rules = (() => {
         u.tgt = pick; u.wpT = 0; u.stuck = 0; u.home = null;
       }
       S.ev.push({ t: 'marked', team, ids, x: c.x, y: c.y, r: c.r });
+    } else if (c.c === 'stance') {
+      if (!STANCES.includes(c.v)) return;
+      for (const u of unitsOf(S, team, c.ids)) {
+        if (u.d.cargo || isAir(u) || !armed(u)) continue;
+        u.st = c.v;
+        // Holding ground drops a chase in hand.
+        if (c.v === 'hold' && u.ord && u.ord.ans) { u.ord = null; u.tgt = 0; }
+      }
     } else if (c.c === 'stop') {
       for (const u of unitsOf(S, team, c.ids)) { u.ord = u.d.cargo ? { t: 'harvest' } : null; u.tgt = 0; u.home = null; }
     } else if (c.c === 'harvest') {
@@ -3605,7 +3641,7 @@ const Rules = (() => {
     mulberry, noiser, clamp, lerp, smooth, angleTo, toXY, toUV, gap, setSize, save, load, hashOf, restartSlot, razeSlot, makeMap, mapFor, layoutFor,
     msin, mcos, matan2, mhypot,
     BRIDGE_HP, SPELL, SKIES, WEATHERS, nightAt, skyOf, offGoing, route, weatherAt, sky, dayAt, spellOf, bridgeAt, clsOf, houseHp, hurtBridge, ignite, shielded,
-    coverPoints, coverNear, COVER_R, COVER_ARC, FORMS, formOfGroup,
+    coverPoints, coverNear, COVER_R, COVER_ARC, FORMS, formOfGroup, STANCES,
   };
 })();
 if (typeof module !== 'undefined') module.exports = Rules;

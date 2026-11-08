@@ -136,6 +136,8 @@ body[data-look="ink"][data-scheme="dark"] #end, body[data-look="ink"][data-schem
 #sel .forms button:hover { color: var(--amber); }
 #sel .forms button.on { color: var(--amber); border-color: var(--amber-dim); }
 #sel .forms svg { width: 24px; height: 16px; fill: currentColor; }
+#sel .stances > div { grid-template-columns: repeat(4, 32px); }
+#sel .stances svg { fill: none; }
 
 /* The sidebar. */
 #side { flex: 0 0 var(--side); width: var(--side); display: flex; flex-direction: column; gap: 6px; padding: 8px; padding-top: calc(8px + env(safe-area-inset-top, 0px)); padding-right: max(8px, env(safe-area-inset-right, 0px)); padding-bottom: calc(8px + env(safe-area-inset-bottom, 0px)); box-sizing: border-box; background: repeating-linear-gradient(90deg, #0000 0 3px, rgba(255,255,255,.012) 3px 4px), linear-gradient(180deg, var(--steel), #2f3328 60%, #272a21); border-left: 2px solid var(--edge); box-shadow: inset 1px 0 0 var(--steel-hi); min-height: 0; overflow: hidden; }
@@ -580,7 +582,7 @@ body[data-look="ink"] .sheet { box-shadow: 4px 4px 0 var(--ink); }
       <div class="choice"><h2>Picture</h2><div id="s-pic" class="two"><button data-v="sharp">Sharp</button><button data-v="fast">Faster</button></div><p id="s-pic-note"></p></div>
       <div class="choice"><h2>Ore, oil and power</h2><div id="s-gauges" class="two"><button data-v="side">In the sidebar</button><button data-v="top">In the top bar</button></div></div>
       <div class="choice"><h2>Music</h2><div id="s-music" class="two"><button data-v="on">On</button><button data-v="off">Off</button></div></div>
-      <p id="build">Build 33f8382 2026-11-08 12:23</p>
+      <p id="build">Build 9966cbf 2026-11-08 12:39</p>
     </div>
     <div id="banner" hidden></div>
     <button id="update" hidden>A new version of Dead Ground is out. <b>Reload</b></button>
@@ -614,6 +616,7 @@ body[data-look="ink"] .sheet { box-shadow: 4px 4px 0 var(--ink); }
         <dt>Alt</dt><dd>With right-click, attack the one enemy alone</dd>
         <dt>A / S</dt><dd>Attack-move, stop</dd>
         <dt>D</dt><dd>Next formation for the selected units: line, block, column, wedge, square, loose</dd>
+        <dt>L</dt><dd>Next stance: seek and destroy, aggressive, defensive, or hold ground</dd>
         <dt>Ctrl 1-9</dt><dd>Set a group, then 1-9 picks it</dd>
         <dt>Arrows</dt><dd>Move the view; on a trackpad swipe to move and pinch to zoom</dd>
         <dt>K</dt><dd>Another pen technique</dd>
@@ -2829,7 +2832,8 @@ const Rules = (() => {
     if (!a || a.hp <= 0 || a.team === t.team || a.drop > 0) return;
     t.ansT = S.tick;
     near(S, t.x, t.y, ANS_R, o => {
-      if (o.b || o.team !== t.team || o.hp <= 0 || o.drop > 0 || o.ord || o.cov >= 0 || S.tick < (o.calm || 0)) return;
+      // A squad in cover holds it, unless it is aggressive or hunting.
+      if (o.b || o.team !== t.team || o.hp <= 0 || o.drop > 0 || o.ord || (o.cov >= 0 && !o.st) || (o.cov >= 0 && o.st === 'def') || o.st === 'hold' || S.tick < (o.calm || 0)) return;
       if (!armed(o) || o.d.cargo || o.d.engineer || o.d.move === 'jet' || mhypot(o.x - t.x, o.y - t.y) > ANS_R) return;
       const c = o.tgt && S.byId.get(o.tgt);
       if (c && c.hp > 0 && !c.b) return;
@@ -3399,9 +3403,9 @@ const Rules = (() => {
     let t = u.tgt ? S.byId.get(u.tgt) : null;
     if (t && (t.hp <= 0 || atPeace(S, u.team, t.team) || (!seenBy(S, u.team, t) && !(o && (o.t === 'attack' || o.t === 'group'))))) { t = null; u.tgt = 0; }
 
-    const free = !o || o.t === 'amove' || o.t === 'capture';
+    const free = !o || o.t === 'amove' || o.t === 'capture', st = u.st || 'def';
     if (armed(u) && free && !t && S.tick % 10 === u.id % 10) {
-      const f = acquire(S, u, d.sight, !o && u.cov >= 0);
+      const f = acquire(S, u, d.sight, (!o && u.cov >= 0 && st === 'def') || st === 'hold');
       if (f) { t = f; u.tgt = f.id; if (!o && !u.home) u.home = [u.x, u.y]; }
     }
     // Vehicles with a turret shoot on the move at what they pass.
@@ -3421,7 +3425,9 @@ const Rules = (() => {
       // An engineer sent to mend unasked turns to the next hurt building if its own is made whole first.
       if (o.fix && t && t.hp >= t.max) { t = fixFor(S, u); if (t) o.id = t.id; }
       // A unit answering fire gives up a chase past its leash and goes home.
-      if (o.ans && u.home && mhypot(u.x - u.home[0], u.y - u.home[1]) > ANS_LEASH) { t = null; u.calm = S.tick + 8 * HZ; }
+      if (o.ans && st === 'def' && u.home && mhypot(u.x - u.home[0], u.y - u.home[1]) > ANS_LEASH) { t = null; u.calm = S.tick + 8 * HZ; }
+      // A unit on any other stance chases with no leash, but not into the dark.
+      if (o.ans && st !== 'def' && t && !seenBy(S, u.team, t)) t = null;
       if (!t || t.hp <= 0 || (t.team === u.team && !d.engineer) || atPeace(S, u.team, t.team)) { u.ord = null; u.tgt = 0; t = null; o = null; }
       else u.tgt = t.id;
     }
@@ -3441,14 +3447,19 @@ const Rules = (() => {
     if (!o) {
       if (t && !armed(u)) { u.tgt = 0; u.v = 0; }
       else if (t && !shoot) {
-        // A squad in cover holds it. Anyone else chases a little, then goes back to where it stood.
+        // A defensive squad in cover holds it, and so does a unit holding its ground. A defensive unit chases a
+        // little, then goes back to where it stood, and an aggressive one or a hunter chases as far as it takes.
         const h = u.home || [u.x, u.y];
-        if (u.cov >= 0) { u.tgt = 0; t = null; u.v = 0; }
-        else if (mhypot(u.x - h[0], u.y - h[1]) < 9) drive(S, u, t.x, t.y, Math.max(WEAPONS[d.weapons[0]].r * 0.85, 1));
+        if ((u.cov >= 0 && st === 'def') || st === 'hold') { u.tgt = 0; t = null; u.v = 0; }
+        else if (st !== 'def' || mhypot(u.x - h[0], u.y - h[1]) < 9) drive(S, u, t.x, t.y, Math.max(WEAPONS[d.weapons[0]].r * 0.85, 1));
         else { u.tgt = 0; t = null; }
-      } else if (!t && u.home) {
+      } else if (!t && u.home && st === 'def') {
         if (drive(S, u, u.home[0], u.home[1], 0.6)) u.home = null;
-      } else u.v = 0;
+      } else {
+        u.v = 0;
+        if (st !== 'def') u.home = null;
+        if (st === 'hunt' && armed(u) && S.tick % (2 * HZ) === u.id % (2 * HZ)) seek(S, u);
+      }
       return;
     }
 
@@ -3797,6 +3808,26 @@ const Rules = (() => {
   // The formations a group can keep, as the selection panel offers them. Block is the one a group falls into of
   // itself; the others the player picks, and each unit keeps its own until told otherwise.
   const FORMS = ['line', 'block', 'column', 'wedge', 'square', 'loose'];
+  // How a unit with no orders fights: seek and destroy, aggressive, defensive (the default) or holding its ground.
+  const STANCES = ['hunt', 'aggr', 'def', 'hold'];
+  // Seek and destroy: an idle hunter attack-moves on the nearest enemy its side can see and it can hurt, or else on
+  // the nearest base of a side still in the game.
+  function seek(S, u) {
+    let best = null, bd = Infinity;
+    for (const e of S.ents) {
+      if (e.team === u.team || e.team < 0 || e.hp <= 0 || e.drop > 0 || atPeace(S, u.team, e.team) || !seenBy(S, u.team, e)) continue;
+      if (!u.d.weapons.some(wn => canHit(wn, e))) continue;
+      const dd = mhypot(e.x - u.x, e.y - u.y);
+      if (dd < bd) { bd = dd; best = e; }
+    }
+    if (!best) for (const t of S.seats) {
+      const b = S.bases[t];
+      if (t === u.team || !S.P[t] || !S.P[t].alive || atPeace(S, u.team, t) || !b) continue;
+      const dd = mhypot(b[0] - u.x, b[1] - u.y);
+      if (dd < bd) { bd = dd; best = { x: b[0], y: b[1] }; }
+    }
+    if (best) { u.ord = { t: 'amove', x: best.x, y: best.y }; u.wpT = 0; u.stuck = 0; u.home = null; }
+  }
   // A unit's place from front to back: 0 in front for melee and heavy armour, 2 behind, or inside a square, for
   // the unarmed, artillery and the long-ranged, and 1 between.
   function rankOf(u) {
@@ -3994,6 +4025,14 @@ const Rules = (() => {
         u.tgt = pick; u.wpT = 0; u.stuck = 0; u.home = null;
       }
       S.ev.push({ t: 'marked', team, ids, x: c.x, y: c.y, r: c.r });
+    } else if (c.c === 'stance') {
+      if (!STANCES.includes(c.v)) return;
+      for (const u of unitsOf(S, team, c.ids)) {
+        if (u.d.cargo || isAir(u) || !armed(u)) continue;
+        u.st = c.v;
+        // Holding ground drops a chase in hand.
+        if (c.v === 'hold' && u.ord && u.ord.ans) { u.ord = null; u.tgt = 0; }
+      }
     } else if (c.c === 'stop') {
       for (const u of unitsOf(S, team, c.ids)) { u.ord = u.d.cargo ? { t: 'harvest' } : null; u.tgt = 0; u.home = null; }
     } else if (c.c === 'harvest') {
@@ -4293,7 +4332,7 @@ const Rules = (() => {
     mulberry, noiser, clamp, lerp, smooth, angleTo, toXY, toUV, gap, setSize, save, load, hashOf, restartSlot, razeSlot, makeMap, mapFor, layoutFor,
     msin, mcos, matan2, mhypot,
     BRIDGE_HP, SPELL, SKIES, WEATHERS, nightAt, skyOf, offGoing, route, weatherAt, sky, dayAt, spellOf, bridgeAt, clsOf, houseHp, hurtBridge, ignite, shielded,
-    coverPoints, coverNear, COVER_R, COVER_ARC, FORMS, formOfGroup,
+    coverPoints, coverNear, COVER_R, COVER_ARC, FORMS, formOfGroup, STANCES,
   };
 })();
 if (typeof module !== 'undefined') module.exports = Rules;
@@ -12277,6 +12316,12 @@ const Hud = (() => {
         if (us.length > 1) setForm(F[(F.indexOf(Rules.formOfGroup(us)) + (e.shiftKey ? F.length - 1 : 1)) % F.length]);
         return;
       }
+      // L steps through the stances, Shift+L back.
+      if (k === 'KeyL') {
+        const us = stanceUnits(), T = Rules.STANCES;
+        if (us.length) setStance(T[(T.indexOf(us[0].st || 'def') + (e.shiftKey ? T.length - 1 : 1)) % T.length]);
+        return;
+      }
       if (k === 'KeyG') { const b = state.sel.find(q => alive(q) && q.b); if (b) game.order(s, t, { c: 'repair', id: b.id }); return; }
       if (k === 'Delete') { const b = state.sel.find(q => alive(q) && q.b); if (b) game.order(s, t, { c: 'sell', id: b.id }); return; }
       if (k === 'Space') { e.preventDefault(); const a = state.lastAlert; if (a) world.focus(a.x, a.y); return; }
@@ -13266,6 +13311,24 @@ const Hud = (() => {
       square: dots([[6, 3], [12, 3], [18, 3], [6, 8], [18, 8], [6, 13], [12, 13], [18, 13]]).replace('</svg>', '<circle cx="12" cy="8" r="1.4" fill="none" stroke="currentColor" stroke-width="1"/></svg>'),
       loose: dots([[3, 3], [12, 2.5], [21, 3.5], [7, 8.5], [17, 8], [3, 13.5], [12, 13], [21, 13.5]]),
     };
+    // The stances, how a unit with no orders fights, drawn as a sight, a charge, a shield and a planted flag.
+    const STANCE_NAME = { hunt: 'Seek and destroy', aggr: 'Aggressive', def: 'Defensive', hold: 'Hold ground' };
+    const STANCE_NOTE = { hunt: 'hunts down the nearest enemy, anywhere', aggr: 'chases what it sees as far as it takes', def: 'chases a little, then goes back to its post', hold: 'fires from where it stands and never moves to fight' };
+    const line = d => `<svg viewBox="0 0 24 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
+    const STANCE_ICON = {
+      hunt: line('<circle cx="12" cy="8" r="4.5"/><path d="M12 1.5v3M12 11.5v3M5.5 8h3M15.5 8h3"/>'),
+      aggr: line('<path d="M7 9.5 12 4.5l5 5M7 13.5 12 8.5l5 5"/>'),
+      def: line('<path d="M12 2 17.5 4v4.2c0 3-2.4 5.2-5.5 6.3-3.1-1.1-5.5-3.3-5.5-6.3V4z"/>'),
+      hold: line('<path d="M10 14.5V2l6 2.6-6 2.6M6 14.5h10"/>'),
+    };
+    // The selected units a stance takes in: the player's own armed units on the ground or the water.
+    const stanceUnits = () => state.sel.filter(e => alive(e) && !e.b && e.team === team() && !Rules.isAir(e) && !e.d.cargo && (e.d.weapons || []).length);
+    function setStance(v) {
+      const us = stanceUnits();
+      if (!us.length) return;
+      game.order(S(), team(), { c: 'stance', ids: us.map(u => u.id), v });
+      say(`${STANCE_NAME[v]}.`);
+    }
     // The selected units a formation takes in: the player's own, on the ground.
     const formUnits = () => state.sel.filter(e => alive(e) && !e.b && e.team === team() && !Rules.isAir(e));
     function setForm(f) {
@@ -13277,7 +13340,9 @@ const Hud = (() => {
     function updateSelPanel() {
       state.sel = state.sel.filter(alive);
       const fu = formUnits(), form = fu.length > 1 ? Rules.formOfGroup(fu) : '';
-      const box = $('sel'), list = state.sel, key = list.map(e => e.id).join() + (list[0] ? (list[0].repairing ? 'r' : '') + (list[0].team) : '') + form;
+      // The stance the selection shares, or none when it is mixed.
+      const su = stanceUnits(), stance = su.length ? (su.every(u => (u.st || 'def') === (su[0].st || 'def')) ? su[0].st || 'def' : 'mixed') : '';
+      const box = $('sel'), list = state.sel, key = list.map(e => e.id).join() + (list[0] ? (list[0].repairing ? 'r' : '') + (list[0].team) : '') + form + stance;
       if (key !== state.selKey) {
         state.selKey = key;
         box.hidden = !list.length;
@@ -13302,9 +13367,10 @@ const Hud = (() => {
             html += '<button id="a-clear">Clear</button>';
           }
           html += '</div>';
+          if (stance) html += `<div class="forms stances"><h4>Stance <kbd>L</kbd></h4><div>${Rules.STANCES.map(v => `<button data-st="${v}" class="${v === stance ? 'on' : ''}" title="${STANCE_NAME[v]}: ${STANCE_NOTE[v]}" aria-label="${STANCE_NAME[v]}">${STANCE_ICON[v]}</button>`).join('')}</div></div>`;
           if (form) html += `<div class="forms"><h4>Formation <kbd>D</kbd></h4><div>${Rules.FORMS.map(f => `<button data-f="${f}" class="${f === form ? 'on' : ''}" title="${FORM_NAME[f]}" aria-label="${FORM_NAME[f]}">${FORM_ICON[f]}</button>`).join('')}</div></div>`;
           box.innerHTML = html;
-          box.querySelectorAll('.forms button').forEach(b => b.addEventListener('click', () => setForm(b.dataset.f)));
+          box.querySelectorAll('.forms button').forEach(b => b.addEventListener('click', () => b.dataset.st ? setStance(b.dataset.st) : setForm(b.dataset.f)));
           box.querySelectorAll('.many button').forEach(b => b.addEventListener('click', () => select(state.sel.filter(e => e.kind === b.dataset.k))));
           const on = (id, fn) => { const b = document.getElementById(id); if (b) b.addEventListener('click', fn); };
           on('a-rep', () => game.order(S(), team(), { c: 'repair', id: first.id }));
