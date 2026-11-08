@@ -52,24 +52,74 @@ const Game = (() => {
   // Sound. Effects are decoded once and played with a little pan and pitch from where they happen. A browser driven
   // by a test harness stays silent, sound and voice alike.
   function makeAudio(data, world) {
-    let ctx = null, master = null, bank = {}, music = null, ambient = null, voiceT = 0, rainSrc = null, rainGain = null;
+    let ctx = null, master = null, bank = {}, ambient = null, voiceT = 0, rainSrc = null, rainGain = null;
     const robot = !!navigator.webdriver;
+    const decode = (k, then, fail) => {
+      const bin = atob(data[k]), buf = new Uint8Array(bin.length);
+      for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
+      ctx.decodeAudioData(buf.buffer, then, fail || (() => {}));
+    };
+    // The score: pieces that take turns, each played through once or twice, then faded into a quiet spell of wind. A
+    // quiet field gets a calm piece and fighting in view a battle piece, which cuts in on a calm one. A piece is
+    // decoded only when it is due and let go when it ends, as a whole score decoded at once would hold 100 MB.
+    let PIECES = [
+      { k: 'm_dust' }, { k: 'm_vigil' }, { k: 'm_steppe' },
+      { k: 'm_march', war: true }, { k: 'm_assault', war: true }, { k: 'm_iron', war: true, age: 4 },
+    ].filter(p => data[p.k]);
+    // A page without the pieces has the one old loop.
+    if (!PIECES.length && data.music) PIECES = [{ k: 'music' }];
+    const lazy = k => PIECES.some(p => p.k === k);
+    const MUSIC_GAIN = 0.32, sc = { cur: null, last: '', next: 1, heat: 0, loading: false };
+    function fadeOut(c, d, gap) {
+      const now = ctx.currentTime;
+      c.g.gain.cancelScheduledValues(now); c.g.gain.setValueAtTime(c.g.gain.value, now); c.g.gain.linearRampToValueAtTime(0, now + d);
+      c.src.stop(now + d + 0.05);
+      sc.cur = null; sc.next = now + d + gap;
+    }
+    function startPiece(p, b) {
+      const now = ctx.currentTime, src = ctx.createBufferSource(), g = ctx.createGain();
+      src.buffer = b; src.loop = true;
+      g.gain.setValueAtTime(0, now); g.gain.linearRampToValueAtTime(MUSIC_GAIN, now + 3);
+      src.connect(g); g.connect(master); src.start(now);
+      const reps = Math.random() < (p.war ? 0.5 : 0.35) ? 2 : 1;
+      sc.cur = { p, src, g, t0: now, end: now + b.duration * reps }; sc.last = p.k;
+    }
+    function scoreTick() {
+      if (!ctx || ctx.state !== 'running') return;
+      const now = ctx.currentTime, c = sc.cur;
+      // Heat is the fighting heard of late, half gone in ten seconds.
+      sc.heat *= 0.933;
+      const war = sc.heat > 4;
+      if (!a.musicOn || a.muted) { if (c) fadeOut(c, 1.5, 1); return; }
+      if (c) {
+        if (war && !c.p.war && now - c.t0 > 15) fadeOut(c, 3, 0.5);
+        else if (now >= c.end - 5) fadeOut(c, 5, war ? 3 + Math.random() * 5 : 25 + Math.random() * 45);
+        return;
+      }
+      if (now < sc.next || sc.loading || !PIECES.length) return;
+      const pool = PIECES.filter(p => !!p.war === war && (p.age || 0) <= a.age && p.k !== sc.last);
+      const p = pool[Math.floor(Math.random() * pool.length)] || PIECES.find(q => q.k !== sc.last) || PIECES[0];
+      sc.loading = true;
+      decode(p.k, b => { sc.loading = false; if (a.musicOn && !a.muted && !sc.cur) startPiece(p, b); }, () => { sc.loading = false; sc.next = ctx.currentTime + 30; });
+    }
     const last = {}, a = {
-      muted: false, ready: false,
+      muted: false, ready: false, musicOn: true, age: 1,
       wake() {
         if (robot) return;
         if (!ctx) {
           const C = window.AudioContext || window.webkitAudioContext;
           if (!C) return;
           ctx = new C(); master = ctx.createGain(); master.gain.value = a.muted ? 0 : 0.8; master.connect(ctx.destination);
-          for (const k in data) {
-            const bin = atob(data[k]), buf = new Uint8Array(bin.length);
-            for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
-            ctx.decodeAudioData(buf.buffer, b => { bank[k] = b; if (k === 'music') a.music(); if (k === 'wind') a.wind(); }, () => {});
-          }
+          for (const k in data) if (!lazy(k)) decode(k, b => { bank[k] = b; if (k === 'wind') a.wind(); });
+          setInterval(scoreTick, 1000);
         }
         if (ctx.state === 'suspended') ctx.resume();
       },
+      // Fighting heard, which turns the score to battle.
+      fight(n = 1) { sc.heat = Math.min(40, sc.heat + n); },
+      // What the score is doing, for tests.
+      score() { return { piece: sc.cur ? sc.cur.p.k : null, heat: Math.round(sc.heat * 10) / 10, t: ctx ? Math.round(ctx.currentTime) : 0, next: Math.round(sc.next), pieces: PIECES.map(p => p.k) }; },
+      setMusic(on) { a.musicOn = on; try { localStorage.setItem('dg-music', on ? '' : 'off'); } catch (e) { /* no store */ } scoreTick(); },
       play(name, o = {}) {
         if (!ctx || !bank[name]) return;
         const now = ctx.currentTime, gap = o.gap ?? 0.05;
@@ -110,7 +160,6 @@ const Game = (() => {
         } catch (e) { /* no voice here */ }
       },
       ack(u, attack) { if (!u) return; a.play(attack ? 'ack2' : 'ack1', { gain: 0.34, gap: 0.5, vary: 0.08 }); },
-      music() { if (music || !bank.music) return; music = ctx.createBufferSource(); music.buffer = bank.music; music.loop = true; const g = ctx.createGain(); g.gain.value = 0.3; music.connect(g); g.connect(master); music.start(); },
       wind() { if (ambient || !bank.wind) return; ambient = ctx.createBufferSource(); ambient.buffer = bank.wind; ambient.loop = true; const g = ctx.createGain(); g.gain.value = 0.22; ambient.connect(g); g.connect(master); ambient.start(); },
       // Rain under everything, as loud as it is raining.
       weather(sky) {
@@ -120,7 +169,7 @@ const Game = (() => {
       },
       toggle() { a.muted = !a.muted; if (master) master.gain.value = a.muted ? 0 : 0.8; try { localStorage.setItem('dg-mute', a.muted ? '1' : ''); } catch (e) { /* no store */ } },
     };
-    try { a.muted = !!localStorage.getItem('dg-mute'); } catch (e) { /* no store */ }
+    try { a.muted = !!localStorage.getItem('dg-mute'); a.musicOn = localStorage.getItem('dg-music') !== 'off'; } catch (e) { /* no store */ }
     return a;
   }
 
@@ -335,13 +384,14 @@ const Game = (() => {
     const oldAge = () => !!(G.S && G.S.P[Math.max(0, G.team)] && G.S.P[Math.max(0, G.team)].tech < Rules.POWER_AGE);
     function drain() {
       const S = G.S, ev = S.ev;
+      if (S.P[Math.max(0, G.team)]) audio.age = S.P[Math.max(0, G.team)].tech;
       for (const e of ev) {
         world.event(e);
         const heard = world.visible(e.x ?? 0, e.y ?? 0);
         switch (e.t) {
           case 'shot': {
             const w = Rules.WEAPONS[e.w], s = w && WSND[w.snd];
-            if (s && heard) audio.at(s[0], e.x, e.y, { gain: s[1], gap: s[2], vary: 0.14 });
+            if (s && heard) { audio.at(s[0], e.x, e.y, { gain: s[1], gap: s[2], vary: 0.14 }); audio.fight(); }
             break;
           }
           case 'hit': if (heard) audio.at(Rules.WEAPONS[e.w].fx === 'rocket' ? 'boom_m' : 'boom_s', e.x, e.y, { gain: 0.6, gap: 0.05, vary: 0.2 }); break;
@@ -507,6 +557,10 @@ const Game = (() => {
     cramped.addEventListener?.('change', placeGauges);
     $('s-gauges').querySelectorAll('button').forEach(b => b.addEventListener('click', () => { gauges = b.dataset.v; store.set('dg-gauges', gauges); placeGauges(); audio.ui('click'); }));
     placeGauges();
+    // The score on or off, apart from the sound button, which silences everything.
+    const showMusic = () => $('s-music').querySelectorAll('button').forEach(b => b.classList.toggle('on', (b.dataset.v === 'on') === audio.musicOn));
+    $('s-music').querySelectorAll('button').forEach(b => b.addEventListener('click', () => { audio.wake(); audio.setMusic(b.dataset.v === 'on'); showMusic(); audio.ui('click'); }));
+    showMusic();
     setPicture(picture);
     // A newer build on the site. The page asks a minute apart and whenever it comes back into view, and offers a
     // reload; the game in hand is saved as the page goes and comes back after it. Only a stamped page served from
