@@ -62,12 +62,14 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
     await b.close(); process.exit(1);
   }
   await guest.waitForFunction('window.__game.playing && window.__game.online', { timeout: 20000 });
-  const seen = async p => p.evaluate(() => ({ hunters: __game.S.ents.filter(e => e.st === 'hunt').length, free: __game.S.free, sup: document.getElementById('sup').textContent, team: __game.team, seats: __game.S.seats, W: __game.S.map.W, tick: __game.S.tick, names: __game.names, alive: __game.S.P.map(P => P.alive) }));
+  const seen = async p => p.evaluate(() => ({ ups: JSON.stringify(__game.S.P.map(P => P.up)), hunters: __game.S.ents.filter(e => e.st === 'hunt').length, free: __game.S.free, sup: document.getElementById('sup').textContent, team: __game.team, seats: __game.S.seats, W: __game.S.map.W, tick: __game.S.tick, names: __game.names, alive: __game.S.P.map(P => P.alive) }));
   const h0 = await seen(host), g0 = await seen(guest);
   // A minute of play: each sends its humvee somewhere.
   for (const p of [host, guest]) await p.evaluate(() => { const S = __game.S, u = S.ents.find(e => e.team === __game.team && e.kind === 'humvee'); if (u) __game.order(S, __game.team, { c: 'move', ids: [u.id], x: S.map.W / 2, y: S.map.H / 2, a: false }); });
   // The guest puts its army on seek and destroy, which the host's copy of the world must hold too.
   await guest.evaluate(() => { const S = __game.S, us = S.ents.filter(e => e.team === __game.team && !e.b && e.d.weapons && e.d.weapons.length && !e.d.cargo); __game.order(S, __game.team, { c: 'stance', ids: us.map(u => u.id), v: 'hunt' }); });
+  // The guest widens its border at its headquarters, which takes 20 seconds, and both copies must have it done.
+  await guest.evaluate(() => { const S = __game.S, hq = S.ents.find(e => e.b && e.team === __game.team && e.kind === 'hq'); __game.order(S, __game.team, { c: 'upgrade', id: hq.id, k: 'border' }); });
   await wait(60000);
   const h1 = await seen(host), g1 = await seen(guest);
   await shot(host, 'game-host'); await shot(guest, 'game-guest');
