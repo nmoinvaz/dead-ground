@@ -494,6 +494,19 @@ const Game = (() => {
       store.set('dg-paper', scheme);
     }));
     $('s-pic').querySelectorAll('button').forEach(b => b.addEventListener('click', () => { setPicture(b.dataset.v); audio.ui('click'); }));
+    // Ore, oil and power stand in the sidebar or in the top bar, as the player chooses. An upright phone or a short
+    // window has no room for them in its sidebar, so there they keep to the top bar.
+    let gauges = store.get('dg-gauges', 'side');
+    const cramped = matchMedia('(max-aspect-ratio: 1/1), (max-height: 520px)');
+    function placeGauges() {
+      const side = gauges === 'side' && !cramped.matches, list = [...document.querySelectorAll('.gauge')];
+      if (side) $('res').append(...list); else $('top').prepend(...list);
+      $('res').hidden = !side;
+      $('s-gauges').querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.v === gauges));
+    }
+    cramped.addEventListener?.('change', placeGauges);
+    $('s-gauges').querySelectorAll('button').forEach(b => b.addEventListener('click', () => { gauges = b.dataset.v; store.set('dg-gauges', gauges); placeGauges(); audio.ui('click'); }));
+    placeGauges();
     setPicture(picture);
     // A newer build on the site. The page asks a minute apart and whenever it comes back into view, and offers a
     // reload; the game in hand is saved as the page goes and comes back after it. Only a stamped page served from

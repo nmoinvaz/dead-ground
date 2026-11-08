@@ -137,6 +137,12 @@ body[data-look="ink"][data-scheme="dark"] #end, body[data-look="ink"][data-schem
 #plate small { font: 11px var(--mono); color: var(--dim); }
 #mapwell { position: relative; width: 100%; aspect-ratio: 1; flex: 0 1 auto; max-height: 34vh; background: var(--well); border: 1px solid #000; box-shadow: inset 0 2px 6px #000, 0 1px 0 var(--steel-hi); align-self: center; }
 #map { width: 100%; height: 100%; display: block; touch-action: none; }
+/* Ore, oil and power in the sidebar: ore and oil side by side, power under them. */
+#res { display: grid; grid-template-columns: 1fr 1fr; gap: 4px; }
+#res[hidden] { display: none; }
+#res .gauge { justify-content: space-between; padding: 2px 7px; min-width: 0; }
+#res .gauge.grow { grid-column: 1 / -1; }
+#res .led { font-size: 18px; }
 #stats { display: grid; grid-template-columns: 1.7fr 1fr; gap: 4px; font: 11px var(--ui); letter-spacing: .08em; color: var(--dim); text-transform: uppercase; }
 #stats div { display: flex; justify-content: space-between; align-items: baseline; gap: 6px; min-width: 0; background: #1b1d15; padding: 1px 5px; border: 1px solid #0a0b07; }
 #stats b { font: 12px var(--mono); color: var(--amber); min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
@@ -563,6 +569,7 @@ body[data-look="ink"] .sheet { box-shadow: 4px 4px 0 var(--ink); }
     <div id="settings" hidden role="dialog" aria-label="Settings">
       <div class="choice"><h2>Paper</h2><div id="s-scheme"><button data-v="light">Light</button><button data-v="dark">Dark</button><button data-v="auto">As the system</button></div></div>
       <div class="choice"><h2>Picture</h2><div id="s-pic" class="two"><button data-v="sharp">Sharp</button><button data-v="fast">Faster</button></div><p id="s-pic-note"></p></div>
+      <div class="choice"><h2>Ore, oil and power</h2><div id="s-gauges" class="two"><button data-v="side">In the sidebar</button><button data-v="top">In the top bar</button></div></div>
       <p id="build">Build __BUILD__</p>
     </div>
     <div id="banner" hidden></div>
@@ -575,6 +582,7 @@ body[data-look="ink"] .sheet { box-shadow: 4px 4px 0 var(--ink); }
   <aside id="side">
     <div id="plate"><span>DEAD GROUND</span><small id="clock">00:00</small></div>
     <div id="mapwell"><canvas id="map" width="400" height="400" aria-label="Map of the battlefield"></canvas></div>
+    <div id="res" hidden></div>
     <div id="stats"><div id="agecell">Age<b id="techlv">Ancient</b></div><div>Towns<b id="towns">0/6</b></div></div>
     <nav id="tabs"></nav>
     <div id="cams"></div>
