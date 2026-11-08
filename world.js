@@ -8,21 +8,23 @@ const World = (() => {
   // Every theatre is shot at sunset. The sun sits low off the left of the screen, so shadows run long
   // across the ground, and the shade is lit by a violet sky and warm bounce from the earth.
   const SUN = (az, el) => { const x = Math.cos(az), z = Math.sin(az), c = Math.cos(el); return [x * c, Math.sin(el), z * c]; };
+  // Each theatre's trees, the height up the slopes where conifers take over from them, and the height above which
+  // snow lies the year round.
   const THEMES = {
     desert: {
-      name: 'Salt Flats', tree: 'acacia', sun: SUN(-0.46, 0.3), sunColor: 0xffb36e, sunPower: 3.9,
+      name: 'Salt Flats', tree: 'acacia', pine: 6, snow: 10.8, sun: SUN(-0.46, 0.3), sunColor: 0xffb36e, sunPower: 3.9,
       hemi: [0x5e6cb4, 0x7a4c34, 0.9], env: [0x34437e, 0xffa866, 0x3e2a22], haze: 0xf0a878, hazeK: 0.008, shroud: 0x100a0a,
       ground: [0xd2b08a, 0xbf9670], patch: 0xa69a6a, rock: 0xa86a52, bank: 0x8a7058, road: 0x76604e, stain: 0x9a5a30,
       water: [0x3f8c96, 0x17404e], leaf: [0x6a7438, 0x8a8440], dust: [0.95, 0.74, 0.55], smoke: [0.17, 0.13, 0.12], ripple: 1,
     },
     steppe: {
-      name: 'Black Steppe', tree: 'broad', sun: SUN(-0.5, 0.27), sunColor: 0xffa862, sunPower: 3.8,
+      name: 'Black Steppe', tree: 'broad', pine: 5, snow: 9, sun: SUN(-0.5, 0.27), sunColor: 0xffa862, sunPower: 3.8,
       hemi: [0x5a66ae, 0x6e4a30, 0.88], env: [0x32407a, 0xff9e5c, 0x34241a], haze: 0xe8a07a, hazeK: 0.008, shroud: 0x0f0a09,
       ground: [0xb59a62, 0x8e744a], patch: 0xcaa860, rock: 0x7e6252, bank: 0x5e4c3c, road: 0x5e4a3a, stain: 0x8a4e28,
       water: [0x3b7a80, 0x163a46], leaf: [0x56622c, 0x84702c], dust: [0.8, 0.66, 0.5], smoke: [0.15, 0.12, 0.11], ripple: 0,
     },
     winter: {
-      name: 'White Pass', tree: 'conifer', sun: SUN(-0.42, 0.25), sunColor: 0xffae80, sunPower: 3.3,
+      name: 'White Pass', tree: 'conifer', snow: 6.5, sun: SUN(-0.42, 0.25), sunColor: 0xffae80, sunPower: 3.3,
       hemi: [0x6c74c0, 0x9a7a74, 0.92], env: [0x3e4a8c, 0xffb084, 0x584450], haze: 0xf0b49c, hazeK: 0.008, shroud: 0x0f0b0e,
       ground: [0xf0e6e2, 0xdcd0cc], patch: 0xc8bcb8, rock: 0x7a6466, bank: 0x8a7a7a, road: 0x6c5e5a, stain: 0x8a5e48,
       water: [0x4a8494, 0x1c3e50], leaf: [0x2e4436, 0x42583e], dust: [0.96, 0.92, 0.92], smoke: [0.17, 0.15, 0.16], ripple: 0,
@@ -70,6 +72,8 @@ const World = (() => {
       uHaze: { value: new THREE.Color(0xf29a5e) }, uHazeK: { value: 0.012 }, uHazeFrom: { value: 80 }, uShroud: { value: new THREE.Color(0x120907) }, uSunDir: { value: new THREE.Vector3(1, 0.3, 0) },
       // The wind on the ground, how far it has carried the clouds, how overcast it is, and lying snow.
       uWind: { value: new THREE.Vector2(0.3, 0.1) }, uCloud: { value: new THREE.Vector2() }, uCloudK: { value: 0.2 }, uCloudT: { value: 0.3 }, uSnowC: { value: 0 },
+      // The height above which snow lies on the heights in any weather.
+      uSnowLine: { value: 99 },
       // How far tread marks darken the ground, none where the look draws them itself.
       uTreadK: { value: 0.34 },
       // How hard the track worn into each cell has become, in red.
@@ -892,12 +896,23 @@ const World = (() => {
       const trees = M.scatter.filter(s => s.k === 'tree'), rocks = M.scatter.filter(s => s.k === 'rock');
       const lf = th.leaf.map(c => new THREE.Color(c));
       scen = { trees: null, houses: null, bridges: null, fords: null, fences: null, fireT: 0, houseT: 0, fenceT: 0 };
-      // Trees get their own line category, so the ink pass can wash their canopies, and sway in the wind.
-      const tl = trees.map(t => ({ x: t.x, y: terrainAt(M, t.x, t.y) - 0.04, z: t.y, s: t.s * 1.1, a: t.a, c: colA.copy(lf[0]).lerp(lf[1], rand()).getHex(), cell: t.c }));
-      const tm = lineCat(instanced(sc[th.tree], treeTint, tl), 0.459, true);
+      // Trees get their own line category, so the ink pass can wash their canopies, and sway in the wind. Up the
+      // high slopes conifers take over from the theatre's own trees, mixed through a band of height.
+      const pf = THEMES.winter.leaf.map(c => new THREE.Color(c));
+      const tl = trees.map(t => {
+        const g = terrainAt(M, t.x, t.y), hi = th.pine !== undefined && g > th.pine + (rand() - 0.5) * 2.4, L = hi ? pf : lf;
+        return { x: t.x, y: g - 0.04, z: t.y, s: t.s * 1.1, a: t.a, c: colA.copy(L[0]).lerp(L[1], rand()).getHex(), cell: t.c, hi };
+      });
+      const meshes = [];
+      for (const [geo, list] of [[sc[th.tree], tl.filter(t => !t.hi)], [sc.conifer, tl.filter(t => t.hi)]]) {
+        if (!list.length) continue;
+        const m = lineCat(instanced(geo, treeTint, list), 0.459, true);
+        list.forEach((t, i) => { t.m = m; t.i = i; });
+        meshes.push(m);
+      }
       const byCell = new Map();
       tl.forEach((t, i) => { if (!byCell.has(t.cell)) byCell.set(t.cell, []); byCell.get(t.cell).push(i); });
-      scen.trees = { mesh: tm, list: tl, state: new Uint8Array(tl.length), seen: -1, byCell };
+      scen.trees = { meshes, list: tl, state: new Uint8Array(tl.length), seen: -1, byCell };
       const rc = new THREE.Color(th.rock);
       instanced(sc.rock, plainTint, rocks.map(t => ({ x: t.x, y: terrainAt(M, t.x, t.y) - 0.06, z: t.y, s: t.s * 1.2, a: t.a, c: colA.copy(rc).multiplyScalar(0.62 + rand() * 0.3).getHex() })));
 
@@ -1181,11 +1196,11 @@ const World = (() => {
           const st = S.wood[t.cell], was = T.state[i];
           if (st === was) return;
           T.state[i] = st; ch = true;
-          setInst(T.mesh, i, treePose(t, st));
+          setInst(t.m, t.i, treePose(t, st));
           if (st === 3) scorch(t.x, t.z, 0.9, 0.5);
           if (st === 1 && !first && VIS(t.x, t.z)) dustPuff(t.x, t.y + 0.3, t.z, 1.2);
         });
-        if (ch) dirty(T.mesh);
+        if (ch) T.meshes.forEach(dirty);
       }
       // Flames in the burning trees in sight, and where they are for the overlay's inked flames.
       fireSpots.length = 0;
@@ -1814,6 +1829,10 @@ const World = (() => {
       SH.uFogOn.value = team < 0 ? 0 : 1;
       applyLight();
       SH.uShroud.value.set(theme.shroud);
+      // Snow lies only on a map with mountains: a hilltop or two just over the line would read as ponds.
+      let over = 0;
+      if (theme.snow !== undefined) for (let i = 0; i < M.h.length; i++) over += M.h[i] > theme.snow;
+      SH.uSnowLine.value = over > M.h.length * 0.015 ? theme.snow : 99;
       renderer.setClearColor(theme.shroud, 1);
 
       fogData = new Uint8Array(W * H * 4); fogR = new Float32Array(W * H); fogG = new Float32Array(W * H);

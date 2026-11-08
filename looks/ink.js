@@ -19,13 +19,13 @@
       // 45 and 135 degrees, then flat and upright lines for the darkest, each line a little uneven with small gaps.
       // The ground's hatching is pinned to the map so it pans with it, the units' redraws a few times a second.
       const ink = new THREE.ShaderMaterial({ uniforms: { t: { value: null }, tSubj: { value: null }, tHeat: { value: null }, tPaper: { value: null }, res: { value: new THREE.Vector2(1, 1) }, uTime: { value: 0 }, uK: { value: 1 }, uOff: { value: new THREE.Vector2() }, uStyle: { value: 8 }, tNorm: { value: null }, tFogS: { value: null }, tLand: { value: null }, uSun2: { value: new THREE.Vector2(-1, 0) }, uUpV: { value: new THREE.Vector3(0, 1, 0) }, uRoad: { value: 0 }, uOre: { value: 0 }, uMarks: { value: 1 },
-        uWindS: { value: new THREE.Vector2() }, uView: { value: new THREE.Vector2(1, 0) }, tFx: { value: null }, tAnc: { value: null }, uDark: { value: 0 }, uInks: { value: 0 }, uFxs: { value: 0 }, uFire: { value: 0 }, uUnits: { value: 0 }, tH: SH.tH, uHSize: { value: new THREE.Vector2(1, 1) }, uHScale: { value: 1 }, uRain: { value: 0 }, uStorm: { value: 0 }, uSnowF: { value: 0 }, uSnowC: SH.uSnowC, uFog: { value: 0 }, uMist: { value: 0 }, uNight: { value: 0 }, uWet: { value: 0 },
+        uWindS: { value: new THREE.Vector2() }, uView: { value: new THREE.Vector2(1, 0) }, tFx: { value: null }, tAnc: { value: null }, uDark: { value: 0 }, uInks: { value: 0 }, uFxs: { value: 0 }, uFire: { value: 0 }, uUnits: { value: 0 }, tH: SH.tH, uHSize: { value: new THREE.Vector2(1, 1) }, uHScale: { value: 1 }, uRain: { value: 0 }, uStorm: { value: 0 }, uSnowF: { value: 0 }, uSnowC: SH.uSnowC, uSnowLine: SH.uSnowLine, uFog: { value: 0 }, uMist: { value: 0 }, uNight: { value: 0 }, uWet: { value: 0 },
         uDayMul: { value: new THREE.Vector3(1, 1, 1) }, uDayAdd: { value: new THREE.Vector3() }, uWaterL: { value: -0.15 }, uCloudK: SH.uCloudK, tMarks: SH.tMarks, uMap: SH.uMap,
         uCloud: SH.uCloud, uCloudT: SH.uCloudT, uSunW: SH.uSunDir, uCloudA: { value: 0 }, uCloudG: { value: 0 }, uRayK: { value: 0 }, uSand: { value: 0 },
         uInvVP: { value: new THREE.Matrix4() }, uW2S: { value: new THREE.Vector4(1, 0, 0, 1) }, uLev: { value: 1 }, tTerr: SH.tTerr, uBorder: SH.uBorder, uMe: { value: 0 },
         // Each side's colour as the anchor pass keeps it, its hue and how coloured it is, and its inks on either paper.
         uSideKey: { value: [...Array(8)].map(() => new THREE.Vector2()) }, uSideL: { value: [...Array(8)].map(() => new THREE.Vector3()) }, uSideD: { value: [...Array(8)].map(() => new THREE.Vector3()) }, uSideB: { value: [...Array(8)].map(() => new THREE.Vector3()) } }, vertexShader: vs, depthTest: false, depthWrite: false, fragmentShader: `
-        varying vec2 vUv; uniform sampler2D t, tSubj, tHeat, tPaper, tNorm, tFogS, tLand, tMarks; uniform float uMap; uniform vec2 res, uOff, uSun2, uWindS, uView, uHSize; uniform float uHScale, uFxs, uFire; uniform int uUnits, uInks; uniform float uDark; uniform sampler2D tH, tFx, tAnc; uniform vec3 uUpV, uDayMul, uDayAdd; uniform float uTime, uK, uRain, uStorm, uSnowF, uSnowC, uFog, uMist, uNight, uWet, uWaterL, uCloudK, uMarks; uniform int uStyle, uRoad, uOre;
+        varying vec2 vUv; uniform sampler2D t, tSubj, tHeat, tPaper, tNorm, tFogS, tLand, tMarks; uniform float uMap; uniform vec2 res, uOff, uSun2, uWindS, uView, uHSize; uniform float uHScale, uFxs, uFire; uniform int uUnits, uInks; uniform float uDark; uniform sampler2D tH, tFx, tAnc; uniform vec3 uUpV, uDayMul, uDayAdd; uniform float uTime, uK, uRain, uStorm, uSnowF, uSnowC, uSnowLine, uFog, uMist, uNight, uWet, uWaterL, uCloudK, uMarks; uniform int uStyle, uRoad, uOre;
         uniform vec2 uSideKey[8]; uniform vec3 uSideL[8], uSideD[8], uSideB[8];
         uniform sampler2D tTerr; uniform float uBorder, uMe;
         uniform vec2 uCloud; uniform vec3 uSunW; uniform float uCloudT, uCloudA, uCloudG, uRayK, uSand;
@@ -432,14 +432,31 @@
               tint *= 0.92 + 0.16 * (noise(Wl * 0.055) * 0.65 + noise(Wl * 0.16 + 5.0) * 0.35);
             }
             vec3 CONT = dk ? vec3(0.68, 0.66, 0.6) : vec3(0.42, 0.33, 0.24);
+            // Snow lies above the theatre's snow line the year round, its edge ragged with drifts, and leaves bare a
+            // face too steep to hold it. A survey map draws a snowfield so: white, with its contours and a fine edge in
+            // blue and its shaded slopes in grey.
+            float sNz = (noise(Wl * 0.09) - 0.5) * 2.4 + (noise(Wl * 0.31 + 7.0) - 0.5) * 0.9;
+            // The slope across a whole unit of land, smooth where the pixel's own gradient is not.
+            #define HB(o) texture2D(tH, ((Wl + o) * uHScale + 0.5) / uHSize).r
+            float sSl = length(vec2(HB(vec2(1.0, 0.0)) - HB(vec2(-1.0, 0.0)), HB(vec2(0.0, 1.0)) - HB(vec2(0.0, -1.0)))) * 0.5;
+            float sF = min(lhS + sNz - uSnowLine, (1.25 - sSl) * 2.0), sW = max(fwidth(sF), 1e-4);
+            float cap = smoothstep(-sW, sW, sF), capE = (1.0 - smoothstep(0.45 * sW * uK, 1.3 * sW * uK, abs(sF)));
+            vec3 SNOWL = dk ? vec3(0.56, 0.68, 0.88) : vec3(0.3, 0.44, 0.7);
+            tint = mix(tint, dk ? vec3(0.6, 0.62, 0.66) : vec3(0.985, 0.985, 0.975), cap);
+            CONT = mix(CONT, SNOWL, cap);
             // A road takes a third of the tint and the contours cross it faint, so it climbs and falls with the land
             // rather than lying flat over it.
             base = mix(base, tint, isG * (1.0 - onRoad * 0.65));
             // On dark paper a shaded slope sinks toward black and a lit one rises toward mid grey.
-            base = mix(base, base * (dk ? vec3(0.36, 0.37, 0.44) : vec3(0.72, 0.70, 0.68)), rfDark * (dk ? 0.95 : 0.65) * isG);
+            base = mix(base, base * (dk ? vec3(0.36, 0.37, 0.44) : mix(vec3(0.72, 0.70, 0.68), vec3(0.8, 0.8, 0.82), cap)), rfDark * (dk ? 0.95 : 0.65) * isG);
             base = mix(base, dk ? base + vec3(0.3, 0.27, 0.21) : min(base * 1.05 + 0.03, vec3(1.0)), rfLight * (dk ? 0.85 : 0.6) * isG);
             base = mix(base, CONT, contour * isG * (1.0 - onRoad * 0.55) * (1.0 - wet));
             base = mix(base, base * vec3(0.9, 0.93, 0.97), uWet * isG * 0.7);
+            // The snowfield's edge is dashed, as a map bounds land cover, so it never reads as a shore.
+            vec2 sg = vec2(dFdx(sF), dFdy(sF)), sTw = normalize(S2W * vec2(-sg.y, sg.x) + 1e-6);
+            float sPh = dot(Wl - floor(Wl / 3.0) * 3.0, sTw) / (0.6 * exp2(gLm));
+            float sDash = mix(step(0.4, fract(sPh)), step(0.4, fract(sPh * 0.5)), gLf);
+            base = mix(base, SNOWL, capE * sDash * 0.8 * isG * (1.0 - onRoad) * (1.0 - wet));
             // A raised road's shadow, a narrow band beyond its edge away from the light; none beside a cutting.
             float rCast = rShade * smoothstep(1.27, 1.33, rd) * (1.0 - smoothstep(1.3, 1.62, rd)) * (1.0 - cut * bank);
             base = mix(base, base * (dk ? vec3(0.55) : vec3(0.8, 0.79, 0.78)), rCast * isG * 0.85);
@@ -484,7 +501,7 @@
               vec3 TR = tn < 0.4 ? TREE3 : tn < 0.62 ? TREE1 : TREE2;
               if (dk) TR = tn < 0.4 ? vec3(0.13, 0.2, 0.12) : tn < 0.62 ? vec3(0.16, 0.235, 0.14) : vec3(0.19, 0.26, 0.165);
               base = mix(base, TR, isT * 0.8);
-              base = mix(base, dk ? vec3(0.4, 0.42, 0.45) : vec3(0.95, 0.96, 0.97), uSnowC * isT * 0.55);
+              base = mix(base, dk ? vec3(0.4, 0.42, 0.45) : vec3(0.95, 0.96, 0.97), max(uSnowC, cap * 0.6) * isT * 0.55);
               // A burnt tree is charcoal, not green.
               base = mix(base, dk ? vec3(0.06, 0.055, 0.05) : vec3(0.27, 0.25, 0.23), isT * (1.0 - smoothstep(0.06, 0.16, L(vUv))));
             }
