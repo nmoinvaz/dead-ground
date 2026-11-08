@@ -57,9 +57,13 @@ write('place', mix(thump(0.4, 140, 50, 12) * 1.2, band(noise(0.4), 300, 3000) * 
 write('launch', mix(low(noise(3.2), 900, 3) * np.minimum(1, t_(3.2) * 2) * np.exp(-t_(3.2) * 0.7), whoosh(3.2, 200, 1200, 0.8), thump(3.2, 90, 30, 1.2)))
 def chirp(f, d=0.09):
     return np.sin(2 * np.pi * f * t_(d)) * env(d, 0.003, 30) * 0.4
-sq = band(noise(0.08), 900, 3200) * env(0.08, 0.001, 25) * 0.5
-write('ack1', mix(sq, np.concatenate([np.zeros(int(SR * 0.06)), chirp(1400)])))
-write('ack2', mix(sq, np.concatenate([np.zeros(int(SR * 0.05)), chirp(1100), chirp(1500)])))
+# An order heard: a soft wooden note, as a marimba's, and two rising for an attack. Its overtone dies first, so
+# nothing rings high. The noise drawn here keeps every later sound's noise as it was.
+noise(0.08)
+def mallet(f, d=0.28):
+    t = t_(d); return (np.sin(2 * np.pi * f * t) * np.exp(-t * 16) + 0.22 * np.sin(2 * np.pi * 4 * f * t) * np.exp(-t * 45)) * np.minimum(1, t / 0.003)
+write('ack1', mallet(392), 0.7)
+write('ack2', mix(mallet(330, 0.2), np.concatenate([np.zeros(int(SR * 0.085)), mallet(440)])), 0.7)
 def chord(notes, d, k=1.2):
     t = t_(d); x = sum(np.sin(2 * np.pi * f * t) + 0.3 * np.sin(4 * np.pi * f * t) for f in notes); return x * np.minimum(1, t * 30) * np.exp(-t * k)
 write('won', mix(chord([196, 247, 294, 392], 2.6), thump(2.6, 90, 40, 3)))
