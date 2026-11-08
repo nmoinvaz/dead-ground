@@ -1,0 +1,146 @@
+{
+  "bpm": 90,
+  "bars": 32,
+  "key": "D minor",
+  "mode": "text",
+  "think": true,
+  "negative": "vocals, singing, choir, lyrics, flute, lo-fi, drum machine, EDM, dubstep, synthwave",
+  "takes": 2,
+  "avoid": [
+    "vocal",
+    "singing",
+    "singer",
+    "voice",
+    "lyric",
+    "choir",
+    "flute",
+    "rap"
+  ],
+  "out": "takes",
+  "styles": [
+    {
+      "id": "dust",
+      "name": "Dust",
+      "bpm": 70,
+      "bars": 24,
+      "key": "D minor",
+      "seed": 11,
+      "caption": "Cinematic orchestral underscore, slow and brooding. Low strings sustain, a solo cello melody, soft timpani rolls, a distant french horn. Sparse and wide, an instrumental war film score.",
+      "want": [
+        "cello",
+        "strings",
+        "horn",
+        "orchestral"
+      ]
+    },
+    {
+      "id": "vigil",
+      "name": "Vigil",
+      "bpm": 66,
+      "bars": 20,
+      "key": "G minor",
+      "seed": 12,
+      "caption": "Quiet cinematic night underscore. Soft felt piano, a warm string pad, a low cello line, slow and mournful. Instrumental war film score.",
+      "want": [
+        "piano",
+        "strings",
+        "cello"
+      ]
+    },
+    {
+      "id": "steppe",
+      "name": "Steppe",
+      "bpm": 84,
+      "bars": 28,
+      "key": "F minor",
+      "seed": 13,
+      "caption": "Sparse cinematic folk underscore. Frame drum and low hand percussion, a bowed double bass drone, a solo viola melody, desolate and patient. Instrumental.",
+      "want": [
+        "percussion",
+        "drum",
+        "viola",
+        "bass",
+        "strings"
+      ]
+    },
+    {
+      "id": "march",
+      "name": "March",
+      "bpm": 84,
+      "bars": 28,
+      "key": "C minor",
+      "seed": 24,
+      "caption": "Orchestral war film score, a slow military march. Snare drum and timpani, a low brass chorale of tubas, trombones and french horns over a full string section. Grim and heavy, like a funeral march. Instrumental.",
+      "want": [
+        "snare",
+        "brass",
+        "orchestral",
+        "timpani",
+        "horn",
+        "march"
+      ],
+      "negative": "vocals, singing, choir, lyrics, flute, lo-fi, funk, saxophone, electric bass, synthesizer, electronic drums, drum machine, pop, dance, EDM",
+      "avoid": [
+        "vocal",
+        "singing",
+        "choir",
+        "flute",
+        "funk",
+        "synth",
+        "electronic",
+        "saxophone",
+        "pop",
+        "dance",
+        "groove"
+      ],
+      "takes": 3
+    },
+    {
+      "id": "assault",
+      "name": "Assault",
+      "bpm": 128,
+      "bars": 40,
+      "key": "E minor",
+      "seed": 15,
+      "caption": "Epic cinematic battle music. Taiko war drums, a driving staccato string ostinato, brass stabs, low horns, intense and fast. Instrumental orchestral.",
+      "want": [
+        "drum",
+        "taiko",
+        "strings",
+        "brass",
+        "epic"
+      ]
+    },
+    {
+      "id": "iron",
+      "name": "Iron",
+      "bpm": 112,
+      "bars": 36,
+      "key": "E minor",
+      "seed": 36,
+      "negative": "vocals, singing, choir, lyrics, flute, lo-fi, funk, synthesizer, synth bass, drum machine, electronic, 80s, dance, pop, EDM, groove",
+      "caption": "Heavy metal instrumental with an industrial edge. Distorted rhythm guitars playing chugging palm-muted riffs, a live drum kit with double kick drums, a growling bass guitar, an anvil clang on the beat. Dark, mechanical and relentless, a war video game soundtrack.",
+      "want": [
+        "metal",
+        "guitar",
+        "distorted",
+        "drum",
+        "heavy",
+        "rock"
+      ],
+      "avoid": [
+        "vocal",
+        "singing",
+        "choir",
+        "flute",
+        "funk",
+        "synth",
+        "electronic",
+        "drum machine",
+        "dance",
+        "pop",
+        "80s"
+      ]
+    }
+  ]
+}

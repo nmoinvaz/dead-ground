@@ -61,17 +61,16 @@ const Game = (() => {
       for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
       ctx.decodeAudioData(buf.buffer, then, fail || (() => {}));
     };
-    // The score: pieces that take turns, each played through once or twice, then faded into a quiet spell of wind. A
-    // quiet field gets a calm piece and fighting in view a battle piece, which cuts in on a calm one. A piece is
-    // decoded only when it is due and let go when it ends, as a whole score decoded at once would hold 100 MB.
-    let PIECES = [
+    // The score: pieces that take turns, each played through once and faded into a quiet spell of wind. A quiet
+    // field gets a calm piece and fighting in view a battle piece, which cuts in on a calm one. Iron, heavy metal,
+    // waits for the Industrial Age. A piece is decoded only when it is due and let go when it ends, as a whole score
+    // decoded at once would hold 100 MB.
+    const PIECES = [
       { k: 'm_dust' }, { k: 'm_vigil' }, { k: 'm_steppe' },
-      { k: 'm_march', war: true }, { k: 'm_assault', war: true }, { k: 'm_iron', war: true, age: 4 },
+      { k: 'm_siege', war: true }, { k: 'm_charge', war: true }, { k: 'm_assault', war: true }, { k: 'm_iron', war: true, age: 4 },
     ].filter(p => data[p.k]);
-    // A page without the pieces has the one old loop.
-    if (!PIECES.length && data.music) PIECES = [{ k: 'music' }];
     const lazy = k => PIECES.some(p => p.k === k);
-    const MUSIC_GAIN = 0.32, sc = { cur: null, last: '', next: 1, heat: 0, loading: false };
+    const MUSIC_GAIN = 0.36, sc = { cur: null, last: '', next: 1, heat: 0, loading: false };
     function fadeOut(c, d, gap) {
       const now = ctx.currentTime;
       c.g.gain.cancelScheduledValues(now); c.g.gain.setValueAtTime(c.g.gain.value, now); c.g.gain.linearRampToValueAtTime(0, now + d);
@@ -80,11 +79,10 @@ const Game = (() => {
     }
     function startPiece(p, b) {
       const now = ctx.currentTime, src = ctx.createBufferSource(), g = ctx.createGain();
-      src.buffer = b; src.loop = true;
+      src.buffer = b;
       g.gain.setValueAtTime(0, now); g.gain.linearRampToValueAtTime(MUSIC_GAIN, now + 3);
       src.connect(g); g.connect(master); src.start(now);
-      const reps = Math.random() < (p.war ? 0.5 : 0.35) ? 2 : 1;
-      sc.cur = { p, src, g, t0: now, end: now + b.duration * reps }; sc.last = p.k;
+      sc.cur = { p, src, g, t0: now, end: now + b.duration }; sc.last = p.k;
     }
     function scoreTick() {
       if (!ctx || ctx.state !== 'running') return;

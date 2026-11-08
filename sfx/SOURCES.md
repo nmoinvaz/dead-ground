@@ -1,7 +1,8 @@
 # Where the sounds come from
 
-The weapons, blasts, blades and bows are recordings in the public domain (CC0), cut by `sfxrec.py`. Everything
-else is synthesized by `sfx.py`. Each pack's licence was read on its own page on 2026-11-04; the packs that ship a
+The weapons, blasts, blades and bows are recordings in the public domain (CC0), cut by `sfxrec.py`. The score,
+`m_*.mp3`, was composed by [ACE-Step 1.5](https://github.com/ace-step/ACE-Step-1.5) (MIT) running locally, from the
+briefs in `music/options.json`, through film-studio's `py/acestep_score.py`. Everything else is synthesized by `sfx.py`. Each pack's licence was read on its own page on 2026-11-04; the packs that ship a
 licence file have it in `licences/`.
 
 | Sound | Recording | Pack | Licence |
@@ -18,3 +19,15 @@ licence file have it in `licences/`.
 | clash | Sabre on Norse sword, blade on blade | [Medieval sound effects, weapon impacts](https://opengameart.org/node/146863), Still North Media | CC0 |
 | bow, longbow, xbow | Scythian recurve, English longbow and crossbow shooting | [Medieval sound effects, weapon textures](https://opengameart.org/content/medieval-sound-effects-weapon-textures), Still North Media | CC0 |
 | pulse, rail | `laserSmall_000`, `laserLarge_000` | [Sci-fi Sounds](https://kenney.nl/assets/sci-fi-sounds), Kenney | CC0 |
+
+## The score
+
+| Piece | Mood | Take |
+|---|---|---|
+| m_dust | calm | Dust, take 2: cello over a wide pad |
+| m_vigil | calm | Vigil, take 1: piano, cello and violin |
+| m_steppe | calm | Steppe, take 1: cello over hand drums |
+| m_siege | battle | Steppe, take 2: staccato strings, full orchestra |
+| m_charge | battle | Assault, take 1: string ostinato, percussion, brass |
+| m_assault | battle | Assault, take 2: low strings, timpani, brass fanfares |
+| m_iron | battle, Industrial Age on | Iron, take 1: distorted guitars and a live kit |

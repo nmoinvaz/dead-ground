@@ -74,20 +74,6 @@ d = 16; w = low(noise(d), 700, 2) * (0.6 + 0.4 * np.sin(2 * np.pi * t_(d) / 8) *
 n = int(SR * 1.5); w[:n] = w[:n] * np.linspace(0, 1, n) + w[-n:] * np.linspace(1, 0, n); w = w[:-n]
 write('wind', w, 0.6)
 
-# A low score. Strings in D minor over a slow drum, thirty-two seconds that loop.
-bpm = 72; beat = 60 / bpm; bars = 8; d = bars * 4 * beat; t = t_(d); music = np.zeros_like(t)
-chords = [[73.4, 110, 146.8, 174.6], [58.3, 87.3, 116.5, 174.6], [65.4, 98, 130.8, 164.8], [55, 82.4, 110, 164.8]]
-for i, ch in enumerate(chords):
-    s0, s1 = int(i * 2 * 4 * beat * SR), int((i + 1) * 2 * 4 * beat * SR); tt = t[: s1 - s0]
-    seg = sum(sum(np.sign(np.sin(2 * np.pi * f * (1 + dt) * tt)) for dt in (-0.003, 0.003)) for f in ch)
-    e = np.minimum(1, tt / 1.6) * np.minimum(1, (tt[-1] - tt) / 1.6)
-    music[s0:s1] += low(seg, 900, 2) * e * 0.12
-for b in range(bars * 4):
-    s0 = int(b * beat * SR)
-    hit = thump(1.2, 110, 45, 4) * (1.0 if b % 4 == 0 else 0.45 if b % 4 == 2 else 0)
-    if b % 8 == 7: hit = hit + thump(1.2, 140, 60, 6) * 0.5
-    music[s0:s0 + len(hit)] += hit[: len(music) - s0] * 0.5
-write('music', music, 0.75)
 
 # Rain on the land, a loop that meets itself: a hiss with drops in it.
 d = 12; r = band(noise(d), 800, 6000) * 0.35 + low(noise(d), 500) * 0.25
