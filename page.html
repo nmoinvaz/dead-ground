@@ -442,7 +442,8 @@ body[data-look="ink"] #menu, body[data-look="ink"] #watch, body[data-look="ink"]
    games are a sheet in the middle, in the panels' paper and ink. */
 :root { --paper: #262a20; --paper-hi: #30352a; --paper-lo: #1c1f17; --ink: var(--stencil); --ink-dim: var(--dim); --redink: var(--amber); }
 #title.on-sheet { background: rgba(6,7,4,.62); justify-content: center; align-items: center; }
-.sheet { width: min(1000px, 100%); max-height: 100%; overflow: auto; display: flex; flex-direction: column; gap: 14px; padding: 18px 22px; background: var(--paper); color: var(--ink); border: 2px solid var(--ink); box-shadow: 4px 4px 0 rgba(0,0,0,.45); }
+/* A sheet's header and footer stay in view, and only what lies between them scrolls, so Start never needs a scroll. */
+.sheet { width: min(1000px, 100%); max-height: 100%; overflow: hidden; display: flex; flex-direction: column; gap: 14px; padding: 18px 22px; background: var(--paper); color: var(--ink); border: 2px solid var(--ink); box-shadow: 4px 4px 0 rgba(0,0,0,.45); }
 .sheet header { display: flex; align-items: center; gap: 14px; }
 .sheet header h2 { margin: 0; flex: 1; font: 34px/1 var(--display); color: var(--ink); }
 #setup-code { font: 15px var(--mono); color: var(--ink-dim); }
@@ -451,7 +452,20 @@ body[data-look="ink"] #menu, body[data-look="ink"] #watch, body[data-look="ink"]
 .sheet button:hover:not(:disabled) { background: var(--paper-lo); }
 .sheet button.on, .sheet button.on:hover { background: var(--ink); color: var(--paper); }
 .sheet button:disabled { opacity: .4; }
-.cols { display: grid; grid-template-columns: minmax(260px, 360px) 1fr; gap: 24px; align-items: start; }
+.sheet > header, .sheet > footer { flex: none; }
+.cols, .rooms-wrap { flex: 0 1 auto; min-height: 0; overflow-y: auto; overscroll-behavior: contain; scrollbar-width: thin; }
+/* The map's list, its picture and the players. Wide, each has a column, and the sheet is as tall as the players'
+   column. Narrower, the picture goes under the list. */
+.cols { display: grid; grid-template-columns: minmax(260px, 360px) 1fr; grid-template-areas: "maps slots" "view slots"; column-gap: 24px; align-items: start; }
+.mapcol { grid-area: maps; }
+.viewcol { grid-area: view; }
+.slotcol { grid-area: slots; }
+@media (min-width: 1240px) {
+  #t-setup { width: min(1200px, 100%); }
+  .cols { grid-template-columns: 330px 300px 1fr; grid-template-areas: "maps view slots"; }
+  .viewcol { padding-top: 21px; }
+  .viewcol .preview { margin-top: 0; }
+}
 .pick { display: grid; gap: 4px; }
 .pick.three { grid-template-columns: repeat(3, 1fr); }
 .pick.three button { padding: 4px 2px; }
@@ -504,7 +518,7 @@ body[data-look="ink"] #age-about, body[data-look="ink"] #map-about, body[data-lo
 .me { display: flex; align-items: center; gap: 10px; font: 600 16px var(--ui); }
 .me input, #room-title { font: 500 18px var(--ui); color: var(--ink); background: var(--paper-hi); border: 1.5px solid var(--ink); min-height: 38px; padding: 0 10px; border-radius: 0; }
 #room-title { flex: 1; min-width: 0; }
-.rooms-wrap { min-height: 160px; }
+.rooms-wrap { min-height: 120px; }
 #rooms { width: 100%; border-collapse: collapse; font: 500 17px var(--ui); color: var(--ink); }
 #rooms th { text-align: left; font: 600 12px var(--ui); letter-spacing: .1em; text-transform: uppercase; color: var(--ink-dim); padding: 4px 6px; border-bottom: 1.5px solid var(--ink); }
 #rooms td { padding: 6px; border-bottom: 1px dashed var(--ink-dim); }
@@ -512,7 +526,7 @@ body[data-look="ink"] #age-about, body[data-look="ink"] #map-about, body[data-lo
 #rooms td:last-child { text-align: right; }
 #rooms-none { margin: 10px 0 0; font: 500 16px var(--ui); color: var(--ink-dim); }
 @media (max-width: 760px) {
-  .cols { grid-template-columns: 1fr; }
+  .cols { grid-template-columns: 1fr; grid-template-areas: "maps" "view" "slots"; }
   .sheet { padding: 12px; gap: 10px; }
   #title.on-sheet { padding: 6px; align-items: stretch; }
   .sheet footer { flex-wrap: wrap; }
@@ -596,6 +610,8 @@ body[data-look="ink"] .sheet { box-shadow: 4px 4px 0 var(--ink); }
         <section class="mapcol">
           <h3>Map</h3>
           <div id="maps" class="pick"></div>
+        </section>
+        <section class="viewcol">
           <div class="preview"><canvas id="preview"></canvas><p id="map-about"></p></div>
           <div class="seedrow"><span>Terrain <b id="seed"></b></span><button id="reseed">New terrain</button></div>
         </section>
