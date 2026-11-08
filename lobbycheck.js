@@ -15,10 +15,11 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
     p.errs = [];
     p.on('pageerror', e => p.errs.push(e.message));
     p.on('console', m => { const t = m.text(); if (m.type() === 'error' || t.startsWith('@desync')) p.errs.push(t.slice(0, 200)); });
-    await p.goto(url + '/?keep=1');
+    // The page, not every font: a stalled font holds the load event for half a minute on some networks.
+    await p.goto(url + '/?keep=1', { waitUntil: 'domcontentloaded' });
     // Check players' ids start check- so a real list never keeps them.
     await p.evaluate((n, i) => { localStorage.clear(); localStorage.setItem('dg-id', i); localStorage.setItem('dg-name', n); }, name, id);
-    await p.reload();
+    await p.reload({ waitUntil: 'domcontentloaded' });
     await p.waitForFunction('document.body.classList.contains("ready") && !document.getElementById("b-multi").hidden', { timeout: 60000 });
     return p;
   };
@@ -79,7 +80,7 @@ const wait = ms => new Promise(r => setTimeout(r, ms));
       if (window.__game && window.__game.playing) clearInterval(t);
     }, 20);
   });
-  await host.reload();
+  await host.reload({ waitUntil: 'domcontentloaded' });
   await host.waitForFunction('document.body.classList.contains("ready") && window.__game && window.__game.playing && window.__game.online', { timeout: 60000 });
   await wait(5000);
   const back = await seen(host), gNow = await seen(guest);
