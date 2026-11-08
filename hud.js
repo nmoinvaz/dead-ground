@@ -1744,12 +1744,37 @@ const Hud = (() => {
       game.order(S(), team(), { c: 'form', ids: us.map(u => u.id), f });
       say(`${FORM_NAME[f]} formation.`);
     }
+    // The upgrades a building of the player's offers, each as its next tier: what it costs, or how far along it is
+    // here, or why it cannot start. A tier at work here is cancelled by a second click.
+    function upState(e) {
+      const p = P();
+      return Rules.upsAt(e.kind).map(k => {
+        const tier = (p.up[k] || 0) + 1, here = e.up && e.up.k === k;
+        return { k, tier, here, why: here ? null : Rules.upBlocked(S(), team(), k, e) };
+      });
+    }
+    function upsHtml(e) {
+      const ups = upState(e);
+      if (!ups.length) return '';
+      const btn = u => {
+        const d = Rules.UPGRADES[u.k];
+        if (u.why === 'Done') return `<button disabled title="${d.name}: ${Rules.upNote(u.k, 3)}"><b>${d.names[2]}</b><span>Done</span></button>`;
+        const c = Rules.upCost(u.k, u.tier), name = d.names[u.tier - 1], note = Rules.upNote(u.k, u.tier);
+        const cost = `${fmt(c.cost)}${c.oil ? ` · ${fmt(c.oil)} oil` : ''}`;
+        const why = u.why === 'Under way' ? 'Under way elsewhere' : u.why && u.why.startsWith('Needs the') ? u.why.slice(10) : u.why;
+        return `<button data-up="${u.k}" class="${u.here ? 'busy' : ''}"${u.why ? ' disabled' : ''} title="${d.name}, tier ${u.tier} of 3: ${note}${u.here ? ' Click to cancel.' : ''}"><b>${name}</b><span>${u.here ? 'Cancel' : why || cost}</span></button>`;
+      };
+      return `<div class="ups"><h4>Upgrades</h4>${ups.map(btn).join('')}</div>`;
+    }
     function updateSelPanel() {
       state.sel = state.sel.filter(alive);
       const fu = formUnits(), form = fu.length > 1 ? Rules.formOfGroup(fu) : '';
       // The stance the selection shares, or none when it is mixed.
       const su = stanceUnits(), stance = su.length ? (su.every(u => (u.st || 'def') === (su[0].st || 'def')) ? su[0].st || 'def' : 'mixed') : '';
-      const box = $('sel'), list = state.sel, key = list.map(e => e.id).join() + (list[0] ? (list[0].repairing ? 'r' : '') + (list[0].team) : '') + form + stance;
+      // A building of the player's alone shows its upgrades, which redraw as any changes state.
+      const one = state.sel.length === 1 && state.sel[0].b && state.sel[0].team === team() ? state.sel[0] : null;
+      const ups = one ? upState(one).map(u => u.tier + (u.here ? 'h' : '') + (u.why || '')).join() : '';
+      const box = $('sel'), list = state.sel, key = list.map(e => e.id).join() + (list[0] ? (list[0].repairing ? 'r' : '') + (list[0].team) : '') + form + stance + ups;
       if (key !== state.selKey) {
         state.selKey = key;
         box.hidden = !list.length;
@@ -1774,11 +1799,16 @@ const Hud = (() => {
             html += '<button id="a-clear">Clear</button>';
           }
           html += '</div>';
+          if (one) html += upsHtml(one);
           if (stance) html += `<div class="forms stances"><h4>Stance <kbd>L</kbd></h4><div>${Rules.STANCES.map(v => `<button data-st="${v}" class="${v === stance ? 'on' : ''}" title="${STANCE_NAME[v]}: ${STANCE_NOTE[v]}" aria-label="${STANCE_NAME[v]}">${STANCE_ICON[v]}</button>`).join('')}</div></div>`;
           if (form) html += `<div class="forms"><h4>Formation <kbd>D</kbd></h4><div>${Rules.FORMS.map(f => `<button data-f="${f}" class="${f === form ? 'on' : ''}" title="${FORM_NAME[f]}" aria-label="${FORM_NAME[f]}">${FORM_ICON[f]}</button>`).join('')}</div></div>`;
           box.innerHTML = html;
           box.querySelectorAll('.forms button').forEach(b => b.addEventListener('click', () => b.dataset.st ? setStance(b.dataset.st) : setForm(b.dataset.f)));
           box.querySelectorAll('.many button').forEach(b => b.addEventListener('click', () => select(state.sel.filter(e => e.kind === b.dataset.k))));
+          box.querySelectorAll('.ups button[data-up]').forEach(b => b.addEventListener('click', () => {
+            if (b.classList.contains('busy')) game.order(S(), team(), { c: 'unupgrade', id: first.id });
+            else { game.order(S(), team(), { c: 'upgrade', id: first.id, k: b.dataset.up }); game.audio.ui('click'); }
+          }));
           const on = (id, fn) => { const b = document.getElementById(id); if (b) b.addEventListener('click', fn); };
           on('a-rep', () => game.order(S(), team(), { c: 'repair', id: first.id }));
           on('a-sell', () => { game.order(S(), team(), { c: 'sell', id: first.id }); select([]); });
@@ -1792,11 +1822,13 @@ const Hud = (() => {
         if (hp) hp.style.width = e.hp / e.max * 100 + '%';
         if (st) {
           let t = `${Math.ceil(e.hp)}/${e.max}`;
-          if (e.d.cargo) t += ` · load ${Math.round(e.cargo)}/${e.d.cargo}`;
+          if (e.d.cargo) t += ` · load ${Math.round(e.cargo)}/${Math.round(Rules.capOf(S(), e))}`;
           if (e.vet) t += ` · ${'★'.repeat(e.vet)}`;
           if (e.b && e.d.power) t += ` · ${e.d.power > 0 ? '+' : ''}${e.d.power} pw`;
           if (st.textContent !== t) st.textContent = t;
         }
+        const busy = e.up && box.querySelector('.ups .busy');
+        if (busy) busy.style.setProperty('--p', (e.up.prog * 100).toFixed(1) + '%');
       }
     }
 

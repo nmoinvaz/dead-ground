@@ -40,6 +40,7 @@ body[data-look="ink"][data-scheme="dark"] #ov, body[data-look="ink"][data-scheme
 /* The pictures of things to build and of the selected unit, turned over to pale lines and laid on the dark paper
    with screen, as the light scheme lays them with multiply. The portrait's own ground is white so it turns dark. */
 body[data-look="ink"][data-scheme="dark"] .cam::before { filter: grayscale(1) contrast(1.5) brightness(1.08) invert(.93); mix-blend-mode: screen; }
+body[data-look="ink"][data-scheme="dark"] #sel .ups button.busy { background: linear-gradient(90deg, rgba(224,122,98,.34) var(--p, 0%), var(--paper-hi) var(--p, 0%)); }
 body[data-look="ink"][data-scheme="dark"] #sel img { background: #fff; border-color: #1f1a16; filter: grayscale(1) contrast(1.45) brightness(1.06) invert(.93); mix-blend-mode: screen; }
 body[data-look="ink"][data-scheme="dark"] #side { background: repeating-linear-gradient(135deg, rgba(232,224,207,.035) 0 1px, transparent 1px 7px), var(--paper); }
 body[data-look="ink"][data-scheme="dark"] .gauge, body[data-look="ink"][data-scheme="dark"] .tools button, body[data-look="ink"][data-scheme="dark"] #sel, body[data-look="ink"][data-scheme="dark"] #stats div, body[data-look="ink"][data-scheme="dark"] #banner { box-shadow: 2px 2px 0 rgba(0,0,0,.5); }
@@ -133,6 +134,13 @@ body[data-look="ink"][data-scheme="dark"] #end, body[data-look="ink"][data-schem
 #sel .forms svg { width: 24px; height: 16px; fill: currentColor; }
 #sel .stances > div { grid-template-columns: repeat(4, 32px); }
 #sel .stances svg { fill: none; }
+#sel .ups { display: flex; flex-direction: column; gap: 3px; justify-content: center; }
+#sel .ups h4 { margin: 0; font: 600 12px var(--ui); letter-spacing: .03em; color: var(--dim); white-space: nowrap; }
+#sel .ups button { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; min-width: 200px; min-height: 24px; padding: 2px 8px; background: #191b13; border: 1px solid #000; font: 600 13px var(--ui); letter-spacing: .02em; white-space: nowrap; text-align: left; }
+#sel .ups button span { font: 11px var(--mono); color: var(--amber); }
+#sel .ups button:hover:not(:disabled) { color: var(--amber); }
+#sel .ups button:disabled { opacity: .5; cursor: default; }
+#sel .ups button.busy { border-color: var(--amber-dim); background: linear-gradient(90deg, rgba(255,190,80,.28) var(--p, 0%), #191b13 var(--p, 0%)); }
 
 /* The sidebar. */
 #side { flex: 0 0 var(--side); width: var(--side); display: flex; flex-direction: column; gap: 6px; padding: 8px; padding-top: calc(8px + env(safe-area-inset-top, 0px)); padding-right: max(8px, env(safe-area-inset-right, 0px)); padding-bottom: calc(8px + env(safe-area-inset-bottom, 0px)); box-sizing: border-box; background: repeating-linear-gradient(90deg, #0000 0 3px, rgba(255,255,255,.012) 3px 4px), linear-gradient(180deg, var(--steel), #2f3328 60%, #272a21); border-left: 2px solid var(--edge); box-shadow: inset 1px 0 0 var(--steel-hi); min-height: 0; overflow: hidden; }
@@ -375,6 +383,11 @@ body[data-look="ink"] #sel .forms h4 { color: var(--ink-dim); font-family: var(-
 body[data-look="ink"] #sel .forms button { background: var(--paper-hi); border: 1px solid var(--ink); color: var(--ink); }
 body[data-look="ink"] #sel .forms button:hover { color: var(--redink); }
 body[data-look="ink"] #sel .forms button.on { color: var(--paper); background: var(--ink); }
+body[data-look="ink"] #sel .ups h4 { color: var(--ink-dim); font-family: var(--display); font-weight: 400; font-size: 14px; letter-spacing: .02em; }
+body[data-look="ink"] #sel .ups button { background: var(--paper-hi); border: 1px solid var(--ink); color: var(--ink); }
+body[data-look="ink"] #sel .ups button span { color: var(--redink); }
+body[data-look="ink"] #sel .ups button:hover:not(:disabled) { color: var(--redink); }
+body[data-look="ink"] #sel .ups button.busy { background: linear-gradient(90deg, rgba(160,40,30,.2) var(--p, 0%), var(--paper-hi) var(--p, 0%)); }
 body[data-look="ink"] #sel .many b { color: var(--redink); text-shadow: 0 0 2px var(--paper), 0 0 2px var(--paper); }
 body[data-look="ink"] #stats { color: var(--ink-dim); }
 body[data-look="ink"] #stats b { color: var(--redink); }

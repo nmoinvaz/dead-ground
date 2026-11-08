@@ -2106,7 +2106,7 @@ const World = (() => {
           m3.makeTranslation(d.door * open * 1.1, 0, 0); m2.multiply(m3);
           mOut.multiplyMatrices(base, m2); emit(p, mOut, color);
         } else if (d.load) {
-          const k = (ent.cargo || 0) / (ent.d.cargo || 1);
+          const k = Math.min(1, (ent.cargo || 0) / (Rules.capOf(S, ent) || 1));
           if (k < 0.06) continue;
           m3.makeTranslation(0, 0.86 * (1 - k * 0.0), 0); m2.multiply(m3);
           m3.makeScale(1, 0.4 + 0.8 * k, 1); m2.multiply(m3);

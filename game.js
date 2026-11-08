@@ -6,7 +6,7 @@ const Game = (() => {
     buildready: ['Construction complete', ''], unitready: ['Unit ready', ''], lowpower: ['Low power', 'bad'], baseattack: ['Our base is under attack', 'bad'],
     truckattack: ['Ore truck under attack', 'bad'], nosupply: ['Insufficient supply', 'bad'], nooil: ['Insufficient oil', 'bad'], newtech: ['New technology available', ''],
     towntaken: ['Town captured', 'good'], townlost: ['Town lost', 'bad'], captured: ['Building captured', 'good'], lostbuilding: ['Building lost', 'bad'],
-    siloready: ['Missile ready', 'good'], missile: ['Warning, missile launch detected', 'bad'],
+    siloready: ['Missile ready', 'good'], missile: ['Warning, missile launch detected', 'bad'], upgraded: ['Upgrade complete', 'good'],
   };
   // The same calls before the Industrial Age, as a herald or a captain would give them, so the early ages do not
   // speak like a radio.
@@ -14,6 +14,7 @@ const Game = (() => {
     buildready: ['The work is done', ''], unitready: ['At your command', ''], baseattack: ['To arms, we are attacked', 'bad'],
     truckattack: ['Our carts are attacked', 'bad'], nosupply: ['We lack the supplies', 'bad'], newtech: ['New learning is ours', ''],
     towntaken: ['The town is ours', 'good'], townlost: ['The town is lost', 'bad'], captured: ['It is ours now', 'good'], lostbuilding: ['A building has fallen', 'bad'],
+    upgraded: ['Our craft is bettered', 'good'],
   };
   // What each turn of the weather means, written and spoken.
   const SKY_SAY = {
@@ -403,6 +404,8 @@ const Game = (() => {
             else if (G.playing && e.team === G.team) { const v = (oldAge() && VOICE_OLD[e.line]) || VOICE[e.line]; if (v) { hud.say(v[0] + '.', v[1]); audio.voice(e.line, v[0], oldAge()); } }
             break;
           case 'alert': if (G.playing && e.team === G.team) hud.alert(e.x, e.y); break;
+          // A finished tier names itself and what the side now has, and the call says only that it is done.
+          case 'upgraded': if (G.playing && e.team === G.team) { const v = (oldAge() && VOICE_OLD.upgraded) || VOICE.upgraded; hud.say(`${Rules.UPGRADES[e.k].names[e.tier - 1]}. ${Rules.upNote(e.k, e.tier)}`, 'good'); audio.voice('upgraded', v[0], oldAge()); } break;
           case 'trade': if (G.playing && e.team === G.team) hud.pop(e.x, e.y, '+' + e.n); break;
           case 'hint': if (G.playing && e.team === G.team && e.hint === 'attrition') hud.say('Attrition: troops wear down abroad. A Support Truck stops it.', 'bad'); break;
           case 'launch': if (G.playing && e.team === G.team) audio.play('launch', { gain: 0.9 }); break;

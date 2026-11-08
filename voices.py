@@ -15,10 +15,11 @@ from kokoro_onnx import Kokoro
 # The lines game.js speaks. Radio only, herald only, and both.
 RADIO = ['Construction complete', 'Unit ready', 'Low power', 'Our base is under attack', 'Ore truck under attack',
          'Insufficient supply', 'Insufficient oil', 'New technology available', 'Town captured', 'Town lost',
-         'Building captured', 'Building lost', 'Missile ready', 'Warning, missile launch detected']
+         'Building captured', 'Building lost', 'Missile ready', 'Warning, missile launch detected',
+         'Upgrade complete']
 HERALD = ['The work is done', 'At your command', 'To arms, we are attacked', 'Our carts are attacked',
           'We lack the supplies', 'New learning is ours', 'The town is ours', 'The town is lost', 'It is ours now',
-          'A building has fallen']
+          'A building has fallen', 'Our craft is bettered']
 BOTH = ['The Ancient Age', 'The Medieval Age', 'The Gunpowder Age', 'The Industrial Age', 'The Modern Age',
         'The Future Age', 'Rain', 'Storm. Aircraft grounded', 'Fog', 'Snow', 'Storm warning',
         'Dust storm. Aircraft grounded', 'Dust storm warning', 'Storm passing', 'Dust storm passing', 'Bridge destroyed']
