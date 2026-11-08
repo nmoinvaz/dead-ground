@@ -556,7 +556,7 @@ body[data-look="ink"] .sheet { box-shadow: 4px 4px 0 var(--ink); }
     <div id="settings" hidden role="dialog" aria-label="Settings">
       <div class="choice"><h2>Paper</h2><div id="s-scheme"><button data-v="light">Light</button><button data-v="dark">Dark</button><button data-v="auto">As the system</button></div></div>
       <div class="choice"><h2>Picture</h2><div id="s-pic" class="two"><button data-v="sharp">Sharp</button><button data-v="fast">Faster</button></div><p id="s-pic-note"></p></div>
-      <p id="build">Build ed64bcc 2026-11-06 17:54</p>
+      <p id="build">Build 5026d99 2026-11-08 11:25</p>
     </div>
     <div id="banner" hidden></div>
     <button id="update" hidden>A new version of Dead Ground is out. <b>Reload</b></button>
@@ -13562,8 +13562,8 @@ const Report = (() => {
     return draw;
   }
 
-  // The timeline: each side a band as thick as its share of all units on the map, top to bottom by slot. Lines
-  // across the bands are fighting between two sides, in the colour of the side that did the most harm.
+  // The timeline: each side a band as thick as its share of all units on the map, top to bottom by slot. The
+  // strip above holds the battles between two sides, in the colour of the side that did the most harm.
   function timeline(c, tip, pane, o, list) {
     const S = o.S, h = S.hist, ts = h.t.map(t => t / HZ), t0 = ts[0], t1 = ts[ts.length - 1], n = S.P.length;
     const bands = list.map(x => x.t).sort((a, b) => a - b);
@@ -13585,10 +13585,25 @@ const Report = (() => {
       }
       for (const k in pairs) { const p = pairs[k]; most = Math.max(most, p.d); fights.push({ j, ...p }); }
     });
+    // A pair's samples of fighting run together into one battle where at most one quiet sample parts them. Stray
+    // shots start none, and only battles of real weight are kept.
+    const runs = [], open = {};
+    for (const f of fights) {
+      if (f.d < Math.max(80, most * 0.04)) continue;
+      const k = f.a * n + f.b, r = open[k];
+      const lead = (f.by[f.a] || 0) >= (f.by[f.b] || 0) ? f.a : f.b;
+      if (r && f.j - r.j1 <= 2) { r.j1 = f.j; r.d += f.d; r.s.push({ j: f.j, d: f.d, lead }); }
+      else runs.push(open[k] = { a: f.a, b: f.b, j0: f.j - 1, j1: f.j, d: f.d, s: [{ j: f.j, d: f.d, lead }] });
+    }
+    const big = runs.reduce((m, r) => Math.max(m, r.d), 0), battles = runs.filter(r => r.d >= Math.max(400, big * 0.08));
+    // Battles at once between other pairs take lanes of their own.
+    const lanes = [];
+    for (const r of battles) { let l = lanes.findIndex(e => e < r.j0); if (l < 0) { l = lanes.length; lanes.push(0); } lanes[l] = r.j1; r.lane = l; }
+    const LANE = lanes.length > 1 ? 11 : 18, strip = Math.max(1, Math.min(3, lanes.length)) * LANE;
     const draw = (hx) => {
       const I = inks(), { g, w, h: hh } = fit(c);
       g.clearRect(0, 0, w, hh);
-      const { box, X } = frame(g, w, hh, I, t0, t1, { l: 8, r: 8, t: 26, b: 36 });
+      const { box, X } = frame(g, w, hh, I, t0, t1, { l: 8, r: 8, t: 26 + strip + 6, b: 36 });
       const Y = s => box.y + s * box.h;
       g.font = `12px ${I.font}`; g.fillStyle = I.dim; g.textAlign = 'left'; g.textBaseline = 'alphabetic';
       g.fillText('Share of all units on the map', 4, 13);
@@ -13604,17 +13619,19 @@ const Report = (() => {
       bands.forEach((t, b) => { if (!b) return; g.beginPath(); ts.forEach((s, j) => { const x = X(s), y = Y(lo[b][j]); if (j) g.lineTo(x, y); else g.moveTo(x, y); }); g.stroke(); });
       g.strokeStyle = I.light ? I.text : I.dim; g.lineWidth = 1; g.strokeRect(box.x + 0.5, box.y + 0.5, box.w - 1, box.h - 1);
       const mid = (b, j) => Y((lo[b][j] + hi[b][j]) / 2);
-      // Fighting, the heavier the thicker. Only real clashes are drawn, not every stray shot.
-      const floor = Math.max(300, most * 0.15);
-      for (const f of fights) {
-        if (f.d < floor) continue;
-        const ba = bands.indexOf(f.a), bb = bands.indexOf(f.b); if (ba < 0 || bb < 0) continue;
-        const x = X((ts[f.j - 1] + ts[f.j]) / 2), ya = (mid(ba, f.j - 1) + mid(ba, f.j)) / 2, yb = (mid(bb, f.j - 1) + mid(bb, f.j)) / 2;
-        const lead = (f.by[f.a] || 0) >= (f.by[f.b] || 0) ? f.a : f.b, k = Math.min(1, Math.sqrt(f.d / most)), wd = 1 + 2 * k;
-        g.lineCap = 'round'; g.globalAlpha = 0.45 + 0.55 * k;
-        g.strokeStyle = I.ground; g.lineWidth = wd + 2; g.beginPath(); g.moveTo(x, ya); g.lineTo(x, yb); g.stroke();
-        g.strokeStyle = I.line(lead); g.lineWidth = wd; g.stroke();
-        g.globalAlpha = 1;
+      // The battles on a ruled strip above the bands, each a ribbon as long as it lasted, as thick as the fighting
+      // at each sample and in the colour of the side doing more harm then.
+      const sy = box.y - 6 - strip;
+      g.strokeStyle = I.dim; g.globalAlpha = 0.5; g.lineWidth = 1;
+      for (let l = 0; l < strip / LANE; l++) { const y = Math.round(sy + l * LANE + LANE / 2) + 0.5; g.beginPath(); g.moveTo(box.x, y); g.lineTo(box.x + box.w, y); g.stroke(); }
+      g.globalAlpha = 1;
+      for (const r of battles) {
+        if (r.lane >= 3) continue;
+        const y = sy + r.lane * LANE + LANE / 2;
+        for (const e of r.s) {
+          const th = 2 + (LANE - 4) * Math.sqrt(e.d / most), xa = X(ts[e.j - 1]), xb = X(ts[e.j]);
+          g.fillStyle = I.line(e.lead); g.fillRect(xa, y - th / 2, Math.max(1, xb - xa + 0.5), th);
+        }
       }
       // Tech levels, launches and falls, on the side's own band.
       const at = s => { let j = 1; while (j < ts.length - 1 && ts[j] < s) j++; return j; };
@@ -13793,7 +13810,7 @@ const Report = (() => {
         if (h && h.pos) cur.redraw = () => warMap(c, tip, pane, o, list);
       } else if (k === 'time') {
         const c = el('canvas', 'rchart'); pane.append(c, tip);
-        const key = el('p', 'rkey', 'Lines across the bands are fighting between two sides, in the colour of the side that did more harm. Tags name the age a side reached, triangles mark missile launches and crosses the end of a side.');
+        const key = el('p', 'rkey', 'The strip above the bands is the fighting between two sides, as thick as it was heavy and in the colour of the side doing more harm. Tags name the age a side reached, triangles mark missile launches and crosses the end of a side.');
         pane.appendChild(key);
         cur.redraw = () => timeline(c, tip, pane, o, list);
       } else if (k === 'graph') {
