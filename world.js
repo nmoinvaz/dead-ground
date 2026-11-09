@@ -76,7 +76,13 @@ const World = (() => {
       // The height above which snow lies on the heights in any weather.
       uSnowLine: { value: 99 },
       // The way the rivers run, from buildFlow, and how far each point lies from a brook and whether at its ford.
-      tFlow: { value: black }, tBrook: { value: farBrook }, tBeach: { value: black },
+      tFlow: { value: black }, tBrook: { value: farBrook },
+      // The land's cover from buildFields: the beaches in red, and the farmland round the towns, its extent in green,
+      // its town's turn of the plots in blue and how far out from the town in alpha.
+      tCover: { value: black },
+      // The farmland as the world's age lays it out: how far out it reaches, a row's depth, a plot's length and the
+      // share of its edges hedged, then the shares walled, in orchard and in meadow.
+      uFieldK: { value: new THREE.Vector4() }, uFieldK2: { value: new THREE.Vector4() },
       // The theatre's wild flowers: 1 the steppe's, 2 the salt flats', 3 the snowy pass's heather.
       uFlora: { value: 0 },
       // Up to four showers over the map: x, y, radius, and strength, negative for snow.
@@ -1014,11 +1020,52 @@ const World = (() => {
         const sl = Math.hypot(terrainAt(M, x + 1, y) - terrainAt(M, x - 1, y), terrainAt(M, x, y + 1) - terrainAt(M, x, y - 1)) / 2;
         beach[c] = Math.round(255 * Math.max(0, 1 - bd[c] / BEACH_W) ** 0.6 * clamp((1.4 - z) / 0.6, 0, 1) * clamp((0.75 - sl) / 0.3, 0, 1));
       }
-      if (beachTex) beachTex.dispose();
-      beachTex = new THREE.DataTexture(beach, W, H, THREE.RedFormat);
-      beachTex.magFilter = beachTex.minFilter = THREE.LinearFilter; beachTex.needsUpdate = true;
-      SH.tBeach.value = beachTex;
       beachMap = beach;
+    }
+
+    // Farmland round each town, its plots' middles out to FIELD_R and their far ends to FIELD_OUT: open, dry, gentle
+    // ground clear of woods, ore, houses, parks, brooks and bases. Where two towns' land would meet a lane is left
+    // between them, so each keeps its own lie of plots. The ink look lays the plots out from this, with the beaches,
+    // in one texture.
+    const FIELD_R = 15, FIELD_OUT = 20;
+    function buildFields() {
+      const n = W * H, cov = new Uint8Array(n * 4), rand = mulberry(M.seed + 59), turn = M.towns.map(() => 1 + Math.floor(rand() * 254)), BD = M.brookDist;
+      for (let c = 0; c < n; c++) {
+        cov[c * 4] = beachMap ? beachMap[c] : 0;
+        const x = c % W + 0.5, y = (c / W | 0) + 0.5;
+        let d1 = 1e9, d2 = 1e9, ti = -1;
+        M.towns.forEach((t, i) => { const d = Math.hypot(t.x - x, t.y - y); if (d < d1) { d2 = d1; d1 = d; ti = i; } else if (d < d2) d2 = d; });
+        if (ti < 0) continue;
+        cov[c * 4 + 2] = turn[ti]; cov[c * 4 + 3] = Math.round(Math.min(1, d1 / FIELD_OUT) * 255);
+        if (d1 > FIELD_OUT || d1 < 3.5 || d2 - d1 < 2.5) continue;
+        const z = terrainAt(M, x, y), v = Math.round(y * RES) * VW + Math.round(x * RES);
+        const sl = Math.hypot(terrainAt(M, x + 1, y) - terrainAt(M, x - 1, y), terrainAt(M, x, y + 1) - terrainAt(M, x, y - 1)) / 2;
+        if ((M.ground[c] & 27) || M.ore[c] || z < M.water + 0.35 || sl > 0.6 || (beachMap && beachMap[c] > 30) || (BD && BD[v] < 1.2) || M.roadDist[v] < 1.2) continue;
+        if (M.houses.some(h => x > h.x - 1.5 && x < h.x + h.w + 1.5 && y > h.y - 1.5 && y < h.y + h.h + 1.5)) continue;
+        if (parks.some(p => Math.hypot(p.x - x, p.y - y) < p.r + 1) || S.bases.some(b => Math.hypot(b[0] - x, b[1] - y) < 22)) continue;
+        cov[c * 4 + 1] = 255;
+      }
+      if (beachTex) beachTex.dispose();
+      beachTex = new THREE.DataTexture(cov, W, H, THREE.RGBAFormat);
+      beachTex.magFilter = beachTex.minFilter = THREE.LinearFilter; beachTex.needsUpdate = true;
+      SH.tCover.value = beachTex;
+      fieldAge = 0;
+    }
+    // The farmland by the ages: small strips near the town in the Ancient Age, the open strip fields of the Medieval,
+    // hedged enclosures from the Gunpowder Age, and the large fields of the Modern. Walls stand in for hedges in the
+    // snowy pass and on the salt flats, where orchards are groves.
+    const FIELDS = [null,
+      [0.55, 1.5, 5.5, 0, 0.1, 0.05, 0.25], [0.7, 1.7, 7.5, 0.15, 0.15, 0.08, 0.25], [0.82, 3.0, 4.5, 0.55, 0.2, 0.12, 0.3],
+      [0.92, 3.4, 5.0, 0.5, 0.25, 0.12, 0.3], [1, 4.6, 7.5, 0.3, 0.1, 0.1, 0.2], [1, 4.6, 7.5, 0.25, 0.1, 0.1, 0.2]];
+    let fieldAge = 0;
+    function updateFields() {
+      const age = Math.max(1, Math.min(6, worldAge()));
+      if (age === fieldAge) return;
+      fieldAge = age;
+      const [reach, rowH, plotW, hedge0, wall0, orch0, mead0] = FIELDS[age], bare = theme.tree === 'conifer' || theme.tree === 'acacia';
+      const hedge = bare ? hedge0 * 0.25 : hedge0, wall = bare ? wall0 + hedge0 * 0.75 : wall0;
+      SH.uFieldK.value.set(reach * FIELD_R / FIELD_OUT, rowH, plotW, hedge);
+      SH.uFieldK2.value.set(wall, theme.tree === 'acacia' ? orch0 * 1.5 : orch0, theme.tree === 'conifer' ? mead0 + 0.2 : mead0, 0);
     }
 
     // What the map letters: the rivers by their courses, the highest hills, and the largest woods, each named from
@@ -1144,6 +1191,7 @@ const World = (() => {
       buildRoadside();
       buildPlants();
       buildParks();
+      buildFields();
 
       // Wellheads in a black stain, each bridge on its piers.
       instanced(sc.well, paint, M.wells.map(w => ({ x: w.x, y: terrainAt(M, w.x, w.y), z: w.y })));
@@ -1582,6 +1630,7 @@ const World = (() => {
       B.lm.visible = worldAge() >= MOTOR_AGE;
       const age = worldAge(), kind = age <= 2 ? 'wood' : age === 3 ? 'stone' : age === 4 ? 'iron' : 'concrete';
       if (kind !== B.kind) { B.kind = kind; for (const [k, K] of Object.entries(B.kinds)) { K.dm.visible = k === kind; if (K.pm) K.pm.visible = k === kind; } SH.uBridgeKind.value = ['wood', 'stone', 'iron', 'concrete'].indexOf(kind); }
+      updateFields();
       const Fd = scen.fords, under = S.flooded || waterRise.value > 0.12;
       if (Fd.mesh && under !== Fd.under) { Fd.under = under; Fd.list.forEach((o, i) => setInst(Fd.mesh, i, o, under)); dirty(Fd.mesh); }
       // Fences under whatever drives over them.

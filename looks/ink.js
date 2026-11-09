@@ -19,13 +19,13 @@
       // 45 and 135 degrees, then flat and upright lines for the darkest, each line a little uneven with small gaps.
       // The ground's hatching is pinned to the map so it pans with it, the units' redraws a few times a second.
       const ink = new THREE.ShaderMaterial({ uniforms: { t: { value: null }, tSubj: { value: null }, tHeat: { value: null }, tPaper: { value: null }, res: { value: new THREE.Vector2(1, 1) }, uTime: { value: 0 }, uK: { value: 1 }, uOff: { value: new THREE.Vector2() }, uStyle: { value: 8 }, tNorm: { value: null }, tFogS: { value: null }, tLand: { value: null }, uSun2: { value: new THREE.Vector2(-1, 0) }, uUpV: { value: new THREE.Vector3(0, 1, 0) }, uRoad: { value: 0 }, uOre: { value: 0 }, uMarks: { value: 1 },
-        uWindS: { value: new THREE.Vector2() }, uView: { value: new THREE.Vector2(1, 0) }, tFx: { value: null }, tAnc: { value: null }, uDark: { value: 0 }, uInks: { value: 0 }, uFxs: { value: 0 }, uFire: { value: 0 }, uUnits: { value: 0 }, tH: SH.tH, uHSize: { value: new THREE.Vector2(1, 1) }, uHScale: { value: 1 }, uRain: { value: 0 }, uStorm: { value: 0 }, uSnowF: { value: 0 }, uSnowC: SH.uSnowC, uSnowLine: SH.uSnowLine, tFlow: SH.tFlow, tBrook: SH.tBrook, uFlora: SH.uFlora, uShow: SH.uShow, tBeach: SH.tBeach, uPark: SH.uPark, uBridgeKind: SH.uBridgeKind, uFog: { value: 0 }, uMist: { value: 0 }, uNight: { value: 0 }, uWet: { value: 0 },
+        uWindS: { value: new THREE.Vector2() }, uView: { value: new THREE.Vector2(1, 0) }, tFx: { value: null }, tAnc: { value: null }, uDark: { value: 0 }, uInks: { value: 0 }, uFxs: { value: 0 }, uFire: { value: 0 }, uUnits: { value: 0 }, tH: SH.tH, uHSize: { value: new THREE.Vector2(1, 1) }, uHScale: { value: 1 }, uRain: { value: 0 }, uStorm: { value: 0 }, uSnowF: { value: 0 }, uSnowC: SH.uSnowC, uSnowLine: SH.uSnowLine, tFlow: SH.tFlow, tBrook: SH.tBrook, uFlora: SH.uFlora, uShow: SH.uShow, tCover: SH.tCover, uFieldK: SH.uFieldK, uFieldK2: SH.uFieldK2, uPark: SH.uPark, uBridgeKind: SH.uBridgeKind, uFog: { value: 0 }, uMist: { value: 0 }, uNight: { value: 0 }, uWet: { value: 0 },
         uDayMul: { value: new THREE.Vector3(1, 1, 1) }, uDayAdd: { value: new THREE.Vector3() }, uWaterL: { value: -0.15 }, uCloudK: SH.uCloudK, tMarks: SH.tMarks, uMap: SH.uMap,
         uCloud: SH.uCloud, uCloudT: SH.uCloudT, uSunW: SH.uSunDir, uCloudA: { value: 0 }, uCloudG: { value: 0 }, uRayK: { value: 0 }, uSand: { value: 0 },
         uInvVP: { value: new THREE.Matrix4() }, uW2S: { value: new THREE.Vector4(1, 0, 0, 1) }, uLev: { value: 1 }, tTerr: SH.tTerr, uBorder: SH.uBorder, uMe: { value: 0 },
         // Each side's colour as the anchor pass keeps it, its hue and how coloured it is, and its inks on either paper.
         uSideKey: { value: [...Array(8)].map(() => new THREE.Vector2()) }, uSideL: { value: [...Array(8)].map(() => new THREE.Vector3()) }, uSideD: { value: [...Array(8)].map(() => new THREE.Vector3()) }, uSideB: { value: [...Array(8)].map(() => new THREE.Vector3()) } }, vertexShader: vs, depthTest: false, depthWrite: false, fragmentShader: `
-        varying vec2 vUv; uniform sampler2D t, tSubj, tHeat, tPaper, tNorm, tFogS, tLand, tMarks; uniform float uMap; uniform vec2 res, uOff, uSun2, uWindS, uView, uHSize; uniform float uHScale, uFxs, uFire; uniform int uUnits, uInks; uniform float uDark; uniform sampler2D tH, tFx, tAnc, tFlow, tBrook, tBeach; uniform vec4 uShow[4]; uniform vec4 uPark[16]; uniform vec3 uUpV, uDayMul, uDayAdd; uniform float uTime, uK, uRain, uStorm, uSnowF, uSnowC, uSnowLine, uFlora, uBridgeKind, uFog, uMist, uNight, uWet, uWaterL, uCloudK, uMarks; uniform int uStyle, uRoad, uOre;
+        varying vec2 vUv; uniform sampler2D t, tSubj, tHeat, tPaper, tNorm, tFogS, tLand, tMarks; uniform float uMap; uniform vec2 res, uOff, uSun2, uWindS, uView, uHSize; uniform float uHScale, uFxs, uFire; uniform int uUnits, uInks; uniform float uDark; uniform sampler2D tH, tFx, tAnc, tFlow, tBrook, tCover; uniform vec4 uFieldK, uFieldK2; uniform vec4 uShow[4]; uniform vec4 uPark[16]; uniform vec3 uUpV, uDayMul, uDayAdd; uniform float uTime, uK, uRain, uStorm, uSnowF, uSnowC, uSnowLine, uFlora, uBridgeKind, uFog, uMist, uNight, uWet, uWaterL, uCloudK, uMarks; uniform int uStyle, uRoad, uOre;
         uniform vec2 uSideKey[8]; uniform vec3 uSideL[8], uSideD[8], uSideB[8];
         uniform sampler2D tTerr; uniform float uBorder, uMe;
         uniform vec2 uCloud; uniform vec3 uSunW; uniform float uCloudT, uCloudA, uCloudG, uRayK, uSand;
@@ -501,13 +501,54 @@
             contour *= 1.0 - rock * 0.85;
             // A beach by still water: sand on the steppe and the salt flats, grey shingle in the snowy pass, its
             // contours faint, wet and darker along the water's edge.
-            float bch = texture2D(tBeach, Wl / uMap).r * (1.0 - cap);
+            vec4 cov = texture2D(tCover, Wl / uMap);
+            float bch = cov.r * (1.0 - cap);
             // A beach's own slope is gentle, so its relief shading is light.
             rfDark *= 1.0 - 0.6 * smoothstep(0.1, 0.45, bch);
             vec3 SAND = uFlora > 2.5 ? (dk ? vec3(0.44, 0.44, 0.45) : vec3(0.84, 0.83, 0.8)) : (dk ? vec3(0.48, 0.43, 0.33) : vec3(0.95, 0.9, 0.76));
             float bWet = (1.0 - smoothstep(0.04, 0.16, -wl)) * step(wl, 0.0);
             tint = mix(tint, mix(SAND, SAND * (dk ? 0.8 : 0.86), bWet), smoothstep(0.1, 0.45, bch));
             CONT = mix(CONT, mix(CONT, tint, 0.55), smoothstep(0.15, 0.55, bch));
+            // Farmland round the towns: plots in rows turned to each town's own lie, each ploughed, sown, in meadow or
+            // in orchard, and bounded by a hedge, a wall or a bare balk. The farmland's outer bound follows whole plots,
+            // by where each plot's middle lies, and woods, rock, water and roads cut the plots beside them.
+            float fIn = 0.0, fEdge = 0.0;
+            vec3 fEdgeC = CONT;
+            if (uFieldK.x > 0.0 && cov.g > 0.05 && cov.a < uFieldK.x + 0.3 && isG > 0.5) {
+              float town = floor(cov.b * 255.0 + 0.5), fTh = town / 255.0 * 3.14159;
+              vec2 fc = vec2(cos(fTh), sin(fTh)), fp = vec2(-fc.y, fc.x), fU = vec2(dot(Wl, fc), dot(Wl, fp));
+              float RH = uFieldK.y, row = floor(fU.y / RH), rOff = hash(vec2(row, town)) * 9.0;
+              float PW = uFieldK.z * mix(0.7, 1.4, hash(vec2(row, town + 3.0))), col = floor((fU.x + rOff) / PW);
+              vec2 fid = vec2(row, col) + town * 101.0, uc = vec2((col + 0.5) * PW - rOff, (row + 0.5) * RH);
+              vec4 cc = texture2D(tCover, (fc * uc.x + fp * uc.y) / uMap);
+              fIn = step(cc.a, uFieldK.x) * smoothstep(0.25, 0.5, cov.g) * (1.0 - onRoad);
+              float kh = hash(fid + 0.37), kc = hash(fid + 5.1);
+              float isOr = step(kh, uFieldK2.y), isMd = (1.0 - isOr) * step(kh, uFieldK2.y + uFieldK2.z), isPl = 1.0 - isOr - isMd;
+              // Ploughed earth, ripe corn or a green crop by the plot, and meadow and orchard in a fresh green.
+              vec3 PLc = dk ? (kc < 0.4 ? vec3(0.34, 0.29, 0.22) : kc < 0.75 ? vec3(0.44, 0.4, 0.26) : vec3(0.27, 0.35, 0.21))
+                : (kc < 0.4 ? vec3(0.87, 0.81, 0.69) : kc < 0.75 ? vec3(0.94, 0.89, 0.68) : vec3(0.8, 0.87, 0.67));
+              vec3 fCol = isPl > 0.5 ? PLc : dk ? vec3(0.23, 0.33, 0.21) : vec3(0.79, 0.87, 0.72);
+              tint = mix(tint, fCol, fIn * 0.75);
+              // Furrows along or across a ploughed or sown plot, a few pixels apart at any zoom.
+              float fq = (hash(fid + 9.3) < 0.5 ? fU.y : fU.x) / (5.0 / 80.0 * exp2(gLm)), fqw = max(fwidth(fq), 1e-4);
+              float fl = mix(1.0 - smoothstep(0.35 * uK, 0.35 * uK + 1.0, min(fract(fq), 1.0 - fract(fq)) / fqw),
+                1.0 - smoothstep(0.35 * uK, 0.35 * uK + 1.0, min(fract(fq * 0.5), 1.0 - fract(fq * 0.5)) / (fqw * 0.5)), gLf);
+              tint = mix(tint, dk ? fCol * 1.35 : fCol * 0.8, fl * isPl * fIn * 0.45 * mix(1.0, 0.5, zo));
+              // An orchard's trees in rows, each a small round crown ringed in green, as a map's symbol for one.
+              float orr = length(fract(fU / 0.75) - 0.5) * 0.75, ow = max(fwidth(orr), 1e-4), oK = isOr * fIn * (1.0 - zo * 0.8);
+              tint = mix(tint, dk ? vec3(0.3, 0.42, 0.26) : vec3(0.64, 0.76, 0.54), (1.0 - smoothstep(0.19 - ow, 0.19 + ow, orr)) * oK * 0.7);
+              tint = mix(tint, dk ? vec3(0.55, 0.65, 0.45) : vec3(0.3, 0.42, 0.26), (1.0 - smoothstep(0.35 * uK * ow, (0.35 * uK + 1.0) * ow, abs(orr - 0.19))) * oK * 0.75);
+              // The plot's bounds: each stretch of edge a hedge, a wall of stones or a bare balk, by the age's shares.
+              float lv = fract(fU.y / RH), lu = fract((fU.x + rOff) / PW), dV = min(lv, 1.0 - lv) * RH, dU = min(lu, 1.0 - lu) * PW;
+              float upp = 0.5 * (length(gJx) + length(gJy));
+              bool eH = dV < dU;
+              vec2 eid = eH ? vec2(floor(fU.y / RH + 0.5), floor(fU.x / 4.0)) : vec2(row, floor((fU.x + rOff) / PW + 0.5)) + 0.5;
+              float ek = hash(eid + town * 13.0 + (eH ? 0.0 : 71.0)), along = eH ? fU.x : fU.y, ed = (eH ? dV : dU) / upp;
+              bool hedge = ek < uFieldK.w, wall = !hedge && ek < uFieldK.w + uFieldK2.x;
+              float eW = hedge ? uK * 1.4 * (0.6 + 0.8 * noise(vec2(along * 2.2, ek * 40.0))) : wall ? uK * 0.6 : uK * 0.4;
+              fEdge = (1.0 - smoothstep(eW, eW + 1.0, ed)) * fIn * (hedge || wall ? 1.0 : 0.55) * (wall ? step(0.3, fract(along / 0.35)) : 1.0) * mix(1.0, 0.65, zo);
+              fEdgeC = hedge ? (dk ? vec3(0.42, 0.56, 0.36) : vec3(0.3, 0.42, 0.25)) : wall ? (dk ? vec3(0.62, 0.6, 0.56) : vec3(0.42, 0.4, 0.37)) : CONT;
+            }
             // A road takes a third of the tint and the contours cross it faint, so it climbs and falls with the land
             // rather than lying flat over it.
             base = mix(base, tint, isG * (1.0 - onRoad * 0.65));
@@ -531,6 +572,7 @@
               float crest = (1.0 - smoothstep(cw, cw + 1.0, min(lf, 1.0 - lf) / lzw)) * step(0.52, noise(Wl * 1.4 + 9.0));
               base = mix(base, dk ? vec3(0.78, 0.76, 0.72) : vec3(0.22, 0.2, 0.19), max(rk * 0.8, crest * 0.75) * mix(1.0, 0.75, zo) * (dk ? 0.8 : 1.0) * rock * isG * (1.0 - wet));
             }
+            base = mix(base, fEdgeC, fEdge * isG * (1.0 - wet) * 0.85);
             base = mix(base, base * vec3(0.9, 0.93, 0.97), uWet * isG * 0.7);
             // The snowfield's edge is dashed, as a map bounds land cover, so it never reads as a shore.
             vec2 sg = vec2(dFdx(sF), dFdy(sF)), sTw = normalize(S2W * vec2(-sg.y, sg.x) + 1e-6);
@@ -593,7 +635,7 @@
             // buttercups and cornflowers on the steppe, a sparse pink bloom on the salt flats, heather in the snowy
             // pass. None in the snow, on a road or by the water.
             if (uFlora > 0.5 && isG > 0.5) {
-              float fP = smoothstep(0.64, 0.82, noise(Wl * 0.13 + 41.0) * 0.75 + noise(Wl * 0.4 + 7.0) * 0.25) * (1.0 - smoothstep(0.1, 0.3, bch)) * (1.0 - pkIn) * smoothstep(1.5, 2.3, rd) * (1.0 - cap) * (1.0 - uSnowC) * (1.0 - smoothstep(0.35, 0.7, sSl)) * (1.0 - bankZone);
+              float fP = smoothstep(0.64, 0.82, noise(Wl * 0.13 + 41.0) * 0.75 + noise(Wl * 0.4 + 7.0) * 0.25) * (1.0 - smoothstep(0.1, 0.3, bch)) * (1.0 - pkIn) * (1.0 - fIn) * smoothstep(1.5, 2.3, rd) * (1.0 - cap) * (1.0 - uSnowC) * (1.0 - smoothstep(0.35, 0.7, sSl)) * (1.0 - bankZone);
               vec2 fq = Wl * 3.2 * exp2(-gLm), fi = floor(fq), fo = vec2(hash(fi + 3.0), hash(fi + 9.0)) * 0.6 + 0.2;
               float fh = hash(fi + 77.0), fc = hash(fi + 131.0);
               float fd = (1.0 - smoothstep(0.11, 0.18, length(fract(fq) - fo))) * step(1.0 - fP * (uFlora > 1.5 && uFlora < 2.5 ? 0.3 : uFlora > 2.5 ? 0.45 : 0.75), fh);
