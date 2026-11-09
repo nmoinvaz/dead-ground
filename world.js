@@ -66,6 +66,7 @@ const World = (() => {
 
     const white = new THREE.DataTexture(new Uint8Array([255, 255, 255, 255]), 1, 1); white.needsUpdate = true;
     const black = new THREE.DataTexture(new Uint8Array([0, 0, 0, 0]), 1, 1); black.needsUpdate = true;
+    const farBrook = new THREE.DataTexture(new Uint8Array([255, 0, 0, 255]), 1, 1); farBrook.needsUpdate = true;
     const SH = {
       tFog: { value: white }, tDetail: { value: null }, tTerr: { value: white }, tH: { value: white }, tMarks: { value: white }, uTime: { value: 0 },
       uTeam0: { value: new THREE.Color(0x3f8cff) }, uTeams: { value: SLOT_COLORS.map(c => new THREE.Color(c).offsetHSL(0, 0, 0.06)) }, uFogOn: { value: 1 }, uBorder: { value: 1 }, uMap: { value: 128 },
@@ -74,8 +75,8 @@ const World = (() => {
       uWind: { value: new THREE.Vector2(0.3, 0.1) }, uCloud: { value: new THREE.Vector2() }, uCloudK: { value: 0.2 }, uCloudT: { value: 0.3 }, uSnowC: { value: 0 },
       // The height above which snow lies on the heights in any weather.
       uSnowLine: { value: 99 },
-      // The way the rivers run, from buildFlow.
-      tFlow: { value: black },
+      // The way the rivers run, from buildFlow, and how far each point lies from a brook and whether at its ford.
+      tFlow: { value: black }, tBrook: { value: farBrook },
       // How far tread marks darken the ground, none where the look draws them itself.
       uTreadK: { value: 0.34 },
       // How hard the track worn into each cell has become, in red.
@@ -674,7 +675,7 @@ const World = (() => {
     let S = null, M = null, theme = null, viewTeam = 0, sets = {}, terrainMesh = null, waterMesh = null, statics = [], baseImage = null;
     const rs = new Map();
     let wrecks = [], corpses = [], bleeds = [], flyers = [], planes = [], falls = [], marks = null, marksTex = null, marksDirty = false, marksLast = 0, treadFade = 0;
-    let fogTex = null, fogData = null, fogR = null, fogG = null, terrTex = null, terrData = null, terrSeen = -1, hTex = null, flowTex = null;
+    let fogTex = null, fogData = null, fogR = null, fogG = null, terrTex = null, terrData = null, terrSeen = -1, hTex = null, flowTex = null, brookTex = null;
     // A number as a half float, for heights within a few units of the ground.
     const halfBuf = new Float32Array(1), halfBits = new Uint32Array(halfBuf.buffer);
     function toHalf(v) {
@@ -902,6 +903,24 @@ const World = (() => {
     function buildFlow() {
       const n = W * H, wet = new Uint8Array(n), D = new Float32Array(n), comp = new Int32Array(n).fill(-1), data = new Uint8Array(n * 4);
       for (let c = 0; c < n; c++) { wet[c] = terrainAt(M, c % W + 0.5, (c / W | 0) + 0.5) < M.water ? 1 : 0; D[c] = wet[c] ? 1e9 : 0; data[c * 4] = data[c * 4 + 1] = 128; data[c * 4 + 3] = 255; }
+      // A brook runs from its spring, so its cells take their way from how far down it they lie, and are kept out of
+      // the rivers' reckoning. Its mouth, in the river's own deep water, is the river's.
+      const bArc = new Float32Array(n).fill(-1), bDist = new Float32Array(n).fill(9);
+      for (const b of M.brooks || []) {
+        let a = 0;
+        b.pts.forEach((p, i) => {
+          if (i) a += Math.hypot(p[0] - b.pts[i - 1][0], p[1] - b.pts[i - 1][1]);
+          for (let y = Math.max(0, Math.floor(p[1] - 2)); y <= Math.min(H - 1, Math.floor(p[1] + 2)); y++) for (let x = Math.max(0, Math.floor(p[0] - 2)); x <= Math.min(W - 1, Math.floor(p[0] + 2)); x++) {
+            const c = y * W + x, d = Math.hypot(x + 0.5 - p[0], y + 0.5 - p[1]);
+            if (!wet[c] && d < 1.6 && d < bDist[c]) { bDist[c] = d; bArc[c] = a; }
+          }
+        });
+      }
+      for (let c = 0; c < n; c++) if (bArc[c] >= 0) {
+        const ang = bArc[c] / FLOW_P * Math.PI * 2;
+        data[c * 4] = Math.round(127.5 + 127.5 * Math.cos(ang)); data[c * 4 + 1] = Math.round(127.5 + 127.5 * Math.sin(ang)); data[c * 4 + 2] = 255; data[c * 4 + 3] = 20;
+        wet[c] = 0; D[c] = 0;
+      }
       // Distance to the bank through the water, in two chamfer passes.
       const relax = (c, o, k) => { if (D[o] + k < D[c]) D[c] = D[o] + k; };
       for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const c = y * W + x; if (!wet[c]) continue; if (x > 0) relax(c, c - 1, 1); if (y > 0) { relax(c, c - W, 1); if (x > 0) relax(c, c - W - 1, 1.414); if (x < W - 1) relax(c, c - W + 1, 1.414); } }
@@ -1039,6 +1058,11 @@ const World = (() => {
       for (const f of M.fords || []) for (let j = -6; j <= 6; j++) {
         const k = j * 1.1, o = j % 2 ? 0.25 : -0.25, x = f[0] - f[3] * k + f[2] * o, y = f[1] + f[2] * k + f[3] * o;
         if (terrainAt(M, x, y) < M.water - 0.05) stones.push({ x, y: terrainAt(M, x, y) + 0.12, z: y, sx: 0.55, sy: 0.35, sz: 0.5, a: k, c: 0xa8a090 });
+      }
+      // A few across each brook's ford.
+      for (const f of M.brookFords || []) for (let j = -1; j <= 1; j++) {
+        const k = j * 0.42, o = j % 2 ? 0.16 : -0.16, x = f[0] - f[3] * k + f[2] * o, y = f[1] + f[2] * k + f[3] * o;
+        stones.push({ x, y: terrainAt(M, x, y) + 0.04, z: y, sx: 0.3, sy: 0.22, sz: 0.28, a: k, c: 0xa8a090 });
       }
       scen.fords = { mesh: stones.length ? instanced(sc.stone, plainTint, stones) : null, list: stones, under: false };
 
@@ -1932,6 +1956,13 @@ const World = (() => {
       hTex = new THREE.DataTexture(hd, VW, VH, THREE.RedFormat, THREE.HalfFloatType);
       hTex.magFilter = hTex.minFilter = THREE.LinearFilter; hTex.wrapS = hTex.wrapT = THREE.ClampToEdgeWrapping; hTex.needsUpdate = true;
       SH.tH.value = hTex;
+      // The brooks' distance map on the heights' grid: four cells at most, and the fords.
+      if (brookTex) brookTex.dispose();
+      const bk = new Uint8Array(M.h.length * 4);
+      for (let i = 0; i < M.h.length; i++) { bk[i * 4] = M.brookDist ? Math.round(Math.min(M.brookDist[i], 4) / 4 * 255) : 255; bk[i * 4 + 1] = M.brookFord && M.brookFord[i] ? 255 : 0; bk[i * 4 + 3] = 255; }
+      brookTex = new THREE.DataTexture(bk, VW, VH, THREE.RGBAFormat);
+      brookTex.magFilter = brookTex.minFilter = THREE.LinearFilter; brookTex.wrapS = brookTex.wrapT = THREE.ClampToEdgeWrapping; brookTex.needsUpdate = true;
+      SH.tBrook.value = brookTex;
       buildFlow();
       for (const k in sky) if (typeof sky[k] === 'number') sky[k] = 0;
       Object.assign(sky, Rules.sky(S), { wind: undefined });
