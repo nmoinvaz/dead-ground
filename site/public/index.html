@@ -598,7 +598,7 @@ body[data-look="ink"] .sheet { box-shadow: 4px 4px 0 var(--ink); }
       <div class="choice"><h2>Ore, oil and power</h2><div id="s-gauges" class="two"><button data-v="top">In the top bar</button><button data-v="side">In the sidebar</button></div></div>
       <div class="choice"><h2>Map sheet frame</h2><div id="s-sheet" class="two"><button data-v="on">On</button><button data-v="off">Off</button></div></div>
       <div class="choice"><h2>Music</h2><div id="s-music" class="two"><button data-v="on">On</button><button data-v="off">Off</button></div></div>
-      <p id="build">Build 9369e1d 2026-11-09 00:21</p>
+      <p id="build">Build 1e57125 2026-11-09 00:28</p>
     </div>
     <div id="banner" hidden></div>
     <button id="update" hidden>A new version of Dead Ground is out. <b>Reload</b></button>
@@ -13227,6 +13227,8 @@ const World = (() => {
       watchAll() { viewTeam = -1; SH.uFogOn.value = 0; },
       // Where one herd of each kind stands, and a raft of ducks, for checks.
       lifeAll() { return life ? life.herds.map(h => h.kind) : []; },
+      // What carries a lamp after dark: the carts or cars on the roads, which by the age, and the boats.
+      lamps() { return { cars: life ? life.cars : [], boats: life ? life.boats : [], motor: worldAge() >= MOTOR_AGE }; },
       get names() { return names; },
       // The parks, and a market day called now at one of them, for checks.
       parksDebug() { return parks.map(p => ({ x: p.x, y: p.y, r: p.r, town: p.town })); },
@@ -14667,22 +14669,38 @@ const Hud = (() => {
       if (note) { og.fillStyle = ink ? '#8a3a22' : '#f0b060'; og.font = f2; og.fillText(note, x - 7, y + 29); }
       og.restore();
     }
+    // Light after dark, on either paper. Light paper takes it added to the page. The dark scheme turns the ink overlay
+    // over, so there a light is laid on as the colour the turning makes it, the inverse of invert(.93) and a half
+    // turn of hue.
+    const HUE_HALF = [[-0.574, 1.43, 0.144], [0.426, 0.43, 0.144], [0.426, 1.43, -0.856]];
+    const nightDark = () => inked() && document.body.dataset.scheme === 'dark';
+    function lit(r, g, b, a) {
+      if (!nightDark()) return `rgba(${r},${g},${b},${a})`;
+      const c = HUE_HALF.map(row => { const u = clamp((row[0] * r + row[1] * g + row[2] * b) / 255, 0, 1); return Math.round(255 * clamp((0.93 - u) / 0.86, 0, 1)); });
+      return `rgba(${c[0]},${c[1]},${c[2]},${a})`;
+    }
+    const glow = (x, y, r, a, c0, c1, sy = 0.8) => {
+      const gr = og.createRadialGradient(x, y, 0, x, y, r);
+      gr.addColorStop(0, lit(...c0, a)); gr.addColorStop(0.55, lit(...c1, a * 0.38)); gr.addColorStop(1, lit(...c1, 0));
+      og.fillStyle = gr; og.beginPath(); og.ellipse(x, y, r, r * sy, 0, 0, 6.283); og.fill();
+    };
     // Night: a flare burns as a bright star over a pool of warm light, and each building that fights sweeps a
-    // searchlight round it. Drawn as light added to the page, they show only as the dark comes on.
+    // searchlight round it. Windows are lit in the towns and the buildings, a campfire burns by each headquarters
+    // and barracks, and carts carry lanterns, cars headlamps and boats a light at the stern. All show only as the
+    // dark comes on.
     function drawNight(s, t) {
       const n = Rules.nightAt(s.tick);
       if (n < 0.05) return;
-      og.save(); og.globalCompositeOperation = 'lighter';
+      const now = performance.now() / 1000, P0 = t >= 0 ? s.P[t] : null, seenAt = (x, y) => !P0 || P0.seen[Rules.cellOf(x, y)], visAt = (x, y) => !P0 || P0.vis[Rules.cellOf(x, y)];
+      og.save(); og.globalCompositeOperation = nightDark() ? 'source-over' : 'lighter';
       for (const w of s.sweeps) {
         if (!w.flare || w.until <= s.tick || (t >= 0 && w.team !== t && !(s.P[t] && s.P[t].vis[Rules.cellOf(w.x, w.y)]))) continue;
         const left = (w.until - s.tick) / (20 * HZ), [x, y] = world.project(w.x, Rules.heightAt(s.map, w.x, w.y), w.y), r = w.r * world.ppu(w.x, 0, w.y);
         const fl = 0.85 + 0.15 * Math.sin(performance.now() / 70 + w.flare), a = n * Math.min(1, left * 4) * fl;
-        const gr = og.createRadialGradient(x, y, 0, x, y, r);
-        gr.addColorStop(0, `rgba(255,214,140,${0.42 * a})`); gr.addColorStop(0.6, `rgba(255,170,90,${0.16 * a})`); gr.addColorStop(1, 'rgba(255,150,80,0)');
-        og.fillStyle = gr; og.beginPath(); og.ellipse(x, y, r, r * 0.8, 0, 0, 6.283); og.fill();
+        glow(x, y, r, 0.42 * a, [255, 214, 140], [255, 170, 90]);
         // The flare itself hangs over the pool and sinks as it burns.
         const [fx, fy] = world.project(w.x, Rules.heightAt(s.map, w.x, w.y) + 3 + 5 * left, w.y);
-        og.fillStyle = `rgba(255,240,200,${0.9 * a})`; og.beginPath(); og.arc(fx, fy, 3.2, 0, 6.283); og.fill();
+        og.fillStyle = lit(255, 240, 200, 0.9 * a); og.beginPath(); og.arc(fx, fy, 3.2, 0, 6.283); og.fill();
       }
       for (const o of world.onScreen) {
         const e = o.e;
@@ -14692,9 +14710,66 @@ const Hud = (() => {
         const [ax, ay] = world.project(e.x, Rules.heightAt(s.map, e.x, e.y) + 1.5, e.y), half = 0.22 * reach * world.ppu(ex, 0, ey);
         const dx = bx - ax, dy = by - ay, L = Math.hypot(dx, dy) || 1, nx = -dy / L * half, ny = dx / L * half;
         const gr = og.createLinearGradient(ax, ay, bx, by);
-        gr.addColorStop(0, `rgba(255,236,190,${0.3 * n})`); gr.addColorStop(1, `rgba(255,236,190,${0.05 * n})`);
+        gr.addColorStop(0, lit(255, 236, 190, 0.3 * n)); gr.addColorStop(1, lit(255, 236, 190, 0.05 * n));
         og.fillStyle = gr; og.beginPath(); og.moveTo(ax, ay); og.lineTo(bx + nx, by + ny); og.lineTo(bx - nx, by - ny); og.closePath(); og.fill();
-        og.fillStyle = `rgba(255,236,190,${0.18 * n})`; og.beginPath(); og.ellipse(bx, by, half, half * 0.7, 0, 0, 6.283); og.fill();
+        og.fillStyle = lit(255, 236, 190, 0.18 * n); og.beginPath(); og.ellipse(bx, by, half, half * 0.7, 0, 0, 6.283); og.fill();
+      }
+      // Windows on the faces of a box turned toward the viewer, a face's middle lying lower on the screen than the
+      // box's own. Some stay dark, and a lamp now and then gutters.
+      const windows = (cx, cy, w, h, z, k, seed) => {
+        const [mx, my] = world.project(cx, z, cy);
+        if (!onView(mx, my, 60)) return;
+        const u = world.ppu(cx, z, cy);
+        for (const [fx, fy, ax, ay, len] of [[0, -h / 2, 1, 0, w], [0, h / 2, 1, 0, w], [-w / 2, 0, 0, 1, h], [w / 2, 0, 0, 1, h]]) {
+          if (world.project(cx + fx, z, cy + fy)[1] <= my) continue;
+          const m = Math.max(1, Math.round(len / 1.4));
+          for (let i = 0; i < m; i++) {
+            const hs = ((seed * 9301 + (i + fx * 3 + fy * 7) * 49297) % 233280) / 233280;
+            if (Math.abs(hs) > k) continue;
+            const f = (i + 0.5) / m - 0.5, wx = cx + fx * 1.02 + ax * f * len, wy = cy + fy * 1.02 + ay * f * len;
+            const [px, py] = world.project(wx, z, wy), fl = 0.88 + 0.12 * Math.sin(now * (3 + hs * 4) + seed);
+            glow(px, py, u * 1.1, 0.42 * n * fl, [255, 200, 120], [255, 160, 80], 0.9);
+            og.fillStyle = lit(255, 230, 160, 0.95 * n * fl); og.fillRect(px - u * 0.09, py - u * 0.12, u * 0.18, u * 0.22);
+          }
+        }
+      };
+      s.map.houses.forEach((h, i) => { if (s.hh[i] > 0 && seenAt(h.x + h.w / 2, h.y + h.h / 2)) windows(h.x + h.w / 2, h.y + h.h / 2, h.w, h.h, Rules.heightAt(s.map, h.x + h.w / 2, h.y + h.h / 2) + 0.55, 0.78, i + 1); });
+      for (const o of world.onScreen) {
+        const e = o.e;
+        // A headquarters that fights in the early ages is lived in all the same.
+        if (!e.b || e.hp <= 0 || e.d.shore || (Rules.armOf(s, e) && e.kind !== 'hq')) continue;
+        windows(e.x, e.y, e.w, e.h, Rules.heightAt(s.map, e.x, e.y) + 0.8, 0.5, e.id);
+        // A campfire outside the headquarters and the barracks, at the corner toward the viewer: a glow on the
+        // ground, a flame that leaps and sparks.
+        if (e.kind !== 'hq' && e.kind !== 'barracks') continue;
+        let fx = e.x, fy = e.y, low = -1e9;
+        for (const [sx, sy] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) { const qx = e.x + sx * (e.w / 2 + 1.1), qy = e.y + sy * (e.h / 2 + 1.1), q = world.project(qx, 0, qy)[1]; if (q > low) { low = q; fx = qx; fy = qy; } }
+        const z = Rules.heightAt(s.map, fx, fy), [px, py] = world.project(fx, z, fy), u = world.ppu(fx, z, fy);
+        const fl = 0.8 + 0.2 * Math.sin(now * 9 + e.id) * Math.sin(now * 13.7 + e.id * 2);
+        glow(px, py, u * 2.6, 0.4 * n * fl, [255, 190, 100], [255, 130, 60]);
+        const fh = u * (0.42 + 0.12 * fl);
+        og.fillStyle = lit(255, 150, 60, 0.9 * n); og.beginPath(); og.moveTo(px - u * 0.16, py); og.quadraticCurveTo(px - u * 0.1, py - fh * 0.6, px + Math.sin(now * 7 + e.id) * u * 0.05, py - fh); og.quadraticCurveTo(px + u * 0.1, py - fh * 0.6, px + u * 0.16, py); og.closePath(); og.fill();
+        og.fillStyle = lit(255, 232, 150, 0.9 * n); og.beginPath(); og.ellipse(px, py - fh * 0.3, u * 0.07, fh * 0.28, 0, 0, 6.283); og.fill();
+        for (let k = 0; k < 3; k++) { const ph = (now * 0.7 + k / 3 + e.id * 0.13) % 1; og.fillStyle = lit(255, 200, 110, n * (1 - ph)); og.fillRect(px + Math.sin(ph * 9 + k * 2) * u * 0.18, py - fh - ph * u * 1.2, 1.6, 1.6); }
+      }
+      // Lamps on the roads and the water: a cart's lantern, a car's two headlamps throwing light ahead, a boat's.
+      const L = world.lamps();
+      for (const c of L.cars) {
+        if (!visAt(c.x, c.y)) continue;
+        const z = Rules.heightAt(s.map, c.x, c.y), [px, py] = world.project(c.x, z + 0.5, c.y);
+        if (!onView(px, py, 40)) continue;
+        const u = world.ppu(c.x, z, c.y);
+        if (!L.motor) { glow(px, py, u * 0.9, 0.5 * n, [255, 214, 130], [255, 170, 80]); continue; }
+        const hx = c.x + Math.cos(c.a) * 3.2, hy = c.y + Math.sin(c.a) * 3.2, [bx, by] = world.project(hx, Rules.heightAt(s.map, hx, hy), hy), [ax, ay] = world.project(c.x + Math.cos(c.a) * 0.5, z + 0.2, c.y + Math.sin(c.a) * 0.5);
+        const dx = bx - ax, dy = by - ay, D = Math.hypot(dx, dy) || 1, nx = -dy / D * u * 0.7, ny = dx / D * u * 0.7;
+        const gr = og.createLinearGradient(ax, ay, bx, by);
+        gr.addColorStop(0, lit(255, 244, 210, 0.38 * n)); gr.addColorStop(1, lit(255, 244, 210, 0));
+        og.fillStyle = gr; og.beginPath(); og.moveTo(ax, ay); og.lineTo(bx + nx, by + ny); og.lineTo(bx - nx, by - ny); og.closePath(); og.fill();
+      }
+      for (const b of L.boats) {
+        if (!visAt(b.x, b.y)) continue;
+        const [px, py] = world.project(b.x, s.map.water + 0.5, b.y);
+        if (onView(px, py, 40)) glow(px, py, world.ppu(b.x, 0, b.y) * 0.8, 0.5 * n, [255, 214, 130], [255, 170, 80]);
       }
       og.restore();
     }
