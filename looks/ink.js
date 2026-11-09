@@ -1181,8 +1181,10 @@
           const C = ink.uniforms, { w, h, camera, sky } = K, [CX, CY] = K.center;
           if (!C.tPaper.value) C.tPaper.value = K.paper();
           if (!sides) setSides(C);
-          C.t.value = K.ldr.texture; C.tSubj.value = K.mask(); C.tNorm.value = K.norm(); C.tHeat.value = K.a0.texture;
-          C.tFx.value = K.fx(); C.uFxs.value = look.fxs || 0; C.uFire.value = look.fire ?? (look.fxs || 0); C.uUnits.value = look.units || 0; C.tAnc.value = K.anchor(); C.uDark.value = Looks.dark ? 1 : 0; C.uInks.value = look.inks || 0;
+          // What each thing is, its surface and its origin, for the lines, from the line passes drawn together.
+          const L = K.lines();
+          C.t.value = K.ldr.texture; C.tSubj.value = L.mask; C.tNorm.value = L.norm; C.tHeat.value = K.a0.texture;
+          C.tFx.value = K.fx(); C.uFxs.value = look.fxs || 0; C.uFire.value = look.fire ?? (look.fxs || 0); C.uUnits.value = look.units || 0; C.tAnc.value = L.anchor; C.uDark.value = Looks.dark ? 1 : 0; C.uInks.value = look.inks || 0;
           C.res.value.set(w, h); C.uTime.value = K.time; C.uK.value = h / 1080;
           C.tFogS.value = K.fog();
           // Distance to the nearest road, per pixel of the land.

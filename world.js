@@ -241,7 +241,7 @@ const World = (() => {
 
     let style = Looks.get('ink'), inkStyle = 8, roadStyle = 3, oreStyle = 4, shadeHatch = true;
     // The kind of thing being drawn into the line passes, shared with the pass's material, and whether it sways.
-    const catU = { value: 1 }, catRef = { mat: null, norm: null }, swayU = { value: 0 };
+    const catU = { value: 1 }, catRef = { mat: null, norm: null, lines: null }, swayU = { value: 0 };
     const maskMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
 
     // The full-screen passes: bloom in two sizes, then the grade.
@@ -350,6 +350,51 @@ const World = (() => {
           if (d > 1e-4) h = mx == vC.r ? mod((vC.g - vC.b) / d, 6.0) : mx == vC.g ? (vC.b - vC.r) / d + 2.0 : (vC.r - vC.g) / d + 4.0;
           gl_FragColor = vec4(gl_FragCoord.xy - vO, h / 6.0, mx > 0.0 ? d / mx : 0.0);
         }` });
+      // The three line passes in one draw, each to its own target, where the browser can write several at once
+      // (WebGL2). The same objects from the same camera, so one depth test serves all three.
+      const linesMat = !renderer.capabilities.isWebGL2 ? null : catRef.lines = new THREE.ShaderMaterial({ glslVersion: THREE.GLSL3, vertexColors: true, uniforms: { uCat: catU, uSwayOn: swayU, uTime: SH.uTime, uWind: SH.uWind, uRes: anchorRes }, vertexShader: `
+        attribute float aTeam; varying vec3 vC; varying vec3 vM; varying float vT; varying vec3 vN; varying float vD; varying vec2 vO;
+        uniform float uSwayOn, uTime; uniform vec2 uWind, uRes;
+        ${SWAY}
+        void main() {
+          vec4 p = vec4(position, 1.0), o = vec4(0.0, 0.0, 0.0, 1.0); vec3 n = normal;
+          #ifdef USE_INSTANCING
+            p = instanceMatrix * p; o = instanceMatrix * o; n = mat3(instanceMatrix) * n;
+          #endif
+          p.xz += sway(p.xz, position.y) * uSwayOn;
+          #ifdef USE_INSTANCING_COLOR
+            vC = instanceColor;
+          #else
+            vC = vec3(0.0);
+          #endif
+          #ifdef USE_COLOR
+            vM = color;
+          #else
+            vM = vec3(0.0);
+          #endif
+          vT = aTeam;
+          vec4 mv = modelViewMatrix * p, oc = projectionMatrix * modelViewMatrix * o;
+          vN = normalize(normalMatrix * n); vD = -mv.z;
+          vO = (oc.xy / oc.w * 0.5 + 0.5) * uRes;
+          gl_Position = projectionMatrix * mv;
+        }`, fragmentShader: `
+        uniform float uCat; varying vec3 vC; varying vec3 vM; varying float vT; varying vec3 vN; varying float vD; varying vec2 vO;
+        layout(location = 0) out highp vec4 oMask;
+        layout(location = 1) out highp vec4 oNorm;
+        layout(location = 2) out highp vec4 oAnc;
+        void main() {
+          // The mask, as markMat writes it.
+          vec3 c = uCat > 0.6 ? vC * (vT > 0.9 ? 1.0 : uCat > 0.9 ? 0.45 : 0.0) : uCat > 0.52 && uCat < 0.58 ? vec3(0.5, 0.4, 0.1) : vec3(0.0);
+          if (uCat > 0.58 && uCat < 0.62) c = vC * vM * 0.5;
+          if (uCat > 0.7 && uCat < 0.8 && vT <= 0.9) c = vM * 0.5;
+          oMask = vec4(c, uCat);
+          // The surface's direction and distance, as normMat writes them.
+          oNorm = vec4(normalize(vN) * 0.5 + 0.5, vD);
+          // The offset from the thing's middle and its colour's hue, as anchorMat writes them.
+          float mx = max(vC.r, max(vC.g, vC.b)), mn = min(vC.r, min(vC.g, vC.b)), d = mx - mn, h = 0.0;
+          if (d > 1e-4) h = mx == vC.r ? mod((vC.g - vC.b) / d, 6.0) : mx == vC.g ? (vC.b - vC.r) / d + 2.0 : (vC.r - vC.g) / d + 4.0;
+          oAnc = vec4(gl_FragCoord.xy - vO, h / 6.0, mx > 0.0 ? d / mx : 0.0);
+        }` });
       // The land alone, for passes that need it: visible, seen, height, and scars.
       const fogPassMat = new THREE.ShaderMaterial({ uniforms: { tFog: SH.tFog, tMarks: SH.tMarks, uFogOn: SH.uFogOn, uMap: SH.uMap }, vertexShader: `
         varying vec3 vW; void main() { vec4 w = modelMatrix * vec4(position, 1.0); vW = w.xyz; gl_Position = projectionMatrix * viewMatrix * w; }`, fragmentShader: `
@@ -372,13 +417,19 @@ const World = (() => {
           float fb = texture2D(tDetail, vW.xz * 0.013 + uCloud * 0.7 + 0.37).g;
           gl_FragColor = vec4(min(vR, 20.0), cl, fb, texture2D(tTrail, vW.xz / uMap).r);
         }` });
-      let ldr = null, maskRT = null, normRT = null, fogRT = null, landRT = null, fxRT = null, anchorRT = null;
+      let ldr = null, maskRT = null, normRT = null, fogRT = null, landRT = null, fxRT = null, anchorRT = null, linesRT = null;
       let rt, a0, a1, b0, b1, w = 1, h = 1;
       // Screen-sized targets a look keeps for itself, by name.
       const targets = new Map();
       function size(wp, hp) {
         w = wp; h = hp;
-        for (const r of [rt, a0, a1, b0, b1, ldr, maskRT, normRT, fogRT, landRT, fxRT, anchorRT, ...targets.values()]) if (r) r.dispose();
+        for (const r of [rt, a0, a1, b0, b1, ldr, maskRT, normRT, fogRT, landRT, fxRT, anchorRT, linesRT, ...targets.values()]) if (r) r.dispose();
+        // The merged line target: the mask in bytes, filtered, as maskRT holds it, and the normals and anchors in half
+        // floats, unfiltered, as normRT and anchorRT hold them.
+        if (linesMat) {
+          linesRT = new THREE.WebGLMultipleRenderTargets(w, h, 3, { type: THREE.HalfFloatType, minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter });
+          Object.assign(linesRT.texture[0], { type: THREE.UnsignedByteType, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter });
+        }
         anchorRT = new THREE.WebGLRenderTarget(w, h, { type: THREE.HalfFloatType, minFilter: THREE.NearestFilter, magFilter: THREE.NearestFilter });
         fxRT = new THREE.WebGLRenderTarget(w >> 1, h >> 1, { type: THREE.HalfFloatType, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter });
         targets.clear();
@@ -418,6 +469,23 @@ const World = (() => {
         scene.overrideMaterial = null; camera.layers.mask = was;
         renderer.setClearColor(theme ? theme.shroud : 0, 1);
         return target.texture;
+      }
+      // The three line passes in one draw. The targets are cleared as the three passes cleared their own: all to the
+      // normals' clear, then the mask and the anchors back to nothing.
+      const NONE = new Float32Array(4);
+      function drawLines() {
+        anchorRes.value.set(w, h);
+        const was = camera.layers.mask, gl = renderer.getContext();
+        camera.layers.set(1); scene.overrideMaterial = linesMat;
+        renderer.shadowMap.autoUpdate = false;
+        renderer.setRenderTarget(linesRT); renderer.setClearColor(0x808080, 0); renderer.clear();
+        gl.clearBufferfv(gl.COLOR, 0, NONE); gl.clearBufferfv(gl.COLOR, 2, NONE);
+        renderer.render(scene, camera);
+        renderer.shadowMap.autoUpdate = true;
+        scene.overrideMaterial = null; camera.layers.mask = was;
+        renderer.setClearColor(theme ? theme.shroud : 0, 1);
+        const [mask, norm, anchor] = linesRT.texture;
+        return { mask, norm, anchor };
       }
       // The land alone, drawn with a material of a pass's own.
       function landInto(material, target) {
@@ -461,6 +529,8 @@ const World = (() => {
         land: () => landInto(landMat, landRT),
         fx: () => drawInto(fxRT, 0x000000, 0, 2, null),
         anchor: () => { anchorRes.value.set(w, h); return drawInto(anchorRT, 0x000000, 0, 1, anchorMat); },
+        // The mask, the normals and the anchors together, in one draw where the browser allows it.
+        lines: () => linesMat ? drawLines() : { mask: K.mask(), norm: K.norm(), anchor: K.anchor() },
         // The shadows cast on the land, in alpha, from the shadow map the frame has already drawn.
         shadows: target => drawInto(target, 0x000000, 0, 3, shadowMat),
         landUniforms,
@@ -732,6 +802,7 @@ const World = (() => {
           catU.value = cat; swayU.value = sw;
           if (catRef.mat) catRef.mat.uniformsNeedUpdate = true;
           if (catRef.norm) catRef.norm.uniformsNeedUpdate = true;
+          if (catRef.lines) catRef.lines.uniformsNeedUpdate = true;
         }
       };
       return mesh;
