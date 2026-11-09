@@ -595,7 +595,7 @@ body[data-look="ink"] .sheet { box-shadow: 4px 4px 0 var(--ink); }
       <div class="choice"><h2>Picture</h2><div id="s-pic" class="two"><button data-v="sharp">Sharp</button><button data-v="fast">Faster</button></div><p id="s-pic-note"></p></div>
       <div class="choice"><h2>Ore, oil and power</h2><div id="s-gauges" class="two"><button data-v="side">In the sidebar</button><button data-v="top">In the top bar</button></div></div>
       <div class="choice"><h2>Music</h2><div id="s-music" class="two"><button data-v="on">On</button><button data-v="off">Off</button></div></div>
-      <p id="build">Build a9e73c1 2026-11-08 15:37</p>
+      <p id="build">Build 7a38f1e 2026-11-08 15:58</p>
     </div>
     <div id="banner" hidden></div>
     <button id="update" hidden>A new version of Dead Ground is out. <b>Reload</b></button>
@@ -1154,6 +1154,8 @@ const Rules = (() => {
   // feature is listed with all of its images in a row, so one town's images sit side by side.
   // How wooded a map is beyond the usual: the woods' patches grow wider, start on lower ground and stand thicker.
   // Maps not named keep the usual woods.
+  // The treeline: woods thin out over TREE_BAND of height round TREE_LINE and stand no higher.
+  const TREE_LINE = 8.6, TREE_BAND = 1.2;
   const WOODS = { quad: 0.7, pass: 1, lakes: 1, greenwood: 3, oldforest: 1.3, twinlakes: 0.6, ponds: 0.8, peaks: 0.6, highlands: 0.5, crater: 0.5 };
   // A point turned a quarter round the middle k times.
   const turnK = ([x, y], k) => { let dx = x - CX, dy = y - CY; for (let i = 0; i < k; i++) { const t = dx; dx = -dy; dy = t; } return [CX + dx, CY + dy]; };
@@ -1700,6 +1702,12 @@ const Rules = (() => {
       const wk = WOODS[kind] || 0, wood = sym(x, y, wk ? 0.06 / (1 + 0.6 * wk) : 0.06, 3), r = rand();
       const place = (k, s) => {
         const px = x + 0.25 + rand() * 0.5, py = y + 0.25 + rand() * 0.5;
+        // Woods thin out up the mountains and stop at the treeline. Each place draws its dice as before, so the
+        // rest of the map is laid as it always was, and decides once for all its copies, so the map stays fair.
+        if (k === 'tree' && hAt(px, py) > TREE_LINE + ((Math.imul(x, 73856093) ^ Math.imul(y, 19349663)) >>> 0) % 1024 / 1024 * TREE_BAND - TREE_BAND / 2) {
+          for (let i = 0; i < L.syms.length; i++) rand();
+          return;
+        }
         for (const T of L.syms) {
           const [qx, qy] = T([px, py]);
           scatter.push({ k, x: qx, y: qy, s, a: rand() * TAU });
@@ -7548,13 +7556,13 @@ if (typeof module !== 'undefined') module.exports = Looks;
       // 45 and 135 degrees, then flat and upright lines for the darkest, each line a little uneven with small gaps.
       // The ground's hatching is pinned to the map so it pans with it, the units' redraws a few times a second.
       const ink = new THREE.ShaderMaterial({ uniforms: { t: { value: null }, tSubj: { value: null }, tHeat: { value: null }, tPaper: { value: null }, res: { value: new THREE.Vector2(1, 1) }, uTime: { value: 0 }, uK: { value: 1 }, uOff: { value: new THREE.Vector2() }, uStyle: { value: 8 }, tNorm: { value: null }, tFogS: { value: null }, tLand: { value: null }, uSun2: { value: new THREE.Vector2(-1, 0) }, uUpV: { value: new THREE.Vector3(0, 1, 0) }, uRoad: { value: 0 }, uOre: { value: 0 }, uMarks: { value: 1 },
-        uWindS: { value: new THREE.Vector2() }, uView: { value: new THREE.Vector2(1, 0) }, tFx: { value: null }, tAnc: { value: null }, uDark: { value: 0 }, uInks: { value: 0 }, uFxs: { value: 0 }, uFire: { value: 0 }, uUnits: { value: 0 }, tH: SH.tH, uHSize: { value: new THREE.Vector2(1, 1) }, uHScale: { value: 1 }, uRain: { value: 0 }, uStorm: { value: 0 }, uSnowF: { value: 0 }, uSnowC: SH.uSnowC, uFog: { value: 0 }, uMist: { value: 0 }, uNight: { value: 0 }, uWet: { value: 0 },
+        uWindS: { value: new THREE.Vector2() }, uView: { value: new THREE.Vector2(1, 0) }, tFx: { value: null }, tAnc: { value: null }, uDark: { value: 0 }, uInks: { value: 0 }, uFxs: { value: 0 }, uFire: { value: 0 }, uUnits: { value: 0 }, tH: SH.tH, uHSize: { value: new THREE.Vector2(1, 1) }, uHScale: { value: 1 }, uRain: { value: 0 }, uStorm: { value: 0 }, uSnowF: { value: 0 }, uSnowC: SH.uSnowC, uSnowLine: SH.uSnowLine, uFog: { value: 0 }, uMist: { value: 0 }, uNight: { value: 0 }, uWet: { value: 0 },
         uDayMul: { value: new THREE.Vector3(1, 1, 1) }, uDayAdd: { value: new THREE.Vector3() }, uWaterL: { value: -0.15 }, uCloudK: SH.uCloudK, tMarks: SH.tMarks, uMap: SH.uMap,
         uCloud: SH.uCloud, uCloudT: SH.uCloudT, uSunW: SH.uSunDir, uCloudA: { value: 0 }, uCloudG: { value: 0 }, uRayK: { value: 0 }, uSand: { value: 0 },
         uInvVP: { value: new THREE.Matrix4() }, uW2S: { value: new THREE.Vector4(1, 0, 0, 1) }, uLev: { value: 1 }, tTerr: SH.tTerr, uBorder: SH.uBorder, uMe: { value: 0 },
         // Each side's colour as the anchor pass keeps it, its hue and how coloured it is, and its inks on either paper.
         uSideKey: { value: [...Array(8)].map(() => new THREE.Vector2()) }, uSideL: { value: [...Array(8)].map(() => new THREE.Vector3()) }, uSideD: { value: [...Array(8)].map(() => new THREE.Vector3()) }, uSideB: { value: [...Array(8)].map(() => new THREE.Vector3()) } }, vertexShader: vs, depthTest: false, depthWrite: false, fragmentShader: `
-        varying vec2 vUv; uniform sampler2D t, tSubj, tHeat, tPaper, tNorm, tFogS, tLand, tMarks; uniform float uMap; uniform vec2 res, uOff, uSun2, uWindS, uView, uHSize; uniform float uHScale, uFxs, uFire; uniform int uUnits, uInks; uniform float uDark; uniform sampler2D tH, tFx, tAnc; uniform vec3 uUpV, uDayMul, uDayAdd; uniform float uTime, uK, uRain, uStorm, uSnowF, uSnowC, uFog, uMist, uNight, uWet, uWaterL, uCloudK, uMarks; uniform int uStyle, uRoad, uOre;
+        varying vec2 vUv; uniform sampler2D t, tSubj, tHeat, tPaper, tNorm, tFogS, tLand, tMarks; uniform float uMap; uniform vec2 res, uOff, uSun2, uWindS, uView, uHSize; uniform float uHScale, uFxs, uFire; uniform int uUnits, uInks; uniform float uDark; uniform sampler2D tH, tFx, tAnc; uniform vec3 uUpV, uDayMul, uDayAdd; uniform float uTime, uK, uRain, uStorm, uSnowF, uSnowC, uSnowLine, uFog, uMist, uNight, uWet, uWaterL, uCloudK, uMarks; uniform int uStyle, uRoad, uOre;
         uniform vec2 uSideKey[8]; uniform vec3 uSideL[8], uSideD[8], uSideB[8];
         uniform sampler2D tTerr; uniform float uBorder, uMe;
         uniform vec2 uCloud; uniform vec3 uSunW; uniform float uCloudT, uCloudA, uCloudG, uRayK, uSand;
@@ -7961,14 +7969,31 @@ if (typeof module !== 'undefined') module.exports = Looks;
               tint *= 0.92 + 0.16 * (noise(Wl * 0.055) * 0.65 + noise(Wl * 0.16 + 5.0) * 0.35);
             }
             vec3 CONT = dk ? vec3(0.68, 0.66, 0.6) : vec3(0.42, 0.33, 0.24);
+            // Snow lies above the theatre's snow line the year round, its edge ragged with drifts, and leaves bare a
+            // face too steep to hold it. A survey map draws a snowfield so: white, with its contours and a fine edge in
+            // blue and its shaded slopes in grey.
+            float sNz = (noise(Wl * 0.09) - 0.5) * 2.4 + (noise(Wl * 0.31 + 7.0) - 0.5) * 0.9;
+            // The slope across a whole unit of land, smooth where the pixel's own gradient is not.
+            #define HB(o) texture2D(tH, ((Wl + o) * uHScale + 0.5) / uHSize).r
+            float sSl = length(vec2(HB(vec2(1.0, 0.0)) - HB(vec2(-1.0, 0.0)), HB(vec2(0.0, 1.0)) - HB(vec2(0.0, -1.0)))) * 0.5;
+            float sF = min(lhS + sNz - uSnowLine, (1.25 - sSl) * 2.0), sW = max(fwidth(sF), 1e-4);
+            float cap = smoothstep(-sW, sW, sF), capE = (1.0 - smoothstep(0.45 * sW * uK, 1.3 * sW * uK, abs(sF)));
+            vec3 SNOWL = dk ? vec3(0.56, 0.68, 0.88) : vec3(0.3, 0.44, 0.7);
+            tint = mix(tint, dk ? vec3(0.6, 0.62, 0.66) : vec3(0.985, 0.985, 0.975), cap);
+            CONT = mix(CONT, SNOWL, cap);
             // A road takes a third of the tint and the contours cross it faint, so it climbs and falls with the land
             // rather than lying flat over it.
             base = mix(base, tint, isG * (1.0 - onRoad * 0.65));
             // On dark paper a shaded slope sinks toward black and a lit one rises toward mid grey.
-            base = mix(base, base * (dk ? vec3(0.36, 0.37, 0.44) : vec3(0.72, 0.70, 0.68)), rfDark * (dk ? 0.95 : 0.65) * isG);
+            base = mix(base, base * (dk ? vec3(0.36, 0.37, 0.44) : mix(vec3(0.72, 0.70, 0.68), vec3(0.8, 0.8, 0.82), cap)), rfDark * (dk ? 0.95 : 0.65) * isG);
             base = mix(base, dk ? base + vec3(0.3, 0.27, 0.21) : min(base * 1.05 + 0.03, vec3(1.0)), rfLight * (dk ? 0.85 : 0.6) * isG);
             base = mix(base, CONT, contour * isG * (1.0 - onRoad * 0.55) * (1.0 - wet));
             base = mix(base, base * vec3(0.9, 0.93, 0.97), uWet * isG * 0.7);
+            // The snowfield's edge is dashed, as a map bounds land cover, so it never reads as a shore.
+            vec2 sg = vec2(dFdx(sF), dFdy(sF)), sTw = normalize(S2W * vec2(-sg.y, sg.x) + 1e-6);
+            float sPh = dot(Wl - floor(Wl / 3.0) * 3.0, sTw) / (0.6 * exp2(gLm));
+            float sDash = mix(step(0.4, fract(sPh)), step(0.4, fract(sPh * 0.5)), gLf);
+            base = mix(base, SNOWL, capE * sDash * 0.8 * isG * (1.0 - onRoad) * (1.0 - wet));
             // A raised road's shadow, a narrow band beyond its edge away from the light; none beside a cutting.
             float rCast = rShade * smoothstep(1.27, 1.33, rd) * (1.0 - smoothstep(1.3, 1.62, rd)) * (1.0 - cut * bank);
             base = mix(base, base * (dk ? vec3(0.55) : vec3(0.8, 0.79, 0.78)), rCast * isG * 0.85);
@@ -8013,7 +8038,7 @@ if (typeof module !== 'undefined') module.exports = Looks;
               vec3 TR = tn < 0.4 ? TREE3 : tn < 0.62 ? TREE1 : TREE2;
               if (dk) TR = tn < 0.4 ? vec3(0.13, 0.2, 0.12) : tn < 0.62 ? vec3(0.16, 0.235, 0.14) : vec3(0.19, 0.26, 0.165);
               base = mix(base, TR, isT * 0.8);
-              base = mix(base, dk ? vec3(0.4, 0.42, 0.45) : vec3(0.95, 0.96, 0.97), uSnowC * isT * 0.55);
+              base = mix(base, dk ? vec3(0.4, 0.42, 0.45) : vec3(0.95, 0.96, 0.97), max(uSnowC, cap * 0.6) * isT * 0.55);
               // A burnt tree is charcoal, not green.
               base = mix(base, dk ? vec3(0.06, 0.055, 0.05) : vec3(0.27, 0.25, 0.23), isT * (1.0 - smoothstep(0.06, 0.16, L(vUv))));
             }
@@ -8553,21 +8578,23 @@ const World = (() => {
   // Every theatre is shot at sunset. The sun sits low off the left of the screen, so shadows run long
   // across the ground, and the shade is lit by a violet sky and warm bounce from the earth.
   const SUN = (az, el) => { const x = Math.cos(az), z = Math.sin(az), c = Math.cos(el); return [x * c, Math.sin(el), z * c]; };
+  // Each theatre's trees, the height up the slopes where conifers take over from them, and the height above which
+  // snow lies the year round.
   const THEMES = {
     desert: {
-      name: 'Salt Flats', tree: 'acacia', sun: SUN(-0.46, 0.3), sunColor: 0xffb36e, sunPower: 3.9,
+      name: 'Salt Flats', tree: 'acacia', pine: 6, snow: 10.8, sun: SUN(-0.46, 0.3), sunColor: 0xffb36e, sunPower: 3.9,
       hemi: [0x5e6cb4, 0x7a4c34, 0.9], env: [0x34437e, 0xffa866, 0x3e2a22], haze: 0xf0a878, hazeK: 0.008, shroud: 0x100a0a,
       ground: [0xd2b08a, 0xbf9670], patch: 0xa69a6a, rock: 0xa86a52, bank: 0x8a7058, road: 0x76604e, stain: 0x9a5a30,
       water: [0x3f8c96, 0x17404e], leaf: [0x6a7438, 0x8a8440], dust: [0.95, 0.74, 0.55], smoke: [0.17, 0.13, 0.12], ripple: 1,
     },
     steppe: {
-      name: 'Black Steppe', tree: 'broad', sun: SUN(-0.5, 0.27), sunColor: 0xffa862, sunPower: 3.8,
+      name: 'Black Steppe', tree: 'broad', pine: 5, snow: 9, sun: SUN(-0.5, 0.27), sunColor: 0xffa862, sunPower: 3.8,
       hemi: [0x5a66ae, 0x6e4a30, 0.88], env: [0x32407a, 0xff9e5c, 0x34241a], haze: 0xe8a07a, hazeK: 0.008, shroud: 0x0f0a09,
       ground: [0xb59a62, 0x8e744a], patch: 0xcaa860, rock: 0x7e6252, bank: 0x5e4c3c, road: 0x5e4a3a, stain: 0x8a4e28,
       water: [0x3b7a80, 0x163a46], leaf: [0x56622c, 0x84702c], dust: [0.8, 0.66, 0.5], smoke: [0.15, 0.12, 0.11], ripple: 0,
     },
     winter: {
-      name: 'White Pass', tree: 'conifer', sun: SUN(-0.42, 0.25), sunColor: 0xffae80, sunPower: 3.3,
+      name: 'White Pass', tree: 'conifer', snow: 6.5, sun: SUN(-0.42, 0.25), sunColor: 0xffae80, sunPower: 3.3,
       hemi: [0x6c74c0, 0x9a7a74, 0.92], env: [0x3e4a8c, 0xffb084, 0x584450], haze: 0xf0b49c, hazeK: 0.008, shroud: 0x0f0b0e,
       ground: [0xf0e6e2, 0xdcd0cc], patch: 0xc8bcb8, rock: 0x7a6466, bank: 0x8a7a7a, road: 0x6c5e5a, stain: 0x8a5e48,
       water: [0x4a8494, 0x1c3e50], leaf: [0x2e4436, 0x42583e], dust: [0.96, 0.92, 0.92], smoke: [0.17, 0.15, 0.16], ripple: 0,
@@ -8615,6 +8642,8 @@ const World = (() => {
       uHaze: { value: new THREE.Color(0xf29a5e) }, uHazeK: { value: 0.012 }, uHazeFrom: { value: 80 }, uShroud: { value: new THREE.Color(0x120907) }, uSunDir: { value: new THREE.Vector3(1, 0.3, 0) },
       // The wind on the ground, how far it has carried the clouds, how overcast it is, and lying snow.
       uWind: { value: new THREE.Vector2(0.3, 0.1) }, uCloud: { value: new THREE.Vector2() }, uCloudK: { value: 0.2 }, uCloudT: { value: 0.3 }, uSnowC: { value: 0 },
+      // The height above which snow lies on the heights in any weather.
+      uSnowLine: { value: 99 },
       // How far tread marks darken the ground, none where the look draws them itself.
       uTreadK: { value: 0.34 },
       // How hard the track worn into each cell has become, in red.
@@ -9437,12 +9466,23 @@ const World = (() => {
       const trees = M.scatter.filter(s => s.k === 'tree'), rocks = M.scatter.filter(s => s.k === 'rock');
       const lf = th.leaf.map(c => new THREE.Color(c));
       scen = { trees: null, houses: null, bridges: null, fords: null, fences: null, fireT: 0, houseT: 0, fenceT: 0 };
-      // Trees get their own line category, so the ink pass can wash their canopies, and sway in the wind.
-      const tl = trees.map(t => ({ x: t.x, y: terrainAt(M, t.x, t.y) - 0.04, z: t.y, s: t.s * 1.1, a: t.a, c: colA.copy(lf[0]).lerp(lf[1], rand()).getHex(), cell: t.c }));
-      const tm = lineCat(instanced(sc[th.tree], treeTint, tl), 0.459, true);
+      // Trees get their own line category, so the ink pass can wash their canopies, and sway in the wind. Up the
+      // high slopes conifers take over from the theatre's own trees, mixed through a band of height.
+      const pf = THEMES.winter.leaf.map(c => new THREE.Color(c));
+      const tl = trees.map(t => {
+        const g = terrainAt(M, t.x, t.y), hi = th.pine !== undefined && g > th.pine + (rand() - 0.5) * 2.4, L = hi ? pf : lf;
+        return { x: t.x, y: g - 0.04, z: t.y, s: t.s * 1.1, a: t.a, c: colA.copy(L[0]).lerp(L[1], rand()).getHex(), cell: t.c, hi };
+      });
+      const meshes = [];
+      for (const [geo, list] of [[sc[th.tree], tl.filter(t => !t.hi)], [sc.conifer, tl.filter(t => t.hi)]]) {
+        if (!list.length) continue;
+        const m = lineCat(instanced(geo, treeTint, list), 0.459, true);
+        list.forEach((t, i) => { t.m = m; t.i = i; });
+        meshes.push(m);
+      }
       const byCell = new Map();
       tl.forEach((t, i) => { if (!byCell.has(t.cell)) byCell.set(t.cell, []); byCell.get(t.cell).push(i); });
-      scen.trees = { mesh: tm, list: tl, state: new Uint8Array(tl.length), seen: -1, byCell };
+      scen.trees = { meshes, list: tl, state: new Uint8Array(tl.length), seen: -1, byCell };
       const rc = new THREE.Color(th.rock);
       instanced(sc.rock, plainTint, rocks.map(t => ({ x: t.x, y: terrainAt(M, t.x, t.y) - 0.06, z: t.y, s: t.s * 1.2, a: t.a, c: colA.copy(rc).multiplyScalar(0.62 + rand() * 0.3).getHex() })));
 
@@ -9726,11 +9766,11 @@ const World = (() => {
           const st = S.wood[t.cell], was = T.state[i];
           if (st === was) return;
           T.state[i] = st; ch = true;
-          setInst(T.mesh, i, treePose(t, st));
+          setInst(t.m, t.i, treePose(t, st));
           if (st === 3) scorch(t.x, t.z, 0.9, 0.5);
           if (st === 1 && !first && VIS(t.x, t.z)) dustPuff(t.x, t.y + 0.3, t.z, 1.2);
         });
-        if (ch) dirty(T.mesh);
+        if (ch) T.meshes.forEach(dirty);
       }
       // Flames in the burning trees in sight, and where they are for the overlay's inked flames.
       fireSpots.length = 0;
@@ -10359,6 +10399,10 @@ const World = (() => {
       SH.uFogOn.value = team < 0 ? 0 : 1;
       applyLight();
       SH.uShroud.value.set(theme.shroud);
+      // Snow lies only on a map with mountains: a hilltop or two just over the line would read as ponds.
+      let over = 0;
+      if (theme.snow !== undefined) for (let i = 0; i < M.h.length; i++) over += M.h[i] > theme.snow;
+      SH.uSnowLine.value = over > M.h.length * 0.015 ? theme.snow : 99;
       renderer.setClearColor(theme.shroud, 1);
 
       fogData = new Uint8Array(W * H * 4); fogR = new Float32Array(W * H); fogG = new Float32Array(W * H);
