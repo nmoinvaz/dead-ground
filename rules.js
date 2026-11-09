@@ -295,6 +295,37 @@ const Rules = (() => {
   // A building with arms but no weapons of its own, as the headquarters, fires only in the ages that arm it.
   const armOf = (S, e) => (e.d.arms && e.d.arms[S.P[e.team].tech - 1]) || (e.d.weapons ? e.d.weapons[0] : null);
 
+  // Place names by theatre, for the towns and for the rivers, hills and woods the map letters. A map's names come of
+  // its seed, so every player's copy reads the same.
+  const NAMES = {
+    steppe: {
+      town: ['Ashford', 'Millbrook', 'Thornbury', 'Oakham', 'Hollins', 'Brackenfield', 'Wexley', 'Stanmore', 'Fairholt', 'Larkhill', 'Edgecombe', 'Redwater', 'Coldridge', 'Highcroft', 'Marlow', 'Kestrel Down'],
+      river: ['River Wend', 'River Arle', 'The Sallow', 'River Coln', 'River Tamsey', 'The Brede', 'River Ouse', 'River Leam'],
+      hill: ['Beacon Hill', 'Grey Knoll', 'Crow Height', 'Windy Ridge', 'Hob Tor', 'Gallows Hill', 'Long Edge', 'Raven Crag'],
+      wood: ['Ashwood', 'Haverholt', 'Blackthorn Wood', 'Hazel Copse', 'Fenwick Wood', 'Oak Hanger', 'Bramble Wood', 'Kings Holt'],
+    },
+    desert: {
+      town: ['Qasr Amir', 'Bir Hasan', 'Wadi Salma', 'Ain Rafa', 'Tel Zahir', 'Ras Nuba', 'Dar Kufra', 'Sidi Barra', 'Umm Qasa', 'Hamra', 'Zawiya', 'Bir Tawil', 'Khor Anza', 'Ain Sefra', 'Tel Gharib', 'Nahla'],
+      river: ['Nahr al-Abyad', 'Nahr Sahl', 'Wadi Kebir', 'Nahr Zarqa', 'Wadi Rimal', 'Nahr Hamra', 'Wadi Tamar', 'Nahr Dhahab'],
+      hill: ['Jebel Sur', 'Jebel Ahmar', 'Gara Hawa', 'Jebel Nasr', 'Qarat Silm', 'Jebel Tarik', 'Gara Kabira', 'Jebel Malh'],
+      wood: ['Ghaba Nakhil', 'Bustan Rafa', 'The Acacia Groves', 'Ghaba Sidr', 'Bustan Amir', 'The Thorn Groves', 'Ghaba Talh', 'Bustan Zahir'],
+    },
+    winter: {
+      town: ['Kaltbrunn', 'Weissach', 'Hochfeld', 'Grauberg', 'Eisental', 'Tannwald', 'Schneeberg', 'Felsheim', 'Kaltenbach', 'Wolfsegg', 'Lindenhof', 'Steinach', 'Hornau', 'Gletsch', 'Firnbach', 'Rabenstein'],
+      river: ['Eisbach', 'Weisse Ach', 'Grauer Inn', 'Kaltwasser', 'Firnach', 'Schmelzbach', 'Felsach', 'Wolfach'],
+      hill: ['Rotkopf', 'Graues Horn', 'Adlerspitze', 'Kahler Kogel', 'Wetterstein', 'Eiskopf', 'Hohe Wand', 'Rabenhorn'],
+      wood: ['Tannwald', 'Schwarzforst', 'Fichtenhain', 'Wolfsforst', 'Lärchenwald', 'Hochforst', 'Bärenwald', 'Kiefernhain'],
+    },
+  };
+  // The n-th name of a kind for this game: the theatre's list dealt in an order its seed shuffles, with a number
+  // after if a map has more than the list.
+  function nameFor(S, kind, n) {
+    const L = (NAMES[S.theatre] || NAMES.steppe)[kind], order = L.map((_, i) => i), r = mulberry((S.seed * 7919 + kind.length * 104729) >>> 0);
+    for (let i = order.length - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1)); [order[i], order[j]] = [order[j], order[i]]; }
+    return L[order[n % L.length]] + (n >= L.length ? ' ' + (Math.floor(n / L.length) + 1) : '');
+  }
+  const townName = (S, i) => nameFor(S, 'town', i);
+
   // Support calls, made from a radar station.
   const POWERS = {
     // A flare needs no radar: anyone may light the ground, most use by night.
@@ -4210,7 +4241,7 @@ const Rules = (() => {
     msin, mcos, matan2, mhypot,
     BRIDGE_HP, SPELL, SKIES, WEATHERS, nightAt, skyOf, offGoing, route, weatherAt, sky, dayAt, spellOf, bridgeAt, clsOf, houseHp, hurtBridge, ignite, shielded,
     coverPoints, coverNear, COVER_R, COVER_ARC, FORMS, formOfGroup, STANCES,
-    FB_AT, PIN, canExplore, UPGRADES, UP_AGE, upCost, upNote, upsAt, upK, upBlocked, hpOf, rangeOf, capOf, showersAt, showerAt,
+    FB_AT, PIN, canExplore, nameFor, townName, UPGRADES, UP_AGE, upCost, upNote, upsAt, upK, upBlocked, hpOf, rangeOf, capOf, showersAt, showerAt,
   };
 })();
 if (typeof module !== 'undefined') module.exports = Rules;

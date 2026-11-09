@@ -686,7 +686,7 @@ const World = (() => {
     let S = null, M = null, theme = null, viewTeam = 0, sets = {}, terrainMesh = null, waterMesh = null, statics = [], baseImage = null;
     const rs = new Map();
     let wrecks = [], corpses = [], bleeds = [], flyers = [], planes = [], falls = [], marks = null, marksTex = null, marksDirty = false, marksLast = 0, treadFade = 0;
-    let fogTex = null, fogData = null, fogR = null, fogG = null, terrTex = null, terrData = null, terrSeen = -1, hTex = null, flowTex = null, brookTex = null, beachTex = null, beachMap = null;
+    let fogTex = null, fogData = null, fogR = null, fogG = null, terrTex = null, terrData = null, terrSeen = -1, hTex = null, flowTex = null, brookTex = null, beachTex = null, beachMap = null, riverLines = [], names = null;
     // A number as a half float, for heights within a few units of the ground.
     const halfBuf = new Float32Array(1), halfBits = new Uint32Array(halfBuf.buffer);
     function toHalf(v) {
@@ -953,6 +953,7 @@ const World = (() => {
       const N8 = [[1, 0, 10], [-1, 0, 10], [0, 1, 10], [0, -1, 10], [1, 1, 14], [-1, 1, 14], [1, -1, 14], [-1, -1, 14]];
       let ci = 0;
       const still = [];
+      riverLines = [];
       for (let c0 = 0; c0 < n; c0++) {
         if (!wet[c0] || comp[c0] >= 0) continue;
         const cells = [c0];
@@ -982,6 +983,12 @@ const World = (() => {
           const x = c % W, y = c / W | 0;
           for (const [dx, dy, k] of N8) { const X = x + dx, Y = y + dy, o = Y * W + X; if (X >= 0 && Y >= 0 && X < W && Y < H && comp[o] === comp[c]) at(o, g + k); }
         }
+        // The river's middle line, for its name: in each three cells down its course, the point furthest from its banks.
+        const bins = new Map();
+        for (const [c, g] of G) { const b = Math.floor(g / 30), cur = bins.get(b); if (cur === undefined || D[c] > D[cur]) bins.set(b, c); }
+        let line = [...bins.keys()].sort((a, b) => a - b).map(k => { const c = bins.get(k); return [c % W + 0.5, (c / W | 0) + 0.5]; });
+        for (let k = 0; k < 3; k++) line = line.map((p, i) => i === 0 || i === line.length - 1 ? p : [(line[i - 1][0] + p[0] * 2 + line[i + 1][0]) / 4, (line[i - 1][1] + p[1] * 2 + line[i + 1][1]) / 4]);
+        if (line.length > 6) riverLines.push(line);
         for (const [c, g] of G) { const a = g / 10 / FLOW_P * Math.PI * 2; data[c * 4] = Math.round(127.5 + 127.5 * Math.cos(a)); data[c * 4 + 1] = Math.round(127.5 + 127.5 * Math.sin(a)); data[c * 4 + 2] = 255; data[c * 4 + 3] = Math.round(Math.min(Ds[c], FLOW_BANK) / FLOW_BANK * 255); }
       }
       if (flowTex) flowTex.dispose();
@@ -1012,6 +1019,39 @@ const World = (() => {
       beachTex.magFilter = beachTex.minFilter = THREE.LinearFilter; beachTex.needsUpdate = true;
       SH.tBeach.value = beachTex;
       beachMap = beach;
+    }
+
+    // What the map letters: the rivers by their courses, the highest hills, and the largest woods, each named from
+    // the theatre's list. Bases are left unnamed.
+    function buildNames() {
+      const hills = [], woods = [], far = (x, y, list, d) => list.every(p => Math.hypot(p.x - x, p.y - y) > d) && S.bases.every(b => Math.hypot(b[0] - x, b[1] - y) > 18);
+      // Hills: tops higher than all about them within eight cells, the highest first.
+      const tops = [];
+      for (let y = 6; y < H - 6; y += 3) for (let x = 6; x < W - 6; x += 3) {
+        const z = terrainAt(M, x, y);
+        if (z < 3.2) continue;
+        let top = true;
+        for (let j = -8; j <= 8 && top; j += 2) for (let i = -8; i <= 8; i += 2) if ((i || j) && terrainAt(M, x + i, y + j) > z) { top = false; break; }
+        if (top) tops.push({ x, y, z });
+      }
+      tops.sort((a, b) => b.z - a.z);
+      for (const t of tops) if (hills.length < Math.round(5 * W / 128) && far(t.x, t.y, hills, 24)) hills.push(t);
+      // Woods: the largest stands, by their cells joined side to side.
+      const seen = new Uint8Array(W * H);
+      const stands = [];
+      for (let c0 = 0; c0 < W * H; c0++) {
+        if (!(M.ground[c0] & 8) || seen[c0]) continue;
+        const q = [c0]; seen[c0] = 1; let sx = 0, sy = 0;
+        for (let i = 0; i < q.length; i++) { const c = q[i], x = c % W, y = c / W | 0; sx += x; sy += y; for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1], [2, 0], [0, 2], [-2, 0], [0, -2]]) { const X = x + dx, Y = y + dy, o = Y * W + X; if (X >= 0 && Y >= 0 && X < W && Y < H && !seen[o] && (M.ground[o] & 8)) { seen[o] = 1; q.push(o); } } }
+        if (q.length >= 60) stands.push({ x: sx / q.length + 0.5, y: sy / q.length + 0.5, n: q.length });
+      }
+      stands.sort((a, b) => b.n - a.n);
+      for (const s of stands) if (woods.length < Math.round(5 * W / 128) && far(s.x, s.y, woods.concat(hills), 18)) woods.push(s);
+      const rivers = riverLines.map(pts => ({ pts }));
+      rivers.forEach((r, i) => { r.name = Rules.nameFor(S, 'river', i); });
+      hills.forEach((h, i) => { h.name = Rules.nameFor(S, 'hill', i); });
+      woods.forEach((w, i) => { w.name = Rules.nameFor(S, 'wood', i); });
+      names = { rivers, hills, woods };
     }
 
     function buildScenery() {
@@ -2270,7 +2310,7 @@ const World = (() => {
       marks.ctx.globalCompositeOperation = 'source-over';
       marks.ctx.fillStyle = '#000'; marks.ctx.fillRect(0, 0, mk, mk); marksTex.needsUpdate = true;
 
-      buildTerrain(); buildWater(); buildFlow(); buildScenery(); buildSets(); buildLife(); applyLight();
+      buildTerrain(); buildWater(); buildFlow(); buildNames(); buildScenery(); buildSets(); buildLife(); applyLight();
       // The land's heights as a texture, for passes that draw the ground's form.
       if (hTex) hTex.dispose();
       const hd = new Uint16Array(M.h.length);
@@ -3614,6 +3654,7 @@ const World = (() => {
       watchAll() { viewTeam = -1; SH.uFogOn.value = 0; },
       // Where one herd of each kind stands, and a raft of ducks, for checks.
       lifeAll() { return life ? life.herds.map(h => h.kind) : []; },
+      get names() { return names; },
       // The parks, and a market day called now at one of them, for checks.
       parksDebug() { return parks.map(p => ({ x: p.x, y: p.y, r: p.r, town: p.town })); },
       fairNow(i) { const p = parks[i]; if (!p || !life) return; life.fairs = life.fairs.filter(q => q.town !== p.town); const t0 = life.fairs.length; life.fairs.push({ town: p.town, x: p.x, y: p.y, t: 120, stalls: Array.from({ length: 5 }, (_, k) => ({ a: p.a + k / 5 * 6.28 + 0.3, col: STALL_C[k] })) }); const t = M.towns[p.town]; for (let k = 0; k < 24; k++) life.folk.push({ town: p.town, visitor: 120, x: t.x + (Math.random() - 0.5) * 8, y: t.y + (Math.random() - 0.5) * 8, tx: p.x, ty: p.y, v: 0, wait: Math.random() * 3, hide: 0, col: [0xf4f0e4, 0xc84a3a, 0x5a7ab0, 0xe0c060, 0x7a9a5a, 0xd8a0a0][k % 6], a: 0, ph: 0 }); for (const f of life.folk) if (f.town === p.town) { f.tx = p.x + (Math.random() - 0.5) * 4; f.ty = p.y + (Math.random() - 0.5) * 4; f.wait = 0; } return t0; },

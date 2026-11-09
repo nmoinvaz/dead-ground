@@ -930,6 +930,62 @@ const Hud = (() => {
     const smoothstepJ = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
     // A small shell's burst as a pen draws one: a ragged star of flame for a moment, then a little scalloped cloud
     // that swells, rises and thins. Ground bursts are a pale brown smoke, air bursts the black of flak.
+    // Text along a line on the screen, each letter turned to the line, read left to right, centred on its middle.
+    function textAlong(text, pts, size, color, spacing) {
+      if (pts.length < 2) return;
+      if (pts[pts.length - 1][0] < pts[0][0]) pts = pts.slice().reverse();
+      const L = [0];
+      for (let i = 1; i < pts.length; i++) L.push(L[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]));
+      const ws = [...text].map(ch => og.measureText(ch).width + spacing), total = ws.reduce((a, b) => a + b, 0) - spacing;
+      if (total > L[L.length - 1] * 0.9) return;
+      let s = (L[L.length - 1] - total) / 2;
+      const at = d => { let k = 1; while (k < L.length - 1 && L[k] < d) k++; const t = (d - L[k - 1]) / Math.max(1e-6, L[k] - L[k - 1]), a = pts[k - 1], b = pts[k]; return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, Math.atan2(b[1] - a[1], b[0] - a[0])]; };
+      [...text].forEach((ch, i) => {
+        const [x, y, a] = at(s + ws[i] / 2);
+        og.save(); og.translate(x, y); og.rotate(a);
+        og.strokeText(ch, 0, 0); og.fillStyle = color; og.fillText(ch, 0, 0);
+        og.restore();
+        s += ws[i];
+      });
+    }
+    function drawNames(s, P) {
+      const dist = world.cam.dist, k = smoothstepJS(38, 70, dist);
+      if (k <= 0) return;
+      const N = world.names, seen = (x, y) => !P || P.seen[Rules.cellOf(x, y)], dk = blastDark || document.body.dataset.scheme === 'dark';
+      const fs = Math.round(12 + smoothstepJS(70, 200, dist) * 5);
+      og.save(); og.globalAlpha = k; og.setLineDash([]); og.textAlign = 'center'; og.textBaseline = 'middle'; og.lineJoin = 'round';
+      og.strokeStyle = dk ? 'rgba(35,32,27,0.85)' : 'rgba(250,244,228,0.9)'; og.lineWidth = 3;
+      og.font = `italic 500 ${fs + 1}px ${labelFont()}`;
+      for (const r of N.rivers) {
+        if (!r.pts.some(p => seen(p[0], p[1]))) continue;
+        // Lettered along the longest stretch of it on the screen, twice where that stretch is long.
+        const sp = r.pts.map(p => world.project(p[0], s.map.water, p[1])), on = q => q[0] > 30 && q[1] > 30 && q[0] < world.vw - 30 && q[1] < world.vh - 30;
+        let best = [], run = [];
+        for (const q of sp) { if (on(q)) run.push(q); else { if (run.length > best.length) best = run; run = []; } }
+        if (run.length > best.length) best = run;
+        let len = 0;
+        for (let i = 1; i < best.length; i++) len += Math.hypot(best[i][0] - best[i - 1][0], best[i][1] - best[i - 1][1]);
+        const n = len > 900 ? 2 : 1;
+        for (let j = 0; j < n; j++) textAlong(r.name, best.slice(Math.floor(j * best.length / n), Math.floor((j + 1) * best.length / n)), fs + 1, dk ? '#8fb0ef' : '#23458c', fs * 0.35);
+      }
+      og.font = `italic 500 ${fs}px ${labelFont()}`;
+      for (const h of N.hills) {
+        if (!seen(h.x, h.y)) continue;
+        const [x, y] = world.project(h.x, terrainAt(s.map, h.x, h.y), h.y);
+        og.fillStyle = dk ? '#d8c8a8' : '#5a4632';
+        og.beginPath(); og.moveTo(x, y - 4); og.lineTo(x + 3.5, y + 2); og.lineTo(x - 3.5, y + 2); og.closePath(); og.fill();
+        og.strokeText(h.name, x, y + fs * 0.95); og.fillText(h.name, x, y + fs * 0.95);
+        const spot = String(Math.round(h.z * 52 + 120));
+        og.font = `500 ${fs - 3}px ${labelFont()}`; og.strokeText(spot, x + 14, y - 2); og.fillText(spot, x + 14, y - 2); og.font = `italic 500 ${fs}px ${labelFont()}`;
+      }
+      og.fillStyle = dk ? '#a8c898' : '#3a5a2e';
+      for (const w of N.woods) {
+        if (!seen(w.x, w.y)) continue;
+        const [x, y] = world.project(w.x, terrainAt(s.map, w.x, w.y) + 1.5, w.y);
+        og.strokeText(w.name, x, y); og.fillText(w.name, x, y);
+      }
+      og.restore();
+    }
     let puffC = null;
     const puffSheet = n => { if (!puffC || puffC.width < n) { puffC = document.createElement('canvas'); puffC.width = puffC.height = Math.max(n, 64); } return puffC; };
     function drawPuff(f) {
@@ -1396,6 +1452,9 @@ const Hud = (() => {
       const P0 = t >= 0 ? s.P[t] : null;
       drawLamps(s);
 
+      // The map's own names, as a survey sheet letters them, once the view is drawn back far enough to want them:
+      // rivers in spaced blue italics along their courses, hills in sepia beside a spot height, woods in green.
+      if (inked() && world.names) drawNames(s, t >= 0 ? s.P[t] : null);
       // Towns show who holds them and how a capture is going. In pen and ink each is a pennant in its holder's
       // wash and a name lettered on the paper, a little larger as the view pulls back.
       const ink = inked(), dist = world.cam.dist;
@@ -1408,7 +1467,7 @@ const Hud = (() => {
           og.lineWidth = 3; og.strokeStyle = ink ? 'rgba(250,244,228,0.9)' : 'rgba(0,0,0,0.5)'; og.beginPath(); og.arc(x, y, 13, 0, 6.3); og.stroke();
           og.strokeStyle = n.capTeam >= 0 ? (ink ? SLOT_PLATE[n.capTeam] : SLOT_CSS[n.capTeam]) : '#d9d4c3'; og.beginPath(); og.arc(x, y, 13, -1.57, -1.57 + n.cap * 6.283); og.stroke();
         }
-        const name = `Town ${String.fromCharCode(65 + n.id)}`;
+        const name = Rules.townName(s, n.id);
         if (ink) {
           const fs = Math.round(12 + smoothstepJS(110, 200, dist) * 3), yy = y - 17;
           og.save(); og.setLineDash([]); og.lineJoin = 'round'; og.lineCap = 'round';

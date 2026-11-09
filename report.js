@@ -364,7 +364,7 @@ const Report = (() => {
     g.strokeStyle = I.light || !I.ink ? 'rgba(110,90,70,0.55)' : 'rgba(200,190,170,0.45)'; g.lineWidth = 1;
     for (const r of M.roads || []) { g.beginPath(); r.forEach(([x, y], i) => i ? g.lineTo(x * sc, y * sc) : g.moveTo(x * sc, y * sc)); g.stroke(); }
     g.font = `11px ${I.font}`; g.textAlign = 'center'; g.textBaseline = 'top';
-    const towns = S.towns.map(t => ({ x: t.x, y: t.y, name: `Town ${String.fromCharCode(65 + t.id)}` }));
+    const towns = S.towns.map(t => ({ x: t.x, y: t.y, name: Rules.townName(S, t.id) }));
     for (const t of towns) { const [x, y] = P(t.x, t.y); g.fillStyle = I.dim; g.fillRect(x - 3, y - 3, 6, 6); g.fillText(t.name, x, y + 5); }
     // The bases, each a square in its side's ink.
     for (const x of list) { const b = S.bases[x.t]; if (!b) continue; const [bx, by] = P(b[0], b[1]); g.fillStyle = I.line(x.t); g.fillRect(bx - 5, by - 5, 10, 10); }
