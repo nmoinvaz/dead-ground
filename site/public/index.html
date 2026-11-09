@@ -603,7 +603,7 @@ body[data-look="ink"] .sheet { box-shadow: 4px 4px 0 var(--ink); }
       <div class="choice"><h2>Map sheet frame</h2><div id="s-sheet" class="two"><button data-v="on">On</button><button data-v="off">Off</button></div></div>
       <div class="choice"><h2>Shadows</h2><div id="s-shade" class="two"><button data-v="hatch">Hatched</button><button data-v="wash">Wash</button></div></div>
       <div class="choice"><h2>Music</h2><div id="s-music" class="two"><button data-v="on">On</button><button data-v="off">Off</button></div></div>
-      <p id="build">Build 8b0e4a7 2026-11-09 10:29</p>
+      <p id="build">Build 7e6e2b8 2026-11-09 12:21</p>
     </div>
     <div id="banner" hidden></div>
     <button id="update" hidden>A new version of Dead Ground is out. <b>Reload</b></button>
@@ -10185,11 +10185,11 @@ const World = (() => {
       // The land alone, drawn with a material of a pass's own.
       function landInto(material, target) {
         if (!terrainMesh) return target.texture;
-        const keep = terrainMesh.material;
-        terrainMesh.material = material;
+        const keep = terrainMesh.children[0].material;
+        for (const t of terrainMesh.children) t.material = material;
         renderer.setRenderTarget(target); renderer.setClearColor(0x000000, 0); renderer.clear();
         renderer.render(terrainMesh, camera);
-        terrainMesh.material = keep;
+        for (const t of terrainMesh.children) t.material = keep;
         renderer.setClearColor(theme ? theme.shroud : 0, 1);
         return target.texture;
       }
@@ -10487,6 +10487,7 @@ const World = (() => {
     }
     const add = o => { scene.add(o); statics.push(o); return o; };
     function lineCat(mesh, cat, sway = false) {
+      if (mesh.tiles) { for (const t of mesh.tiles) lineCat(t, cat, sway); return mesh; }
       mesh.layers.enable(1);
       const sw = sway ? 1 : 0;
       mesh.onBeforeRender = () => {
@@ -10606,9 +10607,27 @@ const World = (() => {
       const tex = terrainTexture();
       tex.flipY = false;
       const mat = patch(new THREE.MeshStandardMaterial({ map: tex, roughness: 0.96, metalness: 0, envMapIntensity: 0.55 }), { plain: true, terrain: true });
-      terrainMesh = add(new THREE.Mesh(g, mat));
-      terrainMesh.receiveShadow = true; terrainMesh.castShadow = false; terrainMesh.frustumCulled = false;
-      terrainMesh.layers.enable(3);
+      // The land in square tiles of the map, the same tiles the scenery is cut into, each a mesh over the shared
+      // vertices with its own triangles and bounds, so land out of view is left out of every pass that draws it.
+      const T = Math.max(32, Math.ceil(W / 4)) * RES, group = new THREE.Group();
+      for (let j0 = 0; j0 < VH - 1; j0 += T) for (let i0 = 0; i0 < VW - 1; i0 += T) {
+        const j1 = Math.min(VH - 1, j0 + T), i1 = Math.min(VW - 1, i0 + T), ix = new Uint32Array((j1 - j0) * (i1 - i0) * 6);
+        let k = 0, lo = Infinity, hi = -Infinity;
+        for (let j = j0; j < j1; j++) for (let i = i0; i < i1; i++) {
+          const a = j * VW + i, b = a + 1, c = a + VW, d = c + 1;
+          ix[k++] = a; ix[k++] = c; ix[k++] = b; ix[k++] = b; ix[k++] = c; ix[k++] = d;
+        }
+        for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) { const z = h[j * VW + i]; if (z < lo) lo = z; if (z > hi) hi = z; }
+        const tg = new THREE.BufferGeometry();
+        for (const name of ['position', 'normal', 'uv', 'aRoad']) tg.setAttribute(name, g.getAttribute(name));
+        tg.setIndex(new THREE.BufferAttribute(ix, 1));
+        const hw = (i1 - i0) / 2 / RES, hd = (j1 - j0) / 2 / RES;
+        tg.boundingSphere = new THREE.Sphere(new THREE.Vector3((i0 + i1) / 2 / RES, (lo + hi) / 2, (j0 + j1) / 2 / RES), Math.hypot(hw, hd, (hi - lo) / 2) + 1);
+        const m = new THREE.Mesh(tg, mat);
+        m.receiveShadow = true; m.castShadow = false; m.layers.enable(3);
+        group.add(m);
+      }
+      terrainMesh = add(group);
     }
 
     function buildWater() {
@@ -10669,15 +10688,38 @@ const World = (() => {
       list.forEach((o, i) => setInst(im, i, o));
       return add(im);
     }
+    // Scenery spread over the whole map, cut into square tiles of the map, an instanced mesh to each tile with its own
+    // bounds, so a tile out of view is left out of every pass: the picture, the shadows and the line passes. A tile
+    // is a quarter of the map across, or 32 cells on a small map. A tiled set answers setInst, dirty and lineCat as
+    // one mesh does.
+    const TILE_PAD = 3;
+    function tiled(geo, mat, list, shadow = true) {
+      const T = Math.max(32, Math.ceil(W / 4)), n = Math.ceil(W / T), groups = new Map();
+      list.forEach((o, i) => { const k = clamp(Math.floor(o.z / T), 0, n - 1) * n + clamp(Math.floor(o.x / T), 0, n - 1); if (!groups.has(k)) groups.set(k, []); groups.get(k).push(i); });
+      const tiles = [], where = new Int32Array(list.length * 2);
+      for (const idx of groups.values()) {
+        const im = instanced(geo, mat, idx.map(i => list[i]), shadow);
+        // The bounds hold every instance as placed, with room for a tree to sway or fall.
+        im.frustumCulled = true; im.computeBoundingSphere(); im.boundingSphere.radius += TILE_PAD;
+        idx.forEach((i, j) => { where[i * 2] = tiles.length; where[i * 2 + 1] = j; });
+        tiles.push(im);
+      }
+      return { tiles, where, touched: new Set() };
+    }
     // One instance from a plain description: place, turn, size and colour. Hidden draws it at no size.
     function setInst(im, i, o, hide = false) {
+      if (im.tiles) { const t = im.tiles[im.where[i * 2]]; setInst(t, im.where[i * 2 + 1], o, hide); im.touched.add(t); return; }
       q1.setFromEuler(e1.set(o.rx || 0, o.a || 0, o.rz || 0));
       const k = hide ? 0 : 1;
       m1.compose(p1.set(o.x, o.y, o.z), q1, s1.set((o.sx ?? o.s ?? 1) * k, (o.sy ?? o.s ?? 1) * k, (o.sz ?? o.s ?? 1) * k));
       im.setMatrixAt(i, m1);
       im.setColorAt(i, colA.set(o.c ?? 0xffffff));
     }
-    const dirty = im => { im.instanceMatrix.needsUpdate = true; if (im.instanceColor) im.instanceColor.needsUpdate = true; };
+    // A tiled set uploads only the tiles changed since it was last marked.
+    const dirty = im => {
+      if (im.tiles) { for (const t of im.touched) dirty(t); im.touched.clear(); return; }
+      im.instanceMatrix.needsUpdate = true; if (im.instanceColor) im.instanceColor.needsUpdate = true;
+    };
     // Scenery that changes: trees by their cells, houses brought to ruin, bridges down and up, the fords'
     // stepping stones and garden fences.
     let scen = null;
@@ -10904,7 +10946,7 @@ const World = (() => {
       const treeKinds = cactus ? [[sc.saguaro, tl.filter(t => !t.pear)], [sc.pear, tl.filter(t => t.pear)]] : palms ? [[sc.palm, tl.map(t => Object.assign(t, { s: t.s * 1.5 }))]] : [[sc[th.tree], tl.filter(t => !t.hi)], [sc.conifer, tl.filter(t => t.hi)]];
       for (const [geo, list] of treeKinds) {
         if (!list.length) continue;
-        const m = lineCat(instanced(geo, treeTint, list), 0.459, true);
+        const m = lineCat(tiled(geo, treeTint, list), 0.459, true);
         list.forEach((t, i) => { t.m = m; t.i = i; });
         meshes.push(m);
       }
@@ -10938,7 +10980,7 @@ const World = (() => {
         if (drums.length) instanced(sc.drum, plainTint, drums);
       }
       const rc = new THREE.Color(th.rock);
-      instanced(sc.rock, plainTint, rocks.map(t => ({ x: t.x, y: terrainAt(M, t.x, t.y) - 0.06, z: t.y, s: t.s * 1.2, a: t.a, c: colA.copy(rc).multiplyScalar(0.62 + rand() * 0.3).getHex() })));
+      tiled(sc.rock, plainTint, rocks.map(t => ({ x: t.x, y: terrainAt(M, t.x, t.y) - 0.06, z: t.y, s: t.s * 1.2, a: t.a, c: colA.copy(rc).multiplyScalar(0.62 + rand() * 0.3).getHex() })));
 
       // Houses, plaster walls under pitched roofs, and in each town its other buildings: the biggest a church with a
       // tower and spire at one end, a long one a barn of dark boards under a broad roof, a square one a market hall
@@ -11062,13 +11104,17 @@ const World = (() => {
       const cells = [];
       for (let c = 0; c < W * H; c++) if (M.ore[c]) cells.push(c);
       const per = low ? 1 : 2, cap = cells.length * per;
-      const nug = new THREE.InstancedMesh(sc.ore, patch(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.5, metalness: 0.4, emissive: 0x3a2400, emissiveIntensity: 0.0, envMapIntensity: 0.55 }), { tint: true }), cap);
-      nug.frustumCulled = false; nug.castShadow = !low; nug.receiveShadow = true;
-      ore = { mesh: nug, cells, per, seen: new Uint16Array(cells.length).fill(65535), rnd: [] };
-      const rr = mulberry(M.seed + 3);
-      for (let i = 0; i < cap; i++) { ore.rnd.push([rr() * 0.8 + 0.1, rr() * 0.8 + 0.1, rr() * 6.28, 0.8 + rr() * 0.8]); nug.setColorAt(i, colA.setHSL(0.1 + rr() * 0.035, 0.74, 0.5 + rr() * 0.16)); }
-      add(nug);
-      lineCat(nug, 0.55);
+      // Laid out at full size first, so each tile's bounds hold its nuggets; updateOre then sizes them by what is left.
+      const oreMat = patch(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.5, metalness: 0.4, emissive: 0x3a2400, emissiveIntensity: 0.0, envMapIntensity: 0.55 }), { tint: true });
+      const rr = mulberry(M.seed + 3), rnd = [], first = [];
+      for (let i = 0; i < cap; i++) {
+        const r = [rr() * 0.8 + 0.1, rr() * 0.8 + 0.1, rr() * 6.28, 0.8 + rr() * 0.8, colA.setHSL(0.1 + rr() * 0.035, 0.74, 0.5 + rr() * 0.16).getHex()], c = cells[i / per | 0];
+        rnd.push(r);
+        const px = c % W + r[0], pz = (c / W | 0) + r[1];
+        first.push({ x: px, y: terrainAt(M, px, pz) - 0.02, z: pz, a: r[2], s: 0.95 * r[3], c: r[4] });
+      }
+      const nug = lineCat(tiled(sc.ore, oreMat, first, !low), 0.55);
+      ore = { mesh: nug, cells, per, seen: new Uint16Array(cells.length).fill(65535), rnd };
       oreSeen = -1;
 
       // Town flags, one mesh each so they can change colour.
@@ -11159,8 +11205,8 @@ const World = (() => {
         if (r < (edge ? 0.3 : g[c] & 4 ? 0.08 : 0.02)) shrubs.push({ x, y: z - 0.03, z: y, s: 0.7 + rand() * 0.7, a: rand() * 6.28, c: colA.copy(new THREE.Color(th.leaf[0])).lerp(new THREE.Color(th.leaf[1]), rand()).multiplyScalar(0.9 + rand() * 0.25).getHex(), cell: c });
       }
       const list = shrubs.slice(0, 2600).concat(wet.slice(0, 2600));
-      const sm = shrubs.length ? lineCat(instanced(sc[shrubM], treeTint, shrubs.slice(0, 2600)), 0.459, true) : null;
-      const wm = wet.length ? lineCat(instanced(sc[desert ? 'palm' : 'reed'], treeTint, wet.slice(0, 2600)), 0.459, true) : null;
+      const sm = shrubs.length ? lineCat(tiled(sc[shrubM], treeTint, shrubs.slice(0, 2600)), 0.459, true) : null;
+      const wm = wet.length ? lineCat(tiled(sc[desert ? 'palm' : 'reed'], treeTint, wet.slice(0, 2600)), 0.459, true) : null;
       shrubs.slice(0, 2600).forEach((p, i) => { p.m = sm; p.i = i; });
       wet.slice(0, 2600).forEach((p, i) => { p.m = wm; p.i = i; });
       scen.plants = { list, seen: -1 };
@@ -12297,20 +12343,18 @@ const World = (() => {
       if (S.oreVer === oreSeen) return;
       oreSeen = S.oreVer;
       const { mesh, cells, per, seen, rnd } = ore;
-      let dirty = false;
+      let changed = false;
       for (let i = 0; i < cells.length; i++) {
         const c = cells[i], left = S.ore[c];
         if (seen[i] === left) continue;
-        seen[i] = left; dirty = true;
+        seen[i] = left; changed = true;
         const x = c % W, y = c / W | 0, k = Math.min(1, left / 90);
         for (let n = 0; n < per; n++) {
           const r = rnd[i * per + n], px = x + r[0], pz = y + r[1], s = left ? (0.35 + 0.6 * k) * r[3] : 0;
-          e1.set(0, r[2], 0); q1.setFromEuler(e1);
-          m1.compose(p1.set(px, terrainAt(M, px, pz) - 0.02, pz), q1, s1.set(s, s, s));
-          mesh.setMatrixAt(i * per + n, m1);
+          setInst(mesh, i * per + n, { x: px, y: terrainAt(M, px, pz) - 0.02, z: pz, a: r[2], s, c: r[4] });
         }
       }
-      if (dirty) mesh.instanceMatrix.needsUpdate = true;
+      if (changed) dirty(mesh);
     }
 
     const VIS = (x, y) => viewTeam < 0 || S.P[viewTeam].vis[Rules.cellOf(x, y)] === 1;
