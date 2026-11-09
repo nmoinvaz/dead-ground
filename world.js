@@ -3716,6 +3716,8 @@ const World = (() => {
       watchAll() { viewTeam = -1; SH.uFogOn.value = 0; },
       // Where one herd of each kind stands, and a raft of ducks, for checks.
       lifeAll() { return life ? life.herds.map(h => h.kind) : []; },
+      // What carries a lamp after dark: the carts or cars on the roads, which by the age, and the boats.
+      lamps() { return { cars: life ? life.cars : [], boats: life ? life.boats : [], motor: worldAge() >= MOTOR_AGE }; },
       get names() { return names; },
       // The parks, and a market day called now at one of them, for checks.
       parksDebug() { return parks.map(p => ({ x: p.x, y: p.y, r: p.r, town: p.town })); },
