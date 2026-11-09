@@ -139,6 +139,8 @@ body[data-look="ink"][data-scheme="dark"] #end, body[data-look="ink"][data-schem
 #sel .forms svg { width: 24px; height: 16px; fill: currentColor; }
 #sel .stances > div { grid-template-columns: repeat(4, 32px); }
 #sel .stances svg { fill: none; }
+#sel .fallback > div { grid-template-columns: 32px; }
+#sel .fallback svg { fill: none; }
 #sel .ups { display: flex; flex-direction: column; gap: 3px; justify-content: center; }
 #sel .ups h4 { margin: 0; font: 600 12px var(--ui); letter-spacing: .03em; color: var(--dim); white-space: nowrap; }
 #sel .ups button { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; min-width: 200px; min-height: 24px; padding: 2px 8px; background: #191b13; border: 1px solid #000; font: 600 13px var(--ui); letter-spacing: .02em; white-space: nowrap; text-align: left; }
@@ -595,7 +597,7 @@ body[data-look="ink"] .sheet { box-shadow: 4px 4px 0 var(--ink); }
       <div class="choice"><h2>Picture</h2><div id="s-pic" class="two"><button data-v="sharp">Sharp</button><button data-v="fast">Faster</button></div><p id="s-pic-note"></p></div>
       <div class="choice"><h2>Ore, oil and power</h2><div id="s-gauges" class="two"><button data-v="top">In the top bar</button><button data-v="side">In the sidebar</button></div></div>
       <div class="choice"><h2>Music</h2><div id="s-music" class="two"><button data-v="on">On</button><button data-v="off">Off</button></div></div>
-      <p id="build">Build 11e63ac 2026-11-08 18:55</p>
+      <p id="build">Build 109eb13 2026-11-08 19:00</p>
     </div>
     <div id="banner" hidden></div>
     <button id="update" hidden>A new version of Dead Ground is out. <b>Reload</b></button>
@@ -629,7 +631,7 @@ body[data-look="ink"] .sheet { box-shadow: 4px 4px 0 var(--ink); }
         <dt>Alt</dt><dd>With right-click, attack the one enemy alone</dd>
         <dt>A / S</dt><dd>Attack-move, stop</dd>
         <dt>D</dt><dd>Next formation for the selected units: line, block, column, wedge, square, loose</dd>
-        <dt>L</dt><dd>Next stance: seek and destroy, aggressive, defensive, or hold ground</dd>
+        <dt>L</dt><dd>Next stance: seek and destroy, aggressive, defensive, or hold ground</dd><dt>J</dt><dd>Fall back when badly hurt, on or off</dd>
         <dt>Ctrl 1-9</dt><dd>Set a group, then 1-9 picks it</dd>
         <dt>Arrows</dt><dd>Move the view; on a trackpad swipe to move and pinch to zoom</dd>
         <dt>K</dt><dd>Another pen technique</dd>
@@ -3102,6 +3104,30 @@ const Rules = (() => {
   // for whoever hit it, chases it up to ANS_LEASH from where it stood, and then goes back there. A unit given
   // an order, a squad holding cover, and one already fighting a unit keep to what they are doing. A unit that
   // gives up a chase answers nothing more for a while, so a gun out of its reach does not draw it back and forth.
+  // Falling back. A unit told to fall back when hurt, once below FB_AT of its health, leaves the fight for the
+  // nearest support vehicle of its side, or else the nearest headquarters, forward base, barracks or factory, and
+  // mends there until whole. It then waits there for orders.
+  const FB_AT = 0.25, FB_NEAR = 6;
+  function fallBack(S, u) {
+    // Sent off elsewhere since, and gone from its haven, it may fall back again.
+    if (u.mend && !(u.ord && u.ord.t === 'move' && u.ord.x === u.mend.at[0] && u.ord.y === u.mend.at[1]) && mhypot(u.x - u.mend.at[0], u.y - u.mend.at[1]) > FB_NEAR + 2) u.mend = null;
+    if (!u.fb || u.hp >= u.max * FB_AT || u.mend || u.d.cargo || isAir(u)) return;
+    let best = null, bd = Infinity;
+    for (const e of S.ents) {
+      if (e.team !== u.team || e.hp <= 0 || e === u) continue;
+      const ok = e.b ? (e.kind === 'hq' || e.kind === 'fob' || e.kind === 'barracks' || e.kind === 'factory') : !!e.d.repair;
+      if (!ok) continue;
+      const dd = mhypot(e.x - u.x, e.y - u.y) - (e.b ? 0 : 4);
+      if (dd < bd) { bd = dd; best = e; }
+    }
+    if (!best) return;
+    // The place beside it on the side the unit comes from.
+    const dx = u.x - best.x, dy = u.y - best.y, m = mhypot(dx, dy) || 1, off = best.b ? Math.max(best.w, best.h) / 2 + 2.5 : 2;
+    const x = clamp(best.x + dx / m * off, 1, W - 1), y = clamp(best.y + dy / m * off, 1, H - 1);
+    u.mend = { at: [x, y] };
+    u.ord = { t: 'move', x, y }; u.tgt = 0; u.home = null; u.wpT = 0; u.stuck = 0;
+    S.ev.push({ t: 'fallback', team: u.team, id: u.id, x: u.x, y: u.y });
+  }
   const ANS_R = 10, ANS_LEASH = 18;
   function answer(S, t, by) {
     if (S.tick - (t.ansT ?? -1e9) < HZ) return;
@@ -3672,12 +3698,15 @@ const Rules = (() => {
     // Veterans mend slowly, and a Support Truck mends anyone close.
     if (u.vet >= 2 && u.hp < u.max) u.hp = Math.min(u.max, u.hp + u.max * 0.002);
     if (S.tick % HZ === u.id % HZ) {
+      fallBack(S, u);
       const c = cellOf(u.x, u.y), foreign = S.terr[c] >= 0 && S.terr[c] !== u.team;
       let helped = false;
       near(S, u.x, u.y, 8, o => {
         if (o.team === u.team && o.d.repair && o.hp > 0 && mhypot(o.x - u.x, o.y - u.y) < 8) helped = true;
       });
       if (helped) u.hp = Math.min(u.max, u.hp + u.max * 0.03);
+      // Back at a haven it fell back to, a unit mends until whole.
+      else if (u.mend && u.mend.at && mhypot(u.x - u.mend.at[0], u.y - u.mend.at[1]) < FB_NEAR) { u.hp = Math.min(u.max, u.hp + u.max * 0.015); if (u.hp >= u.max) u.mend = null; }
       else if (foreign && u.hp > u.max * 0.35) {
         u.hp -= u.max * 0.005;
         u.attrition = S.tick;
@@ -4314,6 +4343,8 @@ const Rules = (() => {
     if (c.c === 'move') {
       const us = unitsOf(S, team, c.ids);
       if (us.length) {
+        // A new order ends a stay to mend.
+        for (const u of us) u.mend = null;
         for (const u of us) if (u.d.cargo && u.ord && u.ord.t === 'harvest') u.ord = null;
         orderMove(S, us, c.x, c.y, !!c.a);
       }
@@ -4365,6 +4396,9 @@ const Rules = (() => {
         u.tgt = pick; u.wpT = 0; u.stuck = 0; u.home = null;
       }
       S.ev.push({ t: 'marked', team, ids, x: c.x, y: c.y, r: c.r });
+    } else if (c.c === 'fallback') {
+      // Whether the units fall back when badly hurt. Turned off, any going back carry on but no longer mend there.
+      for (const u of unitsOf(S, team, c.ids)) { if (u.d.cargo || isAir(u)) continue; u.fb = !!c.on; if (!u.fb) u.mend = null; }
     } else if (c.c === 'stance') {
       if (!STANCES.includes(c.v)) return;
       for (const u of unitsOf(S, team, c.ids)) {
@@ -4685,7 +4719,7 @@ const Rules = (() => {
     msin, mcos, matan2, mhypot,
     BRIDGE_HP, SPELL, SKIES, WEATHERS, nightAt, skyOf, offGoing, route, weatherAt, sky, dayAt, spellOf, bridgeAt, clsOf, houseHp, hurtBridge, ignite, shielded,
     coverPoints, coverNear, COVER_R, COVER_ARC, FORMS, formOfGroup, STANCES,
-    UPGRADES, UP_AGE, upCost, upNote, upsAt, upK, upBlocked, hpOf, rangeOf, capOf, showersAt, showerAt,
+    FB_AT, UPGRADES, UP_AGE, upCost, upNote, upsAt, upK, upBlocked, hpOf, rangeOf, capOf, showersAt, showerAt,
   };
 })();
 if (typeof module !== 'undefined') module.exports = Rules;
@@ -13431,6 +13465,8 @@ const Hud = (() => {
         if (us.length > 1) setForm(F[(F.indexOf(Rules.formOfGroup(us)) + (e.shiftKey ? F.length - 1 : 1)) % F.length]);
         return;
       }
+      // J turns falling back when hurt on or off.
+      if (k === 'KeyJ') { toggleFallBack(); return; }
       // L steps through the stances, Shift+L back.
       if (k === 'KeyL') {
         const us = stanceUnits(), T = Rules.STANCES;
@@ -14442,6 +14478,8 @@ const Hud = (() => {
     const STANCE_NAME = { hunt: 'Seek and destroy', aggr: 'Aggressive', def: 'Defensive', hold: 'Hold ground' };
     const STANCE_NOTE = { hunt: 'hunts down the nearest enemy, anywhere', aggr: 'chases what it sees as far as it takes', def: 'chases a little, then goes back to its post', hold: 'fires from where it stands and never moves to fight' };
     const line = d => `<svg viewBox="0 0 24 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
+    // Falling back, drawn as a cross on a shield-like tent and an arrow home.
+    const FB_ICON = '<svg viewBox="0 0 24 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 8H3M6 5 3 8l3 3"/><path d="M12 3h8v10h-8z"/><path d="M16 5.5v5M13.5 8h5"/></svg>';
     const STANCE_ICON = {
       hunt: line('<circle cx="12" cy="8" r="4.5"/><path d="M12 1.5v3M12 11.5v3M5.5 8h3M15.5 8h3"/>'),
       aggr: line('<path d="M7 9.5 12 4.5l5 5M7 13.5 12 8.5l5 5"/>'),
@@ -14455,6 +14493,15 @@ const Hud = (() => {
       if (!us.length) return;
       game.order(S(), team(), { c: 'stance', ids: us.map(u => u.id), v });
       say(`${STANCE_NAME[v]}.`);
+    }
+    // Falling back when badly hurt, on or off for the selected units: on for all if any were off.
+    const fbUnits = () => state.sel.filter(e => alive(e) && !e.b && e.team === team() && !Rules.isAir(e) && !e.d.cargo);
+    function toggleFallBack() {
+      const us = fbUnits();
+      if (!us.length) return;
+      const on = !us.every(u => u.fb);
+      game.order(S(), team(), { c: 'fallback', ids: us.map(u => u.id), on });
+      say(on ? 'Falling back when badly hurt.' : 'Fighting on when hurt.');
     }
     // The selected units a formation takes in: the player's own, on the ground.
     const formUnits = () => state.sel.filter(e => alive(e) && !e.b && e.team === team() && !Rules.isAir(e));
@@ -14494,7 +14541,8 @@ const Hud = (() => {
       // A building of the player's alone shows its upgrades, which redraw as any changes state.
       const one = state.sel.length === 1 && state.sel[0].b && state.sel[0].team === team() ? state.sel[0] : null;
       const ups = one ? upState(one).map(u => u.tier + (u.here ? 'h' : '') + (u.why || '')).join() : '';
-      const box = $('sel'), list = state.sel, key = list.map(e => e.id).join() + (list[0] ? (list[0].repairing ? 'r' : '') + (list[0].team) : '') + form + stance + ups;
+      const fbu = fbUnits(), fb = fbu.length ? (fbu.every(u => u.fb) ? 'on' : fbu.some(u => u.fb) ? 'some' : 'off') : '';
+      const box = $('sel'), list = state.sel, key = list.map(e => e.id).join() + (list[0] ? (list[0].repairing ? 'r' : '') + (list[0].team) : '') + form + stance + ups + fb;
       if (key !== state.selKey) {
         state.selKey = key;
         box.hidden = !list.length;
@@ -14521,9 +14569,10 @@ const Hud = (() => {
           html += '</div>';
           if (one) html += upsHtml(one);
           if (stance) html += `<div class="forms stances"><h4>Stance <kbd>L</kbd></h4><div>${Rules.STANCES.map(v => `<button data-st="${v}" class="${v === stance ? 'on' : ''}" title="${STANCE_NAME[v]}: ${STANCE_NOTE[v]}" aria-label="${STANCE_NAME[v]}">${STANCE_ICON[v]}</button>`).join('')}</div></div>`;
+          if (fb) html += `<div class="forms fallback"><h4>Fall back <kbd>J</kbd></h4><div><button data-fb class="${fb === 'on' ? 'on' : ''}" title="Fall back when badly hurt: below a quarter of their health they go back to a support vehicle or a base building and mend there" aria-label="Fall back when badly hurt">${FB_ICON}</button></div></div>`;
           if (form) html += `<div class="forms"><h4>Formation <kbd>D</kbd></h4><div>${Rules.FORMS.map(f => `<button data-f="${f}" class="${f === form ? 'on' : ''}" title="${FORM_NAME[f]}" aria-label="${FORM_NAME[f]}">${FORM_ICON[f]}</button>`).join('')}</div></div>`;
           box.innerHTML = html;
-          box.querySelectorAll('.forms button').forEach(b => b.addEventListener('click', () => b.dataset.st ? setStance(b.dataset.st) : setForm(b.dataset.f)));
+          box.querySelectorAll('.forms button').forEach(b => b.addEventListener('click', () => b.dataset.fb !== undefined ? toggleFallBack() : b.dataset.st ? setStance(b.dataset.st) : setForm(b.dataset.f)));
           box.querySelectorAll('.many button').forEach(b => b.addEventListener('click', () => select(state.sel.filter(e => e.kind === b.dataset.k))));
           box.querySelectorAll('.ups button[data-up]').forEach(b => b.addEventListener('click', () => {
             if (b.classList.contains('busy')) game.order(S(), team(), { c: 'unupgrade', id: first.id });
