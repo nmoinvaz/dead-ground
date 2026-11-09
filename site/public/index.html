@@ -595,7 +595,7 @@ body[data-look="ink"] .sheet { box-shadow: 4px 4px 0 var(--ink); }
       <div class="choice"><h2>Picture</h2><div id="s-pic" class="two"><button data-v="sharp">Sharp</button><button data-v="fast">Faster</button></div><p id="s-pic-note"></p></div>
       <div class="choice"><h2>Ore, oil and power</h2><div id="s-gauges" class="two"><button data-v="top">In the top bar</button><button data-v="side">In the sidebar</button></div></div>
       <div class="choice"><h2>Music</h2><div id="s-music" class="two"><button data-v="on">On</button><button data-v="off">Off</button></div></div>
-      <p id="build">Build c6bb61a 2026-11-08 18:10</p>
+      <p id="build">Build 199b229 2026-11-08 18:29</p>
     </div>
     <div id="banner" hidden></div>
     <button id="update" hidden>A new version of Dead Ground is out. <b>Reload</b></button>
@@ -7828,13 +7828,13 @@ if (typeof module !== 'undefined') module.exports = Looks;
       // 45 and 135 degrees, then flat and upright lines for the darkest, each line a little uneven with small gaps.
       // The ground's hatching is pinned to the map so it pans with it, the units' redraws a few times a second.
       const ink = new THREE.ShaderMaterial({ uniforms: { t: { value: null }, tSubj: { value: null }, tHeat: { value: null }, tPaper: { value: null }, res: { value: new THREE.Vector2(1, 1) }, uTime: { value: 0 }, uK: { value: 1 }, uOff: { value: new THREE.Vector2() }, uStyle: { value: 8 }, tNorm: { value: null }, tFogS: { value: null }, tLand: { value: null }, uSun2: { value: new THREE.Vector2(-1, 0) }, uUpV: { value: new THREE.Vector3(0, 1, 0) }, uRoad: { value: 0 }, uOre: { value: 0 }, uMarks: { value: 1 },
-        uWindS: { value: new THREE.Vector2() }, uView: { value: new THREE.Vector2(1, 0) }, tFx: { value: null }, tAnc: { value: null }, uDark: { value: 0 }, uInks: { value: 0 }, uFxs: { value: 0 }, uFire: { value: 0 }, uUnits: { value: 0 }, tH: SH.tH, uHSize: { value: new THREE.Vector2(1, 1) }, uHScale: { value: 1 }, uRain: { value: 0 }, uStorm: { value: 0 }, uSnowF: { value: 0 }, uSnowC: SH.uSnowC, uSnowLine: SH.uSnowLine, tFlow: SH.tFlow, tBrook: SH.tBrook, uFlora: SH.uFlora, uShow: SH.uShow, uFog: { value: 0 }, uMist: { value: 0 }, uNight: { value: 0 }, uWet: { value: 0 },
+        uWindS: { value: new THREE.Vector2() }, uView: { value: new THREE.Vector2(1, 0) }, tFx: { value: null }, tAnc: { value: null }, uDark: { value: 0 }, uInks: { value: 0 }, uFxs: { value: 0 }, uFire: { value: 0 }, uUnits: { value: 0 }, tH: SH.tH, uHSize: { value: new THREE.Vector2(1, 1) }, uHScale: { value: 1 }, uRain: { value: 0 }, uStorm: { value: 0 }, uSnowF: { value: 0 }, uSnowC: SH.uSnowC, uSnowLine: SH.uSnowLine, tFlow: SH.tFlow, tBrook: SH.tBrook, uFlora: SH.uFlora, uShow: SH.uShow, tBeach: SH.tBeach, uFog: { value: 0 }, uMist: { value: 0 }, uNight: { value: 0 }, uWet: { value: 0 },
         uDayMul: { value: new THREE.Vector3(1, 1, 1) }, uDayAdd: { value: new THREE.Vector3() }, uWaterL: { value: -0.15 }, uCloudK: SH.uCloudK, tMarks: SH.tMarks, uMap: SH.uMap,
         uCloud: SH.uCloud, uCloudT: SH.uCloudT, uSunW: SH.uSunDir, uCloudA: { value: 0 }, uCloudG: { value: 0 }, uRayK: { value: 0 }, uSand: { value: 0 },
         uInvVP: { value: new THREE.Matrix4() }, uW2S: { value: new THREE.Vector4(1, 0, 0, 1) }, uLev: { value: 1 }, tTerr: SH.tTerr, uBorder: SH.uBorder, uMe: { value: 0 },
         // Each side's colour as the anchor pass keeps it, its hue and how coloured it is, and its inks on either paper.
         uSideKey: { value: [...Array(8)].map(() => new THREE.Vector2()) }, uSideL: { value: [...Array(8)].map(() => new THREE.Vector3()) }, uSideD: { value: [...Array(8)].map(() => new THREE.Vector3()) }, uSideB: { value: [...Array(8)].map(() => new THREE.Vector3()) } }, vertexShader: vs, depthTest: false, depthWrite: false, fragmentShader: `
-        varying vec2 vUv; uniform sampler2D t, tSubj, tHeat, tPaper, tNorm, tFogS, tLand, tMarks; uniform float uMap; uniform vec2 res, uOff, uSun2, uWindS, uView, uHSize; uniform float uHScale, uFxs, uFire; uniform int uUnits, uInks; uniform float uDark; uniform sampler2D tH, tFx, tAnc, tFlow, tBrook; uniform vec4 uShow[4]; uniform vec3 uUpV, uDayMul, uDayAdd; uniform float uTime, uK, uRain, uStorm, uSnowF, uSnowC, uSnowLine, uFlora, uFog, uMist, uNight, uWet, uWaterL, uCloudK, uMarks; uniform int uStyle, uRoad, uOre;
+        varying vec2 vUv; uniform sampler2D t, tSubj, tHeat, tPaper, tNorm, tFogS, tLand, tMarks; uniform float uMap; uniform vec2 res, uOff, uSun2, uWindS, uView, uHSize; uniform float uHScale, uFxs, uFire; uniform int uUnits, uInks; uniform float uDark; uniform sampler2D tH, tFx, tAnc, tFlow, tBrook, tBeach; uniform vec4 uShow[4]; uniform vec3 uUpV, uDayMul, uDayAdd; uniform float uTime, uK, uRain, uStorm, uSnowF, uSnowC, uSnowLine, uFlora, uFog, uMist, uNight, uWet, uWaterL, uCloudK, uMarks; uniform int uStyle, uRoad, uOre;
         uniform vec2 uSideKey[8]; uniform vec3 uSideL[8], uSideD[8], uSideB[8];
         uniform sampler2D tTerr; uniform float uBorder, uMe;
         uniform vec2 uCloud; uniform vec3 uSunW; uniform float uCloudT, uCloudA, uCloudG, uRayK, uSand;
@@ -8284,6 +8284,15 @@ if (typeof module !== 'undefined') module.exports = Looks;
             float sOld = smoothstep(0.35, 0.75, noise(Wl * 0.05 + 11.0));
             tint = mix(tint, dk ? mix(vec3(0.6, 0.62, 0.66), vec3(0.5, 0.53, 0.58), sOld) : mix(vec3(0.985, 0.985, 0.975), vec3(0.89, 0.91, 0.94), sOld * 0.85), cap);
             CONT = mix(CONT, SNOWL, cap);
+            // A beach by still water: sand on the steppe and the salt flats, grey shingle in the snowy pass, its
+            // contours faint, wet and darker along the water's edge.
+            float bch = texture2D(tBeach, Wl / uMap).r * (1.0 - cap);
+            // A beach's own slope is gentle, so its relief shading is light.
+            rfDark *= 1.0 - 0.6 * smoothstep(0.1, 0.45, bch);
+            vec3 SAND = uFlora > 2.5 ? (dk ? vec3(0.44, 0.44, 0.45) : vec3(0.84, 0.83, 0.8)) : (dk ? vec3(0.48, 0.43, 0.33) : vec3(0.95, 0.9, 0.76));
+            float bWet = (1.0 - smoothstep(0.04, 0.16, -wl)) * step(wl, 0.0);
+            tint = mix(tint, mix(SAND, SAND * (dk ? 0.8 : 0.86), bWet), smoothstep(0.1, 0.45, bch));
+            CONT = mix(CONT, mix(CONT, tint, 0.55), smoothstep(0.15, 0.55, bch));
             // A road takes a third of the tint and the contours cross it faint, so it climbs and falls with the land
             // rather than lying flat over it.
             base = mix(base, tint, isG * (1.0 - onRoad * 0.65));
@@ -8318,11 +8327,23 @@ if (typeof module !== 'undefined') module.exports = Looks;
             float tPh = dot(Wl - floor(Wl / 3.0) * 3.0, tw) / (6.0 / 80.0 * exp2(gLm));
             float tEdge = (1.0 - smoothstep(0.35 * uK, 1.0 * uK, abs(trk - 0.8) / tgl)) * mix(step(0.45, fract(tPh)), step(0.45, fract(tPh * 0.5)), gLf);
             base = mix(base, dk ? vec3(0.52, 0.5, 0.47) : vec3(0.42, 0.36, 0.28), tEdge * 0.8 * isG * (1.0 - onRoad));
+            // The beach's grain, fine dots, and pebbles in the pass, with the swash's reach drawn as a dashed line a
+            // little up from the water.
+            if (bch > 0.05 && isG > 0.5) {
+              vec2 gq = Wl * (uFlora > 2.5 ? 1.3 : 2.2) * exp2(-gLm), gi = floor(gq), go = vec2(hash(gi + 5.0), hash(gi + 17.0)) * 0.6 + 0.2;
+              float gd = length(fract(gq) - go), gr = uFlora > 2.5 ? 0.2 : 0.11;
+              float grain = (uFlora > 2.5 ? (1.0 - smoothstep(gr * 0.6, gr, gd)) - (1.0 - smoothstep(gr * 0.25, gr * 0.6, gd)) : 1.0 - smoothstep(gr * 0.5, gr, gd)) * step(0.55, hash(gi + 29.0));
+              base = mix(base, dk ? vec3(0.62, 0.58, 0.5) : vec3(0.6, 0.52, 0.38), grain * smoothstep(0.15, 0.5, bch) * (1.0 - onRoad) * 0.75);
+              float swF = -wl, swW = max(fwidth(swF), 1e-4), sw = (1.0 - smoothstep(0.4 * uK, 1.1 * uK, abs(swF - 0.2) / swW));
+              vec2 swg = vec2(dFdx(swF), dFdy(swF)), swT = normalize(S2W * vec2(-swg.y, swg.x) + 1e-6);
+              float swP = dot(Wl - floor(Wl / 3.0) * 3.0, swT) / (0.5 * exp2(gLm));
+              base = mix(base, dk ? vec3(0.5, 0.58, 0.75) : vec3(0.42, 0.48, 0.66), sw * step(0.45, fract(swP)) * smoothstep(0.4, 0.7, bch) * 0.7 * (1.0 - onRoad));
+            }
             // Wild flowers in patches on the gentler ground, a dot of colour each laid on the land: poppies,
             // buttercups and cornflowers on the steppe, a sparse pink bloom on the salt flats, heather in the snowy
             // pass. None in the snow, on a road or by the water.
             if (uFlora > 0.5 && isG > 0.5) {
-              float fP = smoothstep(0.64, 0.82, noise(Wl * 0.13 + 41.0) * 0.75 + noise(Wl * 0.4 + 7.0) * 0.25) * smoothstep(1.5, 2.3, rd) * (1.0 - cap) * (1.0 - uSnowC) * (1.0 - smoothstep(0.35, 0.7, sSl)) * (1.0 - bankZone);
+              float fP = smoothstep(0.64, 0.82, noise(Wl * 0.13 + 41.0) * 0.75 + noise(Wl * 0.4 + 7.0) * 0.25) * (1.0 - smoothstep(0.1, 0.3, bch)) * smoothstep(1.5, 2.3, rd) * (1.0 - cap) * (1.0 - uSnowC) * (1.0 - smoothstep(0.35, 0.7, sSl)) * (1.0 - bankZone);
               vec2 fq = Wl * 3.2 * exp2(-gLm), fi = floor(fq), fo = vec2(hash(fi + 3.0), hash(fi + 9.0)) * 0.6 + 0.2;
               float fh = hash(fi + 77.0), fc = hash(fi + 131.0);
               float fd = (1.0 - smoothstep(0.15, 0.24, length(fract(fq) - fo))) * step(1.0 - fP * (uFlora > 1.5 && uFlora < 2.5 ? 0.3 : uFlora > 2.5 ? 0.45 : 0.75), fh);
@@ -9000,7 +9021,7 @@ const World = (() => {
       // The height above which snow lies on the heights in any weather.
       uSnowLine: { value: 99 },
       // The way the rivers run, from buildFlow, and how far each point lies from a brook and whether at its ford.
-      tFlow: { value: black }, tBrook: { value: farBrook },
+      tFlow: { value: black }, tBrook: { value: farBrook }, tBeach: { value: black },
       // The theatre's wild flowers: 1 the steppe's, 2 the salt flats', 3 the snowy pass's heather.
       uFlora: { value: 0 },
       // Up to four showers over the map: x, y, radius, and strength, negative for snow.
@@ -9606,7 +9627,7 @@ const World = (() => {
     let S = null, M = null, theme = null, viewTeam = 0, sets = {}, terrainMesh = null, waterMesh = null, statics = [], baseImage = null;
     const rs = new Map();
     let wrecks = [], corpses = [], bleeds = [], flyers = [], planes = [], falls = [], marks = null, marksTex = null, marksDirty = false, marksLast = 0, treadFade = 0;
-    let fogTex = null, fogData = null, fogR = null, fogG = null, terrTex = null, terrData = null, terrSeen = -1, hTex = null, flowTex = null, brookTex = null;
+    let fogTex = null, fogData = null, fogR = null, fogG = null, terrTex = null, terrData = null, terrSeen = -1, hTex = null, flowTex = null, brookTex = null, beachTex = null, beachMap = null;
     // A number as a half float, for heights within a few units of the ground.
     const halfBuf = new Float32Array(1), halfBits = new Uint32Array(halfBuf.buffer);
     function toHalf(v) {
@@ -9872,6 +9893,7 @@ const World = (() => {
       const rim = (x, y) => y === 0 ? x : x === W - 1 ? W + y : y === H - 1 ? 2 * W + H - x : x === 0 ? 2 * W + 2 * H - y : -1;
       const N8 = [[1, 0, 10], [-1, 0, 10], [0, 1, 10], [0, -1, 10], [1, 1, 14], [-1, 1, 14], [1, -1, 14], [-1, -1, 14]];
       let ci = 0;
+      const still = [];
       for (let c0 = 0; c0 < n; c0++) {
         if (!wet[c0] || comp[c0] >= 0) continue;
         const cells = [c0];
@@ -9890,7 +9912,7 @@ const World = (() => {
         for (const r of ends) { const last = runs[runs.length - 1]; if (last && r - last[1] <= 4) last[1] = r; else runs.push([r, r]); }
         const P = 2 * (W + H);
         if (runs.length > 1 && runs[0][0] + P - runs[runs.length - 1][1] <= 4) runs[runs.length - 1][1] = runs.shift()[1] + P;
-        if (runs.length < 2 || wide > 9) continue;
+        if (runs.length < 2 || wide > 9) { still.push(...cells); continue; }
         const [first, upTo] = runs[0];
         // Distance down the river from the end met first, in tenths of a cell along eight ways, by buckets.
         const G = new Map(), Q = [];
@@ -9907,6 +9929,30 @@ const World = (() => {
       flowTex = new THREE.DataTexture(data, W, H, THREE.RGBAFormat);
       flowTex.magFilter = flowTex.minFilter = THREE.LinearFilter; flowTex.needsUpdate = true;
       SH.tFlow.value = flowTex;
+      // Beaches: the low, gentle ground beside still water, a lake's or the sea's, never a river's. Each dry cell
+      // within BEACH_W of still water that stands less than a unit and a half over it and is not steep is beach, fullest at the
+      // water's edge.
+      const BEACH_W = 4.5, beach = new Uint8Array(n), bd = new Float32Array(n).fill(1e9), q = [];
+      for (const c of still) { bd[c] = 0; q.push(c); }
+      for (let i = 0; i < q.length; i++) {
+        const c = q[i], x = c % W, y = c / W | 0;
+        for (const [dx, dy, len] of N8) {
+          const X = x + dx, Y = y + dy, o = Y * W + X;
+          if (X < 0 || Y < 0 || X >= W || Y >= H || wet[o] || bd[c] + len / 10 >= bd[o] || bd[c] + len / 10 > BEACH_W) continue;
+          bd[o] = bd[c] + len / 10; q.push(o);
+        }
+      }
+      for (let c = 0; c < n; c++) {
+        if (wet[c] || bd[c] > BEACH_W) continue;
+        const x = c % W + 0.5, y = (c / W | 0) + 0.5, z = terrainAt(M, x, y) - M.water;
+        const sl = Math.hypot(terrainAt(M, x + 1, y) - terrainAt(M, x - 1, y), terrainAt(M, x, y + 1) - terrainAt(M, x, y - 1)) / 2;
+        beach[c] = Math.round(255 * Math.max(0, 1 - bd[c] / BEACH_W) ** 0.6 * clamp((1.4 - z) / 0.6, 0, 1) * clamp((0.75 - sl) / 0.3, 0, 1));
+      }
+      if (beachTex) beachTex.dispose();
+      beachTex = new THREE.DataTexture(beach, W, H, THREE.RedFormat);
+      beachTex.magFilter = beachTex.minFilter = THREE.LinearFilter; beachTex.needsUpdate = true;
+      SH.tBeach.value = beachTex;
+      beachMap = beach;
     }
 
     function buildScenery() {
@@ -10091,6 +10137,8 @@ const World = (() => {
         if (M.roadDist[v] < 2.5 || (g[c] & 8) || z < M.water + 0.1 || bd < 0.65) continue;
         // At the edge of the water, a river's, a lake's or a brook's.
         const bank = bd < 1.5 || (z < M.water + 0.7 && (!dry(x + 1, y) || !dry(x - 1, y) || !dry(x, y + 1) || !dry(x, y - 1)));
+        // No reeds on a beach.
+        if (bank && beachMap && beachMap[c] > 70) continue;
         if (bank) { if (r < (desert ? 0.035 : 0.5)) wet.push({ x, y: z - 0.04, z: y, s: (desert ? 0.9 : 0.8) + rand() * 0.5, a: rand() * 6.28, c: desert ? 0x5e7a3a : [0xa8a46a, 0x8a9a58, 0xb8ac78][rand() * 3 | 0], cell: c }); continue; }
         let edge = false;
         for (let j = -1; j <= 1 && !edge; j++) for (let i = -1; i <= 1; i++) { const X = cx + i, Y = cy + j; if (X >= 0 && Y >= 0 && X < W && Y < H && (g[Y * W + X] & 8)) { edge = true; break; } }
@@ -11018,7 +11066,7 @@ const World = (() => {
       marks.ctx.globalCompositeOperation = 'source-over';
       marks.ctx.fillStyle = '#000'; marks.ctx.fillRect(0, 0, mk, mk); marksTex.needsUpdate = true;
 
-      buildTerrain(); buildWater(); buildScenery(); buildSets(); buildLife(); applyLight();
+      buildTerrain(); buildWater(); buildFlow(); buildScenery(); buildSets(); buildLife(); applyLight();
       // The land's heights as a texture, for passes that draw the ground's form.
       if (hTex) hTex.dispose();
       const hd = new Uint16Array(M.h.length);
@@ -11033,7 +11081,6 @@ const World = (() => {
       brookTex = new THREE.DataTexture(bk, VW, VH, THREE.RGBAFormat);
       brookTex.magFilter = brookTex.minFilter = THREE.LinearFilter; brookTex.wrapS = brookTex.wrapT = THREE.ClampToEdgeWrapping; brookTex.needsUpdate = true;
       SH.tBrook.value = brookTex;
-      buildFlow();
       for (const k in sky) if (typeof sky[k] === 'number') sky[k] = 0;
       Object.assign(sky, Rules.sky(S), { wind: undefined });
       sky.wet = 0; sky.day = Rules.dayAt(S.tick); waterRise.value = Math.min(1.25, sky.flood) * 0.26;
