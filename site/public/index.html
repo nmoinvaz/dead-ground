@@ -595,7 +595,7 @@ body[data-look="ink"] .sheet { box-shadow: 4px 4px 0 var(--ink); }
       <div class="choice"><h2>Picture</h2><div id="s-pic" class="two"><button data-v="sharp">Sharp</button><button data-v="fast">Faster</button></div><p id="s-pic-note"></p></div>
       <div class="choice"><h2>Ore, oil and power</h2><div id="s-gauges" class="two"><button data-v="side">In the sidebar</button><button data-v="top">In the top bar</button></div></div>
       <div class="choice"><h2>Music</h2><div id="s-music" class="two"><button data-v="on">On</button><button data-v="off">Off</button></div></div>
-      <p id="build">Build 010e05c 2026-11-08 17:10</p>
+      <p id="build">Build 1b9c49a 2026-11-08 17:18</p>
     </div>
     <div id="banner" hidden></div>
     <button id="update" hidden>A new version of Dead Ground is out. <b>Reload</b></button>
@@ -1154,6 +1154,10 @@ const Rules = (() => {
   // feature is listed with all of its images in a row, so one town's images sit side by side.
   // How wooded a map is beyond the usual: the woods' patches grow wider, start on lower ground and stand thicker.
   // Maps not named keep the usual woods.
+  // How many brooks each map's part has. Every part of a map gets the same, so the map stays fair. A brook runs at
+  // most BROOK_REACH cells.
+  const BROOK_REACH = 90;
+  const BROOKS = { duel: 2, quad: 1, world: 1, gulf: 2, pass: 2, lakes: 1, greenwood: 2, oldforest: 1, twinlakes: 2, seas: 2, peaks: 2, highlands: 1, crater: 1 };
   // The treeline: woods thin out over TREE_BAND of height round TREE_LINE and stand no higher.
   const TREE_LINE = 8.6, TREE_BAND = 1.2;
   const WOODS = { quad: 0.7, pass: 1, lakes: 1, greenwood: 3, oldforest: 1.3, twinlakes: 0.6, ponds: 0.8, peaks: 0.6, highlands: 0.5, crater: 0.5 };
@@ -1601,6 +1605,107 @@ const Rules = (() => {
       }
     }
 
+    // Brooks. Each rises on middling ground in one part of the map and winds down to the river, a lake or the
+    // map's edge, or sinks into a pool, and is copied by the map's turns. It keeps clear of the bases, towns, ore and
+    // wells. A brook is shallow: men wade it, slowly, and wheels and tracks cross only at its fords, or where a road
+    // carries it in a culvert. Its dice are its own, so the rest of the map draws the same numbers as before.
+    const brooks = [], brookFords = [], bD = new Float32Array(VW * VH).fill(99), bF = new Uint8Array(VW * VH);
+    if (BROOKS[kind]) {
+      const br = mulberry((seed * 2654435761 + 0x9e37) % 4294967296);
+      const hv = (x, y) => h[clamp(Math.round(y * RES), 0, VH - 1) * VW + clamp(Math.round(x * RES), 0, VW - 1)];
+      const rdv = (x, y) => roadDist[clamp(Math.round(y * RES), 0, VH - 1) * VW + clamp(Math.round(x * RES), 0, VW - 1)];
+      // The ground a brook keeps off: a base's yard, a town's houses, an ore field and a well, each with a margin it
+      // turns away from as it nears.
+      const keepOff = [...L.bases.map(p => [p[0], p[1], 22]), ...L.towns.map(p => [p[0], p[1], 9]), ...L.ore.map(p => [p[0], p[1], p[2] + 2]), ...L.wells.map(p => [p[0], p[1], 4])];
+      const clear = (x, y) => keepOff.every(o => mhypot(x - o[0], y - o[1]) > o[2]);
+      // The brook's way from its spring: the cheapest walk over the cells to the river, a lake or the map's edge,
+      // dear uphill and dearer along a road, barred from ground it keeps off and from bridges, and made to wind by
+      // noise in the going. Past BROOK_REACH cells it gives up and sinks into a pool at the lowest ground it reached.
+      // The walk is then rounded into curves and laid as points a step apart.
+      const route = (sx, sy) => {
+        const cost = new Float32Array(N).fill(Infinity), from = new Int32Array(N).fill(-1), heap = [];
+        const push = (c, v) => { heap.push([v, c]); let i = heap.length - 1; while (i > 0) { const p = (i - 1) >> 1; if (heap[p][0] <= heap[i][0]) break; [heap[p], heap[i]] = [heap[i], heap[p]]; i = p; } };
+        const pop = () => { const top = heap[0], last = heap.pop(); if (heap.length) { heap[0] = last; let i = 0; for (;;) { const l = 2 * i + 1, r = l + 1; let m = i; if (l < heap.length && heap[l][0] < heap[m][0]) m = l; if (r < heap.length && heap[r][0] < heap[m][0]) m = r; if (m === i) break; [heap[m], heap[i]] = [heap[i], heap[m]]; i = m; } } return top; };
+        const c0 = (sy | 0) * W + (sx | 0);
+        cost[c0] = 0; push(c0, 0);
+        let end = -1, kind = 'pool', low = c0;
+        while (heap.length) {
+          const [v, c] = pop();
+          if (v > cost[c]) continue;
+          const x = c % W, y = c / W | 0, z = hv(x + 0.5, y + 0.5);
+          if (c !== c0 && (z < water + 0.05 || x === 0 || y === 0 || x === W - 1 || y === H - 1)) { end = c; kind = z < water + 0.05 ? 'water' : 'edge'; break; }
+          if (v > 12 && z < hv(low % W + 0.5, (low / W | 0) + 0.5)) low = c;
+          if (v > BROOK_REACH) continue;
+          for (const [dx, dy, len] of [[1, 0, 1], [-1, 0, 1], [0, 1, 1], [0, -1, 1], [1, 1, 1.414], [-1, 1, 1.414], [1, -1, 1.414], [-1, -1, 1.414]]) {
+            const X = x + dx, Y = y + dy;
+            if (X < 0 || Y < 0 || X >= W || Y >= H) continue;
+            const px = X + 0.5, py = Y + 0.5;
+            if (!clear(px, py) || L.bridges.some(([a, b]) => mhypot(px - (a[0] + b[0]) / 2, py - (a[1] + b[1]) / 2) < 9)) continue;
+            const up = Math.max(0, hv(px, py) - z), wind = 0.55 + 0.9 * fbm(px * 0.11 + 91, py * 0.11 + 37, 2);
+            const nv = v + len * wind + up * 9 + (rdv(px, py) < 2.6 ? 2.5 : 0), o = Y * W + X;
+            if (nv < cost[o]) { cost[o] = nv; from[o] = c; push(o, nv); }
+          }
+        }
+        if (end < 0) end = low;
+        const cells = [];
+        for (let c = end; c >= 0; c = from[c]) cells.unshift(c);
+        let pts = cells.map(c => [c % W + 0.5, (c / W | 0) + 0.5]);
+        for (let k = 0; k < 3; k++) {
+          const q = [pts[0]];
+          for (let i = 0; i + 1 < pts.length; i++) { const [ax, ay] = pts[i], [bx, by] = pts[i + 1]; q.push([ax * 0.75 + bx * 0.25, ay * 0.75 + by * 0.25], [ax * 0.25 + bx * 0.75, ay * 0.25 + by * 0.75]); }
+          q.push(pts[pts.length - 1]); pts = q;
+        }
+        const out = [pts[0]];
+        let acc = 0;
+        for (let i = 1; i < pts.length; i++) { acc += mhypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]); if (acc >= 0.8) { out.push(pts[i]); acc = 0; } }
+        return { pts: out, end: kind };
+      };
+      for (let k = 0; k < BROOKS[kind]; k++) {
+        for (let tries = 0; tries < 500; tries++) {
+          // A spring well in from the map's edge and back from the water, so its brook has some way to run.
+          const x = 18 + br() * (W - 36), y = 18 + br() * (H - 36), z = hv(x, y);
+          if (!L.domain(x | 0, y | 0) || z < 1.2 || z > 8 || !clear(x, y) || rdv(x, y) < 6 || L.river(x, y)[0] < L.river(x, y)[1] + 14) continue;
+          // Not along a brook already laid.
+          if (bD[clamp(Math.round(y * RES), 0, VH - 1) * VW + clamp(Math.round(x * RES), 0, VW - 1)] < 12 || brooks.some(b => b.pts.some(p => mhypot(p[0] - x, p[1] - y) < 12))) continue;
+          const t = route(x, y);
+          if (t.pts.length < 22) continue;
+          // A ford part way down, and a second on a long brook, each the nearest place to its mark that is clear of a
+          // road, which has its culvert.
+          const n = t.pts.length, offRoad = i => roadDist[clamp(Math.round(t.pts[i][1] * RES), 0, VH - 1) * VW + clamp(Math.round(t.pts[i][0] * RES), 0, VW - 1)] > 5;
+          const fordNear = f => { for (let d = 0; d < n * 0.5; d++) for (const i of [Math.round(f * (n - 1)) + d, Math.round(f * (n - 1)) - d]) if (i > 2 && i < n - 3 && offRoad(i)) return i; return -1; };
+          const fords = [...new Set((n > 55 ? [0.4, 0.8] : [0.5]).map(fordNear))].filter(i => i >= 0);
+          for (const T of L.syms) {
+            const pts = t.pts.map(T);
+            brooks.push({ pts, end: t.end });
+            for (const i of fords) { const a = pts[Math.max(0, i - 1)], b = pts[Math.min(pts.length - 1, i + 1)], d = mhypot(b[0] - a[0], b[1] - a[1]) || 1; brookFords.push([pts[i][0], pts[i][1], (b[0] - a[0]) / d, (b[1] - a[1]) / d]); }
+          }
+          break;
+        }
+      }
+      // The distance from each point of the land to the nearest brook, and whether that stretch is a ford.
+      for (const b of brooks) for (let k = 0; k + 1 < b.pts.length; k++) {
+        const [ax, ay] = b.pts[k], [bx, by] = b.pts[k + 1], dx = bx - ax, dy = by - ay, L2 = dx * dx + dy * dy || 1e-6, Rr = 3;
+        const i0 = Math.max(0, Math.floor((Math.min(ax, bx) - Rr) * RES)), i1 = Math.min(VW - 1, Math.ceil((Math.max(ax, bx) + Rr) * RES));
+        const j0 = Math.max(0, Math.floor((Math.min(ay, by) - Rr) * RES)), j1 = Math.min(VH - 1, Math.ceil((Math.max(ay, by) + Rr) * RES));
+        for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
+          const qx = i / RES - ax, qy = j / RES - ay, t = clamp((qx * dx + qy * dy) / L2, 0, 1), d = mhypot(qx - dx * t, qy - dy * t), c = j * VW + i;
+          if (d >= bD[c]) continue;
+          bD[c] = d;
+          const px = ax + dx * t, py = ay + dy * t;
+          bF[c] = brookFords.some(f => mhypot(px - f[0], py - f[1]) < 1.6) ? 1 : 0;
+        }
+      }
+      // Its bed: a shallow dip in the land, its floor just clear of the rivers' water, as the brook's water is drawn
+      // from its course and not from the land's height. A brook's last reach, where it sinks, ends in a pool.
+      for (const b of brooks) if (b.end === 'pool') {
+        const [ex, ey] = b.pts[b.pts.length - 1];
+        for (let j = Math.max(0, Math.floor((ey - 3) * RES)); j <= Math.min(VH - 1, Math.ceil((ey + 3) * RES)); j++) for (let i = Math.max(0, Math.floor((ex - 3) * RES)); i <= Math.min(VW - 1, Math.ceil((ex + 3) * RES)); i++) {
+          const c = j * VW + i; bD[c] = Math.min(bD[c], Math.max(0, mhypot(i / RES - ex, j / RES - ey) - 1.2));
+        }
+      }
+      for (let c = 0; c < h.length; c++) if (bD[c] < 3.2) h[c] = Math.min(h[c], lerp(water + 0.1, h[c], smooth(0.3, 3.2, bD[c])));
+    }
+
     // Decks over the water. Units walk at deck height, the terrain below stays as it was.
     const deck = new Float32Array(VW * VH), bridges = [];
     const addBridge = (a, b) => {
@@ -1653,7 +1758,7 @@ const Rules = (() => {
     // and 64 hold how hard a track worn there has become, 0 to 3, set as the world goes on.
     const hAt = (x, y) => { const i = clamp(Math.round(x * RES), 0, VW - 1), j = clamp(Math.round(y * RES), 0, VH - 1); return h[j * VW + i]; };
     const deckAt = (x, y) => { const i = clamp(Math.round(x * RES), 0, VW - 1), j = clamp(Math.round(y * RES), 0, VH - 1); return deck[j * VW + i]; };
-    const ground = new Uint8Array(N), fordCells = [];
+    const ground = new Uint8Array(N), fordCells = [], wadeCells = [];
     // A cell's bits from the land alone, as if no bridge stood over it.
     const landBits = (x, y) => {
       let hi = -99, lo = 99;
@@ -1661,6 +1766,10 @@ const Rules = (() => {
         const z = hAt(x + a / 2, y + b / 2);
         hi = Math.max(hi, z); lo = Math.min(lo, z);
       }
+      // A brook, by its cells' distance from its course: wading slows men and stops wheels, but for at its fords and
+      // where a road carries it in a culvert.
+      const bc = (y * RES + 1) * VW + x * RES + 1;
+      if (bD[bc] < 0.75 && roadDist[bc] > 1.6) return bF[bc] ? 4 | 16 : 1 | 4 | 16;
       if (lo < water + 0.1) return fordK(x + 0.5, y + 0.5) > 0.85 ? 4 | 16 : 7;
       const slope = hi - lo;
       // A road's carriageway is never too steep to use, however hard it climbs. It is only kept free of building.
@@ -1674,7 +1783,8 @@ const Rules = (() => {
     for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
       const bits = deckAt(x + 0.5, y + 0.5) > 0 ? 4 : landBits(x, y);
       ground[y * W + x] = bits;
-      if (bits & 16) fordCells.push(y * W + x);
+      if ((bits & 17) === 17) wadeCells.push(y * W + x);
+      else if (bits & 16) fordCells.push(y * W + x);
     }
     // Each bridge's cells, and what lies under them, for when it falls.
     for (const br of bridges) {
@@ -1695,7 +1805,7 @@ const Rules = (() => {
       const [rd, rw] = L.river(x, y);
       if (L.lake ? rd < rw + 5 : rd < 6.5) return false;
       const c = clamp(Math.round(y * RES), 0, VH - 1) * VW + clamp(Math.round(x * RES), 0, VW - 1);
-      return roadDist[c] > 3;
+      return roadDist[c] > 3 && bD[c] > 1.8;
     };
     for (let y = 2; y < H - 2; y++) for (let x = 2; x < W - 2; x++) {
       if (!L.domain(x, y)) continue;
@@ -1755,7 +1865,7 @@ const Rules = (() => {
     const fish = (L.fish || []).map(p => ({ x: p[0], y: p[1] }));
     let seaCells = 0;
     for (let c = 0; c < N; c++) seaCells += sea[c];
-    return { W, H, seed, kind, h, deck, water, ground, ore: oreCells, oreFields, wells, towns, roads, roadDist, bridges, scatter, houses, oreRich, bases: L.bases, faces, fords: L.fords, fordCells, sea, fish, seaCells };
+    return { W, H, seed, kind, h, deck, water, ground, ore: oreCells, oreFields, wells, towns, roads, roadDist, bridges, scatter, houses, oreRich, bases: L.bases, faces, fords: L.fords, fordCells, wadeCells, brooks, brookFords, brookDist: bD, brookFord: bF, sea, fish, seaCells };
   }
 
   // A map is kept only if vehicles can get from the first base to every other base, town and well.
@@ -4297,8 +4407,8 @@ const Rules = (() => {
       const w = sky(S), want = S.flooded ? w.flood > 0.65 : w.flood > 0.9;
       if (want !== S.flooded) {
         S.flooded = want;
-        const fc = S.map.fordCells;
-        setGround(S, fc, fc.map(() => want ? 7 : 4 | 16));
+        const fc = S.map.fordCells, wc = S.map.wadeCells || [];
+        setGround(S, fc.concat(wc), fc.map(() => want ? 7 : 4 | 16).concat(wc.map(() => want ? 7 : 1 | 4 | 16)));
         S.ev.push({ t: 'flood', on: want });
       }
     }
@@ -7556,13 +7666,13 @@ if (typeof module !== 'undefined') module.exports = Looks;
       // 45 and 135 degrees, then flat and upright lines for the darkest, each line a little uneven with small gaps.
       // The ground's hatching is pinned to the map so it pans with it, the units' redraws a few times a second.
       const ink = new THREE.ShaderMaterial({ uniforms: { t: { value: null }, tSubj: { value: null }, tHeat: { value: null }, tPaper: { value: null }, res: { value: new THREE.Vector2(1, 1) }, uTime: { value: 0 }, uK: { value: 1 }, uOff: { value: new THREE.Vector2() }, uStyle: { value: 8 }, tNorm: { value: null }, tFogS: { value: null }, tLand: { value: null }, uSun2: { value: new THREE.Vector2(-1, 0) }, uUpV: { value: new THREE.Vector3(0, 1, 0) }, uRoad: { value: 0 }, uOre: { value: 0 }, uMarks: { value: 1 },
-        uWindS: { value: new THREE.Vector2() }, uView: { value: new THREE.Vector2(1, 0) }, tFx: { value: null }, tAnc: { value: null }, uDark: { value: 0 }, uInks: { value: 0 }, uFxs: { value: 0 }, uFire: { value: 0 }, uUnits: { value: 0 }, tH: SH.tH, uHSize: { value: new THREE.Vector2(1, 1) }, uHScale: { value: 1 }, uRain: { value: 0 }, uStorm: { value: 0 }, uSnowF: { value: 0 }, uSnowC: SH.uSnowC, uSnowLine: SH.uSnowLine, tFlow: SH.tFlow, uFog: { value: 0 }, uMist: { value: 0 }, uNight: { value: 0 }, uWet: { value: 0 },
+        uWindS: { value: new THREE.Vector2() }, uView: { value: new THREE.Vector2(1, 0) }, tFx: { value: null }, tAnc: { value: null }, uDark: { value: 0 }, uInks: { value: 0 }, uFxs: { value: 0 }, uFire: { value: 0 }, uUnits: { value: 0 }, tH: SH.tH, uHSize: { value: new THREE.Vector2(1, 1) }, uHScale: { value: 1 }, uRain: { value: 0 }, uStorm: { value: 0 }, uSnowF: { value: 0 }, uSnowC: SH.uSnowC, uSnowLine: SH.uSnowLine, tFlow: SH.tFlow, tBrook: SH.tBrook, uFog: { value: 0 }, uMist: { value: 0 }, uNight: { value: 0 }, uWet: { value: 0 },
         uDayMul: { value: new THREE.Vector3(1, 1, 1) }, uDayAdd: { value: new THREE.Vector3() }, uWaterL: { value: -0.15 }, uCloudK: SH.uCloudK, tMarks: SH.tMarks, uMap: SH.uMap,
         uCloud: SH.uCloud, uCloudT: SH.uCloudT, uSunW: SH.uSunDir, uCloudA: { value: 0 }, uCloudG: { value: 0 }, uRayK: { value: 0 }, uSand: { value: 0 },
         uInvVP: { value: new THREE.Matrix4() }, uW2S: { value: new THREE.Vector4(1, 0, 0, 1) }, uLev: { value: 1 }, tTerr: SH.tTerr, uBorder: SH.uBorder, uMe: { value: 0 },
         // Each side's colour as the anchor pass keeps it, its hue and how coloured it is, and its inks on either paper.
         uSideKey: { value: [...Array(8)].map(() => new THREE.Vector2()) }, uSideL: { value: [...Array(8)].map(() => new THREE.Vector3()) }, uSideD: { value: [...Array(8)].map(() => new THREE.Vector3()) }, uSideB: { value: [...Array(8)].map(() => new THREE.Vector3()) } }, vertexShader: vs, depthTest: false, depthWrite: false, fragmentShader: `
-        varying vec2 vUv; uniform sampler2D t, tSubj, tHeat, tPaper, tNorm, tFogS, tLand, tMarks; uniform float uMap; uniform vec2 res, uOff, uSun2, uWindS, uView, uHSize; uniform float uHScale, uFxs, uFire; uniform int uUnits, uInks; uniform float uDark; uniform sampler2D tH, tFx, tAnc, tFlow; uniform vec3 uUpV, uDayMul, uDayAdd; uniform float uTime, uK, uRain, uStorm, uSnowF, uSnowC, uSnowLine, uFog, uMist, uNight, uWet, uWaterL, uCloudK, uMarks; uniform int uStyle, uRoad, uOre;
+        varying vec2 vUv; uniform sampler2D t, tSubj, tHeat, tPaper, tNorm, tFogS, tLand, tMarks; uniform float uMap; uniform vec2 res, uOff, uSun2, uWindS, uView, uHSize; uniform float uHScale, uFxs, uFire; uniform int uUnits, uInks; uniform float uDark; uniform sampler2D tH, tFx, tAnc, tFlow, tBrook; uniform vec3 uUpV, uDayMul, uDayAdd; uniform float uTime, uK, uRain, uStorm, uSnowF, uSnowC, uSnowLine, uFog, uMist, uNight, uWet, uWaterL, uCloudK, uMarks; uniform int uStyle, uRoad, uOre;
         uniform vec2 uSideKey[8]; uniform vec3 uSideL[8], uSideD[8], uSideB[8];
         uniform sampler2D tTerr; uniform float uBorder, uMe;
         uniform vec2 uCloud; uniform vec3 uSunW; uniform float uCloudT, uCloudA, uCloudG, uRayK, uSand;
@@ -7789,6 +7899,12 @@ if (typeof module !== 'undefined') module.exports = Looks;
             float lh = texture2D(tFogS, vUv).b - 20.0, wl = uWaterL - lh, dep = max(wl, 0.0);
             // Where on the land this pixel lies, and the zoom's level for marks laid on it.
             vec2 Wl = landAt(vUv, lh);
+            // A brook is drawn from its distance map, not from the land's water, so it keeps a clean narrow line. Its
+            // depth rises from its banks to its middle, and its banks, water lines and wash follow from that as a
+            // river's do. A road carries it in a culvert, so none is drawn across a road.
+            vec2 bkS = texture2D(tBrook, (Wl * uHScale + 0.5) / uHSize).rg;
+            float bkD = bkS.r * 4.0, bkHW = 0.48;
+            dep = max(dep, max(bkHW - bkD, 0.0) / bkHW * 0.25 * smoothstep(1.2, 1.6, texture2D(tLand, vUv).r) * (1.0 - smoothstep(0.3, 0.37, A(vUv))));
             float lev = clamp(uLev, 0.0, 2.999);
             gLm = floor(lev); gLf = smoothstep(0.15, 0.85, lev - gLm); gW2S = mat2(uW2S.xy, uW2S.zw) / uK;
             // How far the view is drawn back, 0 at the usual view and 1 at a wide one, and for units from closer
@@ -8070,6 +8186,8 @@ if (typeof module !== 'undefined') module.exports = Looks;
             // Water on dark paper is a deep blue, its lines and ripples lighter than it.
             vec3 WTR = dk ? vec3(0.115, 0.15, 0.235) : LILAC, WTR_D = dk ? vec3(0.32, 0.4, 0.6) : LILAC_D, RIP = dk ? vec3(0.4, 0.5, 0.7) : vec3(1.0);
             base = mix(base, mix(mix(WTR, WTR_D, wLine * 0.6), RIP, rip * 0.55 * (1.0 - wLine)), isW);
+            // A brook's ford lies shallow, its wash paler.
+            base = mix(base, mix(base, paperC, 0.5), bkS.g * isW);
             base = mix(base, base * (dk ? 0.5 : 0.8), shB * isW);
             if (isT > 0.0) {
               float tn = noise(p / (60.0 * uK));
@@ -8674,6 +8792,7 @@ const World = (() => {
 
     const white = new THREE.DataTexture(new Uint8Array([255, 255, 255, 255]), 1, 1); white.needsUpdate = true;
     const black = new THREE.DataTexture(new Uint8Array([0, 0, 0, 0]), 1, 1); black.needsUpdate = true;
+    const farBrook = new THREE.DataTexture(new Uint8Array([255, 0, 0, 255]), 1, 1); farBrook.needsUpdate = true;
     const SH = {
       tFog: { value: white }, tDetail: { value: null }, tTerr: { value: white }, tH: { value: white }, tMarks: { value: white }, uTime: { value: 0 },
       uTeam0: { value: new THREE.Color(0x3f8cff) }, uTeams: { value: SLOT_COLORS.map(c => new THREE.Color(c).offsetHSL(0, 0, 0.06)) }, uFogOn: { value: 1 }, uBorder: { value: 1 }, uMap: { value: 128 },
@@ -8682,8 +8801,8 @@ const World = (() => {
       uWind: { value: new THREE.Vector2(0.3, 0.1) }, uCloud: { value: new THREE.Vector2() }, uCloudK: { value: 0.2 }, uCloudT: { value: 0.3 }, uSnowC: { value: 0 },
       // The height above which snow lies on the heights in any weather.
       uSnowLine: { value: 99 },
-      // The way the rivers run, from buildFlow.
-      tFlow: { value: black },
+      // The way the rivers run, from buildFlow, and how far each point lies from a brook and whether at its ford.
+      tFlow: { value: black }, tBrook: { value: farBrook },
       // How far tread marks darken the ground, none where the look draws them itself.
       uTreadK: { value: 0.34 },
       // How hard the track worn into each cell has become, in red.
@@ -9282,7 +9401,7 @@ const World = (() => {
     let S = null, M = null, theme = null, viewTeam = 0, sets = {}, terrainMesh = null, waterMesh = null, statics = [], baseImage = null;
     const rs = new Map();
     let wrecks = [], corpses = [], bleeds = [], flyers = [], planes = [], falls = [], marks = null, marksTex = null, marksDirty = false, marksLast = 0, treadFade = 0;
-    let fogTex = null, fogData = null, fogR = null, fogG = null, terrTex = null, terrData = null, terrSeen = -1, hTex = null, flowTex = null;
+    let fogTex = null, fogData = null, fogR = null, fogG = null, terrTex = null, terrData = null, terrSeen = -1, hTex = null, flowTex = null, brookTex = null;
     // A number as a half float, for heights within a few units of the ground.
     const halfBuf = new Float32Array(1), halfBits = new Uint32Array(halfBuf.buffer);
     function toHalf(v) {
@@ -9510,6 +9629,24 @@ const World = (() => {
     function buildFlow() {
       const n = W * H, wet = new Uint8Array(n), D = new Float32Array(n), comp = new Int32Array(n).fill(-1), data = new Uint8Array(n * 4);
       for (let c = 0; c < n; c++) { wet[c] = terrainAt(M, c % W + 0.5, (c / W | 0) + 0.5) < M.water ? 1 : 0; D[c] = wet[c] ? 1e9 : 0; data[c * 4] = data[c * 4 + 1] = 128; data[c * 4 + 3] = 255; }
+      // A brook runs from its spring, so its cells take their way from how far down it they lie, and are kept out of
+      // the rivers' reckoning. Its mouth, in the river's own deep water, is the river's.
+      const bArc = new Float32Array(n).fill(-1), bDist = new Float32Array(n).fill(9);
+      for (const b of M.brooks || []) {
+        let a = 0;
+        b.pts.forEach((p, i) => {
+          if (i) a += Math.hypot(p[0] - b.pts[i - 1][0], p[1] - b.pts[i - 1][1]);
+          for (let y = Math.max(0, Math.floor(p[1] - 2)); y <= Math.min(H - 1, Math.floor(p[1] + 2)); y++) for (let x = Math.max(0, Math.floor(p[0] - 2)); x <= Math.min(W - 1, Math.floor(p[0] + 2)); x++) {
+            const c = y * W + x, d = Math.hypot(x + 0.5 - p[0], y + 0.5 - p[1]);
+            if (!wet[c] && d < 1.6 && d < bDist[c]) { bDist[c] = d; bArc[c] = a; }
+          }
+        });
+      }
+      for (let c = 0; c < n; c++) if (bArc[c] >= 0) {
+        const ang = bArc[c] / FLOW_P * Math.PI * 2;
+        data[c * 4] = Math.round(127.5 + 127.5 * Math.cos(ang)); data[c * 4 + 1] = Math.round(127.5 + 127.5 * Math.sin(ang)); data[c * 4 + 2] = 255; data[c * 4 + 3] = 20;
+        wet[c] = 0; D[c] = 0;
+      }
       // Distance to the bank through the water, in two chamfer passes.
       const relax = (c, o, k) => { if (D[o] + k < D[c]) D[c] = D[o] + k; };
       for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const c = y * W + x; if (!wet[c]) continue; if (x > 0) relax(c, c - 1, 1); if (y > 0) { relax(c, c - W, 1); if (x > 0) relax(c, c - W - 1, 1.414); if (x < W - 1) relax(c, c - W + 1, 1.414); } }
@@ -9647,6 +9784,11 @@ const World = (() => {
       for (const f of M.fords || []) for (let j = -6; j <= 6; j++) {
         const k = j * 1.1, o = j % 2 ? 0.25 : -0.25, x = f[0] - f[3] * k + f[2] * o, y = f[1] + f[2] * k + f[3] * o;
         if (terrainAt(M, x, y) < M.water - 0.05) stones.push({ x, y: terrainAt(M, x, y) + 0.12, z: y, sx: 0.55, sy: 0.35, sz: 0.5, a: k, c: 0xa8a090 });
+      }
+      // A few across each brook's ford.
+      for (const f of M.brookFords || []) for (let j = -1; j <= 1; j++) {
+        const k = j * 0.42, o = j % 2 ? 0.16 : -0.16, x = f[0] - f[3] * k + f[2] * o, y = f[1] + f[2] * k + f[3] * o;
+        stones.push({ x, y: terrainAt(M, x, y) + 0.04, z: y, sx: 0.3, sy: 0.22, sz: 0.28, a: k, c: 0xa8a090 });
       }
       scen.fords = { mesh: stones.length ? instanced(sc.stone, plainTint, stones) : null, list: stones, under: false };
 
@@ -10540,6 +10682,13 @@ const World = (() => {
       hTex = new THREE.DataTexture(hd, VW, VH, THREE.RedFormat, THREE.HalfFloatType);
       hTex.magFilter = hTex.minFilter = THREE.LinearFilter; hTex.wrapS = hTex.wrapT = THREE.ClampToEdgeWrapping; hTex.needsUpdate = true;
       SH.tH.value = hTex;
+      // The brooks' distance map on the heights' grid: four cells at most, and the fords.
+      if (brookTex) brookTex.dispose();
+      const bk = new Uint8Array(M.h.length * 4);
+      for (let i = 0; i < M.h.length; i++) { bk[i * 4] = M.brookDist ? Math.round(Math.min(M.brookDist[i], 4) / 4 * 255) : 255; bk[i * 4 + 1] = M.brookFord && M.brookFord[i] ? 255 : 0; bk[i * 4 + 3] = 255; }
+      brookTex = new THREE.DataTexture(bk, VW, VH, THREE.RGBAFormat);
+      brookTex.magFilter = brookTex.minFilter = THREE.LinearFilter; brookTex.wrapS = brookTex.wrapT = THREE.ClampToEdgeWrapping; brookTex.needsUpdate = true;
+      SH.tBrook.value = brookTex;
       buildFlow();
       for (const k in sky) if (typeof sky[k] === 'number') sky[k] = 0;
       Object.assign(sky, Rules.sky(S), { wind: undefined });
