@@ -122,6 +122,24 @@
           float s = g / 80.0 * exp2(gLm), ph = dot(w, along);
           return mix(hachL(ph / s, top, lw), hachL(ph / (2.0 * s), top, lw), gLf);
         }
+        // Rock as Swiss survey maps draw it: tapered strokes down the fall line dir, one to each cell of s units with
+        // its middle jittered in the cell, and fewer of them in the light. sh is the shade, 0 lit and 1 dark, upp the
+        // land's units to a pixel and lw the stroke's width in pixels at its middle.
+        float rockL(vec2 w, vec2 dir, float s, float upp, float sh, float lw) {
+          vec2 q = w / s, c0 = floor(q), nrm = vec2(-dir.y, dir.x);
+          float m = 0.0;
+          for (int j = -2; j <= 2; j++) for (int i = -2; i <= 2; i++) {
+            vec2 ci = c0 + vec2(float(i), float(j));
+            float h1 = hash(ci + 3.7), h2 = hash(ci + 11.3), h3 = hash(ci + 23.9);
+            if (h3 > mix(0.12, 0.85, sh)) continue;
+            vec2 d = (q - ci - 0.15 - vec2(h1, h2) * 0.7) * s;
+            float t = dot(d, dir) / (s * mix(0.8, 1.5, fract(h1 * 7.3)));
+            if (abs(t) > 1.0) continue;
+            float wd = lw * mix(0.45, 1.0, sh) * (1.0 - t * t * 0.7);
+            m = max(m, 1.0 - smoothstep(wd - 0.5, wd + 0.5, abs(dot(d, nrm)) / upp));
+          }
+          return m;
+        }
         // The land's height between its grid points as a smooth cubic, from four filtered reads of the height map.
         vec4 cubicW(float v) { vec4 n = vec4(1.0, 2.0, 3.0, 4.0) - v, s = n * n * n; float x = s.x, y = s.y - 4.0 * s.x, z = s.z - 4.0 * s.y + 6.0 * s.x; return vec4(x, y, z, 6.0 - x - y - z) / 6.0; }
         float hCubic(vec2 p) {
@@ -475,6 +493,12 @@
             float sOld = smoothstep(0.35, 0.75, noise(Wl * 0.05 + 11.0));
             tint = mix(tint, dk ? mix(vec3(0.6, 0.62, 0.66), vec3(0.5, 0.53, 0.58), sOld) : mix(vec3(0.985, 0.985, 0.975), vec3(0.89, 0.91, 0.94), sOld * 0.85), cap);
             CONT = mix(CONT, SNOWL, cap);
+            // A face too steep for soil is bare rock, in a cool grey wash with its contours dropped, as a Swiss map
+            // leaves them out where the rock drawing carries the form. None by the water or on a road.
+            float rkN = (noise(Wl * 0.21 + 13.0) - 0.5) * 0.7 + (noise(Wl * 0.7 + 3.0) - 0.5) * 0.25;
+            float rock = smoothstep(1.05, 1.35, sSl + rkN) * smoothstep(0.3, 0.9, -wl) * (1.0 - onRoad) * (1.0 - cap * 0.6);
+            tint = mix(tint, dk ? vec3(0.44, 0.43, 0.42) : vec3(0.87, 0.85, 0.81), rock * 0.75);
+            contour *= 1.0 - rock * 0.85;
             // A beach by still water: sand on the steppe and the salt flats, grey shingle in the snowy pass, its
             // contours faint, wet and darker along the water's edge.
             float bch = texture2D(tBeach, Wl / uMap).r * (1.0 - cap);
@@ -491,6 +515,22 @@
             base = mix(base, base * (dk ? mix(vec3(0.36, 0.37, 0.44), vec3(0.66, 0.67, 0.71), cap) : mix(vec3(0.72, 0.70, 0.68), vec3(0.8, 0.8, 0.82), cap)), rfDark * (dk ? 0.95 : 0.65) * isG);
             base = mix(base, dk ? base + vec3(0.3, 0.27, 0.21) : min(base * 1.05 + 0.03, vec3(1.0)), rfLight * (dk ? 0.85 : 0.6) * isG);
             base = mix(base, CONT, contour * isG * (1.0 - onRoad * 0.55) * (1.0 - wet));
+            // The rock's strokes run down the fall line, heavy and close on the faces away from the sun and in the
+            // gullies, and few and fine on those toward it, so the rock is modelled by its strokes alone.
+            if (rock * isG > 0.01) {
+              vec2 rDir = normalize(sG + 1e-6);
+              float upp = 0.5 * (length(gJx) + length(gJy)), rSh = clamp(0.45 - sSun * 0.7 + sCv * 0.15, 0.0, 1.0);
+              float rS = 6.0 / 80.0 * exp2(gLm), rk = rockL(Wl, rDir, rS, upp, rSh, uK * 0.9);
+              if (gLf > 0.01) rk = mix(rk, rockL(Wl, rDir, rS * 2.0, upp, rSh, uK * 0.9), gLf);
+              // The face steps down in ledges, each topped by a broken crest line with its strokes hanging below it
+              // and a gap of scree at its foot.
+              float lz = (lhS + (noise(Wl * 0.25 + 21.0) - 0.5) * 1.1 + (noise(Wl * 1.1 + 4.0) - 0.5) * 0.3) / 0.7;
+              float lzw = max(fwidth(lz), 1e-4), lf = fract(lz);
+              rk *= smoothstep(0.05, 0.5, lf + (noise(Wl * 1.3 + 5.0) - 0.5) * 0.35);
+              float cw = uK * mix(0.3, 0.85, rSh);
+              float crest = (1.0 - smoothstep(cw, cw + 1.0, min(lf, 1.0 - lf) / lzw)) * step(0.52, noise(Wl * 1.4 + 9.0));
+              base = mix(base, dk ? vec3(0.78, 0.76, 0.72) : vec3(0.22, 0.2, 0.19), max(rk * 0.8, crest * 0.75) * mix(1.0, 0.75, zo) * (dk ? 0.8 : 1.0) * rock * isG * (1.0 - wet));
+            }
             base = mix(base, base * vec3(0.9, 0.93, 0.97), uWet * isG * 0.7);
             // The snowfield's edge is dashed, as a map bounds land cover, so it never reads as a shore.
             vec2 sg = vec2(dFdx(sF), dFdy(sF)), sTw = normalize(S2W * vec2(-sg.y, sg.x) + 1e-6);
