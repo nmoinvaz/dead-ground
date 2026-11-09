@@ -1715,7 +1715,7 @@ const World = (() => {
         m.setColorAt(0, neutral); m.instanceColor.setUsage(THREE.DynamicDrawUsage);
         return add(m);
       };
-      life = { herds: [], rafts: [], cars: [], folk: [], boats: [], flocks: [], birds: [], alarm: [], danger: [], rise: [], scanT: 0, beastM: {}, carM: mk(sc.car, 32), cartM: mk(sc.cart, 32), folkM: mk(sc.folk, 400), stallM: mk(sc.stall, 24), fairs: [], boatM: mk(sc.boat, 12), armM: mk(new THREE.BoxGeometry(0.62, 0.035, 0.035), 60) };
+      life = { herds: [], rafts: [], cars: [], folk: [], boats: [], flocks: [], birds: [], alarm: [], danger: [], rise: [], scanT: 0, beastM: {}, carM: mk(sc.car, 32), cartM: mk(sc.cart, 32), folkM: mk(sc.folk, 400), stallM: mk(sc.stall, 24), fairs: [], boatM: mk(sc.boat, 12), whales: [], whaleM: mk(sc.whale, 16), armM: mk(new THREE.BoxGeometry(0.62, 0.035, 0.035), 60) };
       // The theatre's herds by their shares, its wolf packs, and its ducks.
       // The kinds dealt out in proportion to their shares, in a shuffled order, so each comes.
       const deal = (theme.fauna || [['deer', 1]]).flatMap(([k, w]) => Array(w).fill(k)).sort(() => Math.random() - 0.5);
@@ -1748,6 +1748,15 @@ const World = (() => {
       for (let tries = 0; life.boats.length < Math.round(2 * scale) && tries < 4000; tries++) {
         const x = 2 + R() * (W - 4), y = 2 + R() * (H - 4);
         if (terrainAt(M, x, y) < -1.0 && Rules.bridgeAt(S, x, y) < 0) life.boats.push({ x, y, a: R() * 6.28, v: 1, ph: R() * 6 });
+      }
+      // Whales in the open sea, a pod of one to three to each great stretch of deep water, none on a river or lake.
+      const open = (x, y) => (M.sea ? M.sea[Rules.cellOf(x, y)] : true) && [0, 1.6, 3.2, 4.8].every(a => terrainAt(M, x + Math.cos(a) * 4, y + Math.sin(a) * 4) < -1.2);
+      for (let tries = 0, pods = 0; pods < Math.round(Math.min(3, (M.seaCells || 0) / 900) * scale) && tries < 3000; tries++) {
+        const x = 4 + R() * (W - 8), y = 4 + R() * (H - 8);
+        if (!open(x, y)) continue;
+        pods++;
+        const n = 1 + (R() * 3 | 0), a = R() * 6.28;
+        for (let k = 0; k < n; k++) life.whales.push({ x: x + (R() - 0.5) * 3, y: y + (R() - 0.5) * 3, a: a + (R() - 0.5) * 0.4, v: 0.6, st: 'deep', t: 4 + R() * 14, pitch: 0, sp: 0, flee: 0 });
       }
     }
     // Something loud at a point: deer bolt, birds lift, cars turn back, and a town nearby empties for a while.
@@ -2112,6 +2121,23 @@ const World = (() => {
         if (terrainAt(M, nx, ny) < -0.5) { b.x = nx; b.y = ny; } else b.a += 2 * dt;
         b.ph += dt;
       }
+      // Whales swim in the deep, turning from the shallows. Each comes up to breathe a while, blowing a spout every
+      // few seconds, then dives with its flukes raised and stays down a while. Ships and fighting send it down.
+      for (const w of L.whales) {
+        const ahead = da => terrainAt(M, w.x + Math.cos(w.a + da) * 3.5, w.y + Math.sin(w.a + da) * 3.5);
+        if (ahead(0) > -1.3) w.a += (ahead(0.7) < ahead(-0.7) ? 1 : -1) * 0.9 * dt; else w.a += Math.sin(w.t * 0.3 + w.x) * 0.05 * dt;
+        const near = S.ents.some(e => e.hp > 0 && e.d.move === 'naval' && Math.hypot(e.x - w.x, e.y - w.y) < 7) || L.alarm.some(q => Math.hypot(q.x - w.x, q.y - w.y) < q.r + 4);
+        if (near && w.st === 'up') { w.st = 'dive'; w.t = 2.2; }
+        const nx = w.x + Math.cos(w.a) * w.v * dt, ny = w.y + Math.sin(w.a) * w.v * dt;
+        if (terrainAt(M, nx, ny) < -1.0) { w.x = nx; w.y = ny; } else w.a += 1.5 * dt;
+        w.t -= dt;
+        if (w.st === 'deep' && w.t <= 0 && !near) { w.st = 'up'; w.t = 7 + Math.random() * 6; w.sp = 0.3; w.v = 0.45; }
+        else if (w.st === 'up') {
+          w.sp -= dt;
+          if (w.sp <= 0 && w.t > 1.5) { w.sp = 2.5 + Math.random() * 1.5; if (VIS(w.x, w.y)) spout(w.x + Math.cos(w.a) * 0.35, M.water + waterRise.value + 0.15, w.y + Math.sin(w.a) * 0.35); }
+          if (w.t <= 0) { w.st = 'dive'; w.t = 2.2; }
+        } else if (w.st === 'dive' && w.t <= 0) { w.st = 'deep'; w.t = 14 + Math.random() * 16; w.v = 0.8; }
+      }
       // Birds wheel over one place, scatter at a noise, and settle somewhere else.
       L.birds.length = 0;
       for (const f of L.flocks) {
@@ -2218,6 +2244,17 @@ const World = (() => {
         L.boatM.setMatrixAt(n, m1); L.boatM.setColorAt(n, colA.set(0xf4efe2)); n++;
       }
       L.boatM.count = n; dirty(L.boatM);
+      // A whale up lies awash, its back just clear of the water and rolling a little; diving, it arches, its head
+      // going down and its flukes rising clear before it sinks.
+      n = 0;
+      const wl = M.water + waterRise.value;
+      for (const w of L.whales) {
+        if (n >= 16 || w.st === 'deep' || !VIS(w.x, w.y)) continue;
+        const k = w.st === 'dive' ? 1 - w.t / 2.2 : 0, rise = w.st === 'up' ? Math.min(1, (13 - w.t) / 1.2) : 1;
+        compose(m1, w.x, wl + 0.03 + 0.02 * Math.sin(SH.uTime.value * 1.3 + w.x) - (1 - rise) * 0.3 - k * k * 0.9, w.y, -w.a, 0, -Math.sin(k * Math.PI) * 0.9 - k * 0.3, 1.25);
+        L.whaleM.setMatrixAt(n, m1); L.whaleM.setColorAt(n, colA.set(0xffffff)); n++;
+      }
+      L.whaleM.count = n; dirty(L.whaleM);
     }
 
     // The sky: weather from the rules, eased so a change comes over a few seconds, and the hour.
@@ -2931,6 +2968,11 @@ const World = (() => {
       const s = theme.smoke;
       smoke.add(x, y, z, 0.3 + (Math.random() - 0.5) * 0.25, 1.6, 0.1 + (Math.random() - 0.5) * 0.25, 4.2, size * 0.7, size * 4, fire ? [4, 1.8, 0.5, 0.8] : [s[0], s[1], s[2], 0.7], [s[0], s[1], s[2], 0.68], Math.random() * 4 | 0, { drag: 0.28, spin: 0.2, c2: [s[0] * 2.4, s[1] * 2.3, s[2] * 2.2, 0], mid: 0.12 });
       if (fire) glow.add(x, y - 0.3, z, 0, 0.9, 0, 0.5 + Math.random() * 0.3, size * 0.7, size * 0.2, [3.4, 1.7, 0.5, 0.9], [1.6, 0.3, 0.05, 0], 4 + (Math.random() * 4 | 0), { spin: 1 });
+    }
+    // A whale's spout: a plume of spray thrown up and drifting off, white. The pen-and-ink look draws it itself.
+    function spout(x, y, z) {
+      if (style.name === 'ink') { inkAdd({ k: 'spout', x, y, z, life: 1.5 }); return; }
+      for (let i = 0; i < 7; i++) smoke.add(x, y, z, (Math.random() - 0.5) * 0.25, 2.2 + Math.random() * 0.8, (Math.random() - 0.5) * 0.25, 0.9 + Math.random() * 0.4, 0.08, 0.42, [0.95, 0.97, 1, 0.75], [1, 1, 1, 0], Math.random() * 4 | 0, { drag: 1.6 });
     }
     function steam(x, y, z) { smoke.add(x, y, z, 0.25, 0.9, 0.1, 4, 0.8, 3.2, [0.92, 0.92, 0.92, 0.3], [1, 1, 1, 0], Math.random() * 4 | 0, { drag: 0.2 }); }
     function muzzle(x, y, z, size) {
@@ -3774,6 +3816,8 @@ const World = (() => {
       // Where one herd of each kind stands, and a raft of ducks, for checks.
       lifeAll() { return life ? life.herds.map(h => h.kind) : []; },
       // What carries a lamp after dark: the carts or cars on the roads, which by the age, and the boats.
+      // The whales, for checks.
+      whales() { return life ? life.whales : []; },
       lamps() { return { cars: life ? life.cars : [], boats: life ? life.boats : [], motor: worldAge() >= MOTOR_AGE }; },
       get names() { return names; },
       // The parks, and a market day called now at one of them, for checks.

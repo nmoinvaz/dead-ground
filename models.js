@@ -1091,6 +1091,16 @@ const Models = (() => {
       boat.box(0.36, 0.3, 0.32, -0.3, 0.2, 0, 0xf2eee4);
       boat.cyl(0.015, 0.02, 0.7, 0.2, 0.5, 0, 0x5a4632, { seg: 4 });
       scenery.boat = boat.finish();
+      // A whale, along x, about as long as a fishing boat: a long dark back, a paler throat, two flippers, a small
+      // dorsal fin and the flukes spread flat at the tail.
+      const whale = G();
+      whale.sph(0.2, 0, 0, 0, 0x55636f, { seg: 12, rings: 8, sx: 3.1, sy: 0.62 });
+      whale.sph(0.16, 0.22, -0.05, 0, 0x8a949c, { seg: 10, rings: 6, sx: 2.4, sy: 0.4 });
+      for (const s of [-1, 1]) whale.box(0.22, 0.02, 0.1, 0.18, -0.06, s * 0.22, 0x55636f, { ry: s * 0.5, rx: s * 0.3 });
+      whale.box(0.1, 0.07, 0.02, -0.2, 0.12, 0, 0x55636f, { rz: 0.5 });
+      whale.box(0.18, 0.06, 0.07, -0.66, 0, 0, 0x55636f);
+      for (const s of [-1, 1]) whale.prism([[0, 0], [-0.22, 0.2], [-0.14, 0.02]], 0.02, -0.72, 0.01, 0, 0x55636f, { rx: s * Math.PI / 2 });
+      scenery.whale = whale.finish();
       // A garden fence: one rail, and its post.
       const rail = G();
       rail.box(1, 0.05, 0.04, 0, -0.025, 0, 0xffffff);

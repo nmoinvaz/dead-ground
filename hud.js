@@ -1072,6 +1072,19 @@ const Hud = (() => {
       const INKC = '#1a1512', PAPERC = PAPER_C;
       for (const f of world.inkFx) {
         if (f.k === 'puff') { drawPuff(f); continue; }
+        // A whale's spout: a plume of spray rising and spreading from the blowhole, drawn as small white clouds ringed
+        // in fine blue, in the light paper's colours, as the dark scheme turns the overlay over.
+        if (f.k === 'spout') {
+          const [x, y] = world.project(f.x, f.y, f.z);
+          if (x < -60 || y < -60 || x > world.vw + 60 || y > world.vh + 60) continue;
+          const u = world.ppu(f.x, f.y, f.z), k = f.t / f.life, h = u * 1.3 * Math.min(1, k / 0.3), fade = k > 0.55 ? 1 - (k - 0.55) / 0.45 : 1;
+          og.save(); og.globalAlpha = fade; og.lineWidth = 1; og.strokeStyle = '#4a6a9a'; og.fillStyle = '#fbfcfd';
+          for (let i = 0; i < 11; i++) {
+            const q = i / 10, side = (i % 2 ? 1 : -1) * q * u * 0.36 * (0.4 + k), cy = y - h * (0.15 + 0.85 * q), r = u * (0.025 + 0.05 * q) * (0.7 + 0.6 * k);
+            og.beginPath(); og.arc(x + side + Math.sin(f.seed + i) * u * 0.04, cy, r, 0, 6.283); og.fill(); og.stroke();
+          }
+          og.restore(); continue;
+        }
         // A burst carries the style of what went up, unless the look draws none; a muzzle flash is always a few rays.
         const fx = f.k === 'star' ? 1 : world.style.fx === 4 ? 4 : f.fx !== undefined ? f.fx : (world.style.fx || 0);
         if (fx === 4) continue;
