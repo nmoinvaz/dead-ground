@@ -18,14 +18,14 @@
       // Pen and ink, after the Lightning film and js/ink.js: tone in seven steps of hatching on cream paper, at
       // 45 and 135 degrees, then flat and upright lines for the darkest, each line a little uneven with small gaps.
       // The ground's hatching is pinned to the map so it pans with it, the units' redraws a few times a second.
-      const ink = new THREE.ShaderMaterial({ uniforms: { t: { value: null }, tSubj: { value: null }, tHeat: { value: null }, tPaper: { value: null }, res: { value: new THREE.Vector2(1, 1) }, uTime: { value: 0 }, uK: { value: 1 }, uOff: { value: new THREE.Vector2() }, uStyle: { value: 8 }, tNorm: { value: null }, tFogS: { value: null }, tLand: { value: null }, uSun2: { value: new THREE.Vector2(-1, 0) }, uUpV: { value: new THREE.Vector3(0, 1, 0) }, uRoad: { value: 0 }, uOre: { value: 0 }, uMarks: { value: 1 },
+      const ink = new THREE.ShaderMaterial({ uniforms: { t: { value: null }, tSubj: { value: null }, tHeat: { value: null }, tPaper: { value: null }, res: { value: new THREE.Vector2(1, 1) }, uTime: { value: 0 }, uK: { value: 1 }, uOff: { value: new THREE.Vector2() }, uStyle: { value: 8 }, tNorm: { value: null }, tFogS: { value: null }, tLand: { value: null }, uSun2: { value: new THREE.Vector2(-1, 0) }, uUpV: { value: new THREE.Vector3(0, 1, 0) }, uRoad: { value: 0 }, uOre: { value: 0 }, uMarks: { value: 1 }, uRoadAge: { value: 4 },
         uWindS: { value: new THREE.Vector2() }, uView: { value: new THREE.Vector2(1, 0) }, tFx: { value: null }, tAnc: { value: null }, uDark: { value: 0 }, uInks: { value: 0 }, uFxs: { value: 0 }, uFire: { value: 0 }, uUnits: { value: 0 }, tH: SH.tH, uHSize: { value: new THREE.Vector2(1, 1) }, uHScale: { value: 1 }, uRain: { value: 0 }, uStorm: { value: 0 }, uSnowF: { value: 0 }, uSnowC: SH.uSnowC, uSnowLine: SH.uSnowLine, tFlow: SH.tFlow, tBrook: SH.tBrook, uFlora: SH.uFlora, uShow: SH.uShow, tCover: SH.tCover, uFieldK: SH.uFieldK, uFieldK2: SH.uFieldK2, uPark: SH.uPark, uBridgeKind: SH.uBridgeKind, uFog: { value: 0 }, uMist: { value: 0 }, uNight: { value: 0 }, uWet: { value: 0 },
         uDayMul: { value: new THREE.Vector3(1, 1, 1) }, uDayAdd: { value: new THREE.Vector3() }, uWaterL: { value: -0.15 }, uCloudK: SH.uCloudK, tMarks: SH.tMarks, uMap: SH.uMap,
         uCloud: SH.uCloud, uCloudT: SH.uCloudT, uSunW: SH.uSunDir, uCloudA: { value: 0 }, uCloudG: { value: 0 }, uRayK: { value: 0 }, uSand: { value: 0 },
         uInvVP: { value: new THREE.Matrix4() }, uW2S: { value: new THREE.Vector4(1, 0, 0, 1) }, uLev: { value: 1 }, tTerr: SH.tTerr, uBorder: SH.uBorder, uMe: { value: 0 },
         // Each side's colour as the anchor pass keeps it, its hue and how coloured it is, and its inks on either paper.
         uSideKey: { value: [...Array(8)].map(() => new THREE.Vector2()) }, uSideL: { value: [...Array(8)].map(() => new THREE.Vector3()) }, uSideD: { value: [...Array(8)].map(() => new THREE.Vector3()) }, uSideB: { value: [...Array(8)].map(() => new THREE.Vector3()) } }, vertexShader: vs, depthTest: false, depthWrite: false, fragmentShader: `
-        varying vec2 vUv; uniform sampler2D t, tSubj, tHeat, tPaper, tNorm, tFogS, tLand, tMarks; uniform float uMap; uniform vec2 res, uOff, uSun2, uWindS, uView, uHSize; uniform float uHScale, uFxs, uFire; uniform int uUnits, uInks; uniform float uDark; uniform sampler2D tH, tFx, tAnc, tFlow, tBrook, tCover; uniform vec4 uFieldK, uFieldK2; uniform vec4 uShow[4]; uniform vec4 uPark[16]; uniform vec3 uUpV, uDayMul, uDayAdd; uniform float uTime, uK, uRain, uStorm, uSnowF, uSnowC, uSnowLine, uFlora, uBridgeKind, uFog, uMist, uNight, uWet, uWaterL, uCloudK, uMarks; uniform int uStyle, uRoad, uOre;
+        varying vec2 vUv; uniform sampler2D t, tSubj, tHeat, tPaper, tNorm, tFogS, tLand, tMarks; uniform float uMap; uniform vec2 res, uOff, uSun2, uWindS, uView, uHSize; uniform float uHScale, uFxs, uFire; uniform int uUnits, uInks; uniform float uDark; uniform sampler2D tH, tFx, tAnc, tFlow, tBrook, tCover; uniform vec4 uFieldK, uFieldK2; uniform vec4 uShow[4]; uniform vec4 uPark[16]; uniform vec3 uUpV, uDayMul, uDayAdd; uniform float uTime, uK, uRain, uStorm, uSnowF, uSnowC, uSnowLine, uFlora, uBridgeKind, uFog, uMist, uNight, uWet, uWaterL, uCloudK, uMarks, uRoadAge; uniform int uStyle, uRoad, uOre;
         uniform vec2 uSideKey[8]; uniform vec3 uSideL[8], uSideD[8], uSideB[8];
         uniform sampler2D tTerr; uniform float uBorder, uMe;
         uniform vec2 uCloud; uniform vec3 uSunW; uniform float uCloudT, uCloudA, uCloudG, uRayK, uSand;
@@ -339,9 +339,28 @@
             // The breaks in a line are found only where the line is.
             float rEdge = 1.0 - smoothstep(0.45 * uK * eW, 1.2 * uK * eW, abs(rd - 1.3) / rw), rMid = 1.0 - smoothstep(0.3 * uK, 0.9 * uK, rd / rw);
             if (rEdge > 0.0) rEdge *= step(0.12, landNoise(Wl, 30.0, vec2(0.0)) + 0.1);
+            // Roads by the world's age. In the Ancient Age a narrow beaten path down the way and in the Medieval a
+            // wider cart track, each with two wheel ruts and its verges grass bounded by broken lines. Cobbles in the
+            // Gunpowder Age, a macadam road with its broken middle line from the Industrial, and from the Modern a
+            // fine line inside each edge.
+            float rTrack = 1.0 - step(2.5, uRoadAge), rOld = 1.0 - step(1.5, uRoadAge), rW0 = mix(0.72, 0.5, rOld);
+            float rBed = mix(onRoad, 1.0 - smoothstep(rW0, rW0 + 0.15, rd), rTrack);
+            if (rEdge > 0.0 && rTrack > 0.5) rEdge *= 0.55 * step(0.45, landNoise(Wl, 9.0, vec2(3.0)));
+            float rRut = rTrack > 0.5 ? (1.0 - smoothstep(0.3 * uK, 0.9 * uK, abs(rd - mix(0.36, 0.26, rOld)) / rw)) * step(0.3, landNoise(Wl, 7.0, vec2(9.0))) : 0.0;
+            float rSide = uRoadAge > 4.5 ? 1.0 - smoothstep(0.3 * uK, 0.8 * uK, abs(rd - 0.98) / rw) : 0.0;
             // The broken middle line is a modern road's, from the Industrial Age.
             if (rMid > 0.0) rMid *= step(0.5, landNoise(Wl, 4.5, vec2(0.0))) * uMarks;
-            gC = max(gC * (1.0 - onRoad * 0.9), max(rEdge * 0.9, rMid * 0.4));
+            // Cobbles in rows, each set apart from the next by a fine gap, a few pixels across at any zoom.
+            float rCob = 0.0;
+            if (onRoad > 0.0 && uRoadAge > 2.5 && uRoadAge < 3.5) {
+              vec2 cq = Wl / (vec2(9.0, 6.0) / 80.0 * exp2(gLm));
+              cq.x += mod(floor(cq.y), 2.0) * 0.5;
+              vec2 cf = 0.5 - abs(fract(cq) - 0.5), cw2 = max(fwidth(cq), 1e-4);
+              rCob = max(1.0 - smoothstep(0.25 * uK, 0.75 * uK, cf.x / cw2.x), 1.0 - smoothstep(0.25 * uK, 0.75 * uK, cf.y / cw2.y)) * (1.0 - smoothstep(0.85, 1.05, rd));
+            }
+            gC = max(gC * (1.0 - rBed * 0.9), max(max(rEdge * 0.9, rMid * 0.4), max(rRut * 0.45, max(rSide * 0.35, rCob * 0.2 * mix(1.0, 0.5, zo)))));
+            // A track's grass verges are drawn as the land, so from here the road is its bed alone.
+            onRoad = rBed;
             // Where the land rises beside the road it is cut into, and where it falls the road is carried on an
             // embankment. Either bank is hachured, wider the steeper the fall, a cutting's beyond a ditch.
             float bank = smoothstep(0.04, 0.14, abs(rXs)), cut = step(0.0, rXs);
@@ -650,6 +669,8 @@
             vec3 RC = uRoad == 0 ? PINK : uRoad == 1 ? vec3(0.886, 0.824, 0.675) : uRoad == 2 ? vec3(0.847, 0.835, 0.804) : uRoad == 3 ? paperC : uRoad == 4 ? vec3(0.812, 0.765, 0.573) : vec3(0.969, 0.961, 0.933);
             vec3 RD = uRoad == 0 ? PINK_D : uRoad == 1 ? vec3(0.62, 0.52, 0.34) : uRoad == 2 ? vec3(0.5, 0.49, 0.46) : uRoad == 3 ? paperC : uRoad == 4 ? vec3(0.5, 0.47, 0.3) : vec3(0.72, 0.7, 0.66);
             if (dk && uRoad != 3) RC *= 0.25;
+            // A track is beaten earth whatever the road's colour.
+            if (uRoadAge < 2.5) { RC = dk ? vec3(0.3, 0.27, 0.21) : vec3(0.9, 0.86, 0.71); RD = RC * 0.9; }
             base = mix(base, mix(RC, RD, rH * 0.35), onRoad * isG * 0.9);
             // A bridge deck is toned and ruled, a structure over the water and not a blank gap in the map. On dark
             // paper it stands a little lighter than the land, as a roof does.
@@ -1143,7 +1164,7 @@
           C.uSun2.value.set((q1.x - q.x) * w, (q1.y - q.y) * h).normalize();
           // The world's up in view space, to tell a building's roof from its walls.
           C.uUpV.value.set(0, 1, 0).transformDirection(camera.matrixWorldInverse);
-          C.uRoad.value = K.opts.road; C.uOre.value = K.opts.ore; C.uMarks.value = K.marked ? 1 : 0;
+          C.uRoad.value = K.opts.road; C.uOre.value = K.opts.ore; C.uMarks.value = K.marked ? 1 : 0; C.uRoadAge.value = K.age;
           C.uRain.value = sky.rain; C.uStorm.value = sky.storm; C.uSnowF.value = sky.snow; C.uFog.value = sky.fog; C.uMist.value = sky.mist;
           C.uSand.value = sky.sand || 0; C.uCloudA.value = sky.cloudA || 0; C.uCloudG.value = sky.cloudG || 0; C.uRayK.value = sky.rayK || 0;
           C.uNight.value = sky.night; C.uWet.value = sky.wet; C.uDayMul.value.set(...sky.mul); C.uDayAdd.value.set(...sky.add);

@@ -450,6 +450,8 @@ const World = (() => {
         get sides() { return teamCol.map(c => c.getHex()); },
         // Whether roads carry modern markings, from the Industrial Age.
         get marked() { return worldAge() >= MOTOR_AGE; },
+        // The age the world is seen in, for looks that draw things by it.
+        get age() { return worldAge(); },
         // Where the low sun's light comes in from, across the screen.
         get glow() { return grade.uniforms.uGlow.value; },
         mask: () => drawInto(maskRT, 0x000000, 0, 1, markMat),
