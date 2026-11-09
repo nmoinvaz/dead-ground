@@ -19,13 +19,13 @@
       // 45 and 135 degrees, then flat and upright lines for the darkest, each line a little uneven with small gaps.
       // The ground's hatching is pinned to the map so it pans with it, the units' redraws a few times a second.
       const ink = new THREE.ShaderMaterial({ uniforms: { t: { value: null }, tSubj: { value: null }, tHeat: { value: null }, tPaper: { value: null }, res: { value: new THREE.Vector2(1, 1) }, uTime: { value: 0 }, uK: { value: 1 }, uOff: { value: new THREE.Vector2() }, uStyle: { value: 8 }, tNorm: { value: null }, tFogS: { value: null }, tLand: { value: null }, uSun2: { value: new THREE.Vector2(-1, 0) }, uUpV: { value: new THREE.Vector3(0, 1, 0) }, uRoad: { value: 0 }, uOre: { value: 0 }, uMarks: { value: 1 },
-        uWindS: { value: new THREE.Vector2() }, uView: { value: new THREE.Vector2(1, 0) }, tFx: { value: null }, tAnc: { value: null }, uDark: { value: 0 }, uInks: { value: 0 }, uFxs: { value: 0 }, uFire: { value: 0 }, uUnits: { value: 0 }, tH: SH.tH, uHSize: { value: new THREE.Vector2(1, 1) }, uHScale: { value: 1 }, uRain: { value: 0 }, uStorm: { value: 0 }, uSnowF: { value: 0 }, uSnowC: SH.uSnowC, uSnowLine: SH.uSnowLine, tFlow: SH.tFlow, tBrook: SH.tBrook, uFlora: SH.uFlora, uShow: SH.uShow, uFog: { value: 0 }, uMist: { value: 0 }, uNight: { value: 0 }, uWet: { value: 0 },
+        uWindS: { value: new THREE.Vector2() }, uView: { value: new THREE.Vector2(1, 0) }, tFx: { value: null }, tAnc: { value: null }, uDark: { value: 0 }, uInks: { value: 0 }, uFxs: { value: 0 }, uFire: { value: 0 }, uUnits: { value: 0 }, tH: SH.tH, uHSize: { value: new THREE.Vector2(1, 1) }, uHScale: { value: 1 }, uRain: { value: 0 }, uStorm: { value: 0 }, uSnowF: { value: 0 }, uSnowC: SH.uSnowC, uSnowLine: SH.uSnowLine, tFlow: SH.tFlow, tBrook: SH.tBrook, uFlora: SH.uFlora, uShow: SH.uShow, tBeach: SH.tBeach, uFog: { value: 0 }, uMist: { value: 0 }, uNight: { value: 0 }, uWet: { value: 0 },
         uDayMul: { value: new THREE.Vector3(1, 1, 1) }, uDayAdd: { value: new THREE.Vector3() }, uWaterL: { value: -0.15 }, uCloudK: SH.uCloudK, tMarks: SH.tMarks, uMap: SH.uMap,
         uCloud: SH.uCloud, uCloudT: SH.uCloudT, uSunW: SH.uSunDir, uCloudA: { value: 0 }, uCloudG: { value: 0 }, uRayK: { value: 0 }, uSand: { value: 0 },
         uInvVP: { value: new THREE.Matrix4() }, uW2S: { value: new THREE.Vector4(1, 0, 0, 1) }, uLev: { value: 1 }, tTerr: SH.tTerr, uBorder: SH.uBorder, uMe: { value: 0 },
         // Each side's colour as the anchor pass keeps it, its hue and how coloured it is, and its inks on either paper.
         uSideKey: { value: [...Array(8)].map(() => new THREE.Vector2()) }, uSideL: { value: [...Array(8)].map(() => new THREE.Vector3()) }, uSideD: { value: [...Array(8)].map(() => new THREE.Vector3()) }, uSideB: { value: [...Array(8)].map(() => new THREE.Vector3()) } }, vertexShader: vs, depthTest: false, depthWrite: false, fragmentShader: `
-        varying vec2 vUv; uniform sampler2D t, tSubj, tHeat, tPaper, tNorm, tFogS, tLand, tMarks; uniform float uMap; uniform vec2 res, uOff, uSun2, uWindS, uView, uHSize; uniform float uHScale, uFxs, uFire; uniform int uUnits, uInks; uniform float uDark; uniform sampler2D tH, tFx, tAnc, tFlow, tBrook; uniform vec4 uShow[4]; uniform vec3 uUpV, uDayMul, uDayAdd; uniform float uTime, uK, uRain, uStorm, uSnowF, uSnowC, uSnowLine, uFlora, uFog, uMist, uNight, uWet, uWaterL, uCloudK, uMarks; uniform int uStyle, uRoad, uOre;
+        varying vec2 vUv; uniform sampler2D t, tSubj, tHeat, tPaper, tNorm, tFogS, tLand, tMarks; uniform float uMap; uniform vec2 res, uOff, uSun2, uWindS, uView, uHSize; uniform float uHScale, uFxs, uFire; uniform int uUnits, uInks; uniform float uDark; uniform sampler2D tH, tFx, tAnc, tFlow, tBrook, tBeach; uniform vec4 uShow[4]; uniform vec3 uUpV, uDayMul, uDayAdd; uniform float uTime, uK, uRain, uStorm, uSnowF, uSnowC, uSnowLine, uFlora, uFog, uMist, uNight, uWet, uWaterL, uCloudK, uMarks; uniform int uStyle, uRoad, uOre;
         uniform vec2 uSideKey[8]; uniform vec3 uSideL[8], uSideD[8], uSideB[8];
         uniform sampler2D tTerr; uniform float uBorder, uMe;
         uniform vec2 uCloud; uniform vec3 uSunW; uniform float uCloudT, uCloudA, uCloudG, uRayK, uSand;
@@ -475,6 +475,15 @@
             float sOld = smoothstep(0.35, 0.75, noise(Wl * 0.05 + 11.0));
             tint = mix(tint, dk ? mix(vec3(0.6, 0.62, 0.66), vec3(0.5, 0.53, 0.58), sOld) : mix(vec3(0.985, 0.985, 0.975), vec3(0.89, 0.91, 0.94), sOld * 0.85), cap);
             CONT = mix(CONT, SNOWL, cap);
+            // A beach by still water: sand on the steppe and the salt flats, grey shingle in the snowy pass, its
+            // contours faint, wet and darker along the water's edge.
+            float bch = texture2D(tBeach, Wl / uMap).r * (1.0 - cap);
+            // A beach's own slope is gentle, so its relief shading is light.
+            rfDark *= 1.0 - 0.6 * smoothstep(0.1, 0.45, bch);
+            vec3 SAND = uFlora > 2.5 ? (dk ? vec3(0.44, 0.44, 0.45) : vec3(0.84, 0.83, 0.8)) : (dk ? vec3(0.48, 0.43, 0.33) : vec3(0.95, 0.9, 0.76));
+            float bWet = (1.0 - smoothstep(0.04, 0.16, -wl)) * step(wl, 0.0);
+            tint = mix(tint, mix(SAND, SAND * (dk ? 0.8 : 0.86), bWet), smoothstep(0.1, 0.45, bch));
+            CONT = mix(CONT, mix(CONT, tint, 0.55), smoothstep(0.15, 0.55, bch));
             // A road takes a third of the tint and the contours cross it faint, so it climbs and falls with the land
             // rather than lying flat over it.
             base = mix(base, tint, isG * (1.0 - onRoad * 0.65));
@@ -509,11 +518,23 @@
             float tPh = dot(Wl - floor(Wl / 3.0) * 3.0, tw) / (6.0 / 80.0 * exp2(gLm));
             float tEdge = (1.0 - smoothstep(0.35 * uK, 1.0 * uK, abs(trk - 0.8) / tgl)) * mix(step(0.45, fract(tPh)), step(0.45, fract(tPh * 0.5)), gLf);
             base = mix(base, dk ? vec3(0.52, 0.5, 0.47) : vec3(0.42, 0.36, 0.28), tEdge * 0.8 * isG * (1.0 - onRoad));
+            // The beach's grain, fine dots, and pebbles in the pass, with the swash's reach drawn as a dashed line a
+            // little up from the water.
+            if (bch > 0.05 && isG > 0.5) {
+              vec2 gq = Wl * (uFlora > 2.5 ? 1.3 : 2.2) * exp2(-gLm), gi = floor(gq), go = vec2(hash(gi + 5.0), hash(gi + 17.0)) * 0.6 + 0.2;
+              float gd = length(fract(gq) - go), gr = uFlora > 2.5 ? 0.2 : 0.11;
+              float grain = (uFlora > 2.5 ? (1.0 - smoothstep(gr * 0.6, gr, gd)) - (1.0 - smoothstep(gr * 0.25, gr * 0.6, gd)) : 1.0 - smoothstep(gr * 0.5, gr, gd)) * step(0.55, hash(gi + 29.0));
+              base = mix(base, dk ? vec3(0.62, 0.58, 0.5) : vec3(0.6, 0.52, 0.38), grain * smoothstep(0.15, 0.5, bch) * (1.0 - onRoad) * 0.75);
+              float swF = -wl, swW = max(fwidth(swF), 1e-4), sw = (1.0 - smoothstep(0.4 * uK, 1.1 * uK, abs(swF - 0.2) / swW));
+              vec2 swg = vec2(dFdx(swF), dFdy(swF)), swT = normalize(S2W * vec2(-swg.y, swg.x) + 1e-6);
+              float swP = dot(Wl - floor(Wl / 3.0) * 3.0, swT) / (0.5 * exp2(gLm));
+              base = mix(base, dk ? vec3(0.5, 0.58, 0.75) : vec3(0.42, 0.48, 0.66), sw * step(0.45, fract(swP)) * smoothstep(0.4, 0.7, bch) * 0.7 * (1.0 - onRoad));
+            }
             // Wild flowers in patches on the gentler ground, a dot of colour each laid on the land: poppies,
             // buttercups and cornflowers on the steppe, a sparse pink bloom on the salt flats, heather in the snowy
             // pass. None in the snow, on a road or by the water.
             if (uFlora > 0.5 && isG > 0.5) {
-              float fP = smoothstep(0.64, 0.82, noise(Wl * 0.13 + 41.0) * 0.75 + noise(Wl * 0.4 + 7.0) * 0.25) * smoothstep(1.5, 2.3, rd) * (1.0 - cap) * (1.0 - uSnowC) * (1.0 - smoothstep(0.35, 0.7, sSl)) * (1.0 - bankZone);
+              float fP = smoothstep(0.64, 0.82, noise(Wl * 0.13 + 41.0) * 0.75 + noise(Wl * 0.4 + 7.0) * 0.25) * (1.0 - smoothstep(0.1, 0.3, bch)) * smoothstep(1.5, 2.3, rd) * (1.0 - cap) * (1.0 - uSnowC) * (1.0 - smoothstep(0.35, 0.7, sSl)) * (1.0 - bankZone);
               vec2 fq = Wl * 3.2 * exp2(-gLm), fi = floor(fq), fo = vec2(hash(fi + 3.0), hash(fi + 9.0)) * 0.6 + 0.2;
               float fh = hash(fi + 77.0), fc = hash(fi + 131.0);
               float fd = (1.0 - smoothstep(0.15, 0.24, length(fract(fq) - fo))) * step(1.0 - fP * (uFlora > 1.5 && uFlora < 2.5 ? 0.3 : uFlora > 2.5 ? 0.45 : 0.75), fh);

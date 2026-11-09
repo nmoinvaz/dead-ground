@@ -76,7 +76,7 @@ const World = (() => {
       // The height above which snow lies on the heights in any weather.
       uSnowLine: { value: 99 },
       // The way the rivers run, from buildFlow, and how far each point lies from a brook and whether at its ford.
-      tFlow: { value: black }, tBrook: { value: farBrook },
+      tFlow: { value: black }, tBrook: { value: farBrook }, tBeach: { value: black },
       // The theatre's wild flowers: 1 the steppe's, 2 the salt flats', 3 the snowy pass's heather.
       uFlora: { value: 0 },
       // Up to four showers over the map: x, y, radius, and strength, negative for snow.
@@ -682,7 +682,7 @@ const World = (() => {
     let S = null, M = null, theme = null, viewTeam = 0, sets = {}, terrainMesh = null, waterMesh = null, statics = [], baseImage = null;
     const rs = new Map();
     let wrecks = [], corpses = [], bleeds = [], flyers = [], planes = [], falls = [], marks = null, marksTex = null, marksDirty = false, marksLast = 0, treadFade = 0;
-    let fogTex = null, fogData = null, fogR = null, fogG = null, terrTex = null, terrData = null, terrSeen = -1, hTex = null, flowTex = null, brookTex = null;
+    let fogTex = null, fogData = null, fogR = null, fogG = null, terrTex = null, terrData = null, terrSeen = -1, hTex = null, flowTex = null, brookTex = null, beachTex = null, beachMap = null;
     // A number as a half float, for heights within a few units of the ground.
     const halfBuf = new Float32Array(1), halfBits = new Uint32Array(halfBuf.buffer);
     function toHalf(v) {
@@ -948,6 +948,7 @@ const World = (() => {
       const rim = (x, y) => y === 0 ? x : x === W - 1 ? W + y : y === H - 1 ? 2 * W + H - x : x === 0 ? 2 * W + 2 * H - y : -1;
       const N8 = [[1, 0, 10], [-1, 0, 10], [0, 1, 10], [0, -1, 10], [1, 1, 14], [-1, 1, 14], [1, -1, 14], [-1, -1, 14]];
       let ci = 0;
+      const still = [];
       for (let c0 = 0; c0 < n; c0++) {
         if (!wet[c0] || comp[c0] >= 0) continue;
         const cells = [c0];
@@ -966,7 +967,7 @@ const World = (() => {
         for (const r of ends) { const last = runs[runs.length - 1]; if (last && r - last[1] <= 4) last[1] = r; else runs.push([r, r]); }
         const P = 2 * (W + H);
         if (runs.length > 1 && runs[0][0] + P - runs[runs.length - 1][1] <= 4) runs[runs.length - 1][1] = runs.shift()[1] + P;
-        if (runs.length < 2 || wide > 9) continue;
+        if (runs.length < 2 || wide > 9) { still.push(...cells); continue; }
         const [first, upTo] = runs[0];
         // Distance down the river from the end met first, in tenths of a cell along eight ways, by buckets.
         const G = new Map(), Q = [];
@@ -983,6 +984,30 @@ const World = (() => {
       flowTex = new THREE.DataTexture(data, W, H, THREE.RGBAFormat);
       flowTex.magFilter = flowTex.minFilter = THREE.LinearFilter; flowTex.needsUpdate = true;
       SH.tFlow.value = flowTex;
+      // Beaches: the low, gentle ground beside still water, a lake's or the sea's, never a river's. Each dry cell
+      // within BEACH_W of still water that stands less than a unit and a half over it and is not steep is beach, fullest at the
+      // water's edge.
+      const BEACH_W = 4.5, beach = new Uint8Array(n), bd = new Float32Array(n).fill(1e9), q = [];
+      for (const c of still) { bd[c] = 0; q.push(c); }
+      for (let i = 0; i < q.length; i++) {
+        const c = q[i], x = c % W, y = c / W | 0;
+        for (const [dx, dy, len] of N8) {
+          const X = x + dx, Y = y + dy, o = Y * W + X;
+          if (X < 0 || Y < 0 || X >= W || Y >= H || wet[o] || bd[c] + len / 10 >= bd[o] || bd[c] + len / 10 > BEACH_W) continue;
+          bd[o] = bd[c] + len / 10; q.push(o);
+        }
+      }
+      for (let c = 0; c < n; c++) {
+        if (wet[c] || bd[c] > BEACH_W) continue;
+        const x = c % W + 0.5, y = (c / W | 0) + 0.5, z = terrainAt(M, x, y) - M.water;
+        const sl = Math.hypot(terrainAt(M, x + 1, y) - terrainAt(M, x - 1, y), terrainAt(M, x, y + 1) - terrainAt(M, x, y - 1)) / 2;
+        beach[c] = Math.round(255 * Math.max(0, 1 - bd[c] / BEACH_W) ** 0.6 * clamp((1.4 - z) / 0.6, 0, 1) * clamp((0.75 - sl) / 0.3, 0, 1));
+      }
+      if (beachTex) beachTex.dispose();
+      beachTex = new THREE.DataTexture(beach, W, H, THREE.RedFormat);
+      beachTex.magFilter = beachTex.minFilter = THREE.LinearFilter; beachTex.needsUpdate = true;
+      SH.tBeach.value = beachTex;
+      beachMap = beach;
     }
 
     function buildScenery() {
@@ -1167,6 +1192,8 @@ const World = (() => {
         if (M.roadDist[v] < 2.5 || (g[c] & 8) || z < M.water + 0.1 || bd < 0.65) continue;
         // At the edge of the water, a river's, a lake's or a brook's.
         const bank = bd < 1.5 || (z < M.water + 0.7 && (!dry(x + 1, y) || !dry(x - 1, y) || !dry(x, y + 1) || !dry(x, y - 1)));
+        // No reeds on a beach.
+        if (bank && beachMap && beachMap[c] > 70) continue;
         if (bank) { if (r < (desert ? 0.035 : 0.5)) wet.push({ x, y: z - 0.04, z: y, s: (desert ? 0.9 : 0.8) + rand() * 0.5, a: rand() * 6.28, c: desert ? 0x5e7a3a : [0xa8a46a, 0x8a9a58, 0xb8ac78][rand() * 3 | 0], cell: c }); continue; }
         let edge = false;
         for (let j = -1; j <= 1 && !edge; j++) for (let i = -1; i <= 1; i++) { const X = cx + i, Y = cy + j; if (X >= 0 && Y >= 0 && X < W && Y < H && (g[Y * W + X] & 8)) { edge = true; break; } }
@@ -2094,7 +2121,7 @@ const World = (() => {
       marks.ctx.globalCompositeOperation = 'source-over';
       marks.ctx.fillStyle = '#000'; marks.ctx.fillRect(0, 0, mk, mk); marksTex.needsUpdate = true;
 
-      buildTerrain(); buildWater(); buildScenery(); buildSets(); buildLife(); applyLight();
+      buildTerrain(); buildWater(); buildFlow(); buildScenery(); buildSets(); buildLife(); applyLight();
       // The land's heights as a texture, for passes that draw the ground's form.
       if (hTex) hTex.dispose();
       const hd = new Uint16Array(M.h.length);
@@ -2109,7 +2136,6 @@ const World = (() => {
       brookTex = new THREE.DataTexture(bk, VW, VH, THREE.RGBAFormat);
       brookTex.magFilter = brookTex.minFilter = THREE.LinearFilter; brookTex.wrapS = brookTex.wrapT = THREE.ClampToEdgeWrapping; brookTex.needsUpdate = true;
       SH.tBrook.value = brookTex;
-      buildFlow();
       for (const k in sky) if (typeof sky[k] === 'number') sky[k] = 0;
       Object.assign(sky, Rules.sky(S), { wind: undefined });
       sky.wet = 0; sky.day = Rules.dayAt(S.tick); waterRise.value = Math.min(1.25, sky.flood) * 0.26;
