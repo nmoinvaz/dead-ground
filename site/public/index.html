@@ -603,7 +603,7 @@ body[data-look="ink"] .sheet { box-shadow: 4px 4px 0 var(--ink); }
       <div class="choice"><h2>Map sheet frame</h2><div id="s-sheet" class="two"><button data-v="on">On</button><button data-v="off">Off</button></div></div>
       <div class="choice"><h2>Shadows</h2><div id="s-shade" class="two"><button data-v="hatch">Hatched</button><button data-v="wash">Wash</button></div></div>
       <div class="choice"><h2>Music</h2><div id="s-music" class="two"><button data-v="on">On</button><button data-v="off">Off</button></div></div>
-      <p id="build">Build 3fdb8a2 2026-11-09 01:37</p>
+      <p id="build">Build 87c0bc2 2026-11-09 01:49</p>
     </div>
     <div id="banner" hidden></div>
     <button id="update" hidden>A new version of Dead Ground is out. <b>Reload</b></button>
@@ -1035,6 +1035,9 @@ const Rules = (() => {
   // The n-th name of a kind for this game: the theatre's list dealt in an order its seed shuffles, with a number
   // after if a map has more than the list.
   function nameFor(S, kind, n) {
+    // A map may name its own places, as the Nile names its river.
+    const own = Object.values(MAPS).find(m => m.layout === S.layout), fixed = own && own.names && own.names[kind];
+    if (fixed) return fixed[n % fixed.length];
     const L = (NAMES[S.theatre] || NAMES.steppe)[kind], order = L.map((_, i) => i), r = mulberry((S.seed * 7919 + kind.length * 104729) >>> 0);
     for (let i = order.length - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1)); [order[i], order[j]] = [order[j], order[i]]; }
     return L[order[n % L.length]] + (n >= L.length ? ' ' + (Math.floor(n / L.length) + 1) : '');
@@ -1161,7 +1164,7 @@ const Rules = (() => {
   };
   const SIZES = {
     duel: 128, quad: 192, world: 256, gulf: 128, pass: 128, lakes: 192,
-    greenwood: 128, oldforest: 192, twinlakes: 128, ponds: 192, seas: 128, isles: 192, peaks: 128, highlands: 192, rivers3: 128, crater: 192, mesa: 128,
+    greenwood: 128, oldforest: 192, twinlakes: 128, ponds: 192, seas: 128, isles: 192, peaks: 128, highlands: 192, rivers3: 128, crater: 192, mesa: 128, nile: 128,
   };
   // The maps a game may be set on, each a layout and the most sides it seats.
   const MAPS = {
@@ -1182,6 +1185,7 @@ const Rules = (() => {
     rivers3: { name: 'Three Rivers', layout: 'rivers3', seats: 2, about: 'Three rivers between two bases, each with its bridges and a ford. Lines to hold.' },
     crater: { name: 'Crater Lake', layout: 'crater', seats: 4, about: 'A lake inside a ring of mountains, entered through four gaps, with a base in each corner outside.' },
     // A map may fix its theatre, and draw its woods as other plants.
+    nile: { name: 'The Nile', layout: 'nile', seats: 2, theatre: 'desert', flora: 'palm', names: { river: ['The Nile'] }, about: 'The great river runs between the two sides through the desert, a green strip of fields and palms along its banks, crossed by three long bridges. Pyramids, a temple and its obelisks stand on the sand.' },
     mesa: { name: 'Mesa Country', layout: 'mesa', seats: 2, theatre: 'desert', flora: 'cactus', about: 'Open desert of dunes and sheer-sided mesas, with stands of cactus. The mesas wall off the lines of march.' },
   };
   // The theatre a game on a map is fought in: the map's own, if it fixes one, or the one chosen.
@@ -1209,7 +1213,7 @@ const Rules = (() => {
   // The treeline: woods thin out over TREE_BAND of height round TREE_LINE and stand no higher.
   const TREE_LINE = 8.6, TREE_BAND = 1.2;
   // How thinly a map's woods are sown, a share of the usual; the desert's cactus stands are sparse.
-  const THIN = { mesa: 0.35 };
+  const THIN = { mesa: 0.35, nile: 1.6 };
   const WOODS = { quad: 0.7, pass: 1, lakes: 1, greenwood: 3, oldforest: 1.3, twinlakes: 0.6, ponds: 0.8, peaks: 0.6, highlands: 0.5, crater: 0.5 };
   // A point turned a quarter round the middle k times.
   const turnK = ([x, y], k) => { let dx = x - CX, dy = y - CY; for (let i = 0; i < k; i++) { const t = dx; dx = -dy; dy = t; } return [CX + dx, CY + dy]; };
@@ -1359,7 +1363,7 @@ const Rules = (() => {
   }
 
   // ---- The second set of maps: woods, lakes, seas, islands, mountains and rivers ----
-  const MORE = new Set(['greenwood', 'oldforest', 'twinlakes', 'ponds', 'seas', 'isles', 'peaks', 'highlands', 'rivers3', 'crater', 'mesa']);
+  const MORE = new Set(['greenwood', 'oldforest', 'twinlakes', 'ponds', 'seas', 'isles', 'peaks', 'highlands', 'rivers3', 'crater', 'mesa', 'nile']);
   function moreLayout(kind, L, all, fordAt, R) {
     const dry = () => [99, 0];
     // Two sides on the River Duel's frame, mirrored through the middle.
@@ -1372,6 +1376,17 @@ const Rules = (() => {
     const quad = () => {
       L.syms = [0, 1, 2, 3].map(k => p => turnK(p, k));
       L.domain = (x, y) => x + 0.5 - CX > 0 && y + 0.5 - CY > 0;
+    };
+    // How far a point lies clear of what must stay open: the bases, towns, ore, wells and the roads' lines, 1 when
+    // clear and 0 on them, with margins scaled by s. Read once the layout is laid.
+    const segD = (p, a, b) => { const dx = b[0] - a[0], dy = b[1] - a[1], t = clamp(((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / (dx * dx + dy * dy || 1), 0, 1); return mhypot(p[0] - a[0] - dx * t, p[1] - a[1] - dy * t); };
+    let segs = null, keepOut = null;
+    const clearK = (x, y, s = 1) => {
+      if (!segs) { segs = L.roads.flatMap(r => L.syms.map(T => [T(r.a), T(r.b), r.wig])); keepOut = [...L.bases.map(b => [b[0], b[1], 26]), ...L.towns.map(t => [t[0], t[1], 12]), ...L.ore.map(o => [o[0], o[1], o[2] + 4]), ...L.wells.map(w => [w[0], w[1], 6])]; }
+      let k = 1;
+      for (const o of keepOut) k = Math.min(k, smooth(o[2] * s, (o[2] + 6) * s, mhypot(x - o[0], y - o[1])));
+      for (const [a, b, w] of segs) k = Math.min(k, smooth(w + 4 * s, w + 9 * s, segD([x, y], a, b)));
+      return k;
     };
     // A road through the middle is laid as two halves meeting there, each the other's image, so a wandering road
     // keeps the map exactly symmetric.
@@ -1594,16 +1609,6 @@ const Rules = (() => {
           mesas.push([x, y, r, H0[mesas.length], mesas.length * 1.7]);
         }
       };
-      // How far a point lies clear of what must stay open: the bases, towns, ore, wells and the roads' lines.
-      const segD = (p, a, b) => { const dx = b[0] - a[0], dy = b[1] - a[1], t = clamp(((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / (dx * dx + dy * dy || 1), 0, 1); return mhypot(p[0] - a[0] - dx * t, p[1] - a[1] - dy * t); };
-      let segs = null;
-      const clearK = (x, y) => {
-        if (!segs) segs = L.roads.flatMap(r => L.syms.map(T => [T(r.a), T(r.b), r.wig]));
-        let k = 1;
-        for (const o of [...L.bases.map(b => [b[0], b[1], 26]), ...L.towns.map(t => [t[0], t[1], 12]), ...L.ore.map(o => [o[0], o[1], o[2] + 4]), ...L.wells.map(w => [w[0], w[1], 6])]) k = Math.min(k, smooth(o[2], o[2] + 6, mhypot(x - o[0], y - o[1])));
-        for (const [a, b, w] of segs) k = Math.min(k, smooth(w + 4, w + 9, segD([x, y], a, b)));
-        return k;
-      };
       L.wall = (x0, y0) => {
         const [u0, v0] = toUV(x0, y0), [x, y] = u0 > 0 || (u0 === 0 && v0 > 0) ? mirror([x0, y0]) : [x0, y0];
         if (!mesas) layMesas();
@@ -1622,6 +1627,50 @@ const Rules = (() => {
         const c = 0.5 + 0.5 * mcos(f), dune = 1.1 * c * c * smooth(18, 32, Math.abs(v));
         return Math.max(top, dune) * k;
       };
+    } else if (kind === 'nile') {
+      // The Nile between two bases: a broad river crossed by three long bridges, a green strip of fields and palm
+      // groves along its banks, and on the sand beyond, pyramids, a temple and its obelisks.
+      duel();
+      const course = v => riverU(v) * 0.8, wide = v => 4.2 + 0.8 * mcos(v * 0.09);
+      L.river = (x, y) => { const [u, v] = toUV(x, y); return [Math.abs(u - course(v)), wide(v)]; };
+      // Palms stand only in the green strip along the banks.
+      L.grove = (x, y) => { const [d, w] = L.river(x, y); return smooth(w + 6, w + 8, d) * (1 - smooth(w + 13, w + 16, d)); };
+      L.bases.push(uvp(-60, 0), mirror(uvp(-60, 0)));
+      const tN = uvp(-22, 34), tS = uvp(-24, -36), tC = uvp(-28, 4), hub = uvp(-52, 0);
+      for (const t of [tN, tS, tC]) all(L.towns, t);
+      duelKit(-60, 0);
+      [[-40, 26, 6], [-38, -26, 5.5], [-17, -12, 5]].forEach(o => all(L.ore, uvp(o[0], o[1]), [o[2]]));
+      [[-40, 8], [-30, 20]].forEach(o => all(L.wells, uvp(o[0], o[1])));
+      R(hub, tN, 2.5); R(hub, tS, 2.5); R(hub, tC, 2);
+      for (const v of [0, 40, -40]) {
+        const u0 = course(v), a = uvp(u0 - 13, v), b = uvp(u0 + 13, v);
+        L.bridges.push([a, b]); if (v) L.bridges.push([mirror(a), mirror(b)]);
+        R(a, b, 0, false); if (v) R(mirror(a), mirror(b), 0, false);
+      }
+      R(tC, uvp(course(0) - 13, 0), 1.5); R(tN, uvp(course(40) - 13, 40), 1.5); R(tS, uvp(course(-40) - 13, -40), 1.5);
+      // The monuments, each a kind, a middle, a half size and a turn, laid where each fits clear of the roads, towns,
+      // bases, ore and wells, in one half and copied by the half turn. Three pyramids out on the sand; a temple near
+      // the green strip, facing the river, with two obelisks before its gate.
+      const dry = (x, y) => { const [d, w] = L.river(x, y); return d > w + 10; };
+      const fits = (x, y, r) => { if (x < r + 4 || y < r + 4 || x > W - r - 4 || y > H - r - 4 || mhypot(2 * x - W, 2 * y - H) < 2 * r + 12 || !dry(x, y)) return false; for (let a = 0; a < TAU; a += 0.5) if (clearK(x + mcos(a) * r, y + msin(a) * r, 0.55) < 0.98 || !dry(x + mcos(a) * r, y + msin(a) * r)) return false; return clearK(x, y, 0.55) >= 1; };
+      // Sites over the half, tried in the order given by a score, the best that fits taken.
+      const site = (r, score, ok) => {
+        const cand = [];
+        for (let u = -84; u <= -10; u += 2) for (let v = -84; v <= 84; v += 2) cand.push([u, v, score(u, v)]);
+        cand.sort((p, q) => q[2] - p[2] || p[0] - q[0] || p[1] - q[1]);
+        for (const [u, v] of cand) { const [x, y] = uvp(u, v); if (fits(x, y, r) && ok(x, y)) return [x, y, u, v]; }
+        return null;
+      };
+      // The pyramids as far out on the sand from the river as they fit; the temple as near the green strip.
+      const mons = [], P = site(7, (u, v) => Math.abs(u - course(v)), () => true);
+      if (P) [[-1.5, -1, 3], [3.6, 2.6, 1.9], [-3, 4.2, 1.4]].forEach(([du, dv, r]) => mons.push(['pyramid', ...uvp(P[2] + du, P[3] + dv), r, 0.785]));
+      const T = site(6, (u, v) => -Math.abs(Math.abs(u - course(v)) - 26), (x, y) => !P || mhypot(x - P[0], y - P[1]) > 24);
+      if (T) {
+        const [tx, ty] = uvp(T[2], T[3]), [rx, ry] = uvp(T[2] + 6, T[3]), a = matan2(ry - ty, rx - tx);
+        mons.push(['temple', tx, ty, 2.6, a]);
+        for (const s of [-1, 1]) { const [ox, oy] = uvp(T[2] + 4.5, T[3] + s * 1.6); mons.push(['obelisk', ox, oy, 0.4, a]); }
+      }
+      L.monuments = mons.flatMap(m => { const q = mirror([m[1], m[2]]); return [m, [m[0], q[0], q[1], m[3], m[4] + PI]]; });
     }
     return L;
   }
@@ -1640,6 +1689,7 @@ const Rules = (() => {
     L.towns.forEach(p => open.push([p[0], p[1], 11]));
     L.ore.forEach(p => open.push([p[0], p[1], p[2] + 3]));
     L.wells.forEach(p => open.push([p[0], p[1], 5]));
+    if (L.monuments) L.monuments.forEach(m => open.push([m[1], m[2], m[3] + 2]));
     const flatness = (x, y) => { let m = 1; for (const o of open) m = Math.min(m, smooth(o[2] * 0.75, o[2] * 1.5, mhypot(x - o[0], y - o[1]))); return m; };
 
     // Roads join each base to its bridges and towns.
@@ -1935,10 +1985,14 @@ const Rules = (() => {
       };
       if (!keep(x, y)) continue;
       const w0 = wk ? 0.58 - 0.07 * wk : 0.58;
-      if (wood > w0 && r < (wk ? smooth(w0, w0 + 0.1, wood) * (0.5 + 0.35 * wk) : smooth(0.58, 0.68, wood) * 0.5) * (THIN[kind] || 1)) place('tree', 0.7 + rand() * 0.7);
+      if (wood > w0 && r < (wk ? smooth(w0, w0 + 0.1, wood) * (0.5 + 0.35 * wk) : smooth(0.58, 0.68, wood) * 0.5) * (THIN[kind] || 1) * (L.grove ? L.grove(x + 0.5, y + 0.5) : 1)) place('tree', 0.7 + rand() * 0.7);
       else if (r < 0.006) place('rock', 0.5 + rand() * 0.9);
     }
 
+    // A monument blocks the cells under it, and nothing is built there.
+    if (L.monuments) for (const [, mx, my, r] of L.monuments) for (let y = Math.floor(my - r); y <= Math.ceil(my + r); y++) for (let x = Math.floor(mx - r); x <= Math.ceil(mx + r); x++) {
+      if (x >= 0 && y >= 0 && x < W && y < H && mhypot(x + 0.5 - mx, y + 0.5 - my) < r + 0.3) ground[y * W + x] |= 7;
+    }
     // Town houses block their cells. A town's middle stays clear around its flag.
     const houses = [];
     for (let i = 0; i < towns.length; i += K) {
@@ -2007,7 +2061,7 @@ const Rules = (() => {
     const fish = (L.fish || []).map(p => ({ x: p[0], y: p[1] }));
     let seaCells = 0;
     for (let c = 0; c < N; c++) seaCells += sea[c];
-    return { W, H, seed, kind, h, deck, water, ground, ore: oreCells, oreFields, wells, towns, roads, roadDist, bridges, scatter, houses, oreRich, bases: L.bases, faces, fords: L.fords, fordCells, wadeCells, brooks, brookFords, brookDist: bD, brookFord: bF, sea, fish, seaCells };
+    return { W, H, seed, kind, h, deck, water, ground, ore: oreCells, oreFields, wells, towns, roads, roadDist, bridges, scatter, houses, oreRich, bases: L.bases, faces, fords: L.fords, fordCells, wadeCells, brooks, brookFords, brookDist: bD, brookFord: bF, sea, fish, seaCells, monuments: (L.monuments || []).map(([k, x, y, r, a]) => ({ k, x, y, r, a })) };
   }
 
   // A map is kept only if vehicles can get from the first base to every other base, town and well.
@@ -6348,6 +6402,27 @@ const Models = (() => {
         sg.sph(0.055, s * (0.085 + len), y0 + up, 0, 0xffffff, { seg: 6, rings: 4, top: true });
       }
       scenery.saguaro = sg.finish();
+      // Egypt's monuments, sized to a half size of 1. A pyramid of dressed limestone with a gilded cap; a temple, a
+      // pylon gate of two battered towers before a court of columns and a roofed hall; and an obelisk with its cap.
+      // Each face flat, its own normal, so the faces take their own tones and the ridges are inked.
+      const flat = g => { const f = g.toNonIndexed(); f.computeVertexNormals(); return f; };
+      const pyr = G();
+      pyr.add(flat(new THREE.ConeGeometry(1.41, 1.28, 4, 1)), 0, 0.64, 0, 0xd8c49a, { ry: Math.PI / 4 });
+      pyr.add(flat(new THREE.ConeGeometry(0.14, 0.13, 4, 1)), 0, 1.22, 0, 0xd8a840, { ry: Math.PI / 4 });
+      scenery.pyramid = pyr.finish();
+      const tpl = G(), SAND = 0xd6c29a, SAND2 = 0xc8b088;
+      for (const s of [-1, 1]) tpl.add(flat(new THREE.CylinderGeometry(0.22, 0.3, 0.7, 4, 1)), 0.85, 0.35, s * 0.42, SAND, { ry: Math.PI / 4, sz: 1.6 });
+      tpl.box(0.1, 0.42, 0.24, 0.85, 0.21, 0, SAND2);
+      for (let i = 0; i < 3; i++) for (const s of [-1, 1]) tpl.cyl(0.05, 0.055, 0.38, 0.45 - i * 0.28, 0.19, s * 0.36, SAND, { seg: 8 });
+      tpl.box(0.95, 0.04, 0.9, 0.18, 0.02, 0, SAND2);
+      tpl.box(0.62, 0.4, 0.82, -0.62, 0.2, 0, SAND);
+      tpl.box(0.66, 0.05, 0.86, -0.62, 0.42, 0, SAND2);
+      scenery.temple = tpl.finish();
+      const obl = G();
+      obl.add(flat(new THREE.CylinderGeometry(0.11, 0.17, 2.3, 4, 1)), 0, 1.15, 0, 0xc89a72, { ry: Math.PI / 4 });
+      obl.add(flat(new THREE.ConeGeometry(0.155, 0.22, 4, 1)), 0, 2.41, 0, 0xd8a840, { ry: Math.PI / 4 });
+      obl.box(0.42, 0.12, 0.42, 0, 0.06, 0, 0xb8a080);
+      scenery.obelisk = obl.finish();
       const pp = G();
       for (const [x, y, z, ry, rz] of [[0, 0.16, 0, 0.2, 0], [0.12, 0.36, 0.02, 0.9, -0.4], [-0.12, 0.34, -0.04, -0.6, 0.45], [0.02, 0.52, 0.08, 1.6, 0.1], [0.2, 0.18, -0.12, 2.2, -0.2]]) pp.sph(0.13, x, y, z, 0xffffff, { seg: 8, rings: 6, sx: 1, sy: 1.3, sz: 0.32, ry, rz });
       for (const [x, y, z] of [[0.04, 0.69, 0.08], [0.2, 0.49, 0.04], [-0.2, 0.5, -0.04]]) pp.sph(0.025, x, y, z, 0xc23c4e, { seg: 5, rings: 3 });
@@ -10653,6 +10728,14 @@ const World = (() => {
     const FIELD_R = 15, FIELD_OUT = 20;
     function buildFields() {
       const n = W * H, cov = new Uint8Array(n * 4), rand = mulberry(M.seed + 59), turn = M.towns.map(() => 1 + Math.floor(rand() * 254)), BD = M.brookDist;
+      // A river valley's green strip: the cells within a few of the river's water, found by a walk out from it.
+      const valley = mapOf(S).flora === 'palm', riverNear = new Uint8Array(n);
+      if (valley) {
+        const q = [], dd = new Uint8Array(n).fill(255);
+        for (let c = 0; c < n; c++) if (terrainAt(M, c % W + 0.5, (c / W | 0) + 0.5) < M.water) { dd[c] = 0; q.push(c); }
+        for (let i = 0; i < q.length; i++) { const c = q[i], x = c % W, y = c / W | 0; for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const X = x + dx, Y = y + dy, o = Y * W + X; if (X >= 0 && Y >= 0 && X < W && Y < H && dd[o] > dd[c] + 1 && dd[c] < 11) { dd[o] = dd[c] + 1; q.push(o); } } }
+        for (let c = 0; c < n; c++) riverNear[c] = dd[c] >= 4 && dd[c] <= 11 ? 1 : 0;
+      }
       for (let c = 0; c < n; c++) {
         cov[c * 4] = beachMap ? beachMap[c] : 0;
         const x = c % W + 0.5, y = (c / W | 0) + 0.5;
@@ -10660,7 +10743,10 @@ const World = (() => {
         M.towns.forEach((t, i) => { const d = Math.hypot(t.x - x, t.y - y); if (d < d1) { d2 = d1; d1 = d; ti = i; } else if (d < d2) d2 = d; });
         if (ti < 0) continue;
         cov[c * 4 + 2] = turn[ti]; cov[c * 4 + 3] = Math.round(Math.min(1, d1 / FIELD_OUT) * 255);
-        if (d1 > FIELD_OUT || d1 < 3.5 || d2 - d1 < 2.5) continue;
+        // On a map of a river valley the fields line the river's banks, wherever they lie, as well as round the towns.
+        const strip = valley && riverNear[c] > 0;
+        if (strip) cov[c * 4 + 3] = Math.round(0.2 * 255);
+        if (!strip && (d1 > FIELD_OUT || d1 < 3.5 || d2 - d1 < 2.5)) continue;
         const z = terrainAt(M, x, y), v = Math.round(y * RES) * VW + Math.round(x * RES);
         const sl = Math.hypot(terrainAt(M, x + 1, y) - terrainAt(M, x - 1, y), terrainAt(M, x, y + 1) - terrainAt(M, x, y - 1)) / 2;
         if ((M.ground[c] & 27) || M.ore[c] || z < M.water + 0.35 || sl > 0.6 || (beachMap && beachMap[c] > 30) || (BD && BD[v] < 1.2) || M.roadDist[v] < 1.2) continue;
@@ -10736,13 +10822,13 @@ const World = (() => {
       const pf = THEMES.winter.leaf.map(c => new THREE.Color(c));
       // A map of cactus country grows saguaros and prickly pears in a grey sage green in place of trees, and no
       // conifers on its heights.
-      const cactus = mapOf(S).flora === 'cactus', cf = [new THREE.Color(0x6f8f5e), new THREE.Color(0x8aa070)];
+      const flora = mapOf(S).flora, cactus = flora === 'cactus', palms = flora === 'palm', cf = [new THREE.Color(0x6f8f5e), new THREE.Color(0x8aa070)];
       const tl = trees.map(t => {
-        const g = terrainAt(M, t.x, t.y), hi = !cactus && th.pine !== undefined && g > th.pine + (rand() - 0.5) * 2.4, L = cactus ? cf : hi ? pf : lf;
+        const g = terrainAt(M, t.x, t.y), hi = !cactus && !palms && th.pine !== undefined && g > th.pine + (rand() - 0.5) * 2.4, L = cactus ? cf : hi ? pf : lf;
         return { x: t.x, y: g - 0.04, z: t.y, s: t.s * 1.1, a: t.a, c: colA.copy(L[0]).lerp(L[1], rand()).getHex(), cell: t.c, hi, pear: cactus && rand() < 0.45 };
       });
       const meshes = [];
-      const treeKinds = cactus ? [[sc.saguaro, tl.filter(t => !t.pear)], [sc.pear, tl.filter(t => t.pear)]] : [[sc[th.tree], tl.filter(t => !t.hi)], [sc.conifer, tl.filter(t => t.hi)]];
+      const treeKinds = cactus ? [[sc.saguaro, tl.filter(t => !t.pear)], [sc.pear, tl.filter(t => t.pear)]] : palms ? [[sc.palm, tl.map(t => Object.assign(t, { s: t.s * 1.5 }))]] : [[sc[th.tree], tl.filter(t => !t.hi)], [sc.conifer, tl.filter(t => t.hi)]];
       for (const [geo, list] of treeKinds) {
         if (!list.length) continue;
         const m = lineCat(instanced(geo, treeTint, list), 0.459, true);
@@ -10752,6 +10838,15 @@ const World = (() => {
       const byCell = new Map();
       tl.forEach((t, i) => { if (!byCell.has(t.cell)) byCell.set(t.cell, []); byCell.get(t.cell).push(i); });
       scen.trees = { meshes, list: tl, state: new Uint8Array(tl.length), seen: -1, byCell };
+      // The map's monuments, standing on the lowest ground under them so none floats, each sized to its half size.
+      for (const k of ['pyramid', 'temple', 'obelisk']) {
+        const list = (M.monuments || []).filter(m => m.k === k).map(m => {
+          let lo = 99;
+          for (let a = 0; a < 6.3; a += 0.8) lo = Math.min(lo, terrainAt(M, m.x + Math.cos(a) * m.r * 0.9, m.y + Math.sin(a) * m.r * 0.9));
+          return { x: m.x, y: Math.min(lo, terrainAt(M, m.x, m.y)) - 0.05, z: m.y, s: k === 'obelisk' ? 1 : m.r, a: -m.a, c: 0xffffff };
+        });
+        if (list.length) lineCat(instanced(sc[k], plainTint, list), 0.66);
+      }
       const rc = new THREE.Color(th.rock);
       instanced(sc.rock, plainTint, rocks.map(t => ({ x: t.x, y: terrainAt(M, t.x, t.y) - 0.06, z: t.y, s: t.s * 1.2, a: t.a, c: colA.copy(rc).multiplyScalar(0.62 + rand() * 0.3).getHex() })));
 
@@ -11371,7 +11466,7 @@ const World = (() => {
         if (terrainAt(M, x, y) < -1.0 && Rules.bridgeAt(S, x, y) < 0) life.boats.push({ x, y, a: R() * 6.28, v: 1, ph: R() * 6 });
       }
       // Whales in the open sea, a pod of one to three to each great stretch of deep water, none on a river or lake.
-      const open = (x, y) => (M.sea ? M.sea[Rules.cellOf(x, y)] : true) && [0, 1.6, 3.2, 4.8].every(a => terrainAt(M, x + Math.cos(a) * 4, y + Math.sin(a) * 4) < -1.2);
+      const open = (x, y) => (M.sea ? M.sea[Rules.cellOf(x, y)] : true) && [0, 0.8, 1.6, 2.4, 3.2, 4, 4.8, 5.6].every(a => terrainAt(M, x + Math.cos(a) * 9, y + Math.sin(a) * 9) < -1.2);
       for (let tries = 0, pods = 0; pods < Math.round(Math.min(3, (M.seaCells || 0) / 900) * scale) && tries < 3000; tries++) {
         const x = 4 + R() * (W - 8), y = 4 + R() * (H - 8);
         if (!open(x, y)) continue;
