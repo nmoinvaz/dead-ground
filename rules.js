@@ -1148,6 +1148,39 @@ const Rules = (() => {
         });
       }
     }
+    // More houses further out, so a town is more than two or three, on dice of their own so the rest of the map
+    // is laid as before. Each keeps a cell clear of the houses already standing, the roads, the water and the ore.
+    const hr = mulberry((seed * 2654435761 + 0x4c1d) % 4294967296), taken = c => ground[c] & 7;
+    for (let i = 0; i < towns.length; i += K) {
+      const t = towns[i];
+      let added = 0;
+      for (let k = 0; k < 14 && added < 4; k++) {
+        const a = hr() * TAU, d = 7.5 + hr() * 3, w = 2 + (hr() * 2 | 0), hh = 2 + (hr() * 2 | 0), floors = 1 + (hr() * 2 | 0), tone = hr();
+        const hx = Math.round(t.x + mcos(a) * d), hy = Math.round(t.y + msin(a) * d), x0 = hx - (w >> 1), y0 = hy - (hh >> 1);
+        let ok = true;
+        L.syms.forEach(T => {
+          const p = T([x0, y0]), q = T([x0 + w, y0 + hh]);
+          const px = Math.round(Math.min(p[0], q[0])), py = Math.round(Math.min(p[1], q[1])), pw = Math.round(Math.abs(q[0] - p[0])), ph = Math.round(Math.abs(q[1] - p[1]));
+          for (let cy = py - 1; cy <= py + ph && ok; cy++) for (let cx = px - 1; cx <= px + pw; cx++) {
+            if (cx < 1 || cy < 1 || cx >= W - 1 || cy >= H - 1) { ok = false; break; }
+            const c = cy * W + cx, v = (cy * RES) * VW + cx * RES;
+            if (taken(c) || oreCells[c] || roadDist[v] < 4.5 || hAt(cx + 0.5, cy + 0.5) < water + 0.4) { ok = false; break; }
+          }
+        });
+        if (!ok) continue;
+        // Laid, then taken up again if it shuts off a base, a town or a well, as the map's checks would find.
+        const put = [], was = [];
+        L.syms.forEach((T, s) => {
+          const p = T([x0, y0]), q = T([x0 + w, y0 + hh]);
+          const px = Math.round(Math.min(p[0], q[0])), py = Math.round(Math.min(p[1], q[1])), pw = Math.round(Math.abs(q[0] - p[0])), ph = Math.round(Math.abs(q[1] - p[1]));
+          put.push({ x: px, y: py, w: pw, h: ph, floors, tone, town: i + s });
+          for (let cy = py; cy < py + ph; cy++) for (let cx = px; cx < px + pw; cx++) { was.push(cy * W + cx, ground[cy * W + cx]); ground[cy * W + cx] |= 7; }
+        });
+        if (!reachable(ground, L, towns, wells)) { for (let j = was.length - 2; j >= 0; j -= 2) ground[was[j]] = was[j + 1]; continue; }
+        added++;
+        houses.push(...put);
+      }
+    }
     const faces = L.bases.map(b => matan2(CY - b[1], CX - b[0]));
     for (const s of scatter) s.c = clamp(s.y | 0, 0, H - 1) * W + clamp(s.x | 0, 0, W - 1);
     // Open water deep enough for a ship: every corner of the cell well under the surface. Bridges stand high
@@ -1165,6 +1198,21 @@ const Rules = (() => {
   }
 
   // A map is kept only if vehicles can get from the first base to every other base, town and well.
+  // Whether every base, town and well can be reached on foot and wheel from the first base, over the ground bits.
+  function reachable(ground, L, towns, wells) {
+    const pass = c => !(ground[c] & 9), a = L.bases[0], seen = new Uint8Array(N), q = [Math.floor(a[1]) * W + Math.floor(a[0]) + 4];
+    seen[q[0]] = 1;
+    while (q.length) {
+      const c = q.pop(), x = c % W, y = c / W | 0;
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const nx = x + dx, ny = y + dy;
+        if (nx < 0 || ny < 0 || nx >= W || ny >= H) continue;
+        const n = ny * W + nx;
+        if (!seen[n] && pass(n)) { seen[n] = 1; q.push(n); }
+      }
+    }
+    return L.bases.every(b => seen[Math.floor(b[1]) * W + Math.floor(b[0]) + 4]) && towns.every(t => seen[Math.floor(t.y) * W + Math.floor(t.x)]) && wells.every(w => seen[w.y * W + w.x + 2]);
+  }
   function goodMap(M) {
     const pass = new Uint8Array(N);
     for (let c = 0; c < N; c++) pass[c] = (M.ground[c] & 9) ? 0 : 1;
