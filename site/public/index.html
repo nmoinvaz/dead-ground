@@ -597,7 +597,7 @@ body[data-look="ink"] .sheet { box-shadow: 4px 4px 0 var(--ink); }
       <div class="choice"><h2>Picture</h2><div id="s-pic" class="two"><button data-v="sharp">Sharp</button><button data-v="fast">Faster</button></div><p id="s-pic-note"></p></div>
       <div class="choice"><h2>Ore, oil and power</h2><div id="s-gauges" class="two"><button data-v="top">In the top bar</button><button data-v="side">In the sidebar</button></div></div>
       <div class="choice"><h2>Music</h2><div id="s-music" class="two"><button data-v="on">On</button><button data-v="off">Off</button></div></div>
-      <p id="build">Build 8559944 2026-11-08 20:01</p>
+      <p id="build">Build def11dd 2026-11-08 22:29</p>
     </div>
     <div id="banner" hidden></div>
     <button id="update" hidden>A new version of Dead Ground is out. <b>Reload</b></button>
@@ -3072,6 +3072,7 @@ const Rules = (() => {
     if (team >= 0 && atPeace(S, team, t.team)) return;
     dmg *= coverScale(S, t, by);
     t.hp -= dmg;
+    if (t.d.men && !t.b && t.hp > 0) shaken(S, t, dmg);
     // Where the harm between sides falls, gathered for the war map's battles.
     if (S.hist && team >= 0 && team !== t.team) { const f = S.hist.fa || (S.hist.fa = [0, 0, 0]); f[0] += t.x * dmg; f[1] += t.y * dmg; f[2] += dmg; }
     t.under = S.tick;
@@ -3117,7 +3118,7 @@ const Rules = (() => {
   function fallBack(S, u) {
     // Sent off elsewhere since, and gone from its haven, it may fall back again.
     if (u.mend && !(u.ord && u.ord.t === 'move' && u.ord.x === u.mend.at[0] && u.ord.y === u.mend.at[1]) && mhypot(u.x - u.mend.at[0], u.y - u.mend.at[1]) > FB_NEAR + 2) u.mend = null;
-    if (!u.fb || u.hp >= u.max * FB_AT || u.mend || u.d.cargo || isAir(u)) return;
+    if (!u.fb || u.brk || u.hp >= u.max * FB_AT || u.mend || u.d.cargo || isAir(u)) return;
     let best = null, bd = Infinity;
     for (const e of S.ents) {
       if (e.team !== u.team || e.hp <= 0 || e === u) continue;
@@ -3219,6 +3220,45 @@ const Rules = (() => {
     if (!u.home && !u.ord) u.home = [u.x, u.y];
     u.ord = { t: 'move', x: c % W + 0.5, y: (c / W | 0) + 0.5, scat: true }; u.tgt = 0; u.wpT = 0; u.stuck = 0;
   }
+  // Morale. Men under fire are shaken: their suppression rises with the harm done to them, and falls again when
+  // the fire stops. Above PIN they are pinned, moving and firing slower; a squad shaken through and down to half its
+  // men breaks and runs for the nearest building of its side, deaf to orders, until it rallies. Cover, a formation of
+  // friends about them and a hero or general near steady them, as does a veteran's nerve, and a squad told to hold
+  // its ground never breaks.
+  const PIN = 0.5, BREAK = 0.85, BREAK_HP = 0.5, BREAK_S = 8, RALLY_R = 8;
+  function steadiness(S, u) {
+    let k = 1 - 0.15 * (u.vet || 0);
+    if (u.cov >= 0) k *= 0.5;
+    let friends = 0, leader = false;
+    near(S, u.x, u.y, RALLY_R, o => {
+      if (o === u || o.team !== u.team || o.hp <= 0 || o.b) return;
+      const d = mhypot(o.x - u.x, o.y - u.y);
+      if ((o.d.hero || o.d.general) && d < RALLY_R) leader = true;
+      else if (o.d.men && d < 4) friends++;
+    });
+    if (u.form && u.form !== 'loose' && friends >= 2) k *= 0.75;
+    if (leader) k *= 0.5;
+    return { k, leader };
+  }
+  function shaken(S, u, dmg) {
+    const { k, leader } = steadiness(S, u);
+    u.sup = Math.min(1, (u.sup || 0) + (dmg / u.max * 3 + 0.04) * k);
+    if (u.brk || leader || u.st === 'hold' || u.d.hero || u.d.general) return;
+    if (u.sup >= BREAK && u.hp < u.max * BREAK_HP) {
+      let best = null, bd = Infinity;
+      for (const e of S.ents) if (e.b && e.team === u.team && e.hp > 0) { const dd = mhypot(e.x - u.x, e.y - u.y); if (dd < bd) { bd = dd; best = e; } }
+      const to = best ? [best.x + (u.x > best.x ? 1 : -1) * (best.w / 2 + 2), best.y + (u.y > best.y ? 1 : -1) * (best.h / 2 + 2)] : S.bases[u.team];
+      u.brk = S.tick + BREAK_S * HZ;
+      u.ord = { t: 'move', x: clamp(to[0], 1, W - 1), y: clamp(to[1], 1, H - 1), brk: true }; u.tgt = 0; u.home = null; u.wpT = 0; u.stuck = 0; u.exp = false; u.mend = null;
+      S.ev.push({ t: 'broke', team: u.team, id: u.id, x: u.x, y: u.y });
+    }
+  }
+  // A second's calm: suppression wears off, faster in cover, and a broken squad that has run its time rallies.
+  function steady(S, u) {
+    if (u.sup) { u.sup = Math.max(0, u.sup - (u.cov >= 0 ? 0.2 : 0.12)); if (u.sup < 0.01) u.sup = 0; }
+    if (u.brk && S.tick >= u.brk && (u.sup || 0) < PIN) { u.brk = 0; if (u.ord && u.ord.brk) u.ord = null; u.v = 0; S.ev.push({ t: 'rallied', team: u.team, id: u.id, x: u.x, y: u.y }); }
+  }
+  const pinned = u => (u.sup || 0) >= PIN;
   const ANS_R = 10, ANS_LEASH = 18;
   function answer(S, t, by) {
     if (S.tick - (t.ansT ?? -1e9) < HZ) return;
@@ -3227,7 +3267,7 @@ const Rules = (() => {
     t.ansT = S.tick;
     near(S, t.x, t.y, ANS_R, o => {
       // A squad in cover holds it, unless it is aggressive or hunting.
-      if (o.b || o.team !== t.team || o.hp <= 0 || o.drop > 0 || o.ord || (o.cov >= 0 && !o.st) || (o.cov >= 0 && o.st === 'def') || o.st === 'hold' || S.tick < (o.calm || 0)) return;
+      if (o.b || o.team !== t.team || o.hp <= 0 || o.drop > 0 || o.ord || o.brk || (o.cov >= 0 && !o.st) || (o.cov >= 0 && o.st === 'def') || o.st === 'hold' || S.tick < (o.calm || 0)) return;
       if (!armed(o) || o.d.cargo || o.d.engineer || o.d.move === 'jet' || mhypot(o.x - t.x, o.y - t.y) > ANS_R) return;
       const c = o.tgt && S.byId.get(o.tgt);
       if (c && c.hp > 0 && !c.b) return;
@@ -3438,7 +3478,7 @@ const Rules = (() => {
       if (u.cd[i] > 0) continue;
       if (u.d.turret && Math.abs(angleTo(u.ta, matan2(t.y - u.y, t.x - u.x))) > 0.12) continue;
       if (!clearShot(S, u, wn, t)) { readyAny = false; continue; }
-      u.cd[i] = w.cd * (u.b && S.P[u.team].low ? 2 : 1);
+      u.cd[i] = w.cd * (u.b && S.P[u.team].low ? 2 : 1) * (pinned(u) ? 1.6 : 1);
       if (w.salvo) { u.salvo = w.salvo; u.salvoT = 0; u.salvoW = wn; u.salvoBr = -1; }
       else fire(S, u, wn, t, i);
     }
@@ -3492,6 +3532,8 @@ const Rules = (() => {
       if (sh.rain || sh.snow) going *= 1 - (d.move === 'wheel' ? 0.24 * sh.rain * (1 - rk) + 0.2 * sh.snow : d.move === 'track' ? 0.1 * sh.snow : d.move === 'naval' ? 0 : 0.18 * sh.snow);
     }
     if (here & 16) going *= 0.5;
+    // Pinned men crawl.
+    if (d.men && pinned(u) && !u.brk) going *= 0.45;
     if ((here & 8) && d.move === 'foot') going *= 0.75;
     const top = (u.ord && u.ord.pace ? Math.min(d.speed, u.ord.pace) : d.speed) * speedScale * going;
     const want = matan2(dy, dx), diff = angleTo(u.a, want);
@@ -3789,6 +3831,7 @@ const Rules = (() => {
     // Veterans mend slowly, and a Support Truck mends anyone close.
     if (u.vet >= 2 && u.hp < u.max) u.hp = Math.min(u.max, u.hp + u.max * 0.002);
     if (S.tick % HZ === u.id % HZ) {
+      if (d.men) steady(S, u);
       fallBack(S, u);
       exploreTick(S, u);
       const c = cellOf(u.x, u.y), foreign = S.terr[c] >= 0 && S.terr[c] !== u.team;
@@ -3827,7 +3870,8 @@ const Rules = (() => {
     let t = u.tgt ? S.byId.get(u.tgt) : null;
     if (t && (t.hp <= 0 || atPeace(S, u.team, t.team) || (!seenBy(S, u.team, t) && !(o && (o.t === 'attack' || o.t === 'group'))))) { t = null; u.tgt = 0; }
 
-    const free = !o || o.t === 'amove' || o.t === 'capture', st = u.st || 'def';
+    if (u.brk && t) { t = null; u.tgt = 0; }
+    const free = (!o || o.t === 'amove' || o.t === 'capture') && !u.brk, st = u.st || 'def';
     if (armed(u) && free && !t && S.tick % 10 === u.id % 10) {
       const f = acquire(S, u, d.sight, (!o && u.cov >= 0 && st === 'def') || st === 'hold');
       if (f) { t = f; u.tgt = f.id; if (!o && !u.home) u.home = [u.x, u.y]; }
@@ -4435,7 +4479,8 @@ const Rules = (() => {
 
   function unitsOf(S, team, ids) {
     const out = [];
-    for (const id of ids) { const u = S.byId.get(id); if (u && u.team === team && !u.b && u.hp > 0) out.push(u); }
+    // A broken squad hears no orders until it rallies.
+    for (const id of ids) { const u = S.byId.get(id); if (u && u.team === team && !u.b && u.hp > 0 && !(u.brk && S.tick < u.brk)) out.push(u); }
     return out;
   }
 
@@ -4857,7 +4902,7 @@ const Rules = (() => {
     msin, mcos, matan2, mhypot,
     BRIDGE_HP, SPELL, SKIES, WEATHERS, nightAt, skyOf, offGoing, route, weatherAt, sky, dayAt, spellOf, bridgeAt, clsOf, houseHp, hurtBridge, ignite, shielded,
     coverPoints, coverNear, COVER_R, COVER_ARC, FORMS, formOfGroup, STANCES,
-    FB_AT, canExplore, UPGRADES, UP_AGE, upCost, upNote, upsAt, upK, upBlocked, hpOf, rangeOf, capOf, showersAt, showerAt,
+    FB_AT, PIN, canExplore, UPGRADES, UP_AGE, upCost, upNote, upsAt, upK, upBlocked, hpOf, rangeOf, capOf, showersAt, showerAt,
   };
 })();
 if (typeof module !== 'undefined') module.exports = Rules;
@@ -14386,6 +14431,21 @@ const Hud = (() => {
           if (e.vet) { og.fillStyle = '#ffd34d'; og.font = '9px system-ui'; og.textAlign = 'left'; og.fillText('★'.repeat(e.vet), o.x - bw / 2, by - 2); }
           if (e.repairing) { og.fillStyle = '#7fe0a0'; og.font = '10px system-ui'; og.textAlign = 'center'; og.fillText('+', o.x + bw / 2 + 5, by + 4); }
         }
+        // A squad's nerve, lettered over its head as a map notes a thing: pinned under fire, or broken and running,
+        // in red with a small white flag.
+        if (!e.b && e.d.men && !tagged && o.scale > 5 && ((e.sup || 0) >= Rules.PIN || e.brk)) {
+          const hy = o.y - o.r * 1.1 - 16, word = e.brk ? 'broken' : 'pinned', c = e.brk ? (ink ? '#a3301e' : '#ff8a70') : (ink ? '#1a1512' : '#f2ead8');
+          og.save(); og.setLineDash([]); og.textAlign = 'center'; og.textBaseline = 'middle';
+          og.font = ink ? `italic 600 13px ${labelFont()}` : 'italic 600 12px system-ui';
+          og.lineJoin = 'round'; og.lineWidth = 3.5; og.strokeStyle = ink ? 'rgba(250,244,228,0.92)' : 'rgba(0,0,0,0.7)'; og.strokeText(word, o.x, hy);
+          og.fillStyle = c; og.fillText(word, o.x, hy);
+          if (e.brk) {
+            const fx = o.x + og.measureText(word).width / 2 + 6;
+            og.lineWidth = 1.4; og.strokeStyle = c; og.beginPath(); og.moveTo(fx, hy + 7); og.lineTo(fx, hy - 7); og.stroke();
+            og.fillStyle = '#f8f4ea'; og.beginPath(); og.moveTo(fx, hy - 7); og.lineTo(fx + 9, hy - 4.5); og.lineTo(fx, hy - 2); og.closePath(); og.fill(); og.stroke();
+          }
+          og.restore();
+        }
         if (e.b && on && e.rally && mine) {
           const [rx, ry] = world.project(e.rally[0], terrainAt(s.map, e.rally[0], e.rally[1]) + 0.1, e.rally[1]);
           if (inked()) { og.strokeStyle = PLAN; dotted(); } else { og.strokeStyle = '#7fe0a0'; og.setLineDash([5, 4]); og.lineWidth = 1; }
@@ -14819,6 +14879,7 @@ const Hud = (() => {
           let t = `${Math.ceil(e.hp)}/${e.max}`;
           if (e.d.cargo) t += ` · load ${Math.round(e.cargo)}/${Math.round(Rules.capOf(S(), e))}`;
           if (e.vet) t += ` · ${'★'.repeat(e.vet)}`;
+          if (e.brk) t += ' · broken'; else if ((e.sup || 0) >= Rules.PIN) t += ' · pinned';
           if (e.b && e.d.power) t += ` · ${e.d.power > 0 ? '+' : ''}${e.d.power} pw`;
           if (st.textContent !== t) st.textContent = t;
         }
@@ -16758,6 +16819,8 @@ const Game = (() => {
             drawRoster();
             break;
           case 'weather': if (G.playing) { const v = e.passed ? SKY_PASS[e.was] : SKY_SAY[e.kind]; if (v && !(e.kind === 'cloud' && e.was === 'clear')) { hud.say(v[0], v[1]); if (v[2]) audio.voice('sky', v[2], oldAge()); } } break;
+          // One of the player's squads breaking, said now and then, not for every squad.
+          case 'broke': if (G.playing && e.team === G.team && S.tick - (G.lastBroke ?? -1e9) > 20 * Rules.HZ) { G.lastBroke = S.tick; hud.say('A squad has broken and is running.', 'bad'); } break;
           // Lightning, and a fire it lights in a wood the player can see.
           case 'strike':
             if (G.playing) hud.strike(e);
