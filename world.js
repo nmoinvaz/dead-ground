@@ -1039,15 +1039,55 @@ const World = (() => {
       const rc = new THREE.Color(th.rock);
       instanced(sc.rock, plainTint, rocks.map(t => ({ x: t.x, y: terrainAt(M, t.x, t.y) - 0.06, z: t.y, s: t.s * 1.2, a: t.a, c: colA.copy(rc).multiplyScalar(0.62 + rand() * 0.3).getHex() })));
 
-      // Houses, plaster walls under pitched roofs.
+      // Houses, plaster walls under pitched roofs, and in each town its other buildings: the biggest a church with a
+      // tower and spire at one end, a long one a barn of dark boards under a broad roof, a square one a market hall
+      // over open arches, and a small one a windmill. Some houses have hipped roofs, and most a chimney. What a
+      // building is comes of the map alone, so every player sees the same town; the rules know only houses.
       const wall = [0xcfc4ae, 0xb9ad96, 0xd8d0be, 0xa89a82], roofC = [0x8a4a34, 0x6e4032, 0x5c5a58, 0x7a5a42];
-      const hb = [], hr = [], win = [], hrub = [];
+      const hb = [], hr = [], win = [], hrub = [], kind = M.houses.map(() => 'house');
+      const byTown = new Map();
+      M.houses.forEach((h, i) => { if (!byTown.has(h.town)) byTown.set(h.town, []); byTown.get(h.town).push(i); });
+      for (const list of byTown.values()) {
+        const area = i => M.houses[i].w * M.houses[i].h, free = list.slice().sort((a, b) => area(b) - area(a) || a - b);
+        const take = (f, k) => { const j = free.findIndex(f); if (j >= 0) { kind[free[j]] = k; free.splice(j, 1); } };
+        take(i => area(i) >= 6, 'church');
+        take(i => M.houses[i].w !== M.houses[i].h && area(i) >= 6, 'barn');
+        take(i => M.houses[i].w === M.houses[i].h && area(i) >= 9, 'hall');
+        take(i => area(i) <= 4, 'mill');
+      }
+      const extra = { block: [], spire: [], mill: [], millcap: [], sails: [], hip: [] };
       for (const [hi, h] of M.houses.entries()) {
         const cx = h.x + h.w / 2, cz = h.y + h.h / 2, g = Math.min(terrainAt(M, h.x, h.y), terrainAt(M, h.x + h.w, h.y + h.h)) - 0.12;
-        const tall = 0.62 * h.floors + 0.2, along = h.w >= h.h;
-        hb.push({ x: cx, y: g, z: cz, sx: h.w - 0.3, sy: tall + 0.2, sz: h.h - 0.3, c: wall[h.tone * 4 | 0] });
-        hr.push({ x: cx, y: g + tall + 0.08, z: cz, sx: (along ? h.h : h.w) - 0.1, sy: 0.9, sz: (along ? h.w : h.h) - 0.1, a: along ? Math.PI / 2 : 0, c: roofC[h.tone * 3.99 | 0] });
-        for (let f = 0; f < h.floors; f++) {
+        const tall = 0.62 * h.floors + 0.2, along = h.w >= h.h, k = kind[hi], r = (hi * 2654435761 >>> 0) / 4294967296;
+        const body = { x: cx, y: g, z: cz, sx: h.w - 0.3, sy: tall + 0.2, sz: h.h - 0.3, c: wall[h.tone * 4 | 0] };
+        const roof = { x: cx, y: g + tall + 0.08, z: cz, sx: (along ? h.h : h.w) - 0.1, sy: 0.9, sz: (along ? h.w : h.h) - 0.1, a: along ? Math.PI / 2 : 0, c: roofC[h.tone * 3.99 | 0] };
+        let floors0 = 0, wins = true;
+        if (k === 'church') {
+          // The tower at the end of the long side, twice the nave's height, and its spire.
+          const ex = along ? h.x + 0.75 : cx, ez = along ? cz : h.y + 0.75, th = tall * 1.6 + 1.2;
+          extra.block.push({ x: ex, y: g, z: ez, sx: 1.2, sy: th, sz: 1.2, c: 0xd8d0be, h: hi });
+          extra.spire.push({ x: ex, y: g + th, z: ez, sx: 1.25, sy: 1.8, sz: 1.25, c: 0x5c5a58, h: hi });
+          body.c = 0xd8d0be;
+        } else if (k === 'barn') {
+          body.sy = 0.75; body.c = 0x7a4a36; roof.y = g + 0.63; roof.sy = 1.3; roof.c = 0x5a5650; wins = false;
+          extra.block.push({ x: along ? cx : cx + (h.w / 2 - 0.13), y: g, z: along ? cz + (h.h / 2 - 0.13) : cz, sx: along ? 0.9 : 0.04, sy: 0.6, sz: along ? 0.04 : 0.9, c: 0x3a2a20, h: hi });
+        } else if (k === 'hall') {
+          // An upper floor over open arches: the body lifted, a pillar at each corner and between.
+          body.y = g + 0.62; body.sy = tall - 0.42; floors0 = 1;
+          for (const [px, pz] of [[-1, -1], [1, -1], [-1, 1], [1, 1], [0, -1], [0, 1], [-1, 0], [1, 0]]) extra.block.push({ x: cx + px * (h.w / 2 - 0.3), y: g, z: cz + pz * (h.h / 2 - 0.3), sx: 0.24, sy: 0.64, sz: 0.24, c: body.c, h: hi });
+        } else if (k === 'mill') {
+          const mh = 1.9;
+          extra.mill.push({ x: cx, y: g, z: cz, sx: 1.5, sy: mh, sz: 1.5, c: 0xd8d0be, h: hi });
+          extra.millcap.push({ x: cx, y: g + mh, z: cz, sx: 1.3, sy: 1.2, sz: 1.3, c: 0x6e4032, h: hi });
+          extra.sails.push({ x: cx + 0.62, y: g + mh - 0.05, z: cz, s: 1.35, a: Math.PI / 2 - 0.4, c: 0xffffff, h: hi, mill: true, ph: r * 6.28 });
+          body.sx = body.sz = 0.01; body.sy = 0.01; roof.sx = roof.sz = roof.sy = 0.001; wins = false;
+        } else {
+          // A hipped roof on a square house now and then, and a chimney on most.
+          if (h.w === h.h && r < 0.5) { extra.hip.push({ x: cx, y: g + tall + 0.08, z: cz, sx: h.w * 1.02, sy: 2, sz: h.h * 1.02, c: roof.c, h: hi }); roof.sx = roof.sz = roof.sy = 0.001; }
+          if (r > 0.25) extra.block.push({ x: cx + (along ? (r - 0.6) * h.w * 0.6 : 0.2), y: g + tall + 0.1, z: cz + (along ? 0.2 : (r - 0.6) * h.h * 0.6), sx: 0.26, sy: 0.75, sz: 0.26, c: 0x8a6a56, h: hi });
+        }
+        hb.push(body); hr.push(roof);
+        if (wins) for (let f = floors0; f < h.floors; f++) {
           const wy = g + 0.42 + f * 0.62;
           for (const s of [-1, 1]) for (let k = 0; k < Math.max(1, h.w - 1); k++) win.push({ x: h.x + 0.7 + k * (h.w - 1.4) / Math.max(1, h.w - 2 || 1), y: wy, z: cz + s * (h.h / 2 - 0.14), sx: 0.26, sy: 0.3, sz: 0.03, c: 0x2a2c30, h: hi });
           for (const s of [-1, 1]) for (let k = 0; k < Math.max(1, h.h - 1); k++) win.push({ x: cx + s * (h.w / 2 - 0.14), y: wy, z: h.y + 0.7 + k * (h.h - 1.4) / Math.max(1, h.h - 2 || 1), sx: 0.03, sy: 0.3, sz: 0.26, c: 0x2a2c30, h: hi });
@@ -1057,7 +1097,9 @@ const World = (() => {
       }
       const hbm = instanced(sc.block, plainTint, hb), hrm = instanced(sc.roof, plainTint, hr), wm = instanced(sc.block, plainTint, win, false), rm = instanced(sc.rubble, plainTint, hrub);
       hrub.forEach((o, i) => setInst(rm, i, o, true)); dirty(rm);
-      scen.houses = { hb, hr, win, hrub, hbm, hrm, wm, rm, ruined: new Uint8Array(M.houses.length) };
+      const xm = {};
+      for (const [m, list] of Object.entries(extra)) if (list.length) xm[m] = { mesh: instanced(sc[m], plainTint, list), list };
+      scen.houses = { hb, hr, win, hrub, hbm, hrm, wm, rm, xm, kind, ruined: new Uint8Array(M.houses.length) };
       buildFences();
       buildRoadside();
       buildPlants();
@@ -1465,7 +1507,15 @@ const World = (() => {
           Hh.win.forEach((w, j) => setInst(Hh.wm, j, w, !!Hh.ruined[w.h]));
           Hh.hrub.forEach((o, j) => setInst(Hh.rm, j, o, !Hh.ruined[o.h]));
           dirty(Hh.hbm); dirty(Hh.hrm); dirty(Hh.wm); dirty(Hh.rm);
+          for (const X of Object.values(Hh.xm)) { X.list.forEach((o, j) => setInst(X.mesh, j, o, !!Hh.ruined[o.h])); dirty(X.mesh); }
         }
+      }
+      // Windmill sails turn with the wind, faster the harder it blows.
+      const Sm = scen.houses.xm.sails;
+      if (Sm) {
+        const turn = 0.25 + 0.6 * Math.min(1, Math.hypot(SH.uWind.value.x, SH.uWind.value.y));
+        Sm.list.forEach((o, j) => { if (scen.houses.ruined[o.h] || !VIS(o.x, o.z)) return; o.rz = SH.uTime.value * turn + o.ph; setInst(Sm.mesh, j, o); });
+        dirty(Sm.mesh);
       }
       // Bridges: a fallen one is two stubs from the banks with its middle in the river.
       const B = scen.bridges;

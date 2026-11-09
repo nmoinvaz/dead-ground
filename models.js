@@ -887,6 +887,28 @@ const Models = (() => {
       const roof = G();
       roof.prism([[-0.5, 0], [0, 0.42], [0.5, 0]], 1.04, 0, 0, 0, 0xffffff);
       scenery.roof = roof.finish();
+      // A church's spire, four-sided, from y = 0 to 1; a windmill's tapering tower and its cap; its four sails about
+      // an axle along z; and a hipped roof, sloping on all four sides.
+      const spire = G();
+      spire.add(new THREE.ConeGeometry(0.7071, 1, 4), 0, 0.5, 0, 0xffffff, { ry: Math.PI / 4 });
+      scenery.spire = spire.finish();
+      const mill = G();
+      mill.add(new THREE.CylinderGeometry(0.36, 0.55, 1, 8), 0, 0.5, 0, 0xffffff);
+      scenery.mill = mill.finish();
+      const mcap = G();
+      mcap.add(new THREE.ConeGeometry(0.46, 0.5, 8), 0, 0.25, 0, 0xffffff);
+      scenery.millcap = mcap.finish();
+      const sails = G();
+      for (let k = 0; k < 4; k++) {
+        const a = k * Math.PI / 2, cx = Math.cos(a) * 0.62, cy = Math.sin(a) * 0.62;
+        sails.box(0.05, 1.2, 0.03, cx, cy - 0.6, 0, 0x6a5440, { rz: a - Math.PI / 2 });
+        sails.box(0.28, 1.0, 0.012, cx + Math.cos(a + Math.PI / 2) * 0.13, cy + Math.sin(a + Math.PI / 2) * 0.13 - 0.5, 0, 0xf2eee2, { rz: a - Math.PI / 2 });
+      }
+      sails.cyl(0.06, 0.06, 0.1, 0, 0, 0, 0x4a3a2c, { axis: 'z', seg: 8 });
+      scenery.sails = sails.finish();
+      const hip = G();
+      hip.add(new THREE.ConeGeometry(0.7071, 0.42, 4), 0, 0.21, 0, 0xffffff, { ry: Math.PI / 4 });
+      scenery.hip = hip.finish();
       const well = G();
       well.cyl(0.08, 0.1, 0.34, 0, 0.17, 0, P.steelDk, { seg: 8 });
       well.cyl(0.14, 0.14, 0.04, 0, 0.34, 0, P.steelDk, { seg: 8 });
