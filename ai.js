@@ -430,7 +430,9 @@ const AI = (() => {
     const wave = me.waveIds ? fight.filter(u => me.waveIds.includes(u.id)) : fight;
     const guard = me.waveIds ? fight.filter(u => !me.waveIds.includes(u.id)) : [];
     if (me.state === 'attack') {
-      const ws = wave.reduce((a, u) => a + value(u), 0);
+      // A wave is measured by what it has on land: ships cannot take a town, so a few left afloat do not hold a
+      // spent wave open.
+      const ws = wave.reduce((a, u) => a + (u.d.move === 'naval' ? 0 : value(u)), 0);
       // A wave ends when it has lost most of its worth, or when its raid time is up at a level that has one.
       if (ws < me.startStrength * 0.3 || !wave.length || (me.D.raid && S.tick >= me.attackUntil)) {
         me.state = 'build'; me.waves++; me.waveIds = null;
@@ -452,7 +454,7 @@ const AI = (() => {
     // A keeper holds a player's base while they are away and never sets out.
     if (me.D.stay || foeTeam < 0) return;
     if (m >= me.D.delay && strength >= need) {
-      me.state = 'attack'; me.startStrength = strength; me.attackT = S.tick; me.attackUntil = S.tick + (me.D.raid || 0) * HZ;
+      me.state = 'attack'; me.startStrength = fight.reduce((a, u) => a + (u.d.move === 'naval' ? 0 : value(u)), 0); me.attackT = S.tick; me.attackUntil = S.tick + (me.D.raid || 0) * HZ;
       me.waveIds = (me.D.pulse !== undefined ? me.D.pulse : (S.seats || S.P).length > 2) ? fight.map(u => u.id) : null;
       S.ev.push({ t: 'wave', team, n: me.waves + 1 });
     }
