@@ -1,4 +1,4 @@
-// Dead Ground's server: a Cloudflare Worker with two kinds of Durable Object. A Room is one game. First it is a
+// The server of Mapmaker's War: a Cloudflare Worker with two kinds of Durable Object. A Room is one game. First it is a
 // lobby, where players take seats and the host picks the map, the terrain and the computers. Then it is the game,
 // which the room steps twenty times a second while it runs the computers, sending each step's commands to every
 // player, whose own copy of the rules steps the same world from them. The Directory lists the rooms.
