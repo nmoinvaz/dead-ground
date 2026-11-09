@@ -951,10 +951,11 @@ const Hud = (() => {
     function drawNames(s, P) {
       const dist = world.cam.dist, k = smoothstepJS(38, 70, dist);
       if (k <= 0) return;
-      const N = world.names, seen = (x, y) => !P || P.seen[Rules.cellOf(x, y)], dk = blastDark || document.body.dataset.scheme === 'dark';
+      // The dark scheme turns the overlay over, so these are the light paper's colours either way.
+      const N = world.names, seen = (x, y) => !P || P.seen[Rules.cellOf(x, y)];
       const fs = Math.round(12 + smoothstepJS(70, 200, dist) * 5);
       og.save(); og.globalAlpha = k; og.setLineDash([]); og.textAlign = 'center'; og.textBaseline = 'middle'; og.lineJoin = 'round';
-      og.strokeStyle = dk ? 'rgba(35,32,27,0.85)' : 'rgba(250,244,228,0.9)'; og.lineWidth = 3;
+      og.strokeStyle = 'rgba(250,244,228,0.9)'; og.lineWidth = 3;
       og.font = `italic 500 ${fs + 1}px ${labelFont()}`;
       for (const r of N.rivers) {
         if (!r.pts.some(p => seen(p[0], p[1]))) continue;
@@ -966,19 +967,19 @@ const Hud = (() => {
         let len = 0;
         for (let i = 1; i < best.length; i++) len += Math.hypot(best[i][0] - best[i - 1][0], best[i][1] - best[i - 1][1]);
         const n = len > 900 ? 2 : 1;
-        for (let j = 0; j < n; j++) textAlong(r.name, best.slice(Math.floor(j * best.length / n), Math.floor((j + 1) * best.length / n)), fs + 1, dk ? '#8fb0ef' : '#23458c', fs * 0.35);
+        for (let j = 0; j < n; j++) textAlong(r.name, best.slice(Math.floor(j * best.length / n), Math.floor((j + 1) * best.length / n)), fs + 1, '#23458c', fs * 0.35);
       }
       og.font = `italic 500 ${fs}px ${labelFont()}`;
       for (const h of N.hills) {
         if (!seen(h.x, h.y)) continue;
         const [x, y] = world.project(h.x, terrainAt(s.map, h.x, h.y), h.y);
-        og.fillStyle = dk ? '#d8c8a8' : '#5a4632';
+        og.fillStyle = '#5a4632';
         og.beginPath(); og.moveTo(x, y - 4); og.lineTo(x + 3.5, y + 2); og.lineTo(x - 3.5, y + 2); og.closePath(); og.fill();
         og.strokeText(h.name, x, y + fs * 0.95); og.fillText(h.name, x, y + fs * 0.95);
         const spot = String(Math.round(h.z * 52 + 120));
         og.font = `500 ${fs - 3}px ${labelFont()}`; og.strokeText(spot, x + 14, y - 2); og.fillText(spot, x + 14, y - 2); og.font = `italic 500 ${fs}px ${labelFont()}`;
       }
-      og.fillStyle = dk ? '#a8c898' : '#3a5a2e';
+      og.fillStyle = '#3a5a2e';
       for (const w of N.woods) {
         if (!seen(w.x, w.y)) continue;
         const [x, y] = world.project(w.x, terrainAt(s.map, w.x, w.y) + 1.5, w.y);
@@ -999,7 +1000,8 @@ const Hud = (() => {
       const n = 5 + (f.seed * 7 % 3 | 0), lobes = [], S2 = Math.ceil(R * 2.6), c = puffSheet(S2), g = c.getContext('2d');
       for (let i = 0; i < n; i++) { const a = i / n * 6.283 + rnd(f.seed, i) * 0.9, d = R * (0.35 + 0.3 * rnd(f.seed, i + 5)); lobes.push([Math.cos(a) * d, Math.sin(a) * d * 0.8 - R * 0.1, R * (0.42 + 0.25 * rnd(f.seed, i + 9))]); }
       lobes.push([0, 0, R * 0.55]);
-      const dark = blastDark, fill = f.air ? (dark ? '#1c1a18' : '#4a4540') : (dark ? '#6a6258' : '#cdc3b2'), line = f.air ? (dark ? '#8a847a' : '#1a1512') : (dark ? '#d8d0c0' : '#2a221c');
+      // The dark scheme turns the overlay over, so the cloud is drawn in the light paper's colours either way.
+      const fill = f.air ? '#4a4540' : '#cdc3b2', line = f.air ? '#1a1512' : '#2a221c';
       g.clearRect(0, 0, S2, S2); g.save(); g.translate(S2 / 2, S2 / 2);
       g.strokeStyle = line; g.lineWidth = Math.max(1.2, R * 0.08);
       for (const [cx, cy, r] of lobes) { g.beginPath(); g.arc(cx, cy, r, 0, 6.283); g.stroke(); }
