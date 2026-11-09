@@ -901,6 +901,66 @@ const Models = (() => {
       deer.box(0.1, 0.07, 0.08, -0.45, 0.52, 0, 0xf4f0e8);
       for (const s of [-1, 1]) deer.box(0.03, 0.18, 0.02, 0.54, 0.84, s * 0.06, 0x5a4632, { rz: -0.3, rx: s * 0.4 });
       scenery.deer = deer.finish();
+      // The other beasts, each along x and in white where the instance colours it, sized from life beside the deer.
+      // A horse, taller and longer, its mane, tail and lower legs dark.
+      const horse = G();
+      horse.box(0.98, 0.34, 0.28, 0, 0.52, 0, 0xffffff);
+      horse.box(0.18, 0.44, 0.16, 0.5, 0.66, 0, 0xffffff, { rz: -0.6 });
+      horse.box(0.32, 0.14, 0.13, 0.74, 0.92, 0, 0xffffff, { rz: 0.55 });
+      horse.box(0.3, 0.07, 0.05, 0.5, 0.92, 0, 0x2a2018, { rz: -0.6 });
+      for (const [x, z] of [[0.36, 0.08], [0.36, -0.08], [-0.36, 0.08], [-0.36, -0.08]]) { horse.box(0.08, 0.3, 0.08, x, 0.24, z, 0xffffff); horse.box(0.07, 0.25, 0.07, x, 0, z, 0x3a2e24); }
+      horse.box(0.08, 0.4, 0.07, -0.56, 0.38, 0, 0x2a2018, { rz: -0.3 });
+      scenery.horse = horse.finish();
+      // A sheep, a short woolly block with a dark face and legs.
+      const sheep = G();
+      sheep.box(0.58, 0.32, 0.38, 0, 0.22, 0, 0xffffff);
+      sheep.box(0.17, 0.17, 0.15, 0.36, 0.38, 0, 0x2e2a26, { rz: 0.3 });
+      for (const [x, z] of [[0.18, 0.1], [0.18, -0.1], [-0.18, 0.1], [-0.18, -0.1]]) sheep.box(0.05, 0.24, 0.05, x, 0, z, 0x2e2a26);
+      scenery.sheep = sheep.finish();
+      // A camel, a dromedary, high on long legs, with one hump and its neck carried out and up.
+      const camel = G();
+      camel.box(0.92, 0.34, 0.3, 0, 0.8, 0, 0xffffff);
+      camel.box(0.4, 0.24, 0.26, -0.04, 1.08, 0, 0xffffff);
+      camel.box(0.14, 0.56, 0.12, 0.56, 0.72, 0, 0xffffff, { rz: -1.0 });
+      camel.box(0.14, 0.34, 0.12, 0.8, 0.98, 0, 0xffffff, { rz: 0.2 });
+      camel.box(0.28, 0.12, 0.12, 0.88, 1.28, 0, 0xffffff);
+      for (const [x, z] of [[0.34, 0.09], [0.34, -0.09], [-0.34, 0.09], [-0.34, -0.09]]) camel.box(0.07, 0.8, 0.07, x, 0, z, 0xffffff);
+      camel.box(0.05, 0.3, 0.04, -0.5, 0.62, 0, 0x5a4632, { rz: -0.2 });
+      scenery.camel = camel.finish();
+      // A goat, smaller than a deer, with horns swept back and a beard.
+      const goat = G();
+      goat.box(0.6, 0.24, 0.22, 0, 0.34, 0, 0xffffff);
+      goat.box(0.13, 0.24, 0.11, 0.3, 0.48, 0, 0xffffff, { rz: -0.5 });
+      goat.box(0.2, 0.11, 0.1, 0.44, 0.66, 0, 0xffffff, { rz: 0.35 });
+      for (const s of [-1, 1]) goat.box(0.03, 0.18, 0.03, 0.38, 0.76, s * 0.04, 0x3a3028, { rz: 0.9 });
+      goat.box(0.04, 0.09, 0.04, 0.5, 0.56, 0, 0x3a3028);
+      for (const [x, z] of [[0.22, 0.07], [0.22, -0.07], [-0.22, 0.07], [-0.22, -0.07]]) goat.box(0.05, 0.34, 0.05, x, 0, z, 0xd8ccbc);
+      goat.box(0.08, 0.1, 0.06, -0.32, 0.5, 0, 0xffffff, { rz: 0.6 });
+      scenery.goat = goat.finish();
+      // A wolf, long and low, head and snout forward, ears up, its tail hung.
+      const wolf = G();
+      wolf.box(0.76, 0.22, 0.2, 0, 0.36, 0, 0xffffff);
+      wolf.box(0.24, 0.2, 0.18, 0.46, 0.44, 0, 0xffffff);
+      wolf.box(0.17, 0.09, 0.09, 0.64, 0.46, 0, 0xffffff);
+      for (const s of [-1, 1]) wolf.box(0.04, 0.09, 0.04, 0.44, 0.64, s * 0.05, 0xffffff);
+      wolf.box(0.36, 0.07, 0.07, -0.5, 0.26, 0, 0xffffff, { rz: 0.55 });
+      for (const [x, z] of [[0.27, 0.07], [0.27, -0.07], [-0.27, 0.07], [-0.27, -0.07]]) wolf.box(0.05, 0.36, 0.05, x, 0, z, 0xffffff);
+      scenery.wolf = wolf.finish();
+      // An elk of the snows, a big deer with broad flat antlers.
+      const elk = G();
+      elk.box(0.96, 0.32, 0.28, 0, 0.5, 0, 0xffffff);
+      elk.box(0.18, 0.36, 0.15, 0.48, 0.66, 0, 0xffffff, { rz: -0.5 });
+      elk.box(0.3, 0.14, 0.13, 0.68, 0.9, 0, 0xffffff, { rz: 0.3 });
+      for (const s of [-1, 1]) { elk.box(0.03, 0.1, 0.03, 0.62, 1.0, s * 0.06, 0x8a7458); elk.box(0.14, 0.03, 0.1, 0.6, 1.08, s * 0.12, 0xb8a488, { rx: s * 0.4 }); }
+      for (const [x, z] of [[0.34, 0.08], [0.34, -0.08], [-0.34, 0.08], [-0.34, -0.08]]) elk.box(0.07, 0.5, 0.07, x, 0, z, 0x4a3c30);
+      scenery.elk = elk.finish();
+      // A duck on the water, sitting low, its head green and its bill yellow.
+      const duck = G();
+      duck.box(0.3, 0.12, 0.15, 0, 0, 0, 0xffffff);
+      duck.box(0.08, 0.06, 0.1, -0.15, 0.06, 0, 0xffffff, { rz: 0.5 });
+      duck.box(0.1, 0.12, 0.09, 0.12, 0.1, 0, 0x2e5a3a);
+      duck.box(0.07, 0.03, 0.05, 0.2, 0.15, 0, 0xd8a838);
+      scenery.duck = duck.finish();
       // A small car, along x, with dark glass and wheels.
       const car = G();
       car.box(1.0, 0.26, 0.5, 0, 0.1, 0, 0xffffff);

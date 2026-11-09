@@ -565,8 +565,12 @@
             face = mix(face, bWash, dk ? 0.9 : 0.6);
             base = mix(base, face, isB);
             base = mix(base, dk ? vec3(0.45, 0.46, 0.48) : vec3(0.99), uSnowC * isB * step(0.6, dot(nV, uUpV)));
-            // Deer, cars, townsfolk and boats keep their own colours, as a light wash.
-            base = mix(base, mix(min(texture2D(t, vUv).rgb * (dk ? 1.15 : 1.3), vec3(1.0)), dk ? paperC : vec3(1.0), 0.12), isL);
+            // Beasts, cars, townsfolk and boats keep their own colours, as a light wash: their stuff, shaded as the
+            // scene lights them, so a low sun does not turn a white sheep pink.
+            vec3 lCol = texture2D(t, vUv).rgb, lMat = clamp(texture2D(tSubj, vUv).rgb * 2.0, 0.0, 1.0);
+            float lSh = clamp(dot(lCol, vec3(0.3, 0.59, 0.11)) * 1.6 + 0.3, 0.55, 1.05);
+            vec3 lWash = mix(min(lCol * (dk ? 1.15 : 1.3), vec3(1.0)), lMat * lSh, 0.75);
+            base = mix(base, mix(lWash, dk ? paperC : vec3(1.0), 0.12), isL);
             // Ore in the chosen style: 1 a soft ochre wash, 2 a stippled deposit, 3 engraved, 4 faceted, 5 gold leaf.
             vec3 OCH = vec3(0.92, 0.78, 0.45), GOLD_P = vec3(0.97, 0.9, 0.66), BRN = vec3(0.45, 0.32, 0.14);
             float up = dot(nV, uUpV);
@@ -696,7 +700,9 @@
             if (uStyle == 0) col = mix(col, col * vec3(1.04, 0.99, 0.9), (1.0 - smoothstep(0.05, 0.35, dens)) * 0.6);
           }
           // The sides' markings in coloured ink.
-          vec3 mk = texture2D(tSubj, uv).rgb;
+          // Life's colours in the mask are its own, not a side's.
+          vec4 mk4 = texture2D(tSubj, uv);
+          vec3 mk = mk4.rgb * smoothstep(0.02, 0.035, abs(mk4.a - 0.6));
           float mkx = max(mk.r, max(mk.g, mk.b));
           float mark = smoothstep(0.62, 0.8, mkx) * (1.0 - smoothstep(0.12, 0.42, length(e2)));
           vec3 hue = mk / max(0.001, mkx);
