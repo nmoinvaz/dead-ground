@@ -285,6 +285,7 @@ const Game = (() => {
     try { sk = JSON.parse(store.get(SK, 'null')); } catch (e) { sk = null; }
     if (!sk || !Rules.MAPS[sk.map] || !Array.isArray(sk.slots)) sk = { map: 'duel', seed: newSeed(), theme: store.get('dg-theme', 'desert'), slots: [{ kind: 'you' }, { kind: 'ai', level: store.get('dg-diff', 'regular') }] };
     if (!THEATRES[sk.theme]) sk.theme = 'desert';
+    sk.theme = Rules.theatreOf(sk.map, sk.theme);
     fitSlots(sk);
     // Slots to the map's number of seats, keeping the player and the computers in order, the player always in one.
     function fitSlots(o) {
@@ -734,7 +735,7 @@ const Game = (() => {
       $('map-about').textContent = m.about;
       $('seed').textContent = '#' + v.seed;
       $('reseed').disabled = !edit;
-      $('m-theme').querySelectorAll('button').forEach(b => { b.classList.toggle('on', b.dataset.v === v.theme); b.disabled = !edit && b.dataset.v !== v.theme; });
+      $('m-theme').querySelectorAll('button').forEach(b => { b.classList.toggle('on', b.dataset.v === v.theme); b.disabled = (!edit || !!m.theatre) && b.dataset.v !== v.theme; });
       $('m-age').querySelectorAll('button').forEach(b => { const on = +b.dataset.v === (v.age || 1); b.classList.toggle('on', on); b.disabled = !edit && !on; });
       $('age-about').textContent = Rules.AGES[v.age || 1].note;
       $('m-weather').querySelectorAll('button').forEach(b => { const on = b.dataset.v === (v.weather || 'random'); b.classList.toggle('on', on); b.disabled = !edit && !on; });
@@ -805,6 +806,8 @@ const Game = (() => {
       if (net.inRoom) { send(Object.assign({ t: 'set' }, o)); return; }
       Object.assign(sk, o);
       if (o.map) fitSlots(sk);
+      // A map that fixes its theatre keeps it.
+      sk.theme = Rules.theatreOf(sk.map, sk.theme);
       saveSk(); renderSetup();
     }
     function setSlot(i, kind, level) {

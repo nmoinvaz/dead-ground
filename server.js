@@ -343,6 +343,8 @@ export class Room {
       for (const k of this.socks) k.slot = next.findIndex(s => s.kind === 'human' && s.id === k.id);
       this.slots = next; this.map = m.map;
     }
+    // A map that fixes its theatre keeps it.
+    this.theme = R.theatreOf(this.map, this.theme);
     for (const s of this.slots) if (s.kind === 'human') s.ready = false;
     this.tell(); this.saveRoom();
   }

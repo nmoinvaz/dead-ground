@@ -1109,6 +1109,8 @@ const World = (() => {
       names = { rivers, hills, woods };
     }
 
+    // The map a game is played on, from its layout.
+    const mapOf = s => Rules.MAPS[Object.keys(Rules.MAPS).find(k => Rules.MAPS[k].layout === s.layout)] || {};
     function buildScenery() {
       const th = theme, rand = mulberry(M.seed + 11), sc = MODELS.scenery;
       const trees = M.scatter.filter(s => s.k === 'tree'), rocks = M.scatter.filter(s => s.k === 'rock');
@@ -1117,12 +1119,16 @@ const World = (() => {
       // Trees get their own line category, so the ink pass can wash their canopies, and sway in the wind. Up the
       // high slopes conifers take over from the theatre's own trees, mixed through a band of height.
       const pf = THEMES.winter.leaf.map(c => new THREE.Color(c));
+      // A map of cactus country grows saguaros and prickly pears in a grey sage green in place of trees, and no
+      // conifers on its heights.
+      const cactus = mapOf(S).flora === 'cactus', cf = [new THREE.Color(0x6f8f5e), new THREE.Color(0x8aa070)];
       const tl = trees.map(t => {
-        const g = terrainAt(M, t.x, t.y), hi = th.pine !== undefined && g > th.pine + (rand() - 0.5) * 2.4, L = hi ? pf : lf;
-        return { x: t.x, y: g - 0.04, z: t.y, s: t.s * 1.1, a: t.a, c: colA.copy(L[0]).lerp(L[1], rand()).getHex(), cell: t.c, hi };
+        const g = terrainAt(M, t.x, t.y), hi = !cactus && th.pine !== undefined && g > th.pine + (rand() - 0.5) * 2.4, L = cactus ? cf : hi ? pf : lf;
+        return { x: t.x, y: g - 0.04, z: t.y, s: t.s * 1.1, a: t.a, c: colA.copy(L[0]).lerp(L[1], rand()).getHex(), cell: t.c, hi, pear: cactus && rand() < 0.45 };
       });
       const meshes = [];
-      for (const [geo, list] of [[sc[th.tree], tl.filter(t => !t.hi)], [sc.conifer, tl.filter(t => t.hi)]]) {
+      const treeKinds = cactus ? [[sc.saguaro, tl.filter(t => !t.pear)], [sc.pear, tl.filter(t => t.pear)]] : [[sc[th.tree], tl.filter(t => !t.hi)], [sc.conifer, tl.filter(t => t.hi)]];
+      for (const [geo, list] of treeKinds) {
         if (!list.length) continue;
         const m = lineCat(instanced(geo, treeTint, list), 0.459, true);
         list.forEach((t, i) => { t.m = m; t.i = i; });

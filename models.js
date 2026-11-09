@@ -817,6 +817,21 @@ const Models = (() => {
       for (let i = 0; i < 4; i++) { const an = i * 1.57 + 0.4; k.cyl(0.015, 0.04, 0.6, Math.cos(an) * 0.18, 0.95, Math.sin(an) * 0.18, 0x5b4632, { seg: 4, rz: -Math.cos(an) * 0.7, rx: Math.sin(an) * 0.7 }); }
       k.add(new THREE.IcosahedronGeometry(0.62, 1), 0, 1.3, 0, 0xffffff, { sy: 0.28 });
       scenery.acacia = k.finish();
+      // Cactuses for the desert, in white where the instance colours them: a saguaro, a ribbed column with two arms
+      // bent up at the elbow, and a prickly pear, a clump of flat pads with red fruit on their rims.
+      const sg = G();
+      sg.cyl(0.085, 0.1, 1.55, 0, 0.775, 0, 0xffffff, { seg: 8 });
+      sg.sph(0.085, 0, 1.55, 0, 0xffffff, { seg: 8, rings: 5, top: true });
+      for (const [s, y0, len, up] of [[1, 0.62, 0.22, 0.5], [-1, 0.86, 0.18, 0.4]]) {
+        sg.cyl(0.055, 0.06, len, s * (0.085 + len / 2), y0, 0, 0xffffff, { seg: 6, rz: Math.PI / 2 });
+        sg.cyl(0.055, 0.055, up, s * (0.085 + len), y0 + up / 2, 0, 0xffffff, { seg: 6 });
+        sg.sph(0.055, s * (0.085 + len), y0 + up, 0, 0xffffff, { seg: 6, rings: 4, top: true });
+      }
+      scenery.saguaro = sg.finish();
+      const pp = G();
+      for (const [x, y, z, ry, rz] of [[0, 0.16, 0, 0.2, 0], [0.12, 0.36, 0.02, 0.9, -0.4], [-0.12, 0.34, -0.04, -0.6, 0.45], [0.02, 0.52, 0.08, 1.6, 0.1], [0.2, 0.18, -0.12, 2.2, -0.2]]) pp.sph(0.13, x, y, z, 0xffffff, { seg: 8, rings: 6, sx: 1, sy: 1.3, sz: 0.32, ry, rz });
+      for (const [x, y, z] of [[0.04, 0.69, 0.08], [0.2, 0.49, 0.04], [-0.2, 0.5, -0.04]]) pp.sph(0.025, x, y, z, 0xc23c4e, { seg: 5, rings: 3 });
+      scenery.pear = pp.finish();
       // Lesser plants, in white where the instance colours them. A bush of a few round clumps, a low scrub, a
       // juniper of small cones, a bed of reeds with their brown heads, and a palm with its fronds bowed out.
       const bush = G();
