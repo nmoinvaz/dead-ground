@@ -987,6 +987,55 @@ const Hud = (() => {
       }
       og.restore();
     }
+    // Drawn back, the map is framed as a survey sheet: a neat line round it with a heavy border outside, ticks every
+    // sixteen cells, and in the corner a cartouche with the map's name, its theatre, a scale bar and a north arrow.
+    // Everything is in the light paper's colours, as the dark scheme turns the overlay over.
+    const SHEET_THEATRE = { desert: 'Salt Flats', steppe: 'Black Steppe', winter: 'White Pass', any: 'Black Steppe' };
+    function drawSheet(s) {
+      const dist = world.cam.dist, k = smoothstepJS(78, 115, dist);
+      if (k <= 0) return;
+      const M = s.map, Wm = M.W, Hm = M.H, z = 1, c = [[0, 0], [Wm, 0], [Wm, Hm], [0, Hm]].map(([x, y]) => world.project(x, z, y));
+      const cx = c.reduce((a, p) => a + p[0], 0) / 4, cy = c.reduce((a, p) => a + p[1], 0) / 4;
+      const out = d => c.map(([x, y]) => { const dx = x - cx, dy = y - cy, m = Math.hypot(dx, dy) || 1; return [x + dx / m * d, y + dy / m * d]; });
+      const poly = (pts, w) => { og.lineWidth = w; og.beginPath(); pts.forEach(([x, y], i) => i ? og.lineTo(x, y) : og.moveTo(x, y)); og.closePath(); og.stroke(); };
+      og.save(); og.globalAlpha = k; og.setLineDash([]); og.strokeStyle = INK; og.lineJoin = 'miter';
+      poly(c, 1); poly(out(9), 0.8); poly(out(15), 3);
+      // Ticks along each edge, every sixteen cells, from the neat line out to the inner border.
+      og.lineWidth = 1;
+      for (let e = 0; e < 4; e++) {
+        const a = [[0, 0], [Wm, 0], [Wm, Hm], [0, Hm]][e], b = [[Wm, 0], [Wm, Hm], [0, Hm], [0, 0]][e], n = Math.round((e % 2 ? Hm : Wm) / 16);
+        for (let i = 1; i < n; i++) {
+          const t = i / n, p = world.project(a[0] + (b[0] - a[0]) * t, z, a[1] + (b[1] - a[1]) * t), dx = p[0] - cx, dy = p[1] - cy, m = Math.hypot(dx, dy) || 1;
+          og.beginPath(); og.moveTo(p[0], p[1]); og.lineTo(p[0] + dx / m * 9, p[1] + dy / m * 9); og.stroke();
+        }
+      }
+      // The cartouche, in the corner left of the key.
+      const bw = 236, bh = 92, bx = world.vw - 118 - 12 - bw, by = world.vh - bh - 14;
+      og.fillStyle = 'rgba(250,244,228,0.94)'; og.fillRect(bx, by, bw, bh);
+      og.lineWidth = 1; og.strokeRect(bx + 0.5, by + 0.5, bw - 1, bh - 1); og.lineWidth = 2; og.strokeRect(bx + 3.5, by + 3.5, bw - 7, bh - 7);
+      og.fillStyle = INK; og.textAlign = 'left'; og.textBaseline = 'alphabetic';
+      const map = Rules.MAPS[Object.keys(Rules.MAPS).find(kk => Rules.MAPS[kk].layout === s.layout)] || { name: s.layout };
+      og.font = `600 17px ${getComputedStyle(document.body).getPropertyValue('--display').trim() || 'serif'}`;
+      og.fillText(map.name.toUpperCase(), bx + 14, by + 26);
+      og.font = `italic 13px ${labelFont()}`;
+      og.fillText(`${SHEET_THEATRE[s.theatre] || ''} · Sheet ${s.seed % 1000}`, bx + 14, by + 44);
+      // The scale bar: half a kilometre a side of it, at fifty metres a cell, measured at the view's middle.
+      const u = world.ppu(world.cam.x, z, world.cam.y), seg = 5 * u, sx = bx + 14, sy = by + 62;
+      if (seg * 4 < bw - 70) {
+        for (let i = 0; i < 4; i++) { og.fillStyle = i % 2 ? '#faf4e4' : INK; og.fillRect(sx + i * seg, sy, seg, 5); }
+        og.lineWidth = 1; og.strokeRect(sx + 0.5, sy + 0.5, seg * 4, 5);
+        og.fillStyle = INK; og.font = `11px ${labelFont()}`; og.textAlign = 'center';
+        og.fillText('0', sx, sy + 17); og.fillText('500', sx + seg * 2, sy + 17); og.fillText('1000 m', sx + seg * 4 + 10, sy + 17);
+      }
+      // North: the way up the map, wherever the view is turned.
+      const p0 = world.project(Wm / 2, z, Hm / 2), p1 = world.project(Wm / 2, z, Hm / 2 - 10), ang = Math.atan2(p1[1] - p0[1], p1[0] - p0[0]), ax = bx + bw - 30, ay = by + bh / 2 + 4;
+      og.save(); og.translate(ax, ay); og.rotate(ang + Math.PI / 2);
+      og.fillStyle = INK; og.beginPath(); og.moveTo(0, -24); og.lineTo(7, 12); og.lineTo(0, 6); og.closePath(); og.fill();
+      og.fillStyle = '#faf4e4'; og.lineWidth = 1; og.beginPath(); og.moveTo(0, -24); og.lineTo(-7, 12); og.lineTo(0, 6); og.closePath(); og.fill(); og.stroke();
+      og.restore();
+      og.fillStyle = INK; og.font = `600 12px ${labelFont()}`; og.textAlign = 'center'; og.fillText('N', ax + Math.cos(ang) * 32, ay + Math.sin(ang) * 32 + 4);
+      og.restore();
+    }
     let puffC = null;
     const puffSheet = n => { if (!puffC || puffC.width < n) { puffC = document.createElement('canvas'); puffC.width = puffC.height = Math.max(n, 64); } return puffC; };
     function drawPuff(f) {
@@ -1457,6 +1506,7 @@ const Hud = (() => {
       // The map's own names, as a survey sheet letters them, once the view is drawn back far enough to want them:
       // rivers in spaced blue italics along their courses, hills in sepia beside a spot height, woods in green.
       if (inked() && world.names) drawNames(s, t >= 0 ? s.P[t] : null);
+      if (inked() && game.sheet !== false) drawSheet(s);
       // Towns show who holds them and how a capture is going. In pen and ink each is a pennant in its holder's
       // wash and a name lettered on the paper, a little larger as the view pulls back.
       const ink = inked(), dist = world.cam.dist;

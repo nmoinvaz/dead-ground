@@ -568,6 +568,11 @@ const Game = (() => {
     cramped.addEventListener?.('change', placeGauges);
     $('s-gauges').querySelectorAll('button').forEach(b => b.addEventListener('click', () => { gauges = b.dataset.v; store.set('dg-gauges', gauges); placeGauges(); audio.ui('click'); }));
     placeGauges();
+    // The survey sheet's frame round the map when drawn back, on unless turned off.
+    G.sheet = store.get('dg-sheet', 'on') !== 'off';
+    const showSheet = () => $('s-sheet').querySelectorAll('button').forEach(b => b.classList.toggle('on', (b.dataset.v === 'on') === G.sheet));
+    $('s-sheet').querySelectorAll('button').forEach(b => b.addEventListener('click', () => { G.sheet = b.dataset.v === 'on'; store.set('dg-sheet', G.sheet ? null : 'off'); showSheet(); audio.ui('click'); }));
+    showSheet();
     // The score on or off, apart from the sound button, which silences everything.
     const showMusic = () => $('s-music').querySelectorAll('button').forEach(b => b.classList.toggle('on', (b.dataset.v === 'on') === audio.musicOn));
     $('s-music').querySelectorAll('button').forEach(b => b.addEventListener('click', () => { audio.wake(); audio.setMusic(b.dataset.v === 'on'); showMusic(); audio.ui('click'); }));
