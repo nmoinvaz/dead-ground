@@ -417,6 +417,11 @@ const Game = (() => {
             drawRoster();
             break;
           case 'weather': if (G.playing) { const v = e.passed ? SKY_PASS[e.was] : SKY_SAY[e.kind]; if (v && !(e.kind === 'cloud' && e.was === 'clear')) { hud.say(v[0], v[1]); if (v[2]) audio.voice('sky', v[2], oldAge()); } } break;
+          // Lightning, and a fire it lights in a wood the player can see.
+          case 'strike':
+            if (G.playing) hud.strike(e);
+            if (G.playing && e.fire && G.team >= 0 && S.P[G.team].seen[Rules.cellOf(e.x, e.y)] && S.tick - (G.lastWildfire ?? -1e9) > 60 * Rules.HZ) { G.lastWildfire = S.tick; hud.say(e.dry ? 'Dry lightning has set a wood alight.' : 'Lightning has struck a tree.', 'bad'); }
+            break;
           case 'flood': if (G.playing) hud.say(e.on ? 'The rivers are up. The fords are closed.' : 'The rivers are down. The fords are open again.', e.on ? 'bad' : 'good'); break;
           case 'bridge': if (G.playing && G.team >= 0 && G.S.P[G.team].seen[Rules.cellOf(e.x, e.y)]) { hud.say(e.down ? 'A bridge is down.' : 'A bridge is open again.', e.down ? 'bad' : 'good'); if (e.down) audio.voice('bridge', 'Bridge destroyed', oldAge()); } break;
           case 'wave': if (G.playing && e.team !== G.team) hud.say('Radar shows the enemy massing to attack.', 'bad'); break;

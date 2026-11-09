@@ -1201,13 +1201,25 @@ const Hud = (() => {
       }
       og.restore();
     }
-    // Lightning in a storm, a jagged bolt for a moment, with thunder after.
-    let bolt = null, boltT = 4;
+    // Lightning, a jagged bolt for a moment, with thunder after, later the farther off it falls. A strike the rules
+    // make comes down where it lands; in a storm, now and then, one falls far off beyond the view.
+    let bolt = null, boltT = 8;
+    function boltTo(x, y) {
+      const x0 = x + (Math.random() - 0.5) * 120, pts = [[x0, -10]];
+      for (let i = 1; i <= 8; i++) { const k = i / 8; pts.push([x0 + (x - x0) * k + (i < 8 ? (Math.random() - 0.5) * 46 * (1 - k * 0.5) : 0), -10 + (y + 10) * k]); }
+      bolt = { pts, t: 0 };
+    }
+    function strike(e) {
+      const s = game.S, [x, y] = world.project(e.x, Rules.terrainAt(s.map, e.x, e.y), e.y), c = world.cam;
+      const on = x > -20 && y > 0 && x < world.vw + 20 && y < world.vh + 20, far = Math.hypot(e.x - c.x, e.y - c.y);
+      if (on && !bolt) boltTo(x, y);
+      if (far < 90) setTimeout(() => game.audio.play('thunder', { gain: Math.max(0.25, 1 - far / 110), vary: 0.2 }), 150 + far * 28);
+    }
     function drawLightning(dt) {
       const sk = world.sky;
       boltT -= dt;
       if (sk.storm > 0.6 && boltT <= 0 && !bolt) {
-        boltT = 3 + Math.random() * 7;
+        boltT = 10 + Math.random() * 14;
         const x = world.vw * (0.15 + Math.random() * 0.7), y = world.vh * (0.3 + Math.random() * 0.55), x0 = x + (Math.random() - 0.5) * 120, pts = [[x0, -10]];
         for (let i = 1; i <= 8; i++) { const k = i / 8; pts.push([x0 + (x - x0) * k + (i < 8 ? (Math.random() - 0.5) * 46 * (1 - k * 0.5) : 0), -10 + (y + 10) * k]); }
         bolt = { pts, t: 0 };
@@ -1857,7 +1869,7 @@ const Hud = (() => {
     }
 
     return {
-      state, pickTab, say, symbol, enter, leave, select, layoutMini, pop,
+      state, pickTab, say, symbol, enter, leave, select, layoutMini, pop, strike,
       reset() {
         state.sel = []; state.groups = {}; state.mode = null; state.marks = []; state.alerts = []; state.lastAlert = null; state.selKey = null; state.fogC = null; ro = { sup: -1, oil: -1 };
         world.setGhost(null); showBanner(''); $('log').textContent = '';

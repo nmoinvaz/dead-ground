@@ -2996,6 +2996,8 @@ const World = (() => {
     function event(e) {
       switch (e.t) {
         case 'shot': shotFX(e); startle(e.x, e.y, 4); break;
+        // Lightning leaves a burn where it strikes and startles everything near.
+        case 'strike': scorch(e.x, e.y, 0.7, 0.6); startle(e.x, e.y, 10); break;
         case 'hit': {
           const w = Rules.WEAPONS[e.w];
           startle(e.x, e.y, 8); flatten(e.x, e.y, w.splash || 0.6);
