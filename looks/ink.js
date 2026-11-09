@@ -18,14 +18,14 @@
       // Pen and ink, after the Lightning film and js/ink.js: tone in seven steps of hatching on cream paper, at
       // 45 and 135 degrees, then flat and upright lines for the darkest, each line a little uneven with small gaps.
       // The ground's hatching is pinned to the map so it pans with it, the units' redraws a few times a second.
-      const ink = new THREE.ShaderMaterial({ uniforms: { t: { value: null }, tSubj: { value: null }, tHeat: { value: null }, tPaper: { value: null }, res: { value: new THREE.Vector2(1, 1) }, uTime: { value: 0 }, uK: { value: 1 }, uOff: { value: new THREE.Vector2() }, uStyle: { value: 8 }, tNorm: { value: null }, tFogS: { value: null }, tLand: { value: null }, uSun2: { value: new THREE.Vector2(-1, 0) }, uUpV: { value: new THREE.Vector3(0, 1, 0) }, uRoad: { value: 0 }, uOre: { value: 0 }, uMarks: { value: 1 }, uRoadAge: { value: 4 },
+      const ink = new THREE.ShaderMaterial({ uniforms: { t: { value: null }, tSubj: { value: null }, tHeat: { value: null }, tPaper: { value: null }, res: { value: new THREE.Vector2(1, 1) }, uTime: { value: 0 }, uK: { value: 1 }, uOff: { value: new THREE.Vector2() }, uStyle: { value: 8 }, tNorm: { value: null }, tFogS: { value: null }, tLand: { value: null }, uSun2: { value: new THREE.Vector2(-1, 0) }, uUpV: { value: new THREE.Vector3(0, 1, 0) }, uRoad: { value: 0 }, uOre: { value: 0 }, uMarks: { value: 1 }, uRoadAge: { value: 4 }, uShadeH: { value: 1 }, tShade: { value: null },
         uWindS: { value: new THREE.Vector2() }, uView: { value: new THREE.Vector2(1, 0) }, tFx: { value: null }, tAnc: { value: null }, uDark: { value: 0 }, uInks: { value: 0 }, uFxs: { value: 0 }, uFire: { value: 0 }, uUnits: { value: 0 }, tH: SH.tH, uHSize: { value: new THREE.Vector2(1, 1) }, uHScale: { value: 1 }, uRain: { value: 0 }, uStorm: { value: 0 }, uSnowF: { value: 0 }, uSnowC: SH.uSnowC, uSnowLine: SH.uSnowLine, tFlow: SH.tFlow, tBrook: SH.tBrook, uFlora: SH.uFlora, uShow: SH.uShow, tCover: SH.tCover, uFieldK: SH.uFieldK, uFieldK2: SH.uFieldK2, uPark: SH.uPark, uBridgeKind: SH.uBridgeKind, uFog: { value: 0 }, uMist: { value: 0 }, uNight: { value: 0 }, uWet: { value: 0 },
         uDayMul: { value: new THREE.Vector3(1, 1, 1) }, uDayAdd: { value: new THREE.Vector3() }, uWaterL: { value: -0.15 }, uCloudK: SH.uCloudK, tMarks: SH.tMarks, uMap: SH.uMap,
         uCloud: SH.uCloud, uCloudT: SH.uCloudT, uSunW: SH.uSunDir, uCloudA: { value: 0 }, uCloudG: { value: 0 }, uRayK: { value: 0 }, uSand: { value: 0 },
         uInvVP: { value: new THREE.Matrix4() }, uW2S: { value: new THREE.Vector4(1, 0, 0, 1) }, uLev: { value: 1 }, tTerr: SH.tTerr, uBorder: SH.uBorder, uMe: { value: 0 },
         // Each side's colour as the anchor pass keeps it, its hue and how coloured it is, and its inks on either paper.
         uSideKey: { value: [...Array(8)].map(() => new THREE.Vector2()) }, uSideL: { value: [...Array(8)].map(() => new THREE.Vector3()) }, uSideD: { value: [...Array(8)].map(() => new THREE.Vector3()) }, uSideB: { value: [...Array(8)].map(() => new THREE.Vector3()) } }, vertexShader: vs, depthTest: false, depthWrite: false, fragmentShader: `
-        varying vec2 vUv; uniform sampler2D t, tSubj, tHeat, tPaper, tNorm, tFogS, tLand, tMarks; uniform float uMap; uniform vec2 res, uOff, uSun2, uWindS, uView, uHSize; uniform float uHScale, uFxs, uFire; uniform int uUnits, uInks; uniform float uDark; uniform sampler2D tH, tFx, tAnc, tFlow, tBrook, tCover; uniform vec4 uFieldK, uFieldK2; uniform vec4 uShow[4]; uniform vec4 uPark[16]; uniform vec3 uUpV, uDayMul, uDayAdd; uniform float uTime, uK, uRain, uStorm, uSnowF, uSnowC, uSnowLine, uFlora, uBridgeKind, uFog, uMist, uNight, uWet, uWaterL, uCloudK, uMarks, uRoadAge; uniform int uStyle, uRoad, uOre;
+        varying vec2 vUv; uniform sampler2D t, tSubj, tHeat, tPaper, tNorm, tFogS, tLand, tMarks; uniform float uMap; uniform vec2 res, uOff, uSun2, uWindS, uView, uHSize; uniform float uHScale, uFxs, uFire; uniform int uUnits, uInks; uniform float uDark; uniform sampler2D tH, tFx, tAnc, tFlow, tBrook, tCover, tShade; uniform vec4 uFieldK, uFieldK2; uniform vec4 uShow[4]; uniform vec4 uPark[16]; uniform vec3 uUpV, uDayMul, uDayAdd; uniform float uTime, uK, uRain, uStorm, uSnowF, uSnowC, uSnowLine, uFlora, uBridgeKind, uFog, uMist, uNight, uWet, uWaterL, uCloudK, uMarks, uRoadAge, uShadeH; uniform int uStyle, uRoad, uOre;
         uniform vec2 uSideKey[8]; uniform vec3 uSideL[8], uSideD[8], uSideB[8];
         uniform sampler2D tTerr; uniform float uBorder, uMe;
         uniform vec2 uCloud; uniform vec3 uSunW; uniform float uCloudT, uCloudA, uCloudG, uRayK, uSand;
@@ -855,7 +855,14 @@
             // The soft axonometric has almost no light, so the mixture keeps its shade faint on the land.
             // A unit's shade is a cool slate. Violet on cream turns rose under the dawn and dusk light.
             vec3 shW = mix(vec3(0.6, 0.64, 0.9), vec3(0.64, 0.7, 0.78), smoothstep(0.85, 0.95, s0)), shA = mix(vec3(0.03, 0.025, 0.07), vec3(0.02, 0.03, 0.05), smoothstep(0.85, 0.95, s0));
-            col = mix(col, col * shW + shA, shade * (uStyle == 8 ? mix(0.6, 0.3, gw) : mix(0.85, 0.6, gw)));
+            // Shadows on the open ground may instead be drawn as an engraver draws them, hatched along the light, so a
+            // low sun's long shadows read as lines. A light wash stays under the lines.
+            // The cast shadows come from their own pass, as the soft light leaves them faint in the picture.
+            float hK = uStyle == 8 && uShadeH > 0.5 ? gw * (1.0 - lit) * (1.0 - waterK) : 0.0;
+            float castS = hK > 0.0 ? smoothstep(0.15, 0.6, texture2D(tShade, vUv).a) * hK : 0.0;
+            col = mix(col, col * shW + shA, shade * (uStyle == 8 ? mix(0.6, 0.3, gw) : mix(0.85, 0.6, gw)) * (1.0 - 0.65 * hK));
+            col = mix(col, col * mix(vec3(1.0), shW, 0.5), castS * 0.35);
+            if (castS > 0.0) col = mix(col, dk ? vec3(0.62, 0.66, 0.8) : vec3(0.3, 0.32, 0.46), hatch(p, degrees(atan(uSun2.y, uSun2.x)), 3.2, 0.6, 71.0, 0.08) * castS * 0.48);
             if (uStyle == 0) col = mix(col, col * vec3(1.04, 0.99, 0.9), (1.0 - smoothstep(0.05, 0.35, dens)) * 0.6);
           }
           // The sides' markings in coloured ink.
@@ -1180,6 +1187,8 @@
           C.tFogS.value = K.fog();
           // Distance to the nearest road, per pixel of the land.
           C.tLand.value = K.land();
+          // The shadows cast on the land, when they are to be hatched.
+          if (K.opts.hatch) C.tShade.value = K.shadows(K.target('shade'));
           const q = new THREE.Vector3(CX, 1, CY).project(camera); C.uOff.value.set((q.x + 1) / 2 * w, (q.y + 1) / 2 * h);
           C.uStyle.value = K.opts.ink;
           K.landUniforms(C);
@@ -1193,7 +1202,7 @@
           C.uSun2.value.set((q1.x - q.x) * w, (q1.y - q.y) * h).normalize();
           // The world's up in view space, to tell a building's roof from its walls.
           C.uUpV.value.set(0, 1, 0).transformDirection(camera.matrixWorldInverse);
-          C.uRoad.value = K.opts.road; C.uOre.value = K.opts.ore; C.uMarks.value = K.marked ? 1 : 0; C.uRoadAge.value = K.age;
+          C.uRoad.value = K.opts.road; C.uOre.value = K.opts.ore; C.uMarks.value = K.marked ? 1 : 0; C.uRoadAge.value = K.age; C.uShadeH.value = K.opts.hatch ? 1 : 0;
           C.uRain.value = sky.rain; C.uStorm.value = sky.storm; C.uSnowF.value = sky.snow; C.uFog.value = sky.fog; C.uMist.value = sky.mist;
           C.uSand.value = sky.sand || 0; C.uCloudA.value = sky.cloudA || 0; C.uCloudG.value = sky.cloudG || 0; C.uRayK.value = sky.rayK || 0;
           C.uNight.value = sky.night; C.uWet.value = sky.wet; C.uDayMul.value.set(...sky.mul); C.uDayAdd.value.set(...sky.add);

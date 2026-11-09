@@ -573,6 +573,11 @@ const Game = (() => {
     const showSheet = () => $('s-sheet').querySelectorAll('button').forEach(b => b.classList.toggle('on', (b.dataset.v === 'on') === G.sheet));
     $('s-sheet').querySelectorAll('button').forEach(b => b.addEventListener('click', () => { G.sheet = b.dataset.v === 'on'; store.set('dg-sheet', G.sheet ? null : 'off'); showSheet(); audio.ui('click'); }));
     showSheet();
+    // Shadows on the land in pen hatching unless set to a wash.
+    let shadeHatch = store.get('dg-shade', 'hatch') !== 'wash';
+    const showShade = () => $('s-shade').querySelectorAll('button').forEach(b => b.classList.toggle('on', (b.dataset.v === 'hatch') === shadeHatch));
+    $('s-shade').querySelectorAll('button').forEach(b => b.addEventListener('click', () => { shadeHatch = b.dataset.v === 'hatch'; store.set('dg-shade', shadeHatch ? null : 'wash'); world.setShadeHatch(shadeHatch); showShade(); audio.ui('click'); }));
+    world.setShadeHatch(shadeHatch); showShade();
     // The score on or off, apart from the sound button, which silences everything.
     const showMusic = () => $('s-music').querySelectorAll('button').forEach(b => b.classList.toggle('on', (b.dataset.v === 'on') === audio.musicOn));
     $('s-music').querySelectorAll('button').forEach(b => b.addEventListener('click', () => { audio.wake(); audio.setMusic(b.dataset.v === 'on'); showMusic(); audio.ui('click'); }));

@@ -239,7 +239,7 @@ const World = (() => {
     }
     SH.tDetail.value = makeDetail();
 
-    let style = Looks.get('ink'), inkStyle = 8, roadStyle = 3, oreStyle = 4;
+    let style = Looks.get('ink'), inkStyle = 8, roadStyle = 3, oreStyle = 4, shadeHatch = true;
     // The kind of thing being drawn into the line passes, shared with the pass's material, and whether it sways.
     const catU = { value: 1 }, catRef = { mat: null, norm: null }, swayU = { value: 0 };
     const maskMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
@@ -407,6 +407,7 @@ const World = (() => {
       const run = (mat, target) => { quad.material = mat; renderer.setRenderTarget(target); renderer.render(qs, qc); };
       const pass = (src, dst, dx, dy) => { blur.uniforms.t.value = src; blur.uniforms.d.value.set(dx, dy); run(blur, dst); };
       // The scene drawn again into a buffer of its own, with an override material or a camera layer.
+      const shadowMat = new THREE.ShadowMaterial({ color: 0xffffff, opacity: 1 });
       function drawInto(target, clear, alpha, layer, material) {
         const was = camera.layers.mask;
         if (layer !== undefined) camera.layers.set(layer);
@@ -445,7 +446,7 @@ const World = (() => {
         get w() { return w; }, get h() { return h; }, get ldr() { return ldr; }, get a0() { return a0; }, get a1() { return a1; },
         get time() { return SH.uTime.value; }, get camera() { return camera; }, get cam() { return cam; }, get sky() { return sky; },
         get theme() { return theme; }, get viewTeam() { return viewTeam; }, get center() { return [CX, CY]; }, get waterLevel() { return (M ? M.water : -0.15) + waterRise.value; },
-        get opts() { return { ink: inkStyle, road: roadStyle, ore: oreStyle }; },
+        get opts() { return { ink: inkStyle, road: roadStyle, ore: oreStyle, hatch: shadeHatch }; },
         // Each side's colour, as numbers.
         get sides() { return teamCol.map(c => c.getHex()); },
         // Whether roads carry modern markings, from the Industrial Age.
@@ -460,6 +461,8 @@ const World = (() => {
         land: () => landInto(landMat, landRT),
         fx: () => drawInto(fxRT, 0x000000, 0, 2, null),
         anchor: () => { anchorRes.value.set(w, h); return drawInto(anchorRT, 0x000000, 0, 1, anchorMat); },
+        // The shadows cast on the land, in alpha, from the shadow map the frame has already drawn.
+        shadows: target => drawInto(target, 0x000000, 0, 3, shadowMat),
         landUniforms,
         paper: () => paperTex || (paperTex = Looks.paper(THREE)),
         target(name) {
@@ -687,6 +690,8 @@ const World = (() => {
     sun.castShadow = true;
     sun.shadow.mapSize.set(low ? 2048 : 4096, low ? 2048 : 4096);
     sun.shadow.bias = -0.0004; sun.shadow.normalBias = 0.03;
+    // The sun lights layer 3 too, where the land alone takes the shadows cast on it, for a look to draw them.
+    sun.layers.enable(3);
     scene.add(sun); scene.add(sun.target);
     const hemi = new THREE.HemisphereLight(0xffffff, 0x444444, 0.2);
     scene.add(hemi);
@@ -840,6 +845,7 @@ const World = (() => {
       const mat = patch(new THREE.MeshStandardMaterial({ map: tex, roughness: 0.96, metalness: 0, envMapIntensity: 0.55 }), { plain: true, terrain: true });
       terrainMesh = add(new THREE.Mesh(g, mat));
       terrainMesh.receiveShadow = true; terrainMesh.castShadow = false; terrainMesh.frustumCulled = false;
+      terrainMesh.layers.enable(3);
     }
 
     function buildWater() {
@@ -3702,6 +3708,8 @@ const World = (() => {
       },
       setInk(n) { inkStyle = n; },
       setRoad(n) { roadStyle = n; },
+      // Shadows on the land drawn as pen hatching, or as a wash.
+      setShadeHatch(on) { shadeHatch = !!on; },
       setOre(n) { oreStyle = n; },
       study(o) { studySky = o; },
       get look() { return style.name; },
