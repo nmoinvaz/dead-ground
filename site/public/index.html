@@ -596,8 +596,9 @@ body[data-look="ink"] .sheet { box-shadow: 4px 4px 0 var(--ink); }
       <div class="choice"><h2>Paper</h2><div id="s-scheme"><button data-v="light">Light</button><button data-v="dark">Dark</button><button data-v="auto">As the system</button></div></div>
       <div class="choice"><h2>Picture</h2><div id="s-pic" class="two"><button data-v="sharp">Sharp</button><button data-v="fast">Faster</button></div><p id="s-pic-note"></p></div>
       <div class="choice"><h2>Ore, oil and power</h2><div id="s-gauges" class="two"><button data-v="top">In the top bar</button><button data-v="side">In the sidebar</button></div></div>
+      <div class="choice"><h2>Map sheet frame</h2><div id="s-sheet" class="two"><button data-v="on">On</button><button data-v="off">Off</button></div></div>
       <div class="choice"><h2>Music</h2><div id="s-music" class="two"><button data-v="on">On</button><button data-v="off">Off</button></div></div>
-      <p id="build">Build f96d5e5 2026-11-08 22:43</p>
+      <p id="build">Build 9b7cbde 2026-11-08 22:50</p>
     </div>
     <div id="banner" hidden></div>
     <button id="update" hidden>A new version of Dead Ground is out. <b>Reload</b></button>
@@ -14003,10 +14004,11 @@ const Hud = (() => {
     function drawNames(s, P) {
       const dist = world.cam.dist, k = smoothstepJS(38, 70, dist);
       if (k <= 0) return;
-      const N = world.names, seen = (x, y) => !P || P.seen[Rules.cellOf(x, y)], dk = blastDark || document.body.dataset.scheme === 'dark';
+      // The dark scheme turns the overlay over, so these are the light paper's colours either way.
+      const N = world.names, seen = (x, y) => !P || P.seen[Rules.cellOf(x, y)];
       const fs = Math.round(12 + smoothstepJS(70, 200, dist) * 5);
       og.save(); og.globalAlpha = k; og.setLineDash([]); og.textAlign = 'center'; og.textBaseline = 'middle'; og.lineJoin = 'round';
-      og.strokeStyle = dk ? 'rgba(35,32,27,0.85)' : 'rgba(250,244,228,0.9)'; og.lineWidth = 3;
+      og.strokeStyle = 'rgba(250,244,228,0.9)'; og.lineWidth = 3;
       og.font = `italic 500 ${fs + 1}px ${labelFont()}`;
       for (const r of N.rivers) {
         if (!r.pts.some(p => seen(p[0], p[1]))) continue;
@@ -14018,24 +14020,73 @@ const Hud = (() => {
         let len = 0;
         for (let i = 1; i < best.length; i++) len += Math.hypot(best[i][0] - best[i - 1][0], best[i][1] - best[i - 1][1]);
         const n = len > 900 ? 2 : 1;
-        for (let j = 0; j < n; j++) textAlong(r.name, best.slice(Math.floor(j * best.length / n), Math.floor((j + 1) * best.length / n)), fs + 1, dk ? '#8fb0ef' : '#23458c', fs * 0.35);
+        for (let j = 0; j < n; j++) textAlong(r.name, best.slice(Math.floor(j * best.length / n), Math.floor((j + 1) * best.length / n)), fs + 1, '#23458c', fs * 0.35);
       }
       og.font = `italic 500 ${fs}px ${labelFont()}`;
       for (const h of N.hills) {
         if (!seen(h.x, h.y)) continue;
         const [x, y] = world.project(h.x, terrainAt(s.map, h.x, h.y), h.y);
-        og.fillStyle = dk ? '#d8c8a8' : '#5a4632';
+        og.fillStyle = '#5a4632';
         og.beginPath(); og.moveTo(x, y - 4); og.lineTo(x + 3.5, y + 2); og.lineTo(x - 3.5, y + 2); og.closePath(); og.fill();
         og.strokeText(h.name, x, y + fs * 0.95); og.fillText(h.name, x, y + fs * 0.95);
         const spot = String(Math.round(h.z * 52 + 120));
         og.font = `500 ${fs - 3}px ${labelFont()}`; og.strokeText(spot, x + 14, y - 2); og.fillText(spot, x + 14, y - 2); og.font = `italic 500 ${fs}px ${labelFont()}`;
       }
-      og.fillStyle = dk ? '#a8c898' : '#3a5a2e';
+      og.fillStyle = '#3a5a2e';
       for (const w of N.woods) {
         if (!seen(w.x, w.y)) continue;
         const [x, y] = world.project(w.x, terrainAt(s.map, w.x, w.y) + 1.5, w.y);
         og.strokeText(w.name, x, y); og.fillText(w.name, x, y);
       }
+      og.restore();
+    }
+    // Drawn back, the map is framed as a survey sheet: a neat line round it with a heavy border outside, ticks every
+    // sixteen cells, and in the corner a cartouche with the map's name, its theatre, a scale bar and a north arrow.
+    // Everything is in the light paper's colours, as the dark scheme turns the overlay over.
+    const SHEET_THEATRE = { desert: 'Salt Flats', steppe: 'Black Steppe', winter: 'White Pass', any: 'Black Steppe' };
+    function drawSheet(s) {
+      const dist = world.cam.dist, k = smoothstepJS(78, 115, dist);
+      if (k <= 0) return;
+      const M = s.map, Wm = M.W, Hm = M.H, z = 1, c = [[0, 0], [Wm, 0], [Wm, Hm], [0, Hm]].map(([x, y]) => world.project(x, z, y));
+      const cx = c.reduce((a, p) => a + p[0], 0) / 4, cy = c.reduce((a, p) => a + p[1], 0) / 4;
+      const out = d => c.map(([x, y]) => { const dx = x - cx, dy = y - cy, m = Math.hypot(dx, dy) || 1; return [x + dx / m * d, y + dy / m * d]; });
+      const poly = (pts, w) => { og.lineWidth = w; og.beginPath(); pts.forEach(([x, y], i) => i ? og.lineTo(x, y) : og.moveTo(x, y)); og.closePath(); og.stroke(); };
+      og.save(); og.globalAlpha = k; og.setLineDash([]); og.strokeStyle = INK; og.lineJoin = 'miter';
+      poly(c, 1); poly(out(9), 0.8); poly(out(15), 3);
+      // Ticks along each edge, every sixteen cells, from the neat line out to the inner border.
+      og.lineWidth = 1;
+      for (let e = 0; e < 4; e++) {
+        const a = [[0, 0], [Wm, 0], [Wm, Hm], [0, Hm]][e], b = [[Wm, 0], [Wm, Hm], [0, Hm], [0, 0]][e], n = Math.round((e % 2 ? Hm : Wm) / 16);
+        for (let i = 1; i < n; i++) {
+          const t = i / n, p = world.project(a[0] + (b[0] - a[0]) * t, z, a[1] + (b[1] - a[1]) * t), dx = p[0] - cx, dy = p[1] - cy, m = Math.hypot(dx, dy) || 1;
+          og.beginPath(); og.moveTo(p[0], p[1]); og.lineTo(p[0] + dx / m * 9, p[1] + dy / m * 9); og.stroke();
+        }
+      }
+      // The cartouche, in the corner left of the key.
+      const bw = 236, bh = 92, bx = world.vw - 118 - 12 - bw, by = world.vh - bh - 14;
+      og.fillStyle = 'rgba(250,244,228,0.94)'; og.fillRect(bx, by, bw, bh);
+      og.lineWidth = 1; og.strokeRect(bx + 0.5, by + 0.5, bw - 1, bh - 1); og.lineWidth = 2; og.strokeRect(bx + 3.5, by + 3.5, bw - 7, bh - 7);
+      og.fillStyle = INK; og.textAlign = 'left'; og.textBaseline = 'alphabetic';
+      const map = Rules.MAPS[Object.keys(Rules.MAPS).find(kk => Rules.MAPS[kk].layout === s.layout)] || { name: s.layout };
+      og.font = `600 17px ${getComputedStyle(document.body).getPropertyValue('--display').trim() || 'serif'}`;
+      og.fillText(map.name.toUpperCase(), bx + 14, by + 26);
+      og.font = `italic 13px ${labelFont()}`;
+      og.fillText(`${SHEET_THEATRE[s.theatre] || ''} · Sheet ${s.seed % 1000}`, bx + 14, by + 44);
+      // The scale bar: half a kilometre a side of it, at fifty metres a cell, measured at the view's middle.
+      const u = world.ppu(world.cam.x, z, world.cam.y), seg = 5 * u, sx = bx + 14, sy = by + 62;
+      if (seg * 4 < bw - 70) {
+        for (let i = 0; i < 4; i++) { og.fillStyle = i % 2 ? '#faf4e4' : INK; og.fillRect(sx + i * seg, sy, seg, 5); }
+        og.lineWidth = 1; og.strokeRect(sx + 0.5, sy + 0.5, seg * 4, 5);
+        og.fillStyle = INK; og.font = `11px ${labelFont()}`; og.textAlign = 'center';
+        og.fillText('0', sx, sy + 17); og.fillText('500', sx + seg * 2, sy + 17); og.fillText('1000 m', sx + seg * 4 + 10, sy + 17);
+      }
+      // North: the way up the map, wherever the view is turned.
+      const p0 = world.project(Wm / 2, z, Hm / 2), p1 = world.project(Wm / 2, z, Hm / 2 - 10), ang = Math.atan2(p1[1] - p0[1], p1[0] - p0[0]), ax = bx + bw - 30, ay = by + bh / 2 + 4;
+      og.save(); og.translate(ax, ay); og.rotate(ang + Math.PI / 2);
+      og.fillStyle = INK; og.beginPath(); og.moveTo(0, -24); og.lineTo(7, 12); og.lineTo(0, 6); og.closePath(); og.fill();
+      og.fillStyle = '#faf4e4'; og.lineWidth = 1; og.beginPath(); og.moveTo(0, -24); og.lineTo(-7, 12); og.lineTo(0, 6); og.closePath(); og.fill(); og.stroke();
+      og.restore();
+      og.fillStyle = INK; og.font = `600 12px ${labelFont()}`; og.textAlign = 'center'; og.fillText('N', ax + Math.cos(ang) * 32, ay + Math.sin(ang) * 32 + 4);
       og.restore();
     }
     let puffC = null;
@@ -14051,7 +14102,8 @@ const Hud = (() => {
       const n = 5 + (f.seed * 7 % 3 | 0), lobes = [], S2 = Math.ceil(R * 2.6), c = puffSheet(S2), g = c.getContext('2d');
       for (let i = 0; i < n; i++) { const a = i / n * 6.283 + rnd(f.seed, i) * 0.9, d = R * (0.35 + 0.3 * rnd(f.seed, i + 5)); lobes.push([Math.cos(a) * d, Math.sin(a) * d * 0.8 - R * 0.1, R * (0.42 + 0.25 * rnd(f.seed, i + 9))]); }
       lobes.push([0, 0, R * 0.55]);
-      const dark = blastDark, fill = f.air ? (dark ? '#1c1a18' : '#4a4540') : (dark ? '#6a6258' : '#cdc3b2'), line = f.air ? (dark ? '#8a847a' : '#1a1512') : (dark ? '#d8d0c0' : '#2a221c');
+      // The dark scheme turns the overlay over, so the cloud is drawn in the light paper's colours either way.
+      const fill = f.air ? '#4a4540' : '#cdc3b2', line = f.air ? '#1a1512' : '#2a221c';
       g.clearRect(0, 0, S2, S2); g.save(); g.translate(S2 / 2, S2 / 2);
       g.strokeStyle = line; g.lineWidth = Math.max(1.2, R * 0.08);
       for (const [cx, cy, r] of lobes) { g.beginPath(); g.arc(cx, cy, r, 0, 6.283); g.stroke(); }
@@ -14507,6 +14559,7 @@ const Hud = (() => {
       // The map's own names, as a survey sheet letters them, once the view is drawn back far enough to want them:
       // rivers in spaced blue italics along their courses, hills in sepia beside a spot height, woods in green.
       if (inked() && world.names) drawNames(s, t >= 0 ? s.P[t] : null);
+      if (inked() && game.sheet !== false) drawSheet(s);
       // Towns show who holds them and how a capture is going. In pen and ink each is a pennant in its holder's
       // wash and a name lettered on the paper, a little larger as the view pulls back.
       const ink = inked(), dist = world.cam.dist;
@@ -17120,6 +17173,11 @@ const Game = (() => {
     cramped.addEventListener?.('change', placeGauges);
     $('s-gauges').querySelectorAll('button').forEach(b => b.addEventListener('click', () => { gauges = b.dataset.v; store.set('dg-gauges', gauges); placeGauges(); audio.ui('click'); }));
     placeGauges();
+    // The survey sheet's frame round the map when drawn back, on unless turned off.
+    G.sheet = store.get('dg-sheet', 'on') !== 'off';
+    const showSheet = () => $('s-sheet').querySelectorAll('button').forEach(b => b.classList.toggle('on', (b.dataset.v === 'on') === G.sheet));
+    $('s-sheet').querySelectorAll('button').forEach(b => b.addEventListener('click', () => { G.sheet = b.dataset.v === 'on'; store.set('dg-sheet', G.sheet ? null : 'off'); showSheet(); audio.ui('click'); }));
+    showSheet();
     // The score on or off, apart from the sound button, which silences everything.
     const showMusic = () => $('s-music').querySelectorAll('button').forEach(b => b.classList.toggle('on', (b.dataset.v === 'on') === audio.musicOn));
     $('s-music').querySelectorAll('button').forEach(b => b.addEventListener('click', () => { audio.wake(); audio.setMusic(b.dataset.v === 'on'); showMusic(); audio.ui('click'); }));
