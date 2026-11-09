@@ -595,7 +595,7 @@ body[data-look="ink"] .sheet { box-shadow: 4px 4px 0 var(--ink); }
       <div class="choice"><h2>Picture</h2><div id="s-pic" class="two"><button data-v="sharp">Sharp</button><button data-v="fast">Faster</button></div><p id="s-pic-note"></p></div>
       <div class="choice"><h2>Ore, oil and power</h2><div id="s-gauges" class="two"><button data-v="side">In the sidebar</button><button data-v="top">In the top bar</button></div></div>
       <div class="choice"><h2>Music</h2><div id="s-music" class="two"><button data-v="on">On</button><button data-v="off">Off</button></div></div>
-      <p id="build">Build 1b9c49a 2026-11-08 17:18</p>
+      <p id="build">Build e399e13 2026-11-08 17:35</p>
     </div>
     <div id="banner" hidden></div>
     <button id="update" hidden>A new version of Dead Ground is out. <b>Reload</b></button>
@@ -5940,6 +5940,66 @@ const Models = (() => {
       deer.box(0.1, 0.07, 0.08, -0.45, 0.52, 0, 0xf4f0e8);
       for (const s of [-1, 1]) deer.box(0.03, 0.18, 0.02, 0.54, 0.84, s * 0.06, 0x5a4632, { rz: -0.3, rx: s * 0.4 });
       scenery.deer = deer.finish();
+      // The other beasts, each along x and in white where the instance colours it, sized from life beside the deer.
+      // A horse, taller and longer, its mane, tail and lower legs dark.
+      const horse = G();
+      horse.box(0.98, 0.34, 0.28, 0, 0.52, 0, 0xffffff);
+      horse.box(0.18, 0.44, 0.16, 0.5, 0.66, 0, 0xffffff, { rz: -0.6 });
+      horse.box(0.32, 0.14, 0.13, 0.74, 0.92, 0, 0xffffff, { rz: 0.55 });
+      horse.box(0.3, 0.07, 0.05, 0.5, 0.92, 0, 0x2a2018, { rz: -0.6 });
+      for (const [x, z] of [[0.36, 0.08], [0.36, -0.08], [-0.36, 0.08], [-0.36, -0.08]]) { horse.box(0.08, 0.3, 0.08, x, 0.24, z, 0xffffff); horse.box(0.07, 0.25, 0.07, x, 0, z, 0x3a2e24); }
+      horse.box(0.08, 0.4, 0.07, -0.56, 0.38, 0, 0x2a2018, { rz: -0.3 });
+      scenery.horse = horse.finish();
+      // A sheep, a short woolly block with a dark face and legs.
+      const sheep = G();
+      sheep.box(0.58, 0.32, 0.38, 0, 0.22, 0, 0xffffff);
+      sheep.box(0.17, 0.17, 0.15, 0.36, 0.38, 0, 0x2e2a26, { rz: 0.3 });
+      for (const [x, z] of [[0.18, 0.1], [0.18, -0.1], [-0.18, 0.1], [-0.18, -0.1]]) sheep.box(0.05, 0.24, 0.05, x, 0, z, 0x2e2a26);
+      scenery.sheep = sheep.finish();
+      // A camel, a dromedary, high on long legs, with one hump and its neck carried out and up.
+      const camel = G();
+      camel.box(0.92, 0.34, 0.3, 0, 0.8, 0, 0xffffff);
+      camel.box(0.4, 0.24, 0.26, -0.04, 1.08, 0, 0xffffff);
+      camel.box(0.14, 0.56, 0.12, 0.56, 0.72, 0, 0xffffff, { rz: -1.0 });
+      camel.box(0.14, 0.34, 0.12, 0.8, 0.98, 0, 0xffffff, { rz: 0.2 });
+      camel.box(0.28, 0.12, 0.12, 0.88, 1.28, 0, 0xffffff);
+      for (const [x, z] of [[0.34, 0.09], [0.34, -0.09], [-0.34, 0.09], [-0.34, -0.09]]) camel.box(0.07, 0.8, 0.07, x, 0, z, 0xffffff);
+      camel.box(0.05, 0.3, 0.04, -0.5, 0.62, 0, 0x5a4632, { rz: -0.2 });
+      scenery.camel = camel.finish();
+      // A goat, smaller than a deer, with horns swept back and a beard.
+      const goat = G();
+      goat.box(0.6, 0.24, 0.22, 0, 0.34, 0, 0xffffff);
+      goat.box(0.13, 0.24, 0.11, 0.3, 0.48, 0, 0xffffff, { rz: -0.5 });
+      goat.box(0.2, 0.11, 0.1, 0.44, 0.66, 0, 0xffffff, { rz: 0.35 });
+      for (const s of [-1, 1]) goat.box(0.03, 0.18, 0.03, 0.38, 0.76, s * 0.04, 0x3a3028, { rz: 0.9 });
+      goat.box(0.04, 0.09, 0.04, 0.5, 0.56, 0, 0x3a3028);
+      for (const [x, z] of [[0.22, 0.07], [0.22, -0.07], [-0.22, 0.07], [-0.22, -0.07]]) goat.box(0.05, 0.34, 0.05, x, 0, z, 0xd8ccbc);
+      goat.box(0.08, 0.1, 0.06, -0.32, 0.5, 0, 0xffffff, { rz: 0.6 });
+      scenery.goat = goat.finish();
+      // A wolf, long and low, head and snout forward, ears up, its tail hung.
+      const wolf = G();
+      wolf.box(0.76, 0.22, 0.2, 0, 0.36, 0, 0xffffff);
+      wolf.box(0.24, 0.2, 0.18, 0.46, 0.44, 0, 0xffffff);
+      wolf.box(0.17, 0.09, 0.09, 0.64, 0.46, 0, 0xffffff);
+      for (const s of [-1, 1]) wolf.box(0.04, 0.09, 0.04, 0.44, 0.64, s * 0.05, 0xffffff);
+      wolf.box(0.36, 0.07, 0.07, -0.5, 0.26, 0, 0xffffff, { rz: 0.55 });
+      for (const [x, z] of [[0.27, 0.07], [0.27, -0.07], [-0.27, 0.07], [-0.27, -0.07]]) wolf.box(0.05, 0.36, 0.05, x, 0, z, 0xffffff);
+      scenery.wolf = wolf.finish();
+      // An elk of the snows, a big deer with broad flat antlers.
+      const elk = G();
+      elk.box(0.96, 0.32, 0.28, 0, 0.5, 0, 0xffffff);
+      elk.box(0.18, 0.36, 0.15, 0.48, 0.66, 0, 0xffffff, { rz: -0.5 });
+      elk.box(0.3, 0.14, 0.13, 0.68, 0.9, 0, 0xffffff, { rz: 0.3 });
+      for (const s of [-1, 1]) { elk.box(0.03, 0.1, 0.03, 0.62, 1.0, s * 0.06, 0x8a7458); elk.box(0.14, 0.03, 0.1, 0.6, 1.08, s * 0.12, 0xb8a488, { rx: s * 0.4 }); }
+      for (const [x, z] of [[0.34, 0.08], [0.34, -0.08], [-0.34, 0.08], [-0.34, -0.08]]) elk.box(0.07, 0.5, 0.07, x, 0, z, 0x4a3c30);
+      scenery.elk = elk.finish();
+      // A duck on the water, sitting low, its head green and its bill yellow.
+      const duck = G();
+      duck.box(0.3, 0.12, 0.15, 0, 0, 0, 0xffffff);
+      duck.box(0.08, 0.06, 0.1, -0.15, 0.06, 0, 0xffffff, { rz: 0.5 });
+      duck.box(0.1, 0.12, 0.09, 0.12, 0.1, 0, 0x2e5a3a);
+      duck.box(0.07, 0.03, 0.05, 0.2, 0.15, 0, 0xd8a838);
+      scenery.duck = duck.finish();
       // A small car, along x, with dark glass and wheels.
       const car = G();
       car.box(1.0, 0.26, 0.5, 0, 0.1, 0, 0xffffff);
@@ -8212,8 +8272,12 @@ if (typeof module !== 'undefined') module.exports = Looks;
             face = mix(face, bWash, dk ? 0.9 : 0.6);
             base = mix(base, face, isB);
             base = mix(base, dk ? vec3(0.45, 0.46, 0.48) : vec3(0.99), uSnowC * isB * step(0.6, dot(nV, uUpV)));
-            // Deer, cars, townsfolk and boats keep their own colours, as a light wash.
-            base = mix(base, mix(min(texture2D(t, vUv).rgb * (dk ? 1.15 : 1.3), vec3(1.0)), dk ? paperC : vec3(1.0), 0.12), isL);
+            // Beasts, cars, townsfolk and boats keep their own colours, as a light wash: their stuff, shaded as the
+            // scene lights them, so a low sun does not turn a white sheep pink.
+            vec3 lCol = texture2D(t, vUv).rgb, lMat = clamp(texture2D(tSubj, vUv).rgb * 2.0, 0.0, 1.0);
+            float lSh = clamp(dot(lCol, vec3(0.3, 0.59, 0.11)) * 1.6 + 0.3, 0.55, 1.05);
+            vec3 lWash = mix(min(lCol * (dk ? 1.15 : 1.3), vec3(1.0)), lMat * lSh, 0.75);
+            base = mix(base, mix(lWash, dk ? paperC : vec3(1.0), 0.12), isL);
             // Ore in the chosen style: 1 a soft ochre wash, 2 a stippled deposit, 3 engraved, 4 faceted, 5 gold leaf.
             vec3 OCH = vec3(0.92, 0.78, 0.45), GOLD_P = vec3(0.97, 0.9, 0.66), BRN = vec3(0.45, 0.32, 0.14);
             float up = dot(nV, uUpV);
@@ -8343,7 +8407,9 @@ if (typeof module !== 'undefined') module.exports = Looks;
             if (uStyle == 0) col = mix(col, col * vec3(1.04, 0.99, 0.9), (1.0 - smoothstep(0.05, 0.35, dens)) * 0.6);
           }
           // The sides' markings in coloured ink.
-          vec3 mk = texture2D(tSubj, uv).rgb;
+          // Life's colours in the mask are its own, not a side's.
+          vec4 mk4 = texture2D(tSubj, uv);
+          vec3 mk = mk4.rgb * smoothstep(0.02, 0.035, abs(mk4.a - 0.6));
           float mkx = max(mk.r, max(mk.g, mk.b));
           float mark = smoothstep(0.62, 0.8, mkx) * (1.0 - smoothstep(0.12, 0.42, length(e2)));
           vec3 hue = mk / max(0.001, mkx);
@@ -8734,23 +8800,23 @@ const World = (() => {
   // Every theatre is shot at sunset. The sun sits low off the left of the screen, so shadows run long
   // across the ground, and the shade is lit by a violet sky and warm bounce from the earth.
   const SUN = (az, el) => { const x = Math.cos(az), z = Math.sin(az), c = Math.cos(el); return [x * c, Math.sin(el), z * c]; };
-  // Each theatre's trees, the height up the slopes where conifers take over from them, and the height above which
-  // snow lies the year round.
+  // Each theatre's trees, the height up the slopes where conifers take over from them, the height above which
+  // snow lies the year round, and its beasts: the herds in their shares, the wolf packs, and whether ducks swim.
   const THEMES = {
     desert: {
-      name: 'Salt Flats', tree: 'acacia', pine: 6, snow: 10.8, sun: SUN(-0.46, 0.3), sunColor: 0xffb36e, sunPower: 3.9,
+      name: 'Salt Flats', tree: 'acacia', pine: 6, snow: 10.8, fauna: [['camel', 2], ['gazelle', 3], ['goat', 1]], wolves: 0, ducks: false, sun: SUN(-0.46, 0.3), sunColor: 0xffb36e, sunPower: 3.9,
       hemi: [0x5e6cb4, 0x7a4c34, 0.9], env: [0x34437e, 0xffa866, 0x3e2a22], haze: 0xf0a878, hazeK: 0.008, shroud: 0x100a0a,
       ground: [0xd2b08a, 0xbf9670], patch: 0xa69a6a, rock: 0xa86a52, bank: 0x8a7058, road: 0x76604e, stain: 0x9a5a30,
       water: [0x3f8c96, 0x17404e], leaf: [0x6a7438, 0x8a8440], dust: [0.95, 0.74, 0.55], smoke: [0.17, 0.13, 0.12], ripple: 1,
     },
     steppe: {
-      name: 'Black Steppe', tree: 'broad', pine: 5, snow: 9, sun: SUN(-0.5, 0.27), sunColor: 0xffa862, sunPower: 3.8,
+      name: 'Black Steppe', tree: 'broad', pine: 5, snow: 9, fauna: [['deer', 2], ['horse', 2], ['sheep', 2]], wolves: 1, ducks: true, sun: SUN(-0.5, 0.27), sunColor: 0xffa862, sunPower: 3.8,
       hemi: [0x5a66ae, 0x6e4a30, 0.88], env: [0x32407a, 0xff9e5c, 0x34241a], haze: 0xe8a07a, hazeK: 0.008, shroud: 0x0f0a09,
       ground: [0xb59a62, 0x8e744a], patch: 0xcaa860, rock: 0x7e6252, bank: 0x5e4c3c, road: 0x5e4a3a, stain: 0x8a4e28,
       water: [0x3b7a80, 0x163a46], leaf: [0x56622c, 0x84702c], dust: [0.8, 0.66, 0.5], smoke: [0.15, 0.12, 0.11], ripple: 0,
     },
     winter: {
-      name: 'White Pass', tree: 'conifer', snow: 6.5, sun: SUN(-0.42, 0.25), sunColor: 0xffae80, sunPower: 3.3,
+      name: 'White Pass', tree: 'conifer', snow: 6.5, fauna: [['elk', 3], ['goat', 2], ['deer', 1]], wolves: 2, ducks: true, sun: SUN(-0.42, 0.25), sunColor: 0xffae80, sunPower: 3.3,
       hemi: [0x6c74c0, 0x9a7a74, 0.92], env: [0x3e4a8c, 0xffb084, 0x584450], haze: 0xf0b49c, hazeK: 0.008, shroud: 0x0f0b0e,
       ground: [0xf0e6e2, 0xdcd0cc], patch: 0xc8bcb8, rock: 0x7a6466, bank: 0x8a7a7a, road: 0x6c5e5a, stain: 0x8a5e48,
       water: [0x4a8494, 0x1c3e50], leaf: [0x2e4436, 0x42583e], dust: [0.96, 0.92, 0.92], smoke: [0.17, 0.15, 0.16], ripple: 0,
@@ -8993,7 +9059,8 @@ const World = (() => {
           float n = fract(sin(dot(vUv + fract(uTime), vec2(12.9898, 78.233))) * 43758.5453);
           gl_FragColor = vec4(c + (n - 0.5) * 0.018, 1.0); }` });
       // The units and buildings for the outlines: white where they stand, their side's colour on their markings.
-      // A building's own stuff, thatch, tile, stone or brick, goes in at half strength, below any marking's.
+      // A building's own stuff, thatch, tile, stone or brick, goes in at half strength, below any marking's, as do
+      // the colours of life on the land.
       const markMat = catRef.mat = new THREE.ShaderMaterial({ vertexColors: true, uniforms: { uCat: catU, uSwayOn: swayU, uTime: SH.uTime, uWind: SH.uWind }, vertexShader: `
         attribute float aTeam; varying vec3 vC; varying vec3 vM; varying float vT; uniform float uSwayOn, uTime; uniform vec2 uWind;
         ${SWAY}
@@ -9016,6 +9083,8 @@ const World = (() => {
           vT = aTeam;
           gl_Position = projectionMatrix * modelViewMatrix * p;
         }`, fragmentShader: `uniform float uCat; varying vec3 vC; varying vec3 vM; varying float vT; void main() { vec3 c = uCat > 0.6 ? vC * (vT > 0.9 ? 1.0 : uCat > 0.9 ? 0.45 : 0.0) : uCat > 0.52 && uCat < 0.58 ? vec3(0.5, 0.4, 0.1) : vec3(0.0);
+          // Life, beasts, cars and people, gives its own colours at half strength, for the ink to wash it by.
+          if (uCat > 0.58 && uCat < 0.62) c = vC * vM * 0.5;
           if (uCat > 0.7 && uCat < 0.8 && vT <= 0.9) c = vM * 0.5;
           gl_FragColor = vec4(c, uCat); }` });
       // Surface direction and distance of everything drawn in line, for the lines inside a shape.
@@ -10106,18 +10175,47 @@ const World = (() => {
     let life = null;
     const lerpA = (a, b, t) => a + Rules.angleTo(a, b) * Math.min(1, t);
     const openAt = (x, y) => x > 1 && y > 1 && x < W - 1 && y < H - 1 && !(S.gnd[Rules.cellOf(x, y)] & 3) && terrainAt(M, x, y) > M.water + 0.2;
-    // A quiet open place away from bases, towns and buildings.
-    function meadow(loose) {
+    // The beasts: the model, the colours a herd's members take, how many go together, how far apart, how fast they
+    // walk, how fast the herd drifts as it grazes, how fast they run, and their size. A line goes in single file, a
+    // pack hunts the grazing herds, and the high keep to the hills and climb what men and horses cannot.
+    const BEASTS = {
+      deer: { m: 'deer', col: [0x8a6a4c], n: [3, 6], spread: 3.2, walk: 0.9, roam: 0.35, run: 7, s: 0.85 },
+      gazelle: { m: 'deer', col: [0xc8a070, 0xd6b486], n: [4, 8], spread: 3.6, walk: 1, roam: 0.4, run: 9, s: 0.68 },
+      horse: { m: 'horse', col: [0x6a4a32, 0x3a2a20, 0x8a6a4a, 0xd8ccb8, 0x4a3a2e], n: [4, 7], spread: 4.4, walk: 1.1, roam: 0.45, run: 8.5, s: 1 },
+      sheep: { m: 'sheep', col: [0xeee8dc, 0xe4dccc, 0xdcd4c4, 0x3a3430], n: [7, 12], spread: 4, walk: 0.6, roam: 0.25, run: 4, s: 0.78 },
+      camel: { m: 'camel', col: [0xc8a070, 0xb8905e, 0xd8b888], n: [2, 4], spread: 1.6, walk: 0.8, roam: 0.3, run: 4.5, s: 1, line: true },
+      goat: { m: 'goat', col: [0xe8e0d4, 0x6a5a4a, 0x3a3028, 0xb8a890], n: [3, 6], spread: 2.6, walk: 0.8, roam: 0.3, run: 5.5, s: 0.75, high: true },
+      elk: { m: 'elk', col: [0x6a5444, 0x5a4638, 0x7a6450], n: [2, 5], spread: 3.6, walk: 0.9, roam: 0.3, run: 6.5, s: 1.05 },
+      wolf: { m: 'wolf', col: [0x8a8478, 0x6a645c, 0xa8a094, 0x4a4640], n: [3, 5], spread: 2.6, walk: 1.3, roam: 0.9, run: 7.5, s: 0.8, pack: true },
+    };
+    const PREY = new Set(['deer', 'gazelle', 'sheep', 'goat', 'elk']);
+    // Where a beast may tread: open ground, and for a climber the steep ground too, but never a cliff or the water.
+    const openFor = (B, x, y) => B && B.high ? x > 1 && y > 1 && x < W - 1 && y < H - 1 && !(S.gnd[Rules.cellOf(x, y)] & 2) && terrainAt(M, x, y) > M.water + 0.2 : openAt(x, y);
+    // A quiet open place away from bases, towns and buildings, for a climber up in the hills.
+    function meadow(loose, high) {
       for (let k = 0; k < 300; k++) {
         const x = 3 + Math.random() * (W - 6), y = 3 + Math.random() * (H - 6);
-        if (!loose && (S.gnd[Rules.cellOf(x, y)] || M.roadDist[Math.round(y * RES) * VW + Math.round(x * RES)] < 3)) continue;
+        if (high && (terrainAt(M, x, y) < (k < 200 ? 4 : 2.5) || (S.gnd[Rules.cellOf(x, y)] & 2))) continue;
+        if (!loose && !high && (S.gnd[Rules.cellOf(x, y)] || M.roadDist[Math.round(y * RES) * VW + Math.round(x * RES)] < 3)) continue;
         if (S.bases.some(b => Math.hypot(b[0] - x, b[1] - y) < 30) || M.towns.some(t => Math.hypot(t.x - x, t.y - y) < 12)) continue;
         if (S.ents.some(e => e.b && e.hp > 0 && Math.hypot(e.x - x, e.y - y) < 20)) continue;
         return [x, y];
       }
       return null;
     }
-    const newHerd = p => ({ x: p[0], y: p[1], tx: p[0], ty: p[1], flee: 0, fx: 0, fy: 0, wander: 0, deer: Array.from({ length: 3 + (Math.random() * 3 | 0) }, () => ({ ox: (Math.random() - 0.5) * 3.2, oy: (Math.random() - 0.5) * 3.2, x: p[0], y: p[1], a: Math.random() * 6.28, v: 0, ph: Math.random() * 6, graze: Math.random() * 6 })) });
+    const newHerd = (p, kind = 'deer') => {
+      const B = BEASTS[kind], n = B.n[0] + (Math.random() * (B.n[1] - B.n[0] + 1) | 0);
+      return { kind, x: p[0], y: p[1], tx: p[0], ty: p[1], hd: Math.random() * 6.28, flee: 0, fx: 0, fy: 0, wander: 0, hunt: null, rest: 0,
+        deer: Array.from({ length: n }, (_, i) => ({ ox: B.line ? -i * B.spread : (Math.random() - 0.5) * B.spread, oy: B.line ? 0 : (Math.random() - 0.5) * B.spread, x: p[0], y: p[1], a: Math.random() * 6.28, v: 0, ph: Math.random() * 6, graze: Math.random() * 6, col: B.col[Math.random() * B.col.length | 0] })) };
+    };
+    // Ducks in a raft on still or slow water, near enough the bank.
+    function duckWater() {
+      for (let k = 0; k < 400; k++) {
+        const x = 3 + Math.random() * (W - 6), y = 3 + Math.random() * (H - 6), d = M.water - terrainAt(M, x, y);
+        if (d > 0.25 && d < 1 && Rules.bridgeAt(S, x, y) < 0) return [x, y];
+      }
+      return null;
+    }
     const newFlock = p => ({ cx: p[0], cy: p[1], x: p[0], y: p[1], r: 4 + Math.random() * 6, alt: 7 + Math.random() * 4, w: (Math.random() < 0.5 ? -1 : 1) * (0.25 + Math.random() * 0.2), t: Math.random() * 9, fly: 0, go: false, vx: 0, vy: 0, n: 5 + (Math.random() * 5 | 0), off: Array.from({ length: 10 }, () => [Math.random() * 6.28, Math.random() * 1.6, Math.random() * 6.28]) });
     function buildLife() {
       const sc = MODELS.scenery, R = Math.random, scale = W / 128;
@@ -10127,8 +10225,21 @@ const World = (() => {
         m.setColorAt(0, neutral); m.instanceColor.setUsage(THREE.DynamicDrawUsage);
         return add(m);
       };
-      life = { herds: [], cars: [], folk: [], boats: [], flocks: [], birds: [], alarm: [], danger: [], rise: [], scanT: 0, deerM: mk(sc.deer, 60), carM: mk(sc.car, 32), cartM: mk(sc.cart, 32), folkM: mk(sc.folk, 200), boatM: mk(sc.boat, 12), armM: mk(new THREE.BoxGeometry(0.62, 0.035, 0.035), 60) };
-      for (let i = 0; i < Math.round(4 * scale); i++) { const p = meadow(); if (p) life.herds.push(newHerd(p)); }
+      life = { herds: [], rafts: [], cars: [], folk: [], boats: [], flocks: [], birds: [], alarm: [], danger: [], rise: [], scanT: 0, beastM: {}, carM: mk(sc.car, 32), cartM: mk(sc.cart, 32), folkM: mk(sc.folk, 200), boatM: mk(sc.boat, 12), armM: mk(new THREE.BoxGeometry(0.62, 0.035, 0.035), 60) };
+      // The theatre's herds by their shares, its wolf packs, and its ducks.
+      // The kinds dealt out in proportion to their shares, in a shuffled order, so each comes.
+      const deal = (theme.fauna || [['deer', 1]]).flatMap(([k, w]) => Array(w).fill(k)).sort(() => Math.random() - 0.5);
+      for (let i = 0; i < Math.round(6 * scale); i++) {
+        const kind = deal[i % deal.length], p = meadow(false, BEASTS[kind].high);
+        if (p) life.herds.push(newHerd(p, kind));
+      }
+      for (let i = 0; i < Math.round((theme.wolves || 0) * scale); i++) { const p = meadow(); if (p) life.herds.push(newHerd(p, 'wolf')); }
+      for (const h of life.herds) { const m = BEASTS[h.kind].m; if (!life.beastM[m]) life.beastM[m] = mk(sc[m], 90); }
+      if (theme.ducks) for (let i = 0; i < Math.round(3 * scale); i++) {
+        const p = duckWater();
+        if (p) life.rafts.push({ x: p[0], y: p[1], a: Math.random() * 6.28, v: 0.12, flee: 0, ph: Math.random() * 6, ducks: Array.from({ length: 4 + (Math.random() * 5 | 0) }, () => ({ ox: (Math.random() - 0.5) * 2.4, oy: (Math.random() - 0.5) * 2.4, a: Math.random() * 6.28, ph: Math.random() * 6, col: Math.random() < 0.5 ? 0x8a7a64 : 0xb0a490 })) });
+      }
+      if (life.rafts.length) life.beastM.duck = mk(sc.duck, 60);
       for (let i = 0; i < Math.round(3 * scale); i++) { const p = meadow(true); if (p) life.flocks.push(newFlock(p)); }
       // The roads come in pieces that meet at junctions and at the ends of bridges. Each piece knows which others
       // begin or end within a stride of each of its ends, so a car can drive on from one to the next.
@@ -10152,7 +10263,8 @@ const World = (() => {
     // Something loud at a point: deer bolt, birds lift, cars turn back, and a town nearby empties for a while.
     function startle(x, y, r) {
       if (!life) return;
-      for (const h of life.herds) { const d = Math.hypot(h.x - x, h.y - y); if (d < r + 5 && h.flee < 1) { h.flee = 4 + Math.random() * 3; h.fx = (h.x - x) / (d || 1); h.fy = (h.y - y) / (d || 1); } }
+      for (const h of life.herds) { const d = Math.hypot(h.x - x, h.y - y); if (d < r + 5 && h.flee < 1) { h.flee = 4 + Math.random() * 3; h.fx = (h.x - x) / (d || 1); h.fy = (h.y - y) / (d || 1); h.hunt = null; } }
+      for (const f of life.rafts) { const d = Math.hypot(f.x - x, f.y - y); if (d < r + 8) { f.flee = 4; f.a = Math.atan2(f.y - y, f.x - x); } }
       for (const f of life.flocks) { const d = Math.hypot(f.x - x, f.y - y); if (d < r + 10 && f.fly <= 0) { f.fly = 5 + Math.random() * 2; f.go = false; f.vx = (f.x - x) / (d || 1) * 8; f.vy = (f.y - y) / (d || 1) * 8; } }
       for (const c of life.cars) if (Math.hypot(c.x - x, c.y - y) < r + 7 && Math.cos(c.a) * (x - c.x) + Math.sin(c.a) * (y - c.y) > 0) c.turn = true;
       if (life.alarm.length < 60) life.alarm.push({ x, y, r: r + 6, t: 10 });
@@ -10264,7 +10376,8 @@ const World = (() => {
       for (let i = L.alarm.length - 1; i >= 0; i--) { L.alarm[i].t -= dt; if (L.alarm[i].t <= 0) L.alarm.splice(i, 1); }
       // A slower look round for trouble.
       L.scanT -= dt;
-      if (L.scanT <= 0) {
+      L.scanNow = L.scanT <= 0;
+      if (L.scanNow) {
         L.scanT = 0.4;
         for (const h of L.herds) {
           if (h.flee <= 0) {
@@ -10274,8 +10387,18 @@ const World = (() => {
           }
           // A herd driven among buildings, out of sight, finds somewhere quieter.
           if (!VIS(h.x, h.y) && S.ents.some(e => e.b && e.hp > 0 && Math.hypot(e.x - h.x, e.y - h.y) < 18)) {
-            const p = meadow();
-            if (p && !VIS(p[0], p[1])) { h.x = h.tx = p[0]; h.y = h.ty = p[1]; h.flee = 0; for (const e of h.deer) { e.x = p[0] + e.ox; e.y = p[1] + e.oy; } }
+            const p = meadow(false, BEASTS[h.kind].high);
+            if (p && !VIS(p[0], p[1])) { h.x = h.tx = p[0]; h.y = h.ty = p[1]; h.flee = 0; h.hunt = null; for (const e of h.deer) { e.x = p[0] + e.ox; e.y = p[1] + e.oy; } }
+          }
+          // A pack not resting goes after a grazing herd it comes near, and a herd that sees it close bolts.
+          if (h.kind === 'wolf' && h.flee <= 0) {
+            if (!h.hunt && h.rest <= 0) {
+              let best = null, bd = 24;
+              for (const o of L.herds) if (PREY.has(o.kind)) { const d = Math.hypot(o.x - h.x, o.y - h.y); if (d < bd) { bd = d; best = o; } }
+              if (best) h.hunt = { prey: best, t: 9 + Math.random() * 5 };
+            }
+            const q = h.hunt && h.hunt.prey, d = q ? Math.hypot(q.x - h.x, q.y - h.y) : 99;
+            if (q && d < 8 && q.flee <= 0) { q.flee = 5 + Math.random() * 3; q.fx = (q.x - h.x) / (d || 1); q.fy = (q.y - h.y) / (d || 1); }
           }
         }
         L.danger = M.towns.map(t => {
@@ -10324,30 +10447,62 @@ const World = (() => {
           for (const f of rest.slice(1)) if (Math.hypot(f.x - a.x, f.y - a.y) < 7) { f.watch = 9; f.watchAt = [(a.x + b.x) / 2, (a.y + b.y) / 2]; }
         });
       }
-      // Deer graze, wander a little, and bolt from trouble.
+      // Herds graze, wander a little, and bolt from trouble, each kind at its own pace. A pack roams wide and runs
+      // down the herd it hunts until it tires, then rests a while.
       for (const h of L.herds) {
+        const B = BEASTS[h.kind], ox0 = h.x, oy0 = h.y;
+        h.rest = Math.max(0, h.rest - dt);
         if (h.flee > 0) {
           h.flee -= dt;
-          const nx = h.x + h.fx * 5.5 * dt, ny = h.y + h.fy * 5.5 * dt;
-          if (openAt(nx, ny)) { h.x = nx; h.y = ny; } else { const a = Math.atan2(h.fy, h.fx) + (Math.random() < 0.5 ? 1 : -1) * 1.1; h.fx = Math.cos(a); h.fy = Math.sin(a); }
+          const sp = B.run * 0.78, nx = h.x + h.fx * sp * dt, ny = h.y + h.fy * sp * dt;
+          if (openFor(B, nx, ny)) { h.x = nx; h.y = ny; } else { const a = Math.atan2(h.fy, h.fx) + (Math.random() < 0.5 ? 1 : -1) * 1.1; h.fx = Math.cos(a); h.fy = Math.sin(a); }
           h.tx = h.x; h.ty = h.y;
+        } else if (h.hunt) {
+          const q = h.hunt.prey;
+          h.hunt.t -= dt;
+          if (h.hunt.t <= 0 || !L.herds.includes(q)) { h.hunt = null; h.rest = 18 + Math.random() * 12; }
+          else {
+            const dx = q.x - h.x, dy = q.y - h.y, d = Math.hypot(dx, dy) || 1, sp = B.run * 0.7, nx = h.x + dx / d * sp * dt, ny = h.y + dy / d * sp * dt;
+            if (d > 1.5 && openFor(B, nx, ny)) { h.x = nx; h.y = ny; }
+            h.tx = h.x; h.ty = h.y;
+          }
         } else {
           h.wander -= dt;
-          if (h.wander <= 0) { h.wander = 6 + Math.random() * 10; const a = Math.random() * 6.28, r = 2 + Math.random() * 6, tx = h.x + Math.cos(a) * r, ty = h.y + Math.sin(a) * r; if (openAt(tx, ty)) { h.tx = tx; h.ty = ty; } }
+          if (h.wander <= 0) { h.wander = 6 + Math.random() * 10; const a = Math.random() * 6.28, r = (B.pack ? 6 : 2) + Math.random() * (B.pack ? 12 : 6), tx = h.x + Math.cos(a) * r, ty = h.y + Math.sin(a) * r; if (openFor(B, tx, ty)) { h.tx = tx; h.ty = ty; } }
           const dx = h.tx - h.x, dy = h.ty - h.y, d = Math.hypot(dx, dy);
-          if (d > 0.1) { h.x += dx / d * Math.min(d, 0.35 * dt); h.y += dy / d * Math.min(d, 0.35 * dt); }
+          if (d > 0.1) { h.x += dx / d * Math.min(d, B.roam * dt); h.y += dy / d * Math.min(d, B.roam * dt); }
         }
-        const run = h.flee > 0;
+        if (Math.hypot(h.x - ox0, h.y - oy0) > 1e-3) h.hd = lerpA(h.hd, Math.atan2(h.y - oy0, h.x - ox0), dt * 2);
+        const run = h.flee > 0 || !!h.hunt, ch = Math.cos(h.hd), sh = Math.sin(h.hd);
         for (const e of h.deer) {
-          const dx = h.x + e.ox - e.x, dy = h.y + e.oy - e.y, d = Math.hypot(dx, dy), want = run ? Math.min(7, d * 3 + 4.5) : d > 0.6 ? 0.9 : 0;
+          // A line's places trail along the way the herd goes; the rest stand about it as they please.
+          const px = B.line ? h.x + e.ox * ch - e.oy * sh : h.x + e.ox, py = B.line ? h.y + e.ox * sh + e.oy * ch : h.y + e.oy;
+          const dx = px - e.x, dy = py - e.y, d = Math.hypot(dx, dy), want = run ? Math.min(B.run, d * 3 + B.run * 0.64) : d > 0.6 ? B.walk : 0;
           e.v += (want - e.v) * Math.min(1, dt * 3);
           if (d > 0.05 && e.v > 0.05) {
             e.a = lerpA(e.a, Math.atan2(dy, dx), dt * 5);
             const nx = e.x + Math.cos(e.a) * e.v * dt, ny = e.y + Math.sin(e.a) * e.v * dt;
-            if (openAt(nx, ny)) { e.x = nx; e.y = ny; }
+            if (openFor(B, nx, ny)) { e.x = nx; e.y = ny; }
           }
-          e.ph += dt * (run ? 13 : 3); e.graze += dt;
+          e.ph += dt * (run ? 13 : 3) * (B.run > 8 ? 1.1 : B.run < 5 ? 0.8 : 1); e.graze += dt;
         }
+        // Each keeps a body's room from the next.
+        const room = 0.75 * B.s;
+        for (let i = 0; i < h.deer.length; i++) for (let j = i + 1; j < h.deer.length; j++) {
+          const a = h.deer[i], b = h.deer[j], dx = b.x - a.x, dy = b.y - a.y, d = Math.hypot(dx, dy);
+          if (d < room && d > 1e-4) { const k = (room - d) / 2 / d; a.x -= dx * k; a.y -= dy * k; b.x += dx * k; b.y += dy * k; }
+        }
+      }
+      // Ducks paddle about their water, turn from the bank, and make off from trouble.
+      for (const f of L.rafts) {
+        f.flee = Math.max(0, f.flee - dt);
+        const sp = f.flee > 0 ? 1.4 : 0.12, ahead = M.water - terrainAt(M, f.x + Math.cos(f.a) * 2.5, f.y + Math.sin(f.a) * 2.5);
+        if (ahead < 0.25 || Rules.bridgeAt(S, f.x + Math.cos(f.a) * 2.5, f.y + Math.sin(f.a) * 2.5) >= 0) f.a += 1.6 * dt;
+        else if (Math.random() < dt * 0.1) f.a += (Math.random() - 0.5) * 1.5;
+        const nx = f.x + Math.cos(f.a) * sp * dt, ny = f.y + Math.sin(f.a) * sp * dt;
+        if (M.water - terrainAt(M, nx, ny) > 0.2) { f.x = nx; f.y = ny; }
+        f.ph += dt;
+        if (L.scanNow) Rules.near(S, f.x, f.y, 7, u => { if (u.hp > 0 && f.flee <= 0 && Math.hypot(u.x - f.x, u.y - f.y) < 6) { f.flee = 4; f.a = Math.atan2(f.y - u.y, f.x - u.x); } });
       }
       // Cars run up and down the roads, stop for what is in the way, and turn back from fighting and broken bridges.
       // On a bridge a car drives on to the end rather than turning, and one blocked for long turns back.
@@ -10473,14 +10628,27 @@ const World = (() => {
     function drawLife() {
       const L = life;
       let n = 0;
-      for (const h of L.herds) for (const e of h.deer) {
-        if (n >= 60 || !VIS(e.x, e.y)) continue;
-        const run = h.flee > 0, g = heightAt(M, e.x, e.y), bound = run ? Math.abs(Math.sin(e.ph)) * 0.22 : 0;
-        const nod = run ? Math.sin(e.ph) * 0.12 : e.v < 0.2 ? -0.34 * smooth(0.2, 0.8, Math.sin(e.graze * 0.5) * 0.5 + 0.5) : 0;
-        compose(m1, e.x, g + bound, e.y, -e.a, nod, 0, 0.85);
-        L.deerM.setMatrixAt(n, m1); L.deerM.setColorAt(n, colA.set(0x8a6a4c)); n++;
+      const used = {};
+      for (const k in L.beastM) used[k] = 0;
+      for (const h of L.herds) {
+        const B = BEASTS[h.kind], BM = L.beastM[B.m], run = h.flee > 0 || !!h.hunt;
+        for (const e of h.deer) {
+          if (used[B.m] >= 90 || !VIS(e.x, e.y)) continue;
+          const g = heightAt(M, e.x, e.y), bound = run ? Math.abs(Math.sin(e.ph)) * 0.22 * B.s : 0;
+          const nod = run ? Math.sin(e.ph) * 0.12 : e.v < 0.2 && !B.pack ? -0.34 * smooth(0.2, 0.8, Math.sin(e.graze * 0.5) * 0.5 + 0.5) : 0;
+          compose(m1, e.x, g + bound, e.y, -e.a, nod, 0, B.s);
+          BM.setMatrixAt(used[B.m], m1); BM.setColorAt(used[B.m], colA.set(e.col)); used[B.m]++;
+        }
       }
-      L.deerM.count = n; dirty(L.deerM);
+      for (const f of L.rafts) for (const d of f.ducks) {
+        if (used.duck >= 60) break;
+        const x = f.x + d.ox, y = f.y + d.oy;
+        if (!VIS(x, y) || M.water - terrainAt(M, x, y) < 0.1) continue;
+        d.a = lerpA(d.a, f.a + Math.sin(f.ph * 0.7 + d.ph) * 0.6, 0.05);
+        compose(m1, x, M.water + waterRise.value + 0.02 + Math.sin(f.ph * 2 + d.ph) * 0.015, y, -d.a, 0, 0, 1);
+        L.beastM.duck.setMatrixAt(used.duck, m1); L.beastM.duck.setColorAt(used.duck, colA.set(d.col)); used.duck++;
+      }
+      for (const k in L.beastM) { L.beastM[k].count = used[k]; dirty(L.beastM[k]); }
       n = 0;
       // Motor cars from the Industrial Age, horse carts before it.
       const motor = worldAge() >= MOTOR_AGE, CM = motor ? L.carM : L.cartM;
@@ -11980,6 +12148,9 @@ const World = (() => {
       get viewTeam() { return viewTeam; },
       // Sees the whole map with no fog, as one watching a game does.
       watchAll() { viewTeam = -1; SH.uFogOn.value = 0; },
+      // Where one herd of each kind stands, and a raft of ducks, for checks.
+      lifeAll() { return life ? life.herds.map(h => h.kind) : []; },
+      lifeDebug() { if (!life) return []; const out = [], seen = new Set(); for (const h of life.herds) if (!seen.has(h.kind)) { seen.add(h.kind); out.push({ kind: h.kind, x: h.deer[0].x, y: h.deer[0].y, n: h.deer.length }); } if (life.rafts[0]) out.push({ kind: 'duck', x: life.rafts[0].x, y: life.rafts[0].y, n: life.rafts[0].ducks.length }); return out; },
       visible: VIS,
       // Whether a point has been seen by the side being shown, so what is remembered there is drawn.
       known: (x, y) => viewTeam < 0 || S.P[viewTeam].seen[Rules.cellOf(x, y)] === 1,
