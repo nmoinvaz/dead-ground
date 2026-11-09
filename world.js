@@ -3473,12 +3473,8 @@ const World = (() => {
       pp.size(bw, bh);
     }
 
-    function frame(alpha, dt, now) {
-      SH.uTime.value += dt;
-      updateSky(dt);
-      cam.x = clamp(cam.x, 2, W - 2); cam.y = clamp(cam.y, 2, H - 2);
-      cam.shake *= Math.exp(-dt * 7); if (cam.shake < 0.01) cam.shake = 0;
-      placeCamera();
+    // The sun's shadow camera over the view, snapped to its texels so the shadows hold still as the view pans.
+    function aimSun() {
       const c = cam, half = c.dist * 0.72;
       sun.target.position.set(c.x + Math.cos(c.yaw) * half * 0.15, 1, c.y + Math.sin(c.yaw) * half * 0.15);
       const dir = new THREE.Vector3(...sky.sun).normalize();
@@ -3489,6 +3485,55 @@ const World = (() => {
       sun.position.copy(sun.target.position).addScaledVector(dir, 90);
       const sc = sun.shadow.camera;
       sc.left = -half; sc.right = half; sc.top = half; sc.bottom = -half; sc.near = 10; sc.far = 190; sc.updateProjectionMatrix();
+    }
+    // A plate of a moment, as a history book prints one: the view drawn once more over the place on light paper
+    // with nothing hidden, read back small, the view put back as it was, and the picture engraved.
+    let plateReq = null;
+    function drawPlate() {
+      const q = plateReq, keep = { x: cam.x, y: cam.y, dist: cam.dist, shake: cam.shake }, dark = Looks.dark, fog = SH.uFogOn.value;
+      plateReq = null;
+      Object.assign(cam, { x: clamp(q.x, 2, W - 2), y: clamp(q.y, 2, H - 2), dist: q.dist || 34, shake: 0 });
+      Looks.dark = false; SH.uFogOn.value = 0;
+      placeCamera(); aimSun(); pp.render();
+      // A wide band across the middle of the view, where the place lies, as a book's plate is wider than tall.
+      const src = renderer.domElement, bh = Math.min(src.height, Math.round(src.width / 2.2)), k = Math.min(1, 1280 / src.width), cv = document.createElement('canvas');
+      cv.width = Math.round(src.width * k); cv.height = Math.round(bh * k);
+      const g = cv.getContext('2d');
+      g.drawImage(src, 0, (src.height - bh) / 2, src.width, bh, 0, 0, cv.width, cv.height);
+      Object.assign(cam, keep); Looks.dark = dark; SH.uFogOn.value = fog;
+      placeCamera(); aimSun(); pp.render();
+      if (!q.raw) engrave(g, cv.width, cv.height);
+      q.cb(cv.toDataURL('image/jpeg', 0.88));
+    }
+    // A picture as a steel engraving in sepia on cream. The tone is measured from the paper the picture lies on, so
+    // bare paper stays bare and only what is drawn takes lines. The burin's lines run straight across, closer and
+    // heavier where it is dark, crossed in the deepest shade, and the drawing's own edges are kept as line.
+    function engrave(g, w, h) {
+      const im = g.getImageData(0, 0, w, h), d = im.data, PAPER = [246, 240, 226], INK = [48, 36, 28], L = new Float32Array(w * h);
+      for (let i = 0; i < w * h; i++) L[i] = (0.3 * d[i * 4] + 0.59 * d[i * 4 + 1] + 0.11 * d[i * 4 + 2]) / 255;
+      // The paper's own tone, the lightest common value, so the tint of the paper itself is not hatched.
+      const hist = new Uint32Array(64); for (let i = 0; i < L.length; i += 7) hist[Math.min(63, L[i] * 64 | 0)]++;
+      let acc = 0, top = 63; for (; top > 0; top--) { acc += hist[top]; if (acc > L.length / 7 * 0.2) break; }
+      const P0 = (top + 0.5) / 64;
+      for (let y = 1; y < h - 1; y++) for (let x = 1; x < w - 1; x++) {
+        const k = y * w + x, i = k * 4, dk = Math.min(1, Math.max(0, (P0 - 0.025 - L[k]) / (P0 - 0.2)));
+        const ed = Math.min(1, Math.max(0, (Math.abs(L[k + 1] - L[k - 1]) + Math.abs(L[k + w] - L[k - w]) - 0.08) * 4));
+        const a = Math.abs(y / 3 - Math.floor(y / 3) - 0.5) * 2;
+        let c = Math.min(1, Math.max(0, (dk * 1.1 - a) * 3));
+        if (dk > 0.6) { const f2 = (x - y) / 3.4, a2 = Math.abs(f2 - Math.floor(f2) - 0.5) * 2; c = Math.max(c, Math.min(1, Math.max(0, ((dk - 0.6) * 2.4 - a2) * 3))); }
+        c = Math.max(c, ed);
+        for (let j = 0; j < 3; j++) d[i + j] = PAPER[j] + (INK[j] - PAPER[j]) * c;
+      }
+      g.putImageData(im, 0, 0);
+    }
+
+    function frame(alpha, dt, now) {
+      SH.uTime.value += dt;
+      updateSky(dt);
+      cam.x = clamp(cam.x, 2, W - 2); cam.y = clamp(cam.y, 2, H - 2);
+      cam.shake *= Math.exp(-dt * 7); if (cam.shake < 0.01) cam.shake = 0;
+      placeCamera();
+      aimSun();
 
       const sv = new THREE.Vector3(...sky.sun).applyMatrix3(new THREE.Matrix3().setFromMatrix4(camera.matrixWorldInverse));
       const g2 = new THREE.Vector2(sv.x, sv.y);
@@ -3534,6 +3579,7 @@ const World = (() => {
       smoke.flush(); glow.flush();
       updateGhost();
       pp.render();
+      if (plateReq) drawPlate();
     }
 
     // A building's model in its side's age. A side not playing, or no game, sees the modern one.
@@ -3712,6 +3758,9 @@ const World = (() => {
       setShadeHatch(on) { shadeHatch = !!on; },
       setOre(n) { oreStyle = n; },
       study(o) { studySky = o; },
+      // Draws a plate of the place at x, y with the next frame, and hands it to cb as a picture's data URL; raw
+      // leaves it unengraved, for checks.
+      plate(x, y, cb, dist, raw) { plateReq = { x, y, cb, dist, raw }; },
       get look() { return style.name; },
       get style() { return style; },
       cam, vw: 1, vh: 1, onScreen: [], load, frame, event, resize, pick, project, setGhost, cameos, renderer, camera, scene, place: placeCamera,

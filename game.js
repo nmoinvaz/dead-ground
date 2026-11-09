@@ -269,7 +269,7 @@ const Game = (() => {
       begin(S, theme, team);
       pictures();
       hud.reset();
-      G.playing = true; G.paused = false; G.outcome = null;
+      G.playing = true; G.paused = false; G.outcome = null; G.falls = {}; G.plate = null;
       document.body.classList.add('in-game');
       if (team >= 0) home(S, team); else world.focus(S.map.W / 2, S.map.H / 2, 150);
       drawRoster();
@@ -348,6 +348,18 @@ const Game = (() => {
 
     // A side's name, marked when it is the player's own.
     const youName = t => { const n = G.names[t] || `Side ${t + 1}`; return t === G.team && n !== 'You' ? n + ' (you)' : n; };
+    // The plate's caption, worded as a history book words one: who fell, what, near which town, in which age and
+    // how far into the fighting.
+    function plateOf(p) {
+      const S = G.S;
+      if (!p || !S) return null;
+      const P = S.P[p.team], age = Rules.AGES[P ? P.tech : 1].name, m = Math.max(1, Math.round(p.tick / Rules.HZ / 60));
+      let ti = 0, td = 1e9;
+      S.map.towns.forEach((t, i) => { const d = Math.hypot(t.x - p.x, t.y - p.y); if (d < td) { td = d; ti = i; } });
+      const who = p.team === G.team ? 'your' : `${G.names[p.team] || `Side ${p.team + 1}`}'s`;
+      const what = p.regicide ? 'general' : p.kind ? Rules.nameOf(p.kind, P ? P.tech : 1).toLowerCase() : 'last stand';
+      return { url: p.url, caption: `The fall of ${who} ${what} near ${Rules.townName(S, ti)}, in the ${age} Age, ${m} minute${m === 1 ? '' : 's'} into the fighting.` };
+    }
     // Shows how things stand once a side falls or the game is won: the final report, or, for a player whose base
     // has fallen while others fight on, the report so far and a choice to watch the rest.
     function outcome() {
@@ -377,7 +389,7 @@ const Game = (() => {
       $('again').textContent = G.online ? 'Back to the room' : 'Again';
       $('menu').textContent = G.online ? 'Leave' : 'Menu';
       $('end').hidden = false;
-      Report.show($('end-report'), { S, name: youName });
+      Report.show($('end-report'), { S, name: youName, plate: plateOf(G.plate) });
     }
 
     // Hands what the rules did to the picture, the sound and the reports.
@@ -398,7 +410,7 @@ const Game = (() => {
           }
           case 'hit': if (heard) audio.at(Rules.WEAPONS[e.w].fx === 'rocket' ? 'boom_m' : 'boom_s', e.x, e.y, { gain: 0.6, gap: 0.05, vary: 0.2 }); break;
           case 'boom': if (heard || e.size >= 8) audio.at(e.size >= 8 ? 'boom_x' : e.size > 1.5 ? 'boom_l' : 'boom_m', e.x, e.y, { gain: e.size >= 8 ? 2 : 0.8, gap: 0.05, vary: 0.2 }); break;
-          case 'die': if (heard) audio.at(e.b ? 'boom_l' : Rules.UNITS[e.kind]?.men ? 'scream' : 'boom_m', e.x, e.y, { gain: Rules.UNITS[e.kind]?.men ? 0.3 : 0.9, gap: 0.08, vary: 0.2 }); break;
+          case 'die': if ((e.b || e.kind === 'general') && e.team >= 0) G.falls[e.team] = { x: e.x, y: e.y, kind: e.kind }; if (heard) audio.at(e.b ? 'boom_l' : Rules.UNITS[e.kind]?.men ? 'scream' : 'boom_m', e.x, e.y, { gain: Rules.UNITS[e.kind]?.men ? 0.3 : 0.9, gap: 0.08, vary: 0.2 }); break;
           case 'say':
             // A new age has its own card, so its call names the age and leaves no line in the log.
             if (G.playing && e.team === G.team && e.line === 'newtech') audio.voice(e.line, `The ${Rules.AGES[S.P[e.team].tech].name} Age`, oldAge());
@@ -412,11 +424,15 @@ const Game = (() => {
           case 'launch': if (G.playing && e.team === G.team) audio.play('launch', { gain: 0.9 }); break;
           case 'placed': if (G.playing && e.team === G.team) audio.at('place', e.x, e.y, { gain: 0.8 }); break;
           case 'over': if (G.playing) setTimeout(outcome, 1800); drawRoster(); break;
-          case 'fallen':
+          case 'fallen': {
+            // A plate of the fall for the report: where the side's last building went down, or else its base.
+            const at = G.falls[e.team] || (S.bases[e.team] ? { x: S.bases[e.team][0], y: S.bases[e.team][1] } : null);
+            if (at && !e.forfeit) world.plate(at.x, at.y, url => { G.plate = { url, team: e.team, kind: at.kind, tick: S.tick, x: at.x, y: at.y, regicide: e.regicide }; });
             if (G.playing && e.team === G.team) setTimeout(outcome, 1800);
             else if (G.playing && G.names[e.team]) hud.say(e.forfeit ? `${G.names[e.team]} has forfeited the game.` : e.regicide ? `${G.names[e.team]}'s general has fallen. They are out.` : `${G.names[e.team]} is out.`, 'good');
             drawRoster();
             break;
+          }
           case 'weather': if (G.playing) { const v = e.passed ? SKY_PASS[e.was] : SKY_SAY[e.kind]; if (v && !(e.kind === 'cloud' && e.was === 'clear')) { hud.say(v[0], v[1]); if (v[2]) audio.voice('sky', v[2], oldAge()); } } break;
           // One of the player's squads breaking, said now and then, not for every squad.
           case 'broke': if (G.playing && e.team === G.team && S.tick - (G.lastBroke ?? -1e9) > 20 * Rules.HZ) { G.lastBroke = S.tick; hud.say('A squad has broken and is running.', 'bad'); } break;

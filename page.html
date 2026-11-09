@@ -233,6 +233,10 @@ body[data-scheme="dark"] #loading { background: #1a1814; color: #e8e0d0; }
 .gauge.off { opacity: .4; }
 /* The closing report: tabs, a pane of tables or a chart, and the chart's hover card. */
 #end-report { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+/* The plate of the decisive moment: an engraving in a ruled border on paper, its caption set beneath in italics. */
+.rplate { margin: 0 0 4px; padding: 7px; background: #f6f0e2; border: 1px solid #2a2420; box-shadow: inset 0 0 0 3px #f6f0e2, inset 0 0 0 4px #2a2420; }
+.rplate img { display: block; width: 100%; height: auto; max-height: 38vh; object-fit: cover; }
+.rplate figcaption { margin-top: 6px; color: #2a2420; font: italic 13px/1.35 var(--label, serif); text-align: center; }
 .rtabs, .rseries { display: flex; flex-wrap: wrap; gap: 3px; }
 .rtabs button, .rseries button { flex: 1 1 auto; padding: 7px 10px; min-height: 34px; background: linear-gradient(#2f3328, #1d1f17); border: 1px solid #000; font: 600 15px var(--ui); color: #b9b8a2; }
 .rseries button { flex: 0 1 auto; min-height: 28px; padding: 4px 11px; font-size: 14px; }

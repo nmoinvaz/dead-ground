@@ -439,6 +439,12 @@ const Report = (() => {
       pane.replaceChildren(); tip.hidden = true; cur.redraw = null;
       const S = o.S;
       if (k === 'sum') {
+        // The decisive moment as a plate, engraved and captioned, at the head of the summary.
+        if (o.plate) {
+          const f = el('figure', 'rplate'), img = el('img'), cap = el('figcaption', '', `Plate I. ${o.plate.caption}`);
+          img.src = o.plate.url; img.alt = o.plate.caption;
+          f.append(img, cap); pane.appendChild(f);
+        }
         pane.appendChild(table(list, [['Score', x => num(x.sc.total)], ['Military', x => num(x.sc.mil)], ['Economy', x => num(x.sc.eco)], ['Ages', x => num(x.sc.tec)], ['Territory', x => num(x.sc.ter)], ['Reached', x => ageName(x.P.tech)], ['Result', x => result(S, x)]]));
         pane.appendChild(el('p', 'rkey', 'Military is a tenth of the enemy worth destroyed, economy a twentieth of all supply and oil earned, ages the cost of the ages reached, territory 40 a town and 10 for each percent of the map held.'));
       } else if (k === 'mil') {
