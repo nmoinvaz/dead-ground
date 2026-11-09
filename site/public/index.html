@@ -238,6 +238,10 @@ body[data-scheme="dark"] #loading { background: #1a1814; color: #e8e0d0; }
 .gauge.off { opacity: .4; }
 /* The closing report: tabs, a pane of tables or a chart, and the chart's hover card. */
 #end-report { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+/* The plate of the decisive moment: an engraving in a ruled border on paper, its caption set beneath in italics. */
+.rplate { margin: 0 0 4px; padding: 7px; background: #f6f0e2; border: 1px solid #2a2420; box-shadow: inset 0 0 0 3px #f6f0e2, inset 0 0 0 4px #2a2420; }
+.rplate img { display: block; width: 100%; height: auto; max-height: 38vh; object-fit: cover; }
+.rplate figcaption { margin-top: 6px; color: #2a2420; font: italic 13px/1.35 var(--label, serif); text-align: center; }
 .rtabs, .rseries { display: flex; flex-wrap: wrap; gap: 3px; }
 .rtabs button, .rseries button { flex: 1 1 auto; padding: 7px 10px; min-height: 34px; background: linear-gradient(#2f3328, #1d1f17); border: 1px solid #000; font: 600 15px var(--ui); color: #b9b8a2; }
 .rseries button { flex: 0 1 auto; min-height: 28px; padding: 4px 11px; font-size: 14px; }
@@ -599,7 +603,7 @@ body[data-look="ink"] .sheet { box-shadow: 4px 4px 0 var(--ink); }
       <div class="choice"><h2>Map sheet frame</h2><div id="s-sheet" class="two"><button data-v="on">On</button><button data-v="off">Off</button></div></div>
       <div class="choice"><h2>Shadows</h2><div id="s-shade" class="two"><button data-v="hatch">Hatched</button><button data-v="wash">Wash</button></div></div>
       <div class="choice"><h2>Music</h2><div id="s-music" class="two"><button data-v="on">On</button><button data-v="off">Off</button></div></div>
-      <p id="build">Build 5ba0da5 2026-11-09 00:55</p>
+      <p id="build">Build 43a9092 2026-11-09 01:09</p>
     </div>
     <div id="banner" hidden></div>
     <button id="update" hidden>A new version of Dead Ground is out. <b>Reload</b></button>
@@ -12994,12 +12998,8 @@ const World = (() => {
       pp.size(bw, bh);
     }
 
-    function frame(alpha, dt, now) {
-      SH.uTime.value += dt;
-      updateSky(dt);
-      cam.x = clamp(cam.x, 2, W - 2); cam.y = clamp(cam.y, 2, H - 2);
-      cam.shake *= Math.exp(-dt * 7); if (cam.shake < 0.01) cam.shake = 0;
-      placeCamera();
+    // The sun's shadow camera over the view, snapped to its texels so the shadows hold still as the view pans.
+    function aimSun() {
       const c = cam, half = c.dist * 0.72;
       sun.target.position.set(c.x + Math.cos(c.yaw) * half * 0.15, 1, c.y + Math.sin(c.yaw) * half * 0.15);
       const dir = new THREE.Vector3(...sky.sun).normalize();
@@ -13010,6 +13010,55 @@ const World = (() => {
       sun.position.copy(sun.target.position).addScaledVector(dir, 90);
       const sc = sun.shadow.camera;
       sc.left = -half; sc.right = half; sc.top = half; sc.bottom = -half; sc.near = 10; sc.far = 190; sc.updateProjectionMatrix();
+    }
+    // A plate of a moment, as a history book prints one: the view drawn once more over the place on light paper
+    // with nothing hidden, read back small, the view put back as it was, and the picture engraved.
+    let plateReq = null;
+    function drawPlate() {
+      const q = plateReq, keep = { x: cam.x, y: cam.y, dist: cam.dist, shake: cam.shake }, dark = Looks.dark, fog = SH.uFogOn.value;
+      plateReq = null;
+      Object.assign(cam, { x: clamp(q.x, 2, W - 2), y: clamp(q.y, 2, H - 2), dist: q.dist || 34, shake: 0 });
+      Looks.dark = false; SH.uFogOn.value = 0;
+      placeCamera(); aimSun(); pp.render();
+      // A wide band across the middle of the view, where the place lies, as a book's plate is wider than tall.
+      const src = renderer.domElement, bh = Math.min(src.height, Math.round(src.width / 2.2)), k = Math.min(1, 1280 / src.width), cv = document.createElement('canvas');
+      cv.width = Math.round(src.width * k); cv.height = Math.round(bh * k);
+      const g = cv.getContext('2d');
+      g.drawImage(src, 0, (src.height - bh) / 2, src.width, bh, 0, 0, cv.width, cv.height);
+      Object.assign(cam, keep); Looks.dark = dark; SH.uFogOn.value = fog;
+      placeCamera(); aimSun(); pp.render();
+      if (!q.raw) engrave(g, cv.width, cv.height);
+      q.cb(cv.toDataURL('image/jpeg', 0.88));
+    }
+    // A picture as a steel engraving in sepia on cream. The tone is measured from the paper the picture lies on, so
+    // bare paper stays bare and only what is drawn takes lines. The burin's lines run straight across, closer and
+    // heavier where it is dark, crossed in the deepest shade, and the drawing's own edges are kept as line.
+    function engrave(g, w, h) {
+      const im = g.getImageData(0, 0, w, h), d = im.data, PAPER = [246, 240, 226], INK = [48, 36, 28], L = new Float32Array(w * h);
+      for (let i = 0; i < w * h; i++) L[i] = (0.3 * d[i * 4] + 0.59 * d[i * 4 + 1] + 0.11 * d[i * 4 + 2]) / 255;
+      // The paper's own tone, the lightest common value, so the tint of the paper itself is not hatched.
+      const hist = new Uint32Array(64); for (let i = 0; i < L.length; i += 7) hist[Math.min(63, L[i] * 64 | 0)]++;
+      let acc = 0, top = 63; for (; top > 0; top--) { acc += hist[top]; if (acc > L.length / 7 * 0.2) break; }
+      const P0 = (top + 0.5) / 64;
+      for (let y = 1; y < h - 1; y++) for (let x = 1; x < w - 1; x++) {
+        const k = y * w + x, i = k * 4, dk = Math.min(1, Math.max(0, (P0 - 0.025 - L[k]) / (P0 - 0.2)));
+        const ed = Math.min(1, Math.max(0, (Math.abs(L[k + 1] - L[k - 1]) + Math.abs(L[k + w] - L[k - w]) - 0.08) * 4));
+        const a = Math.abs(y / 3 - Math.floor(y / 3) - 0.5) * 2;
+        let c = Math.min(1, Math.max(0, (dk * 1.1 - a) * 3));
+        if (dk > 0.6) { const f2 = (x - y) / 3.4, a2 = Math.abs(f2 - Math.floor(f2) - 0.5) * 2; c = Math.max(c, Math.min(1, Math.max(0, ((dk - 0.6) * 2.4 - a2) * 3))); }
+        c = Math.max(c, ed);
+        for (let j = 0; j < 3; j++) d[i + j] = PAPER[j] + (INK[j] - PAPER[j]) * c;
+      }
+      g.putImageData(im, 0, 0);
+    }
+
+    function frame(alpha, dt, now) {
+      SH.uTime.value += dt;
+      updateSky(dt);
+      cam.x = clamp(cam.x, 2, W - 2); cam.y = clamp(cam.y, 2, H - 2);
+      cam.shake *= Math.exp(-dt * 7); if (cam.shake < 0.01) cam.shake = 0;
+      placeCamera();
+      aimSun();
 
       const sv = new THREE.Vector3(...sky.sun).applyMatrix3(new THREE.Matrix3().setFromMatrix4(camera.matrixWorldInverse));
       const g2 = new THREE.Vector2(sv.x, sv.y);
@@ -13055,6 +13104,7 @@ const World = (() => {
       smoke.flush(); glow.flush();
       updateGhost();
       pp.render();
+      if (plateReq) drawPlate();
     }
 
     // A building's model in its side's age. A side not playing, or no game, sees the modern one.
@@ -13233,6 +13283,9 @@ const World = (() => {
       setShadeHatch(on) { shadeHatch = !!on; },
       setOre(n) { oreStyle = n; },
       study(o) { studySky = o; },
+      // Draws a plate of the place at x, y with the next frame, and hands it to cb as a picture's data URL; raw
+      // leaves it unengraved, for checks.
+      plate(x, y, cb, dist, raw) { plateReq = { x, y, cb, dist, raw }; },
       get look() { return style.name; },
       get style() { return style; },
       cam, vw: 1, vh: 1, onScreen: [], load, frame, event, resize, pick, project, setGhost, cameos, renderer, camera, scene, place: placeCamera,
@@ -15879,6 +15932,12 @@ const Report = (() => {
       pane.replaceChildren(); tip.hidden = true; cur.redraw = null;
       const S = o.S;
       if (k === 'sum') {
+        // The decisive moment as a plate, engraved and captioned, at the head of the summary.
+        if (o.plate) {
+          const f = el('figure', 'rplate'), img = el('img'), cap = el('figcaption', '', `Plate I. ${o.plate.caption}`);
+          img.src = o.plate.url; img.alt = o.plate.caption;
+          f.append(img, cap); pane.appendChild(f);
+        }
         pane.appendChild(table(list, [['Score', x => num(x.sc.total)], ['Military', x => num(x.sc.mil)], ['Economy', x => num(x.sc.eco)], ['Ages', x => num(x.sc.tec)], ['Territory', x => num(x.sc.ter)], ['Reached', x => ageName(x.P.tech)], ['Result', x => result(S, x)]]));
         pane.appendChild(el('p', 'rkey', 'Military is a tenth of the enemy worth destroyed, economy a twentieth of all supply and oil earned, ages the cost of the ages reached, territory 40 a town and 10 for each percent of the map held.'));
       } else if (k === 'mil') {
@@ -17166,7 +17225,7 @@ const Game = (() => {
       begin(S, theme, team);
       pictures();
       hud.reset();
-      G.playing = true; G.paused = false; G.outcome = null;
+      G.playing = true; G.paused = false; G.outcome = null; G.falls = {}; G.plate = null;
       document.body.classList.add('in-game');
       if (team >= 0) home(S, team); else world.focus(S.map.W / 2, S.map.H / 2, 150);
       drawRoster();
@@ -17245,6 +17304,18 @@ const Game = (() => {
 
     // A side's name, marked when it is the player's own.
     const youName = t => { const n = G.names[t] || `Side ${t + 1}`; return t === G.team && n !== 'You' ? n + ' (you)' : n; };
+    // The plate's caption, worded as a history book words one: who fell, what, near which town, in which age and
+    // how far into the fighting.
+    function plateOf(p) {
+      const S = G.S;
+      if (!p || !S) return null;
+      const P = S.P[p.team], age = Rules.AGES[P ? P.tech : 1].name, m = Math.max(1, Math.round(p.tick / Rules.HZ / 60));
+      let ti = 0, td = 1e9;
+      S.map.towns.forEach((t, i) => { const d = Math.hypot(t.x - p.x, t.y - p.y); if (d < td) { td = d; ti = i; } });
+      const who = p.team === G.team ? 'your' : `${G.names[p.team] || `Side ${p.team + 1}`}'s`;
+      const what = p.regicide ? 'general' : p.kind ? Rules.nameOf(p.kind, P ? P.tech : 1).toLowerCase() : 'last stand';
+      return { url: p.url, caption: `The fall of ${who} ${what} near ${Rules.townName(S, ti)}, in the ${age} Age, ${m} minute${m === 1 ? '' : 's'} into the fighting.` };
+    }
     // Shows how things stand once a side falls or the game is won: the final report, or, for a player whose base
     // has fallen while others fight on, the report so far and a choice to watch the rest.
     function outcome() {
@@ -17274,7 +17345,7 @@ const Game = (() => {
       $('again').textContent = G.online ? 'Back to the room' : 'Again';
       $('menu').textContent = G.online ? 'Leave' : 'Menu';
       $('end').hidden = false;
-      Report.show($('end-report'), { S, name: youName });
+      Report.show($('end-report'), { S, name: youName, plate: plateOf(G.plate) });
     }
 
     // Hands what the rules did to the picture, the sound and the reports.
@@ -17295,7 +17366,7 @@ const Game = (() => {
           }
           case 'hit': if (heard) audio.at(Rules.WEAPONS[e.w].fx === 'rocket' ? 'boom_m' : 'boom_s', e.x, e.y, { gain: 0.6, gap: 0.05, vary: 0.2 }); break;
           case 'boom': if (heard || e.size >= 8) audio.at(e.size >= 8 ? 'boom_x' : e.size > 1.5 ? 'boom_l' : 'boom_m', e.x, e.y, { gain: e.size >= 8 ? 2 : 0.8, gap: 0.05, vary: 0.2 }); break;
-          case 'die': if (heard) audio.at(e.b ? 'boom_l' : Rules.UNITS[e.kind]?.men ? 'scream' : 'boom_m', e.x, e.y, { gain: Rules.UNITS[e.kind]?.men ? 0.3 : 0.9, gap: 0.08, vary: 0.2 }); break;
+          case 'die': if ((e.b || e.kind === 'general') && e.team >= 0) G.falls[e.team] = { x: e.x, y: e.y, kind: e.kind }; if (heard) audio.at(e.b ? 'boom_l' : Rules.UNITS[e.kind]?.men ? 'scream' : 'boom_m', e.x, e.y, { gain: Rules.UNITS[e.kind]?.men ? 0.3 : 0.9, gap: 0.08, vary: 0.2 }); break;
           case 'say':
             // A new age has its own card, so its call names the age and leaves no line in the log.
             if (G.playing && e.team === G.team && e.line === 'newtech') audio.voice(e.line, `The ${Rules.AGES[S.P[e.team].tech].name} Age`, oldAge());
@@ -17309,11 +17380,15 @@ const Game = (() => {
           case 'launch': if (G.playing && e.team === G.team) audio.play('launch', { gain: 0.9 }); break;
           case 'placed': if (G.playing && e.team === G.team) audio.at('place', e.x, e.y, { gain: 0.8 }); break;
           case 'over': if (G.playing) setTimeout(outcome, 1800); drawRoster(); break;
-          case 'fallen':
+          case 'fallen': {
+            // A plate of the fall for the report: where the side's last building went down, or else its base.
+            const at = G.falls[e.team] || (S.bases[e.team] ? { x: S.bases[e.team][0], y: S.bases[e.team][1] } : null);
+            if (at && !e.forfeit) world.plate(at.x, at.y, url => { G.plate = { url, team: e.team, kind: at.kind, tick: S.tick, x: at.x, y: at.y, regicide: e.regicide }; });
             if (G.playing && e.team === G.team) setTimeout(outcome, 1800);
             else if (G.playing && G.names[e.team]) hud.say(e.forfeit ? `${G.names[e.team]} has forfeited the game.` : e.regicide ? `${G.names[e.team]}'s general has fallen. They are out.` : `${G.names[e.team]} is out.`, 'good');
             drawRoster();
             break;
+          }
           case 'weather': if (G.playing) { const v = e.passed ? SKY_PASS[e.was] : SKY_SAY[e.kind]; if (v && !(e.kind === 'cloud' && e.was === 'clear')) { hud.say(v[0], v[1]); if (v[2]) audio.voice('sky', v[2], oldAge()); } } break;
           // One of the player's squads breaking, said now and then, not for every squad.
           case 'broke': if (G.playing && e.team === G.team && S.tick - (G.lastBroke ?? -1e9) > 20 * Rules.HZ) { G.lastBroke = S.tick; hud.say('A squad has broken and is running.', 'bad'); } break;
