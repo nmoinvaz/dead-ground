@@ -19,13 +19,13 @@
       // 45 and 135 degrees, then flat and upright lines for the darkest, each line a little uneven with small gaps.
       // The ground's hatching is pinned to the map so it pans with it, the units' redraws a few times a second.
       const ink = new THREE.ShaderMaterial({ uniforms: { t: { value: null }, tSubj: { value: null }, tHeat: { value: null }, tPaper: { value: null }, res: { value: new THREE.Vector2(1, 1) }, uTime: { value: 0 }, uK: { value: 1 }, uOff: { value: new THREE.Vector2() }, uStyle: { value: 8 }, tNorm: { value: null }, tFogS: { value: null }, tLand: { value: null }, uSun2: { value: new THREE.Vector2(-1, 0) }, uUpV: { value: new THREE.Vector3(0, 1, 0) }, uRoad: { value: 0 }, uOre: { value: 0 }, uMarks: { value: 1 },
-        uWindS: { value: new THREE.Vector2() }, uView: { value: new THREE.Vector2(1, 0) }, tFx: { value: null }, tAnc: { value: null }, uDark: { value: 0 }, uInks: { value: 0 }, uFxs: { value: 0 }, uFire: { value: 0 }, uUnits: { value: 0 }, tH: SH.tH, uHSize: { value: new THREE.Vector2(1, 1) }, uHScale: { value: 1 }, uRain: { value: 0 }, uStorm: { value: 0 }, uSnowF: { value: 0 }, uSnowC: SH.uSnowC, uSnowLine: SH.uSnowLine, tFlow: SH.tFlow, tBrook: SH.tBrook, uFlora: SH.uFlora, uFog: { value: 0 }, uMist: { value: 0 }, uNight: { value: 0 }, uWet: { value: 0 },
+        uWindS: { value: new THREE.Vector2() }, uView: { value: new THREE.Vector2(1, 0) }, tFx: { value: null }, tAnc: { value: null }, uDark: { value: 0 }, uInks: { value: 0 }, uFxs: { value: 0 }, uFire: { value: 0 }, uUnits: { value: 0 }, tH: SH.tH, uHSize: { value: new THREE.Vector2(1, 1) }, uHScale: { value: 1 }, uRain: { value: 0 }, uStorm: { value: 0 }, uSnowF: { value: 0 }, uSnowC: SH.uSnowC, uSnowLine: SH.uSnowLine, tFlow: SH.tFlow, tBrook: SH.tBrook, uFlora: SH.uFlora, uShow: SH.uShow, uFog: { value: 0 }, uMist: { value: 0 }, uNight: { value: 0 }, uWet: { value: 0 },
         uDayMul: { value: new THREE.Vector3(1, 1, 1) }, uDayAdd: { value: new THREE.Vector3() }, uWaterL: { value: -0.15 }, uCloudK: SH.uCloudK, tMarks: SH.tMarks, uMap: SH.uMap,
         uCloud: SH.uCloud, uCloudT: SH.uCloudT, uSunW: SH.uSunDir, uCloudA: { value: 0 }, uCloudG: { value: 0 }, uRayK: { value: 0 }, uSand: { value: 0 },
         uInvVP: { value: new THREE.Matrix4() }, uW2S: { value: new THREE.Vector4(1, 0, 0, 1) }, uLev: { value: 1 }, tTerr: SH.tTerr, uBorder: SH.uBorder, uMe: { value: 0 },
         // Each side's colour as the anchor pass keeps it, its hue and how coloured it is, and its inks on either paper.
         uSideKey: { value: [...Array(8)].map(() => new THREE.Vector2()) }, uSideL: { value: [...Array(8)].map(() => new THREE.Vector3()) }, uSideD: { value: [...Array(8)].map(() => new THREE.Vector3()) }, uSideB: { value: [...Array(8)].map(() => new THREE.Vector3()) } }, vertexShader: vs, depthTest: false, depthWrite: false, fragmentShader: `
-        varying vec2 vUv; uniform sampler2D t, tSubj, tHeat, tPaper, tNorm, tFogS, tLand, tMarks; uniform float uMap; uniform vec2 res, uOff, uSun2, uWindS, uView, uHSize; uniform float uHScale, uFxs, uFire; uniform int uUnits, uInks; uniform float uDark; uniform sampler2D tH, tFx, tAnc, tFlow, tBrook; uniform vec3 uUpV, uDayMul, uDayAdd; uniform float uTime, uK, uRain, uStorm, uSnowF, uSnowC, uSnowLine, uFlora, uFog, uMist, uNight, uWet, uWaterL, uCloudK, uMarks; uniform int uStyle, uRoad, uOre;
+        varying vec2 vUv; uniform sampler2D t, tSubj, tHeat, tPaper, tNorm, tFogS, tLand, tMarks; uniform float uMap; uniform vec2 res, uOff, uSun2, uWindS, uView, uHSize; uniform float uHScale, uFxs, uFire; uniform int uUnits, uInks; uniform float uDark; uniform sampler2D tH, tFx, tAnc, tFlow, tBrook; uniform vec4 uShow[4]; uniform vec3 uUpV, uDayMul, uDayAdd; uniform float uTime, uK, uRain, uStorm, uSnowF, uSnowC, uSnowLine, uFlora, uFog, uMist, uNight, uWet, uWaterL, uCloudK, uMarks; uniform int uStyle, uRoad, uOre;
         uniform vec2 uSideKey[8]; uniform vec3 uSideL[8], uSideD[8], uSideB[8];
         uniform sampler2D tTerr; uniform float uBorder, uMe;
         uniform vec2 uCloud; uniform vec3 uSunW; uniform float uCloudT, uCloudA, uCloudG, uRayK, uSand;
@@ -910,20 +910,34 @@
             if (!dk) col = mix(col, col * vec3(0.93, 0.94, 0.97), uRayK * (1.0 - beam) * 0.6 * (1.0 - smoothstep(0.7, 2.7, far)));
             col = mix(col, dk ? vec3(0.8, 0.72, 0.52) : vec3(1.0, 0.9, 0.64), uRayK * beam * (dk ? 0.32 : 0.4));
           }
+          // Showers over part of the map: how deep under rain and under snow the ground here lies, and how deep under
+          // the shower's cloud, which is drawn over the ground it falls on so the two read as one.
+          vec2 Wg = landAt(vUv, texture2D(tFogS, vUv).b - 20.0), WgC = Wg;
+          float shR = 0.0, shS = 0.0, shC = 0.0;
+          for (int i = 0; i < 4; i++) {
+            vec4 s = uShow[i];
+            if (s.z <= 0.0) continue;
+            float ragged = 1.0 + (noise(Wg * 0.12 + float(i) * 13.0) - 0.5) * 0.45;
+            float v = smoothstep(s.z, s.z * 0.5, length(Wg - s.xy) * ragged) * abs(s.w);
+            if (s.w > 0.0) shR = max(shR, v); else shS = max(shS, v);
+            shC = max(shC, smoothstep(s.z * 1.15, s.z * 0.6, length(WgC - s.xy) * (1.0 + (noise(WgC * 0.1 + float(i) * 7.0) - 0.5) * 0.5)) * abs(s.w));
+          }
+          col = mix(col, col * (dk ? vec3(0.74, 0.77, 0.84) : vec3(0.8, 0.83, 0.89)), max(shR, shS) * 0.6);
+          float rainL = max(uRain, shR * 0.85);
           // Rain in slanted pen strokes, leaning with the wind, and rings where the drops land.
-          if (uRain > 0.01) {
+          if (rainL > 0.01) {
             vec2 rd = normalize(vec2(uWindS.x * 0.45 + 0.1, -1.0)), rn = vec2(-rd.y, rd.x);
             float sp = 7.0 * uK, ac = dot(px, rn), al = dot(px, rd) - uTime * 1000.0 * uK, ci = floor(ac / sp), per = 160.0 * uK;
             float ph = hash(vec2(ci, 3.0)) * per, row = floor((al + ph) / per), pos = mod(al + ph, per), len = (16.0 + 14.0 * uStorm) * uK;
-            float drop = step(hash(vec2(ci, row)), uRain * (0.5 + 0.45 * uStorm)) * step(pos, len) * (1.0 - smoothstep(0.25 * uK, 0.8 * uK, abs(fract(ac / sp) - 0.5) * sp));
+            float drop = step(hash(vec2(ci, row)), rainL * (0.5 + 0.45 * uStorm)) * step(pos, len) * (1.0 - smoothstep(0.25 * uK, 0.8 * uK, abs(fract(ac / sp) - 0.5) * sp));
             col = mix(col, dk ? vec3(0.55, 0.62, 0.74) : vec3(0.3, 0.36, 0.48), drop * 0.45);
             vec2 sq = (px - uOff) / (20.0 * uK), si = floor(sq), sf = fract(sq) - 0.5;
             float st = fract(uTime * 1.3 + hash(si + 7.0));
-            float ring = (1.0 - smoothstep(0.015, 0.05, abs(length(sf * vec2(1.0, 1.7)) - st * 0.4))) * step(hash(si + 3.0), uRain * 0.6) * (1.0 - st) * (1.0 - step(0.5, s0)) * seenE;
+            float ring = (1.0 - smoothstep(0.015, 0.05, abs(length(sf * vec2(1.0, 1.7)) - st * 0.4))) * step(hash(si + 3.0), rainL * 0.6) * (1.0 - st) * (1.0 - step(0.5, s0)) * seenE;
             col = mix(col, dk ? vec3(0.5, 0.57, 0.7) : vec3(0.35, 0.42, 0.55), ring * 0.55);
           }
           // Snow falling in two layers, each flake white with a fine blue-grey rim.
-          float snowF = uSnowF;
+          float snowF = max(uSnowF, shS * 0.85);
           if (snowF > 0.01) {
             for (int L = 0; L < 2; L++) {
               float fl = float(L), sc = 15.0 + fl * 9.0;
@@ -935,6 +949,11 @@
               col = mix(col, vec3(1.0), inner * has);
             }
           }
+          // A shower's cloud, a grey wash over it, drawn with a ragged edge as the other clouds are.
+          float shZ = mix(0.6, 1.0, smoothstep(1.0, 2.2, uLev)) * (1.0 - 0.45 * step(0.85, s0));
+          col = mix(col, dk ? vec3(0.42, 0.44, 0.5) : vec3(0.64, 0.67, 0.75), shC * 0.55 * shZ);
+          float shW = max(fwidth(shC), 1e-4), shE = (1.0 - smoothstep(0.6 * uK, 1.6 * uK, abs(shC - 0.35) / shW)) * step(0.02, shC);
+          col = mix(col, dk ? vec3(0.7, 0.72, 0.78) : vec3(0.4, 0.44, 0.54), shE * 0.7 * shZ);
           // The clouds themselves over everything, see-through washes drifting with the wind, white in fair weather and
           // grey in foul, each edged with a light scalloped line as a drawn cloud is. They thin when the view is close
           // and over units, so nothing below is lost.

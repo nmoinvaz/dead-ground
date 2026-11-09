@@ -79,6 +79,8 @@ const World = (() => {
       tFlow: { value: black }, tBrook: { value: farBrook },
       // The theatre's wild flowers: 1 the steppe's, 2 the salt flats', 3 the snowy pass's heather.
       uFlora: { value: 0 },
+      // Up to four showers over the map: x, y, radius, and strength, negative for snow.
+      uShow: { value: [0, 1, 2, 3].map(() => new THREE.Vector4()) },
       // How far tread marks darken the ground, none where the look draws them itself.
       uTreadK: { value: 0.34 },
       // How hard the track worn into each cell has become, in red.
@@ -1972,6 +1974,8 @@ const World = (() => {
       if (!S) return;
       const w = studySky ? Object.assign({}, Rules.sky(S), studySky) : Rules.sky(S), k = studySky ? 1 : 1 - Math.exp(-dt * 0.8);
       for (const key of ['clear', 'rain', 'storm', 'fog', 'snow', 'sand', 'cloud', 'cover', 'flood']) sky[key] += (w[key] - sky[key]) * k;
+      const shw = Rules.showersAt(S);
+      for (let i = 0; i < 4; i++) { const s = shw[i]; SH.uShow.value[i].set(s ? s.x : 0, s ? s.y : 0, s ? s.r : 0, s ? (s.kind === 'snow' ? -s.k : s.k) : 0); }
       sky.kind = w.kind;
       // The ground stays wet a while after the rain.
       sky.wet += ((w.rain > 0.2 ? 1 : 0) - sky.wet) * (studySky ? 1 : 1 - Math.exp(-dt * (w.rain > 0.2 ? 0.15 : 0.012)));
