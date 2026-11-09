@@ -1171,6 +1171,8 @@ const Models = (() => {
       pike: soldier({ cloth: A.tunic2, vest: A.mail, vestT: 0.3, hat: 'kettle', arms: 'pike' }),
       musket: soldier({ cloth: A.coatR, vest: A.white, vestT: 0, hat: 'tricorne', arms: 'musket', legs: A.white }),
       rifleman: soldier({ cloth: A.khaki, vest: A.field, hat: 'brodie', arms: 'musket', legs: A.khaki, pack: A.field }),
+      // A general: a dark coat with a red sash and a tricorne, his sword drawn.
+      general: soldier({ cloth: 0x2a2e3e, vest: 0x2a2e3e, vestT: 0, hat: 'tricorne', arms: 'sword', legs: 0xd8d0be, sash: 0xb02a20 }),
       exo: soldier({ cloth: A.exo, vest: A.exoDk, vestT: 0.5, hat: 'visor', arms: 'pulse', legs: A.exoDk, pack: A.exoDk }),
       archer: soldier({ cloth: A.linen, vest: A.tunic2, vestT: 0, hat: 'crest', crest: A.tunic2, arms: 'bow' }),
       crossbow: soldier({ cloth: A.tunic, vest: A.mail, vestT: 0.3, hat: 'kettle', arms: 'xbow' }),

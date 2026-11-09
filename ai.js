@@ -401,7 +401,7 @@ const AI = (() => {
     bridges(S, me, P);
     powers(S, me, P);
 
-    let army = S.ents.filter(e => e.team === team && !e.b && !e.d.cargo && !e.d.repair && !e.d.engineer && !e.d.trade && !e.d.fish && e.drop <= 0);
+    let army = S.ents.filter(e => e.team === team && !e.b && !e.d.cargo && !e.d.repair && !e.d.engineer && !e.d.trade && !e.d.fish && !e.d.general && e.drop <= 0);
     army = garrison(S, me, army);
     army = towns(S, me, army);
     const fight = army.filter(u => !(u.ord && u.ord.t === 'capture') && u.d.move !== 'jet');
