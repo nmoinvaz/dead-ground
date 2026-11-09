@@ -3505,12 +3505,13 @@ const World = (() => {
       if (u.value > 0) u.value = Math.max(0, u.value - dt * 0.9);
       marksLast += dt;
       // Tread marks weather away: every five seconds the scars' green is scaled down a tenth, so one pass is gone in a
-      // minute and a well-used way lasts longer. Scorch and blood stay.
+      // minute and a well-used way lasts longer. In lying snow they keep three times as long, and in mud twice, while
+      // falling snow fills them a little faster than that. Scorch and blood stay.
       treadFade += dt;
       if (marks && treadFade > 5) {
         treadFade = 0;
-        const c = marks.ctx;
-        c.globalCompositeOperation = 'multiply'; c.fillStyle = 'rgb(255,230,255)'; c.fillRect(0, 0, marks.width, marks.height);
+        const c = marks.ctx, keep = sky.snow > 0.3 ? 0.93 : sky.cover > 0.3 ? 0.966 : sky.wet > 0.3 ? 0.95 : 0.9;
+        c.globalCompositeOperation = 'multiply'; c.fillStyle = `rgb(255,${Math.round(255 * keep)},255)`; c.fillRect(0, 0, marks.width, marks.height);
         c.globalCompositeOperation = 'lighter'; marksDirty = true;
       }
       if (marksDirty && marksLast > 0.5) { marksTex.needsUpdate = true; marksDirty = false; marksLast = 0; }
