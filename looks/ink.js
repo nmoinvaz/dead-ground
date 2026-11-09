@@ -19,13 +19,13 @@
       // 45 and 135 degrees, then flat and upright lines for the darkest, each line a little uneven with small gaps.
       // The ground's hatching is pinned to the map so it pans with it, the units' redraws a few times a second.
       const ink = new THREE.ShaderMaterial({ uniforms: { t: { value: null }, tSubj: { value: null }, tHeat: { value: null }, tPaper: { value: null }, res: { value: new THREE.Vector2(1, 1) }, uTime: { value: 0 }, uK: { value: 1 }, uOff: { value: new THREE.Vector2() }, uStyle: { value: 8 }, tNorm: { value: null }, tFogS: { value: null }, tLand: { value: null }, uSun2: { value: new THREE.Vector2(-1, 0) }, uUpV: { value: new THREE.Vector3(0, 1, 0) }, uRoad: { value: 0 }, uOre: { value: 0 }, uMarks: { value: 1 },
-        uWindS: { value: new THREE.Vector2() }, uView: { value: new THREE.Vector2(1, 0) }, tFx: { value: null }, tAnc: { value: null }, uDark: { value: 0 }, uInks: { value: 0 }, uFxs: { value: 0 }, uFire: { value: 0 }, uUnits: { value: 0 }, tH: SH.tH, uHSize: { value: new THREE.Vector2(1, 1) }, uHScale: { value: 1 }, uRain: { value: 0 }, uStorm: { value: 0 }, uSnowF: { value: 0 }, uSnowC: SH.uSnowC, uSnowLine: SH.uSnowLine, tFlow: SH.tFlow, tBrook: SH.tBrook, uFog: { value: 0 }, uMist: { value: 0 }, uNight: { value: 0 }, uWet: { value: 0 },
+        uWindS: { value: new THREE.Vector2() }, uView: { value: new THREE.Vector2(1, 0) }, tFx: { value: null }, tAnc: { value: null }, uDark: { value: 0 }, uInks: { value: 0 }, uFxs: { value: 0 }, uFire: { value: 0 }, uUnits: { value: 0 }, tH: SH.tH, uHSize: { value: new THREE.Vector2(1, 1) }, uHScale: { value: 1 }, uRain: { value: 0 }, uStorm: { value: 0 }, uSnowF: { value: 0 }, uSnowC: SH.uSnowC, uSnowLine: SH.uSnowLine, tFlow: SH.tFlow, tBrook: SH.tBrook, uFlora: SH.uFlora, uFog: { value: 0 }, uMist: { value: 0 }, uNight: { value: 0 }, uWet: { value: 0 },
         uDayMul: { value: new THREE.Vector3(1, 1, 1) }, uDayAdd: { value: new THREE.Vector3() }, uWaterL: { value: -0.15 }, uCloudK: SH.uCloudK, tMarks: SH.tMarks, uMap: SH.uMap,
         uCloud: SH.uCloud, uCloudT: SH.uCloudT, uSunW: SH.uSunDir, uCloudA: { value: 0 }, uCloudG: { value: 0 }, uRayK: { value: 0 }, uSand: { value: 0 },
         uInvVP: { value: new THREE.Matrix4() }, uW2S: { value: new THREE.Vector4(1, 0, 0, 1) }, uLev: { value: 1 }, tTerr: SH.tTerr, uBorder: SH.uBorder, uMe: { value: 0 },
         // Each side's colour as the anchor pass keeps it, its hue and how coloured it is, and its inks on either paper.
         uSideKey: { value: [...Array(8)].map(() => new THREE.Vector2()) }, uSideL: { value: [...Array(8)].map(() => new THREE.Vector3()) }, uSideD: { value: [...Array(8)].map(() => new THREE.Vector3()) }, uSideB: { value: [...Array(8)].map(() => new THREE.Vector3()) } }, vertexShader: vs, depthTest: false, depthWrite: false, fragmentShader: `
-        varying vec2 vUv; uniform sampler2D t, tSubj, tHeat, tPaper, tNorm, tFogS, tLand, tMarks; uniform float uMap; uniform vec2 res, uOff, uSun2, uWindS, uView, uHSize; uniform float uHScale, uFxs, uFire; uniform int uUnits, uInks; uniform float uDark; uniform sampler2D tH, tFx, tAnc, tFlow, tBrook; uniform vec3 uUpV, uDayMul, uDayAdd; uniform float uTime, uK, uRain, uStorm, uSnowF, uSnowC, uSnowLine, uFog, uMist, uNight, uWet, uWaterL, uCloudK, uMarks; uniform int uStyle, uRoad, uOre;
+        varying vec2 vUv; uniform sampler2D t, tSubj, tHeat, tPaper, tNorm, tFogS, tLand, tMarks; uniform float uMap; uniform vec2 res, uOff, uSun2, uWindS, uView, uHSize; uniform float uHScale, uFxs, uFire; uniform int uUnits, uInks; uniform float uDark; uniform sampler2D tH, tFx, tAnc, tFlow, tBrook; uniform vec3 uUpV, uDayMul, uDayAdd; uniform float uTime, uK, uRain, uStorm, uSnowF, uSnowC, uSnowLine, uFlora, uFog, uMist, uNight, uWet, uWaterL, uCloudK, uMarks; uniform int uStyle, uRoad, uOre;
         uniform vec2 uSideKey[8]; uniform vec3 uSideL[8], uSideD[8], uSideB[8];
         uniform sampler2D tTerr; uniform float uBorder, uMe;
         uniform vec2 uCloud; uniform vec3 uSunW; uniform float uCloudT, uCloudA, uCloudG, uRayK, uSand;
@@ -509,7 +509,18 @@
             float tPh = dot(Wl - floor(Wl / 3.0) * 3.0, tw) / (6.0 / 80.0 * exp2(gLm));
             float tEdge = (1.0 - smoothstep(0.35 * uK, 1.0 * uK, abs(trk - 0.8) / tgl)) * mix(step(0.45, fract(tPh)), step(0.45, fract(tPh * 0.5)), gLf);
             base = mix(base, dk ? vec3(0.52, 0.5, 0.47) : vec3(0.42, 0.36, 0.28), tEdge * 0.8 * isG * (1.0 - onRoad));
-            // Grass in tufts of three short strokes, leaning and stirring with the wind, thicker in the meadows.
+            // Wild flowers in patches on the gentler ground, a dot of colour each laid on the land: poppies,
+            // buttercups and cornflowers on the steppe, a sparse pink bloom on the salt flats, heather in the snowy
+            // pass. None in the snow, on a road or by the water.
+            if (uFlora > 0.5 && isG > 0.5) {
+              float fP = smoothstep(0.64, 0.82, noise(Wl * 0.13 + 41.0) * 0.75 + noise(Wl * 0.4 + 7.0) * 0.25) * smoothstep(1.5, 2.3, rd) * (1.0 - cap) * (1.0 - uSnowC) * (1.0 - smoothstep(0.35, 0.7, sSl)) * (1.0 - bankZone);
+              vec2 fq = Wl * 3.2 * exp2(-gLm), fi = floor(fq), fo = vec2(hash(fi + 3.0), hash(fi + 9.0)) * 0.6 + 0.2;
+              float fh = hash(fi + 77.0), fc = hash(fi + 131.0);
+              float fd = (1.0 - smoothstep(0.15, 0.24, length(fract(fq) - fo))) * step(1.0 - fP * (uFlora > 1.5 && uFlora < 2.5 ? 0.3 : uFlora > 2.5 ? 0.45 : 0.75), fh);
+              vec3 FL = uFlora < 1.5 ? (fc < 0.45 ? vec3(0.82, 0.2, 0.14) : fc < 0.75 ? vec3(0.93, 0.78, 0.18) : fc < 0.9 ? vec3(0.35, 0.47, 0.84) : vec3(0.97, 0.96, 0.92))
+                : uFlora < 2.5 ? (fc < 0.6 ? vec3(0.86, 0.42, 0.62) : vec3(0.95, 0.85, 0.5)) : vec3(0.6, 0.42, 0.7);
+              base = mix(base, dk ? FL * 0.85 : FL, fd * 0.85);
+            }
             // Lying snow whitens the land, and the roads less.
             base = mix(base, dk ? vec3(0.48, 0.49, 0.52) : vec3(0.975, 0.975, 0.965), uSnowC * isG * (1.0 - onRoad * 0.5));
             float rH = onRoad * isG > 0.0 || isBr > 0.0 ? hatch(p, 60.0, 4.0, 0.8, 53.0, 0.1) : 0.0;

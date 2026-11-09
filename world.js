@@ -77,6 +77,8 @@ const World = (() => {
       uSnowLine: { value: 99 },
       // The way the rivers run, from buildFlow, and how far each point lies from a brook and whether at its ford.
       tFlow: { value: black }, tBrook: { value: farBrook },
+      // The theatre's wild flowers: 1 the steppe's, 2 the salt flats', 3 the snowy pass's heather.
+      uFlora: { value: 0 },
       // How far tread marks darken the ground, none where the look draws them itself.
       uTreadK: { value: 0.34 },
       // How hard the track worn into each cell has become, in red.
@@ -1027,6 +1029,7 @@ const World = (() => {
       scen.houses = { hb, hr, win, hrub, hbm, hrm, wm, rm, ruined: new Uint8Array(M.houses.length) };
       buildFences();
       buildRoadside();
+      buildPlants();
 
       // Wellheads in a black stain, each bridge on its piers.
       instanced(sc.well, paint, M.wells.map(w => ({ x: w.x, y: terrainAt(M, w.x, w.y), z: w.y })));
@@ -1148,6 +1151,41 @@ const World = (() => {
       }
     }
 
+    // Lesser plants, for the picture alone, by the theatre: shrubs on the slopes, the banks and at the woods' edges,
+    // and by the water reeds, or on the salt flats a palm now and then. None stands on a road or in a wood, and one a
+    // building comes to stand over goes while it stands. The same map grows the same plants.
+    function buildPlants() {
+      const th = theme, rand = mulberry(M.seed + 23), sc = MODELS.scenery, g = M.ground, BD = M.brookDist;
+      const shrubM = th.tree === 'acacia' ? 'scrub' : th.tree === 'conifer' ? 'juniper' : 'bush', desert = th.tree === 'acacia';
+      const dry = (x, y) => terrainAt(M, x, y) >= M.water;
+      const shrubs = [], wet = [];
+      for (let c = 0; c < W * H; c++) {
+        const cx = c % W, cy = c / W | 0, x = cx + 0.15 + rand() * 0.7, y = cy + 0.15 + rand() * 0.7, r = rand(), z = terrainAt(M, x, y);
+        const v = Math.round(y * RES) * VW + Math.round(x * RES), bd = BD ? BD[v] : 99;
+        if (M.roadDist[v] < 2.5 || (g[c] & 8) || z < M.water + 0.1 || bd < 0.65) continue;
+        // At the edge of the water, a river's, a lake's or a brook's.
+        const bank = bd < 1.5 || (z < M.water + 0.7 && (!dry(x + 1, y) || !dry(x - 1, y) || !dry(x, y + 1) || !dry(x, y - 1)));
+        if (bank) { if (r < (desert ? 0.035 : 0.5)) wet.push({ x, y: z - 0.04, z: y, s: (desert ? 0.9 : 0.8) + rand() * 0.5, a: rand() * 6.28, c: desert ? 0x5e7a3a : [0xa8a46a, 0x8a9a58, 0xb8ac78][rand() * 3 | 0], cell: c }); continue; }
+        let edge = false;
+        for (let j = -1; j <= 1 && !edge; j++) for (let i = -1; i <= 1; i++) { const X = cx + i, Y = cy + j; if (X >= 0 && Y >= 0 && X < W && Y < H && (g[Y * W + X] & 8)) { edge = true; break; } }
+        if (r < (edge ? 0.3 : g[c] & 4 ? 0.08 : 0.02)) shrubs.push({ x, y: z - 0.03, z: y, s: 0.7 + rand() * 0.7, a: rand() * 6.28, c: colA.copy(new THREE.Color(th.leaf[0])).lerp(new THREE.Color(th.leaf[1]), rand()).multiplyScalar(0.9 + rand() * 0.25).getHex(), cell: c });
+      }
+      const list = shrubs.slice(0, 2600).concat(wet.slice(0, 2600));
+      const sm = shrubs.length ? lineCat(instanced(sc[shrubM], treeTint, shrubs.slice(0, 2600)), 0.459, true) : null;
+      const wm = wet.length ? lineCat(instanced(sc[desert ? 'palm' : 'reed'], treeTint, wet.slice(0, 2600)), 0.459, true) : null;
+      shrubs.slice(0, 2600).forEach((p, i) => { p.m = sm; p.i = i; });
+      wet.slice(0, 2600).forEach((p, i) => { p.m = wm; p.i = i; });
+      scen.plants = { list, seen: -1 };
+    }
+    // A plant under a building goes while the building stands.
+    function updatePlants() {
+      const P = scen && scen.plants;
+      if (!P || P.seen === S.occVer) return;
+      P.seen = S.occVer;
+      const ms = new Set();
+      for (const p of P.list) { const hid = S.occ[p.cell] ? 1 : 0; if (hid !== (p.hid || 0)) { p.hid = hid; setInst(p.m, p.i, p, !!hid); ms.add(p.m); } }
+      ms.forEach(dirty);
+    }
     // The age the world is seen in: the side being shown, or the most advanced side when watching them all.
     // Motor cars, telegraph lines and road markings belong to the Industrial Age and after.
     const MOTOR_AGE = 4;
@@ -1282,6 +1320,7 @@ const World = (() => {
     function updateScenery(dt) {
       if (!scen) return;
       // Trees: standing, flattened by tracks, on fire, or burnt to black sticks.
+      updatePlants();
       const T = scen.trees;
       if (T.seen !== S.woodVer) {
         const first = T.seen < 0;
@@ -2027,6 +2066,7 @@ const World = (() => {
       let over = 0;
       if (theme.snow !== undefined) for (let i = 0; i < M.h.length; i++) over += M.h[i] > theme.snow;
       SH.uSnowLine.value = over > M.h.length * 0.015 ? theme.snow : 99;
+      SH.uFlora.value = theme.tree === 'broad' ? 1 : theme.tree === 'acacia' ? 2 : 3;
       renderer.setClearColor(theme.shroud, 1);
 
       fogData = new Uint8Array(W * H * 4); fogR = new Float32Array(W * H); fogG = new Float32Array(W * H);

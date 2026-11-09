@@ -812,6 +812,31 @@ const Models = (() => {
       for (let i = 0; i < 4; i++) { const an = i * 1.57 + 0.4; k.cyl(0.015, 0.04, 0.6, Math.cos(an) * 0.18, 0.95, Math.sin(an) * 0.18, 0x5b4632, { seg: 4, rz: -Math.cos(an) * 0.7, rx: Math.sin(an) * 0.7 }); }
       k.add(new THREE.IcosahedronGeometry(0.62, 1), 0, 1.3, 0, 0xffffff, { sy: 0.28 });
       scenery.acacia = k.finish();
+      // Lesser plants, in white where the instance colours them. A bush of a few round clumps, a low scrub, a
+      // juniper of small cones, a bed of reeds with their brown heads, and a palm with its fronds bowed out.
+      const bush = G();
+      for (const [x, y, z, r] of [[0, 0.24, 0, 0.3], [0.2, 0.18, 0.12, 0.22], [-0.18, 0.2, -0.1, 0.24], [0.04, 0.4, -0.04, 0.2]]) bush.add(new THREE.IcosahedronGeometry(r, 0), x, y, z, 0xffffff, { sy: 0.85 });
+      scenery.bush = bush.finish();
+      const scrub = G();
+      for (const [x, z, r] of [[0, 0, 0.26], [0.24, 0.1, 0.18], [-0.2, 0.14, 0.2], [0.08, -0.22, 0.17]]) scrub.add(new THREE.IcosahedronGeometry(r, 0), x, r * 0.45, z, 0xffffff, { sy: 0.5 });
+      for (let i = 0; i < 5; i++) { const an = i * 1.26; scrub.cyl(0.008, 0.012, 0.32, Math.cos(an) * 0.2, 0.22, Math.sin(an) * 0.2, 0x7a6a52, { seg: 3, rz: -Math.cos(an) * 0.6, rx: Math.sin(an) * 0.6 }); }
+      scenery.scrub = scrub.finish();
+      const jun = G();
+      jun.add(new THREE.ConeGeometry(0.26, 0.62, 6), 0, 0.31, 0, 0xffffff);
+      jun.add(new THREE.ConeGeometry(0.2, 0.46, 6), 0.22, 0.23, 0.08, 0xeeeeee, { ry: 0.4 });
+      jun.add(new THREE.ConeGeometry(0.18, 0.4, 6), -0.16, 0.2, -0.14, 0xe4e4e4, { ry: 0.9 });
+      scenery.juniper = jun.finish();
+      const reed = G();
+      for (let i = 0; i < 9; i++) {
+        const an = i * 2.4, r = 0.06 + (i % 3) * 0.08, x = Math.cos(an) * r, z = Math.sin(an) * r, h = 0.55 + (i * 37 % 10) * 0.035;
+        reed.box(0.022, h, 0.022, x, 0, z, 0xffffff, { rz: -x * 0.9, rx: z * 0.9 });
+        if (i % 3 === 0) reed.box(0.04, 0.1, 0.04, x - x * 0.9 * h * 0.5, h - 0.04, z + z * 0.9 * h * 0.5, 0x6a4a2e);
+      }
+      scenery.reed = reed.finish();
+      const palm = G();
+      for (let i = 0; i < 5; i++) palm.cyl(0.07 - i * 0.006, 0.08 - i * 0.006, 0.4, i * i * 0.012, 0.2 + i * 0.4, 0, 0x8a7458, { seg: 6, rz: -i * 0.06 });
+      for (let i = 0; i < 7; i++) { const an = i * 0.9; palm.box(0.7, 0.03, 0.14, 0.16 + Math.cos(an) * 0.34, 1.95, Math.sin(an) * 0.34, 0xffffff, { ry: -an, rz: -0.45 }); }
+      scenery.palm = palm.finish();
       // An outcrop of a few weathered stones of unequal size, each a solid knocked out of true, so it reads as stone
       // and not as a cut solid, and keeps a broken outline when it is small.
       const stone = (rad, seed) => {
