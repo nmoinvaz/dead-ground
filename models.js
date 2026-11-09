@@ -837,6 +837,25 @@ const Models = (() => {
       for (let i = 0; i < 5; i++) palm.cyl(0.07 - i * 0.006, 0.08 - i * 0.006, 0.4, i * i * 0.012, 0.2 + i * 0.4, 0, 0x8a7458, { seg: 6, rz: -i * 0.06 });
       for (let i = 0; i < 7; i++) { const an = i * 0.9; palm.box(0.7, 0.03, 0.14, 0.16 + Math.cos(an) * 0.34, 1.95, Math.sin(an) * 0.34, 0xffffff, { ry: -an, rz: -0.45 }); }
       scenery.palm = palm.finish();
+      // A park's furniture: a fountain of a round stone basin with water in it and a column in the middle, and a
+      // bench of a seat, a back and two ends.
+      const fount = G();
+      fount.cyl(0.8, 0.85, 0.24, 0, 0.12, 0, 0xd8d0c0, { seg: 16 });
+      fount.cyl(0.68, 0.68, 0.02, 0, 0.23, 0, 0x8aa0c8, { seg: 16 });
+      fount.cyl(0.1, 0.13, 0.75, 0, 0.5, 0, 0xd8d0c0, { seg: 8 });
+      fount.cyl(0.3, 0.12, 0.1, 0, 0.88, 0, 0xd8d0c0, { seg: 10 });
+      scenery.fountain = fount.finish();
+      const bench = G();
+      bench.box(0.62, 0.05, 0.18, 0, 0.18, 0, 0x8a6a46);
+      bench.box(0.62, 0.16, 0.04, 0, 0.26, -0.08, 0x8a6a46);
+      for (const x of [-0.27, 0.27]) bench.box(0.05, 0.2, 0.18, x, 0, 0, 0x4a4038);
+      scenery.bench = bench.finish();
+      // A market stall: a table under a striped awning on four poles, the awning coloured per instance.
+      const stall = G();
+      stall.box(0.9, 0.06, 0.5, 0, 0.42, 0, 0x8a6a46);
+      for (const [x, z] of [[-0.42, -0.24], [0.42, -0.24], [-0.42, 0.24], [0.42, 0.24]]) stall.box(0.04, 0.85, 0.04, x, 0, z, 0x5a4632);
+      stall.box(1.0, 0.04, 0.62, 0, 0.86, 0, 0xffffff, { rx: 0.18 });
+      scenery.stall = stall.finish();
       // An outcrop of a few weathered stones of unequal size, each a solid knocked out of true, so it reads as stone
       // and not as a cut solid, and keeps a broken outline when it is small.
       const stone = (rad, seed) => {

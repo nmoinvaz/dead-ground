@@ -81,6 +81,8 @@ const World = (() => {
       uFlora: { value: 0 },
       // Up to four showers over the map: x, y, radius, and strength, negative for snow.
       uShow: { value: [0, 1, 2, 3].map(() => new THREE.Vector4()) },
+      // Up to sixteen town parks: x, y, radius and the turn of their paths.
+      uPark: { value: Array.from({ length: 16 }, () => new THREE.Vector4()) },
       // How far tread marks darken the ground, none where the look draws them itself.
       uTreadK: { value: 0.34 },
       // How hard the track worn into each cell has become, in red.
@@ -1057,6 +1059,7 @@ const World = (() => {
       buildFences();
       buildRoadside();
       buildPlants();
+      buildParks();
 
       // Wellheads in a black stain, each bridge on its piers.
       instanced(sc.well, paint, M.wells.map(w => ({ x: w.x, y: terrainAt(M, w.x, w.y), z: w.y })));
@@ -1205,6 +1208,52 @@ const World = (() => {
       shrubs.slice(0, 2600).forEach((p, i) => { p.m = sm; p.i = i; });
       wet.slice(0, 2600).forEach((p, i) => { p.m = wm; p.i = i; });
       scen.plants = { list, seen: -1 };
+    }
+    // A park beside each town that has room for one: a round lawn with gravel paths and a hedge, drawn by the ink
+    // look, a fountain at its middle, benches and a few trees. Its furniture goes while a building stands over it.
+    let parks = [];
+    function buildParks() {
+      const rand = mulberry(M.seed + 41), sc = MODELS.scenery, th = theme, lf = th.leaf.map(c => new THREE.Color(c));
+      parks = [];
+      M.towns.forEach((t, ti) => {
+        if (parks.length >= 16) return;
+        for (let k = 0; k < 24; k++) {
+          const a = rand() * 6.28, d = 9.5 + rand() * 3, r = 3.6 + rand() * 0.8, x = t.x + Math.cos(a) * d, y = t.y + Math.sin(a) * d;
+          if (x < r + 2 || y < r + 2 || x > W - r - 2 || y > H - r - 2) continue;
+          let ok = true;
+          for (let j = -r; j <= r && ok; j += 0.8) for (let i = -r; i <= r && ok; i += 0.8) {
+            if (i * i + j * j > r * r) continue;
+            const px = x + i, py = y + j, c = Rules.cellOf(px, py), z = terrainAt(M, px, py);
+            if (M.ground[c] || M.ore[c] || z < M.water + 0.3 || M.roadDist[Math.round(py * RES) * VW + Math.round(px * RES)] < 1.8) ok = false;
+          }
+          if (ok && M.houses.some(h => Math.hypot(h.x + h.w / 2 - x, h.y + h.h / 2 - y) < r + 2.5)) ok = false;
+          if (ok && S.bases.some(b => Math.hypot(b[0] - x, b[1] - y) < 26)) ok = false;
+          if (ok && parks.some(p => Math.hypot(p.x - x, p.y - y) < p.r + r + 3)) ok = false;
+          if (ok) { parks.push({ x, y, r, a: rand() * 1.57, town: ti }); break; }
+        }
+      });
+      parks.forEach((p, i) => SH.uPark.value[i].set(p.x, p.y, p.r, p.a));
+      for (let i = parks.length; i < 16; i++) SH.uPark.value[i].set(0, 0, 0, 0);
+      const fount = [], bench = [], tree = [];
+      for (const p of parks) {
+        const g = terrainAt(M, p.x, p.y);
+        fount.push({ x: p.x, y: g - 0.02, z: p.y, s: 0.5, a: p.a, c: 0xffffff, cell: Rules.cellOf(p.x, p.y) });
+        // Benches face the fountain from the ring path, and the theatre's trees stand round the lawn's edge.
+        for (let k = 0; k < 4; k++) {
+          const a = p.a + Math.PI / 4 + k * Math.PI / 2, rb = p.r * 0.55 + 0.4, bx = p.x + Math.cos(a) * rb, by = p.y + Math.sin(a) * rb;
+          bench.push({ x: bx, y: terrainAt(M, bx, by), z: by, s: 0.8, a: -a - Math.PI / 2, c: 0xffffff, cell: Rules.cellOf(bx, by) });
+        }
+        const nt = Math.round(p.r * 2.2);
+        for (let k = 0; k < nt; k++) {
+          const a = p.a + (k + 0.5) / nt * 6.28, rt = p.r - 0.45, tx = p.x + Math.cos(a) * rt, ty = p.y + Math.sin(a) * rt;
+          if (k % 4 === 0) continue;
+          tree.push({ x: tx, y: terrainAt(M, tx, ty) - 0.04, z: ty, s: 0.5 + rand() * 0.12, a: rand() * 6.28, c: colA.copy(lf[0]).lerp(lf[1], rand()).getHex(), cell: Rules.cellOf(tx, ty) });
+        }
+      }
+      const fm = fount.length ? lineCat(instanced(sc.fountain, plainTint, fount), 0.5) : null, bm = bench.length ? lineCat(instanced(sc.bench, plainTint, bench), 0.5) : null;
+      const tm = tree.length ? lineCat(instanced(sc[th.tree], treeTint, tree), 0.459, true) : null;
+      fount.forEach((o, i) => { o.m = fm; o.i = i; }); bench.forEach((o, i) => { o.m = bm; o.i = i; }); tree.forEach((o, i) => { o.m = tm; o.i = i; });
+      scen.plants.list.push(...fount, ...bench, ...tree);
     }
     // A plant under a building goes while the building stands.
     function updatePlants() {
@@ -1501,7 +1550,7 @@ const World = (() => {
         m.setColorAt(0, neutral); m.instanceColor.setUsage(THREE.DynamicDrawUsage);
         return add(m);
       };
-      life = { herds: [], rafts: [], cars: [], folk: [], boats: [], flocks: [], birds: [], alarm: [], danger: [], rise: [], scanT: 0, beastM: {}, carM: mk(sc.car, 32), cartM: mk(sc.cart, 32), folkM: mk(sc.folk, 200), boatM: mk(sc.boat, 12), armM: mk(new THREE.BoxGeometry(0.62, 0.035, 0.035), 60) };
+      life = { herds: [], rafts: [], cars: [], folk: [], boats: [], flocks: [], birds: [], alarm: [], danger: [], rise: [], scanT: 0, beastM: {}, carM: mk(sc.car, 32), cartM: mk(sc.cart, 32), folkM: mk(sc.folk, 400), stallM: mk(sc.stall, 24), fairs: [], boatM: mk(sc.boat, 12), armM: mk(new THREE.BoxGeometry(0.62, 0.035, 0.035), 60) };
       // The theatre's herds by their shares, its wolf packs, and its ducks.
       // The kinds dealt out in proportion to their shares, in a shuffled order, so each comes.
       const deal = (theme.fauna || [['deer', 1]]).flatMap(([k, w]) => Array(w).fill(k)).sort(() => Math.random() - 0.5);
@@ -1530,7 +1579,7 @@ const World = (() => {
       }
       const CARS = [0xb8402e, 0x2f5a8a, 0xe8e0cc, 0x5d7a46, 0x3a3a3a, 0xe0b040], long = life.roads.filter(r => r.len > 14);
       for (let i = 0; i < Math.min(long.length, Math.round(8 * scale)); i++) { const r = long[(i * 7) % long.length]; life.cars.push({ r, s: R() * r.len, dir: R() < 0.5 ? 1 : -1, v: 0, wait: R() * 3, col: CARS[i % CARS.length], x: r.pts[0][0], y: r.pts[0][1], a: 0, turn: false, careless: R() < 0.3 }); }
-      M.towns.forEach((t, ti) => { for (let k = 0; k < 5; k++) life.folk.push({ town: ti, x: t.x + (R() - 0.5) * 5, y: t.y + (R() - 0.5) * 5, tx: t.x, ty: t.y, v: 0, wait: R() * 4, hide: 0, col: SHIRTS[(ti * 5 + k) % SHIRTS.length], a: R() * 6.28, ph: R() * 6 }); });
+      M.towns.forEach((t, ti) => { for (let k = 0; k < TOWNFOLK; k++) life.folk.push({ town: ti, x: t.x + (R() - 0.5) * 5, y: t.y + (R() - 0.5) * 5, tx: t.x, ty: t.y, v: 0, wait: R() * 4, hide: 0, col: SHIRTS[(ti * 5 + k) % SHIRTS.length], a: R() * 6.28, ph: R() * 6 }); });
       for (let tries = 0; life.boats.length < Math.round(2 * scale) && tries < 4000; tries++) {
         const x = 2 + R() * (W - 4), y = 2 + R() * (H - 4);
         if (terrainAt(M, x, y) < -1.0 && Rules.bridgeAt(S, x, y) < 0) life.boats.push({ x, y, a: R() * 6.28, v: 1, ph: R() * 6 });
@@ -1549,6 +1598,10 @@ const World = (() => {
     // drivers of a car that is not burning often get out and fight it out between the wrecks.
     const DRIVER_SHIRTS = [0xf4f0e4, 0x3a3a3a, 0x5a7ab0, 0xc84a3a, 0x8a6a4c];
     const SHIRTS = [0xf4f0e4, 0xc84a3a, 0x5a7ab0, 0xe0c060, 0x7a9a5a, 0xd8a0a0];
+    // People living in each town, and how many more come to its market day.
+    const TOWNFOLK = 12, FAIR_EXTRA = 24;
+    // Market awnings in faded canvas: cream, rust, slate, ochre and sage.
+    const STALL_C = [0xe0d6c0, 0xb88a72, 0xa0aab4, 0xc8b88c, 0xa8b098];
     function crash(c, o) {
       const burn = Math.random() < 0.25, R = Math.random;
       for (const [k, q] of [[1, c], [-1, o]]) { q.crash = { t: 22 + R() * 14, spin: k * (0.45 + R() * 0.7), roll: (R() - 0.5) * 0.3, burn: burn && q === c, smokeT: 0 }; q.v = 0; }
@@ -1694,7 +1747,7 @@ const World = (() => {
           L.rise[ti] = Math.max(0, (L.rise[ti] || 0) - 0.4);
           const folk = L.folk.filter(f => f.town === ti);
           if (!L.danger[ti]) {
-            if (folk.length < 5 && Math.random() < 0.01) L.folk.push({ town: ti, x: t.x, y: t.y, tx: t.x, ty: t.y, v: 0, wait: 2, hide: 0, col: SHIRTS[(ti * 5 + folk.length) % SHIRTS.length], a: Math.random() * 6.28, ph: 0 });
+            if (folk.length < TOWNFOLK && Math.random() < 0.02) L.folk.push({ town: ti, x: t.x, y: t.y, tx: t.x, ty: t.y, v: 0, wait: 2, hide: 0, col: SHIRTS[(ti * 5 + folk.length) % SHIRTS.length], a: Math.random() * 6.28, ph: 0 });
             return;
           }
           if (L.rise[ti] > 0 || night > 0.6 || storm > 0.5) return;
@@ -1854,12 +1907,15 @@ const World = (() => {
         // A driver stands by the wreck a little after the fight, then is gone with it.
         if (f.driver) { f.v = 0; if ((f.life -= dt) <= 0) f.gone = true; continue; }
         if (f.watch > 0) { f.watch -= dt; f.v = 0; f.a = Math.atan2(f.watchAt[1] - f.y, f.watchAt[0] - f.x); continue; }
-        const t = M.towns[f.town];
-        if (f.wait > 0) { f.wait -= dt; f.v = 0; continue; }
+        const t = M.towns[f.town], fair = L.fairs.find(q => q.town === f.town), park = parks.find(q => q.town === f.town);
+        if (f.wait > 0) { f.wait -= dt; f.v = 0; if (fair) f.a = lerpA(f.a, Math.atan2(fair.y - f.y, fair.x - f.x), dt); continue; }
         const dx = f.tx - f.x, dy = f.ty - f.y, d = Math.hypot(dx, dy);
         if (d < 0.3) {
           f.wait = 2 + Math.random() * 6;
-          for (let k = 0; k < 10; k++) { const a = Math.random() * 6.28, r = 1.5 + Math.random() * 6.5, x = t.x + Math.cos(a) * r, y = t.y + Math.sin(a) * r; if (openAt(x, y)) { f.tx = x; f.ty = y; break; } }
+          // On a market day the town comes to the park and mills about the stalls; otherwise a stroll about the
+          // houses, or now and then in the park.
+          const P = fair || (park && Math.random() < 0.3 ? park : null), cx = P ? P.x : t.x, cy = P ? P.y : t.y, rr = P ? (fair ? 1.2 + Math.random() * 3.2 : 1 + Math.random() * P.r * 0.8) : 1.5 + Math.random() * 6.5;
+          for (let k = 0; k < 10; k++) { const a = Math.random() * 6.28, r = k ? rr : rr, x = cx + Math.cos(a) * r, y = cy + Math.sin(a) * r; if (openAt(x, y)) { f.tx = x; f.ty = y; break; } }
           continue;
         }
         f.v = 0.8; f.a = Math.atan2(dy, dx); f.ph += dt * 8;
@@ -1867,6 +1923,21 @@ const World = (() => {
         if (openAt(nx, ny)) { f.x = nx; f.y = ny; } else { f.tx = f.x; f.ty = f.y; }
       }
       if (L.folk.some(f => f.gone)) L.folk = L.folk.filter(f => !f.gone);
+      // Market days. Now and then, by day and in peace, a town with a park holds a market there for a few minutes:
+      // stalls go up round the fountain, its people crowd in, and more come from round about. Trouble ends it at once.
+      for (let i = L.fairs.length - 1; i >= 0; i--) { const q = L.fairs[i]; q.t -= dt; if (q.t <= 0 || L.danger[q.town] || night > 0.6 || storm > 0.5) L.fairs.splice(i, 1); }
+      if (night < 0.4 && storm < 0.3 && Math.random() < dt / 70) {
+        const free = parks.filter(p => !L.danger[p.town] && !L.fairs.some(q => q.town === p.town));
+        const p = free[Math.random() * free.length | 0];
+        if (p) {
+          const ns = 4 + (Math.random() * 3 | 0);
+          L.fairs.push({ town: p.town, x: p.x, y: p.y, t: 90 + Math.random() * 90, stalls: Array.from({ length: ns }, (_, k) => ({ a: p.a + k / ns * 6.28 + 0.3, col: STALL_C[k % STALL_C.length] })) });
+          const t = M.towns[p.town];
+          for (let k = 0; k < FAIR_EXTRA; k++) L.folk.push({ town: p.town, visitor: 120 + Math.random() * 60, x: t.x + (Math.random() - 0.5) * 8, y: t.y + (Math.random() - 0.5) * 8, tx: p.x, ty: p.y, v: 0, wait: Math.random() * 3, hide: 0, col: SHIRTS[(k * 7) % SHIRTS.length], a: Math.random() * 6.28, ph: Math.random() * 6 });
+        }
+      }
+      // Visitors go home when the market ends.
+      for (const f of L.folk) if (f.visitor) { f.visitor -= dt; if (f.visitor <= 0 || !L.fairs.some(q => q.town === f.town)) f.gone = true; }
       // Boats keep to deep water, turning from the shallows, the fords and the banks.
       for (const b of L.boats) {
         const ahead = da => terrainAt(M, b.x + Math.cos(b.a + da) * 2.2, b.y + Math.sin(b.a + da) * 2.2);
@@ -1941,7 +2012,7 @@ const World = (() => {
       n = 0;
       let na = 0;
       for (const f of L.folk) {
-        if (n >= 200 || !VIS(f.x, f.y)) continue;
+        if (n >= 400 || !VIS(f.x, f.y)) continue;
         if (!f.fight && !(f.dead > 0) && (f.hide > 0 || L.danger[f.town])) continue;
         let px = f.x, py = f.y, lean = 0, roll = 0, hop = f.v > 0 ? Math.abs(Math.sin(f.ph)) * 0.03 : 0;
         // Arms carried at the port, run with, and swung or levelled at the foe.
@@ -1964,6 +2035,16 @@ const World = (() => {
         L.folkM.setMatrixAt(n, m1); L.folkM.setColorAt(n, colA.set(f.col)); n++;
       }
       L.folkM.count = n; dirty(L.folkM);
+      // The stalls of a market day, round the park's fountain.
+      let ns = 0;
+      for (const q of L.fairs) for (const s of q.stalls) {
+        if (ns >= 24) break;
+        const p = parks.find(o => o.town === q.town), rr = p ? p.r * 0.3 + 0.6 : 2, x = q.x + Math.cos(s.a) * rr, y = q.y + Math.sin(s.a) * rr;
+        if (!VIS(x, y)) continue;
+        compose(m1, x, heightAt(M, x, y), y, -s.a + Math.PI / 2, 0, 0, 0.75);
+        L.stallM.setMatrixAt(ns, m1); L.stallM.setColorAt(ns, colA.set(s.col)); ns++;
+      }
+      L.stallM.count = ns; dirty(L.stallM);
       L.armM.count = na; dirty(L.armM);
       n = 0;
       for (const b of L.boats) {
@@ -3430,6 +3511,9 @@ const World = (() => {
       watchAll() { viewTeam = -1; SH.uFogOn.value = 0; },
       // Where one herd of each kind stands, and a raft of ducks, for checks.
       lifeAll() { return life ? life.herds.map(h => h.kind) : []; },
+      // The parks, and a market day called now at one of them, for checks.
+      parksDebug() { return parks.map(p => ({ x: p.x, y: p.y, r: p.r, town: p.town })); },
+      fairNow(i) { const p = parks[i]; if (!p || !life) return; life.fairs = life.fairs.filter(q => q.town !== p.town); const t0 = life.fairs.length; life.fairs.push({ town: p.town, x: p.x, y: p.y, t: 120, stalls: Array.from({ length: 5 }, (_, k) => ({ a: p.a + k / 5 * 6.28 + 0.3, col: STALL_C[k] })) }); const t = M.towns[p.town]; for (let k = 0; k < 24; k++) life.folk.push({ town: p.town, visitor: 120, x: t.x + (Math.random() - 0.5) * 8, y: t.y + (Math.random() - 0.5) * 8, tx: p.x, ty: p.y, v: 0, wait: Math.random() * 3, hide: 0, col: [0xf4f0e4, 0xc84a3a, 0x5a7ab0, 0xe0c060, 0x7a9a5a, 0xd8a0a0][k % 6], a: 0, ph: 0 }); for (const f of life.folk) if (f.town === p.town) { f.tx = p.x + (Math.random() - 0.5) * 4; f.ty = p.y + (Math.random() - 0.5) * 4; f.wait = 0; } return t0; },
       lifeDebug() { if (!life) return []; const out = [], seen = new Set(); for (const h of life.herds) if (!seen.has(h.kind)) { seen.add(h.kind); out.push({ kind: h.kind, x: h.deer[0].x, y: h.deer[0].y, n: h.deer.length }); } if (life.rafts[0]) out.push({ kind: 'duck', x: life.rafts[0].x, y: life.rafts[0].y, n: life.rafts[0].ducks.length }); return out; },
       visible: VIS,
       // Whether a point has been seen by the side being shown, so what is remembered there is drawn.
