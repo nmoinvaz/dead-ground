@@ -598,7 +598,7 @@ body[data-look="ink"] .sheet { box-shadow: 4px 4px 0 var(--ink); }
       <div class="choice"><h2>Ore, oil and power</h2><div id="s-gauges" class="two"><button data-v="top">In the top bar</button><button data-v="side">In the sidebar</button></div></div>
       <div class="choice"><h2>Map sheet frame</h2><div id="s-sheet" class="two"><button data-v="on">On</button><button data-v="off">Off</button></div></div>
       <div class="choice"><h2>Music</h2><div id="s-music" class="two"><button data-v="on">On</button><button data-v="off">Off</button></div></div>
-      <p id="build">Build a6e0a47 2026-11-08 23:50</p>
+      <p id="build">Build ed483c6 2026-11-08 23:59</p>
     </div>
     <div id="banner" hidden></div>
     <button id="update" hidden>A new version of Dead Ground is out. <b>Reload</b></button>
@@ -8415,6 +8415,8 @@ if (typeof module !== 'undefined') module.exports = Looks;
           vec3 brdLC = vec3(0.0), brdWC = vec3(1.0);
           float brdL = 0.0, brdW = 0.0;
           float waterK = 0.0;
+          // How far the ground lies under snow, the year's on the heights or the weather's, for the tracks across it.
+          float gSnow = 0.0;
           // The mixture's washes under its ink, and its lines alone, for the remembered past.
           vec3 baseC = paperC;
           float lineK = lines;
@@ -8729,6 +8731,7 @@ if (typeof module !== 'undefined') module.exports = Looks;
             float sOld = smoothstep(0.35, 0.75, noise(Wl * 0.05 + 11.0));
             tint = mix(tint, dk ? mix(vec3(0.6, 0.62, 0.66), vec3(0.5, 0.53, 0.58), sOld) : mix(vec3(0.985, 0.985, 0.975), vec3(0.89, 0.91, 0.94), sOld * 0.85), cap);
             CONT = mix(CONT, SNOWL, cap);
+            gSnow = max(cap, uSnowC) * isG;
             // A face too steep for soil is bare rock, in a cool grey wash with its contours dropped, as a Swiss map
             // leaves them out where the rock drawing carries the form. None by the water or on a road.
             float rkN = (noise(Wl * 0.21 + 13.0) - 0.5) * 0.7 + (noise(Wl * 0.7 + 3.0) - 0.5) * 0.25;
@@ -9177,7 +9180,16 @@ if (typeof module !== 'undefined') module.exports = Looks;
           float tG = 0.25 * (texture2D(tMarks, mu + mo).g + texture2D(tMarks, mu - mo).g + texture2D(tMarks, mu + vec2(mo.x, -mo.y)).g + texture2D(tMarks, mu + vec2(-mo.x, mo.y)).g);
           float tGw = max(fwidth(tG), 1e-4), tBand = smoothstep(0.06 - tGw * 0.6, 0.06 + tGw * 0.6, tG) * gnd;
           float tGrain = mix(0.3 + 0.7 * step(0.3, noise(Wm * 5.0)), 0.8, smoothstep(0.25, 0.8, fwidth(Wm.x * 5.0)));
-          col = mix(col, dk ? vec3(0.44, 0.42, 0.39) : vec3(0.55, 0.46, 0.35), tBand * (0.24 + 0.36 * smoothstep(0.1, 0.45, tG)) * tGrain);
+          // In snow a track is a trough in blue-grey, pocked with the prints of feet and treads. In mud it is a dark
+          // rut, with water standing along the deepest of them.
+          float tSnow = gSnow * tBand, tMud = uWet * (1.0 - gSnow) * tBand;
+          vec3 trC = mix(dk ? vec3(0.44, 0.42, 0.39) : vec3(0.55, 0.46, 0.35), dk ? vec3(0.42, 0.5, 0.66) : vec3(0.6, 0.67, 0.8), gSnow);
+          trC = mix(trC, dk ? vec3(0.22, 0.19, 0.15) : vec3(0.47, 0.38, 0.28), uWet * (1.0 - gSnow));
+          col = mix(col, trC, tBand * (0.24 + 0.36 * smoothstep(0.1, 0.45, tG)) * mix(tGrain, 1.0, max(gSnow, uWet)));
+          vec2 pq = Wm * 7.0 * exp2(-gLm), pj = vec2(hash(floor(pq) + 3.0), hash(floor(pq) + 8.0)) * 0.4 + 0.3;
+          float tPrint = step(0.45, hash(floor(pq) + 21.0)) * (1.0 - smoothstep(0.12, 0.2, length(fract(pq) - pj)));
+          col = mix(col, dk ? vec3(0.3, 0.36, 0.5) : vec3(0.38, 0.45, 0.62), tPrint * tSnow * 0.7);
+          col = mix(col, dk ? vec3(0.25, 0.3, 0.45) : vec3(0.6, 0.62, 0.76), smoothstep(0.35, 0.5, tG) * tMud * 0.6);
           // Blood where men and beasts fell, in solid red ink read from the scars on the land under the pixel.
           // A flat wash inside a fine outline of darker red, as a blot of ink dries.
           float bB = texture2D(tMarks, Wm / uMap).b, bw = max(fwidth(bB), 1e-4);
@@ -12999,12 +13011,13 @@ const World = (() => {
       if (u.value > 0) u.value = Math.max(0, u.value - dt * 0.9);
       marksLast += dt;
       // Tread marks weather away: every five seconds the scars' green is scaled down a tenth, so one pass is gone in a
-      // minute and a well-used way lasts longer. Scorch and blood stay.
+      // minute and a well-used way lasts longer. In lying snow they keep three times as long, and in mud twice, while
+      // falling snow fills them a little faster than that. Scorch and blood stay.
       treadFade += dt;
       if (marks && treadFade > 5) {
         treadFade = 0;
-        const c = marks.ctx;
-        c.globalCompositeOperation = 'multiply'; c.fillStyle = 'rgb(255,230,255)'; c.fillRect(0, 0, marks.width, marks.height);
+        const c = marks.ctx, keep = sky.snow > 0.3 ? 0.93 : sky.cover > 0.3 ? 0.966 : sky.wet > 0.3 ? 0.95 : 0.9;
+        c.globalCompositeOperation = 'multiply'; c.fillStyle = `rgb(255,${Math.round(255 * keep)},255)`; c.fillRect(0, 0, marks.width, marks.height);
         c.globalCompositeOperation = 'lighter'; marksDirty = true;
       }
       if (marksDirty && marksLast > 0.5) { marksTex.needsUpdate = true; marksDirty = false; marksLast = 0; }
