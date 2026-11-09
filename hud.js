@@ -478,6 +478,15 @@ const Hud = (() => {
         return;
       }
       if (e && e.b && e.team === t && us.some(u => u.d.engineer)) { game.order(s, t, { c: 'attack', ids: us.filter(u => u.d.engineer).map(u => u.id), id: e.id }); marker(e.x, e.y, '#7fe0a0'); return; }
+      // One of the side's own, a unit not among those sent or a building: they guard it.
+      if (e && e.team === t && !(e.b && e.kind === 'refinery' && us.some(u => u.d.cargo)) && !ids.includes(e.id)) {
+        const gs = us.filter(u => !Rules.isAir(u) && !u.d.cargo && u.id !== e.id).map(u => u.id);
+        if (gs.length) {
+          game.order(s, t, { c: 'guard', ids: gs, id: e.id }); marker(e.x, e.y, '#7fc0ff'); game.audio.ack(us[0]);
+          say(`Guarding the ${(e.b ? Rules.nameOf(e.kind, s.P[t].tech) : e.d.name).toLowerCase()}.`);
+          return;
+        }
+      }
       // A bridge: engineers mend or rebuild it, and an attack order on it brings it down.
       const bi = e ? -1 : Rules.bridgeAt(s, g.x, g.y);
       if (bi >= 0) {

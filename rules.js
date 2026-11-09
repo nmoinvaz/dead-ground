@@ -3181,6 +3181,8 @@ const Rules = (() => {
       return;
     }
 
+    if (o.t === 'guard') return guardGo(S, u, o, t, shoot);
+
     if (o.t === 'attack' || o.t === 'group') {
       if (o.t === 'attack' && d.engineer) return engineerGo(S, u, t);
       if (o.t === 'attack' && d.hero && t.b) return heroC4(S, u, t);
@@ -3210,6 +3212,37 @@ const Rules = (() => {
       if (o.cov >= 0 && mhypot(u.x - sx, u.y - sy) < 0.5) { u.x = sx; u.y = sy; u.a = coverPoints(S.map)[o.cov].dir; u.cov = o.cov; }
       u.ord = null; u.tgt = 0; u.home = null;
     }
+  }
+
+  // Guarding. A guard keeps a place beside its charge, a unit or a building of its side, following a unit where it
+  // goes, a little behind it. Whatever enemy comes within GUARD_R of the charge it fights, the nearest armed one
+  // first, chasing no further than GUARD_LEASH from the charge, and then it takes its place again. It ends when
+  // the charge is gone.
+  const GUARD_R = 10, GUARD_LEASH = 16;
+  function guardGo(S, u, o, t, shoot) {
+    const g = S.byId.get(o.id), d = u.d;
+    if (!g || g.hp <= 0 || g.team !== u.team) { u.ord = null; u.tgt = 0; u.v = 0; return; }
+    if (t && (mhypot(t.x - g.x, t.y - g.y) > GUARD_LEASH || mhypot(u.x - g.x, u.y - g.y) > GUARD_LEASH)) { t = null; u.tgt = 0; }
+    if (!t && armed(u) && S.tick % 10 === u.id % 10) {
+      let best = null, bd = Infinity;
+      near(S, g.x, g.y, GUARD_R, e => {
+        if (e.team === u.team || e.team < 0 || e.hp <= 0 || e.drop > 0 || atPeace(S, u.team, e.team) || !seenBy(S, u.team, e)) return;
+        if (!d.weapons.some(wn => canHit(wn, e))) return;
+        const dd = gap(g.x, g.y, e) + (e.b ? 8 : 0) + (armed(e) ? 0 : 4);
+        if (dd < GUARD_R + 8 && dd < bd) { bd = dd; best = e; }
+      });
+      if (best) { t = best; u.tgt = best.id; }
+    }
+    if (t) {
+      if (shoot) { u.v = 0; return; }
+      drive(S, u, t.x, t.y, Math.max(WEAPONS[d.weapons[0]].r * 0.85, 1));
+      return;
+    }
+    // Its place: round a building, or behind a unit and to one side, by its own number so guards spread out.
+    const k = ((u.id * 2.39996) % 2.4) - 1.2, r = g.b ? Math.max(g.w, g.h) / 2 + 1.6 : 1.6 + d.r + (g.d.r || 0.5);
+    const a = g.b ? (u.id * 2.39996) % TAU : g.a + PI + k;
+    const sx = clamp(g.x + mcos(a) * r, 1, W - 1), sy = clamp(g.y + msin(a) * r, 1, H - 1);
+    if (mhypot(u.x - sx, u.y - sy) > (g.b ? 1.2 : 0.9)) drive(S, u, sx, sy, 0.5); else { u.v = 0; if (!g.b) u.a += clamp(angleTo(u.a, g.a), -3 * DT, 3 * DT); }
   }
 
   // The building an engineer goes to mend unasked. Its side's own within reach, at most FIX_AT whole, the worst hurt
@@ -3782,6 +3815,14 @@ const Rules = (() => {
         u.tgt = pick; u.wpT = 0; u.stuck = 0; u.home = null;
       }
       S.ev.push({ t: 'marked', team, ids, x: c.x, y: c.y, r: c.r });
+    } else if (c.c === 'guard') {
+      // Guard a unit or a building of the side's own.
+      const g = S.byId.get(c.id);
+      if (!g || g.hp <= 0 || g.team !== team) return;
+      for (const u of unitsOf(S, team, c.ids)) {
+        if (u === g || isAir(u) || u.d.cargo || u.d.trade || u.d.fish) continue;
+        u.ord = { t: 'guard', id: g.id }; u.tgt = 0; u.home = null; u.wpT = 0; u.stuck = 0; u.mend = null; u.exp = false;
+      }
     } else if (c.c === 'explore') {
       // Scouts set to explore, or stopped from it, where they stand.
       for (const u of unitsOf(S, team, c.ids)) { if (!canExplore(u)) continue; u.exp = !!c.on; if (u.ord && u.ord.exp) { u.ord = null; u.v = 0; } u.expWait = 0; }

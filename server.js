@@ -19,7 +19,7 @@ const CMDS = {
   move: ['ids', 'x', 'y', 'a'], attack: ['ids', 'id'], strike: ['ids', 'id', 'x', 'y', 'r'], stop: ['ids'], harvest: ['ids', 'cell'],
   capture: ['ids', 'town'], train: ['kind'], build: ['kind'], research: [], hold: ['cat', 'i'], cancel: ['cat', 'i'],
   place: ['kind', 'x', 'y'], sell: ['id'], repair: ['id'], rally: ['id', 'x', 'y'], power: ['name', 'x', 'y'], launch: ['x', 'y'],
-  form: ['ids', 'f'], stance: ['ids', 'v'], fallback: ['ids', 'on'], explore: ['ids', 'on'], upgrade: ['id', 'k'], unupgrade: ['id'],
+  form: ['ids', 'f'], stance: ['ids', 'v'], fallback: ['ids', 'on'], explore: ['ids', 'on'], guard: ['ids', 'id'], upgrade: ['id', 'k'], unupgrade: ['id'],
 };
 const CATS = ['bld', 'def', 'inf', 'veh', 'air', 'tech'];
 function clean(S, c) {
