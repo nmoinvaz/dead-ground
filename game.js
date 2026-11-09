@@ -595,7 +595,8 @@ const Game = (() => {
     function drawPreview(key, seed, slots) {
       const m = Rules.MAPS[key], id = m.layout + ':' + seed + ':' + (Looks.dark ? 'd' : 'l'), cv = $('preview');
       const css = Math.max(120, cv.clientWidth || 280), px = Math.round(css * Math.min(2, devicePixelRatio || 1));
-      if (cv.width !== px) { cv.width = cv.height = px; }
+      // A canvas starts 300 by 150, so a 300 pixel column must still set its height.
+      if (cv.width !== px || cv.height !== px) { cv.width = cv.height = px; }
       const g = cv.getContext('2d');
       const paint = P => {
         g.clearRect(0, 0, px, px);
