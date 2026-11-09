@@ -595,7 +595,7 @@ body[data-look="ink"] .sheet { box-shadow: 4px 4px 0 var(--ink); }
       <div class="choice"><h2>Picture</h2><div id="s-pic" class="two"><button data-v="sharp">Sharp</button><button data-v="fast">Faster</button></div><p id="s-pic-note"></p></div>
       <div class="choice"><h2>Ore, oil and power</h2><div id="s-gauges" class="two"><button data-v="side">In the sidebar</button><button data-v="top">In the top bar</button></div></div>
       <div class="choice"><h2>Music</h2><div id="s-music" class="two"><button data-v="on">On</button><button data-v="off">Off</button></div></div>
-      <p id="build">Build e399e13 2026-11-08 17:35</p>
+      <p id="build">Build 0466773 2026-11-08 17:41</p>
     </div>
     <div id="banner" hidden></div>
     <button id="update" hidden>A new version of Dead Ground is out. <b>Reload</b></button>
@@ -5851,6 +5851,31 @@ const Models = (() => {
       for (let i = 0; i < 4; i++) { const an = i * 1.57 + 0.4; k.cyl(0.015, 0.04, 0.6, Math.cos(an) * 0.18, 0.95, Math.sin(an) * 0.18, 0x5b4632, { seg: 4, rz: -Math.cos(an) * 0.7, rx: Math.sin(an) * 0.7 }); }
       k.add(new THREE.IcosahedronGeometry(0.62, 1), 0, 1.3, 0, 0xffffff, { sy: 0.28 });
       scenery.acacia = k.finish();
+      // Lesser plants, in white where the instance colours them. A bush of a few round clumps, a low scrub, a
+      // juniper of small cones, a bed of reeds with their brown heads, and a palm with its fronds bowed out.
+      const bush = G();
+      for (const [x, y, z, r] of [[0, 0.24, 0, 0.3], [0.2, 0.18, 0.12, 0.22], [-0.18, 0.2, -0.1, 0.24], [0.04, 0.4, -0.04, 0.2]]) bush.add(new THREE.IcosahedronGeometry(r, 0), x, y, z, 0xffffff, { sy: 0.85 });
+      scenery.bush = bush.finish();
+      const scrub = G();
+      for (const [x, z, r] of [[0, 0, 0.26], [0.24, 0.1, 0.18], [-0.2, 0.14, 0.2], [0.08, -0.22, 0.17]]) scrub.add(new THREE.IcosahedronGeometry(r, 0), x, r * 0.45, z, 0xffffff, { sy: 0.5 });
+      for (let i = 0; i < 5; i++) { const an = i * 1.26; scrub.cyl(0.008, 0.012, 0.32, Math.cos(an) * 0.2, 0.22, Math.sin(an) * 0.2, 0x7a6a52, { seg: 3, rz: -Math.cos(an) * 0.6, rx: Math.sin(an) * 0.6 }); }
+      scenery.scrub = scrub.finish();
+      const jun = G();
+      jun.add(new THREE.ConeGeometry(0.26, 0.62, 6), 0, 0.31, 0, 0xffffff);
+      jun.add(new THREE.ConeGeometry(0.2, 0.46, 6), 0.22, 0.23, 0.08, 0xeeeeee, { ry: 0.4 });
+      jun.add(new THREE.ConeGeometry(0.18, 0.4, 6), -0.16, 0.2, -0.14, 0xe4e4e4, { ry: 0.9 });
+      scenery.juniper = jun.finish();
+      const reed = G();
+      for (let i = 0; i < 9; i++) {
+        const an = i * 2.4, r = 0.06 + (i % 3) * 0.08, x = Math.cos(an) * r, z = Math.sin(an) * r, h = 0.55 + (i * 37 % 10) * 0.035;
+        reed.box(0.022, h, 0.022, x, 0, z, 0xffffff, { rz: -x * 0.9, rx: z * 0.9 });
+        if (i % 3 === 0) reed.box(0.04, 0.1, 0.04, x - x * 0.9 * h * 0.5, h - 0.04, z + z * 0.9 * h * 0.5, 0x6a4a2e);
+      }
+      scenery.reed = reed.finish();
+      const palm = G();
+      for (let i = 0; i < 5; i++) palm.cyl(0.07 - i * 0.006, 0.08 - i * 0.006, 0.4, i * i * 0.012, 0.2 + i * 0.4, 0, 0x8a7458, { seg: 6, rz: -i * 0.06 });
+      for (let i = 0; i < 7; i++) { const an = i * 0.9; palm.box(0.7, 0.03, 0.14, 0.16 + Math.cos(an) * 0.34, 1.95, Math.sin(an) * 0.34, 0xffffff, { ry: -an, rz: -0.45 }); }
+      scenery.palm = palm.finish();
       // An outcrop of a few weathered stones of unequal size, each a solid knocked out of true, so it reads as stone
       // and not as a cut solid, and keeps a broken outline when it is small.
       const stone = (rad, seed) => {
@@ -7726,13 +7751,13 @@ if (typeof module !== 'undefined') module.exports = Looks;
       // 45 and 135 degrees, then flat and upright lines for the darkest, each line a little uneven with small gaps.
       // The ground's hatching is pinned to the map so it pans with it, the units' redraws a few times a second.
       const ink = new THREE.ShaderMaterial({ uniforms: { t: { value: null }, tSubj: { value: null }, tHeat: { value: null }, tPaper: { value: null }, res: { value: new THREE.Vector2(1, 1) }, uTime: { value: 0 }, uK: { value: 1 }, uOff: { value: new THREE.Vector2() }, uStyle: { value: 8 }, tNorm: { value: null }, tFogS: { value: null }, tLand: { value: null }, uSun2: { value: new THREE.Vector2(-1, 0) }, uUpV: { value: new THREE.Vector3(0, 1, 0) }, uRoad: { value: 0 }, uOre: { value: 0 }, uMarks: { value: 1 },
-        uWindS: { value: new THREE.Vector2() }, uView: { value: new THREE.Vector2(1, 0) }, tFx: { value: null }, tAnc: { value: null }, uDark: { value: 0 }, uInks: { value: 0 }, uFxs: { value: 0 }, uFire: { value: 0 }, uUnits: { value: 0 }, tH: SH.tH, uHSize: { value: new THREE.Vector2(1, 1) }, uHScale: { value: 1 }, uRain: { value: 0 }, uStorm: { value: 0 }, uSnowF: { value: 0 }, uSnowC: SH.uSnowC, uSnowLine: SH.uSnowLine, tFlow: SH.tFlow, tBrook: SH.tBrook, uFog: { value: 0 }, uMist: { value: 0 }, uNight: { value: 0 }, uWet: { value: 0 },
+        uWindS: { value: new THREE.Vector2() }, uView: { value: new THREE.Vector2(1, 0) }, tFx: { value: null }, tAnc: { value: null }, uDark: { value: 0 }, uInks: { value: 0 }, uFxs: { value: 0 }, uFire: { value: 0 }, uUnits: { value: 0 }, tH: SH.tH, uHSize: { value: new THREE.Vector2(1, 1) }, uHScale: { value: 1 }, uRain: { value: 0 }, uStorm: { value: 0 }, uSnowF: { value: 0 }, uSnowC: SH.uSnowC, uSnowLine: SH.uSnowLine, tFlow: SH.tFlow, tBrook: SH.tBrook, uFlora: SH.uFlora, uFog: { value: 0 }, uMist: { value: 0 }, uNight: { value: 0 }, uWet: { value: 0 },
         uDayMul: { value: new THREE.Vector3(1, 1, 1) }, uDayAdd: { value: new THREE.Vector3() }, uWaterL: { value: -0.15 }, uCloudK: SH.uCloudK, tMarks: SH.tMarks, uMap: SH.uMap,
         uCloud: SH.uCloud, uCloudT: SH.uCloudT, uSunW: SH.uSunDir, uCloudA: { value: 0 }, uCloudG: { value: 0 }, uRayK: { value: 0 }, uSand: { value: 0 },
         uInvVP: { value: new THREE.Matrix4() }, uW2S: { value: new THREE.Vector4(1, 0, 0, 1) }, uLev: { value: 1 }, tTerr: SH.tTerr, uBorder: SH.uBorder, uMe: { value: 0 },
         // Each side's colour as the anchor pass keeps it, its hue and how coloured it is, and its inks on either paper.
         uSideKey: { value: [...Array(8)].map(() => new THREE.Vector2()) }, uSideL: { value: [...Array(8)].map(() => new THREE.Vector3()) }, uSideD: { value: [...Array(8)].map(() => new THREE.Vector3()) }, uSideB: { value: [...Array(8)].map(() => new THREE.Vector3()) } }, vertexShader: vs, depthTest: false, depthWrite: false, fragmentShader: `
-        varying vec2 vUv; uniform sampler2D t, tSubj, tHeat, tPaper, tNorm, tFogS, tLand, tMarks; uniform float uMap; uniform vec2 res, uOff, uSun2, uWindS, uView, uHSize; uniform float uHScale, uFxs, uFire; uniform int uUnits, uInks; uniform float uDark; uniform sampler2D tH, tFx, tAnc, tFlow, tBrook; uniform vec3 uUpV, uDayMul, uDayAdd; uniform float uTime, uK, uRain, uStorm, uSnowF, uSnowC, uSnowLine, uFog, uMist, uNight, uWet, uWaterL, uCloudK, uMarks; uniform int uStyle, uRoad, uOre;
+        varying vec2 vUv; uniform sampler2D t, tSubj, tHeat, tPaper, tNorm, tFogS, tLand, tMarks; uniform float uMap; uniform vec2 res, uOff, uSun2, uWindS, uView, uHSize; uniform float uHScale, uFxs, uFire; uniform int uUnits, uInks; uniform float uDark; uniform sampler2D tH, tFx, tAnc, tFlow, tBrook; uniform vec3 uUpV, uDayMul, uDayAdd; uniform float uTime, uK, uRain, uStorm, uSnowF, uSnowC, uSnowLine, uFlora, uFog, uMist, uNight, uWet, uWaterL, uCloudK, uMarks; uniform int uStyle, uRoad, uOre;
         uniform vec2 uSideKey[8]; uniform vec3 uSideL[8], uSideD[8], uSideB[8];
         uniform sampler2D tTerr; uniform float uBorder, uMe;
         uniform vec2 uCloud; uniform vec3 uSunW; uniform float uCloudT, uCloudA, uCloudG, uRayK, uSand;
@@ -8216,7 +8241,18 @@ if (typeof module !== 'undefined') module.exports = Looks;
             float tPh = dot(Wl - floor(Wl / 3.0) * 3.0, tw) / (6.0 / 80.0 * exp2(gLm));
             float tEdge = (1.0 - smoothstep(0.35 * uK, 1.0 * uK, abs(trk - 0.8) / tgl)) * mix(step(0.45, fract(tPh)), step(0.45, fract(tPh * 0.5)), gLf);
             base = mix(base, dk ? vec3(0.52, 0.5, 0.47) : vec3(0.42, 0.36, 0.28), tEdge * 0.8 * isG * (1.0 - onRoad));
-            // Grass in tufts of three short strokes, leaning and stirring with the wind, thicker in the meadows.
+            // Wild flowers in patches on the gentler ground, a dot of colour each laid on the land: poppies,
+            // buttercups and cornflowers on the steppe, a sparse pink bloom on the salt flats, heather in the snowy
+            // pass. None in the snow, on a road or by the water.
+            if (uFlora > 0.5 && isG > 0.5) {
+              float fP = smoothstep(0.64, 0.82, noise(Wl * 0.13 + 41.0) * 0.75 + noise(Wl * 0.4 + 7.0) * 0.25) * smoothstep(1.5, 2.3, rd) * (1.0 - cap) * (1.0 - uSnowC) * (1.0 - smoothstep(0.35, 0.7, sSl)) * (1.0 - bankZone);
+              vec2 fq = Wl * 3.2 * exp2(-gLm), fi = floor(fq), fo = vec2(hash(fi + 3.0), hash(fi + 9.0)) * 0.6 + 0.2;
+              float fh = hash(fi + 77.0), fc = hash(fi + 131.0);
+              float fd = (1.0 - smoothstep(0.15, 0.24, length(fract(fq) - fo))) * step(1.0 - fP * (uFlora > 1.5 && uFlora < 2.5 ? 0.3 : uFlora > 2.5 ? 0.45 : 0.75), fh);
+              vec3 FL = uFlora < 1.5 ? (fc < 0.45 ? vec3(0.82, 0.2, 0.14) : fc < 0.75 ? vec3(0.93, 0.78, 0.18) : fc < 0.9 ? vec3(0.35, 0.47, 0.84) : vec3(0.97, 0.96, 0.92))
+                : uFlora < 2.5 ? (fc < 0.6 ? vec3(0.86, 0.42, 0.62) : vec3(0.95, 0.85, 0.5)) : vec3(0.6, 0.42, 0.7);
+              base = mix(base, dk ? FL * 0.85 : FL, fd * 0.85);
+            }
             // Lying snow whitens the land, and the roads less.
             base = mix(base, dk ? vec3(0.48, 0.49, 0.52) : vec3(0.975, 0.975, 0.965), uSnowC * isG * (1.0 - onRoad * 0.5));
             float rH = onRoad * isG > 0.0 || isBr > 0.0 ? hatch(p, 60.0, 4.0, 0.8, 53.0, 0.1) : 0.0;
@@ -8869,6 +8905,8 @@ const World = (() => {
       uSnowLine: { value: 99 },
       // The way the rivers run, from buildFlow, and how far each point lies from a brook and whether at its ford.
       tFlow: { value: black }, tBrook: { value: farBrook },
+      // The theatre's wild flowers: 1 the steppe's, 2 the salt flats', 3 the snowy pass's heather.
+      uFlora: { value: 0 },
       // How far tread marks darken the ground, none where the look draws them itself.
       uTreadK: { value: 0.34 },
       // How hard the track worn into each cell has become, in red.
@@ -9819,6 +9857,7 @@ const World = (() => {
       scen.houses = { hb, hr, win, hrub, hbm, hrm, wm, rm, ruined: new Uint8Array(M.houses.length) };
       buildFences();
       buildRoadside();
+      buildPlants();
 
       // Wellheads in a black stain, each bridge on its piers.
       instanced(sc.well, paint, M.wells.map(w => ({ x: w.x, y: terrainAt(M, w.x, w.y), z: w.y })));
@@ -9940,6 +9979,41 @@ const World = (() => {
       }
     }
 
+    // Lesser plants, for the picture alone, by the theatre: shrubs on the slopes, the banks and at the woods' edges,
+    // and by the water reeds, or on the salt flats a palm now and then. None stands on a road or in a wood, and one a
+    // building comes to stand over goes while it stands. The same map grows the same plants.
+    function buildPlants() {
+      const th = theme, rand = mulberry(M.seed + 23), sc = MODELS.scenery, g = M.ground, BD = M.brookDist;
+      const shrubM = th.tree === 'acacia' ? 'scrub' : th.tree === 'conifer' ? 'juniper' : 'bush', desert = th.tree === 'acacia';
+      const dry = (x, y) => terrainAt(M, x, y) >= M.water;
+      const shrubs = [], wet = [];
+      for (let c = 0; c < W * H; c++) {
+        const cx = c % W, cy = c / W | 0, x = cx + 0.15 + rand() * 0.7, y = cy + 0.15 + rand() * 0.7, r = rand(), z = terrainAt(M, x, y);
+        const v = Math.round(y * RES) * VW + Math.round(x * RES), bd = BD ? BD[v] : 99;
+        if (M.roadDist[v] < 2.5 || (g[c] & 8) || z < M.water + 0.1 || bd < 0.65) continue;
+        // At the edge of the water, a river's, a lake's or a brook's.
+        const bank = bd < 1.5 || (z < M.water + 0.7 && (!dry(x + 1, y) || !dry(x - 1, y) || !dry(x, y + 1) || !dry(x, y - 1)));
+        if (bank) { if (r < (desert ? 0.035 : 0.5)) wet.push({ x, y: z - 0.04, z: y, s: (desert ? 0.9 : 0.8) + rand() * 0.5, a: rand() * 6.28, c: desert ? 0x5e7a3a : [0xa8a46a, 0x8a9a58, 0xb8ac78][rand() * 3 | 0], cell: c }); continue; }
+        let edge = false;
+        for (let j = -1; j <= 1 && !edge; j++) for (let i = -1; i <= 1; i++) { const X = cx + i, Y = cy + j; if (X >= 0 && Y >= 0 && X < W && Y < H && (g[Y * W + X] & 8)) { edge = true; break; } }
+        if (r < (edge ? 0.3 : g[c] & 4 ? 0.08 : 0.02)) shrubs.push({ x, y: z - 0.03, z: y, s: 0.7 + rand() * 0.7, a: rand() * 6.28, c: colA.copy(new THREE.Color(th.leaf[0])).lerp(new THREE.Color(th.leaf[1]), rand()).multiplyScalar(0.9 + rand() * 0.25).getHex(), cell: c });
+      }
+      const list = shrubs.slice(0, 2600).concat(wet.slice(0, 2600));
+      const sm = shrubs.length ? lineCat(instanced(sc[shrubM], treeTint, shrubs.slice(0, 2600)), 0.459, true) : null;
+      const wm = wet.length ? lineCat(instanced(sc[desert ? 'palm' : 'reed'], treeTint, wet.slice(0, 2600)), 0.459, true) : null;
+      shrubs.slice(0, 2600).forEach((p, i) => { p.m = sm; p.i = i; });
+      wet.slice(0, 2600).forEach((p, i) => { p.m = wm; p.i = i; });
+      scen.plants = { list, seen: -1 };
+    }
+    // A plant under a building goes while the building stands.
+    function updatePlants() {
+      const P = scen && scen.plants;
+      if (!P || P.seen === S.occVer) return;
+      P.seen = S.occVer;
+      const ms = new Set();
+      for (const p of P.list) { const hid = S.occ[p.cell] ? 1 : 0; if (hid !== (p.hid || 0)) { p.hid = hid; setInst(p.m, p.i, p, !!hid); ms.add(p.m); } }
+      ms.forEach(dirty);
+    }
     // The age the world is seen in: the side being shown, or the most advanced side when watching them all.
     // Motor cars, telegraph lines and road markings belong to the Industrial Age and after.
     const MOTOR_AGE = 4;
@@ -10074,6 +10148,7 @@ const World = (() => {
     function updateScenery(dt) {
       if (!scen) return;
       // Trees: standing, flattened by tracks, on fire, or burnt to black sticks.
+      updatePlants();
       const T = scen.trees;
       if (T.seen !== S.woodVer) {
         const first = T.seen < 0;
@@ -10819,6 +10894,7 @@ const World = (() => {
       let over = 0;
       if (theme.snow !== undefined) for (let i = 0; i < M.h.length; i++) over += M.h[i] > theme.snow;
       SH.uSnowLine.value = over > M.h.length * 0.015 ? theme.snow : 99;
+      SH.uFlora.value = theme.tree === 'broad' ? 1 : theme.tree === 'acacia' ? 2 : 3;
       renderer.setClearColor(theme.shroud, 1);
 
       fogData = new Uint8Array(W * H * 4); fogR = new Float32Array(W * H); fogG = new Float32Array(W * H);
