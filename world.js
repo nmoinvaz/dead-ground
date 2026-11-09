@@ -74,6 +74,8 @@ const World = (() => {
       uWind: { value: new THREE.Vector2(0.3, 0.1) }, uCloud: { value: new THREE.Vector2() }, uCloudK: { value: 0.2 }, uCloudT: { value: 0.3 }, uSnowC: { value: 0 },
       // The height above which snow lies on the heights in any weather.
       uSnowLine: { value: 99 },
+      // The way the rivers run, from buildFlow.
+      tFlow: { value: black },
       // How far tread marks darken the ground, none where the look draws them itself.
       uTreadK: { value: 0.34 },
       // How hard the track worn into each cell has become, in red.
@@ -672,7 +674,7 @@ const World = (() => {
     let S = null, M = null, theme = null, viewTeam = 0, sets = {}, terrainMesh = null, waterMesh = null, statics = [], baseImage = null;
     const rs = new Map();
     let wrecks = [], corpses = [], bleeds = [], flyers = [], planes = [], falls = [], marks = null, marksTex = null, marksDirty = false, marksLast = 0, treadFade = 0;
-    let fogTex = null, fogData = null, fogR = null, fogG = null, terrTex = null, terrData = null, terrSeen = -1, hTex = null;
+    let fogTex = null, fogData = null, fogR = null, fogG = null, terrTex = null, terrData = null, terrSeen = -1, hTex = null, flowTex = null;
     // A number as a half float, for heights within a few units of the ground.
     const halfBuf = new Float32Array(1), halfBits = new Uint32Array(halfBuf.buffer);
     function toHalf(v) {
@@ -890,6 +892,72 @@ const World = (() => {
     // Scenery that changes: trees by their cells, houses brought to ruin, bridges down and up, the fords'
     // stepping stones and garden fences.
     let scen = null;
+
+    // The way each river runs, for the ink look's water lines to drift down it. Water in a channel no wider than a
+    // river that meets the map's edge in two places or more flows from the end met first going round the edge, down
+    // its course. Lakes, ponds the edge cuts off, and the sea lie still. A cell holds how far down its river it lies
+    // as the cosine and sine of a FLOW_P cycle, which reads back smoothly between cells, whether it flows, and its
+    // distance from the bank in twelfths of FLOW_BANK cells.
+    const FLOW_P = 48, FLOW_BANK = 12;
+    function buildFlow() {
+      const n = W * H, wet = new Uint8Array(n), D = new Float32Array(n), comp = new Int32Array(n).fill(-1), data = new Uint8Array(n * 4);
+      for (let c = 0; c < n; c++) { wet[c] = terrainAt(M, c % W + 0.5, (c / W | 0) + 0.5) < M.water ? 1 : 0; D[c] = wet[c] ? 1e9 : 0; data[c * 4] = data[c * 4 + 1] = 128; data[c * 4 + 3] = 255; }
+      // Distance to the bank through the water, in two chamfer passes.
+      const relax = (c, o, k) => { if (D[o] + k < D[c]) D[c] = D[o] + k; };
+      for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) { const c = y * W + x; if (!wet[c]) continue; if (x > 0) relax(c, c - 1, 1); if (y > 0) { relax(c, c - W, 1); if (x > 0) relax(c, c - W - 1, 1.414); if (x < W - 1) relax(c, c - W + 1, 1.414); } }
+      for (let y = H - 1; y >= 0; y--) for (let x = W - 1; x >= 0; x--) { const c = y * W + x; if (!wet[c]) continue; if (x < W - 1) relax(c, c + 1, 1); if (y < H - 1) { relax(c, c + W, 1); if (x < W - 1) relax(c, c + W + 1, 1.414); if (x > 0) relax(c, c + W - 1, 1.414); } }
+      // The distance smoothed, so rows laid by it run round and not in the chamfer's corners.
+      const Ds = new Float32Array(D);
+      for (let pass = 0; pass < 3; pass++) {
+        const src = pass ? Ds.slice() : D;
+        for (let y = 1; y < H - 1; y++) for (let x = 1; x < W - 1; x++) {
+          const c = y * W + x;
+          if (!wet[c]) continue;
+          let t = 0;
+          for (let j = -1; j <= 1; j++) for (let i = -1; i <= 1; i++) t += src[c + j * W + i];
+          Ds[c] = t / 9;
+        }
+      }
+      // A cell's place going clockwise round the map's edge from the top left corner.
+      const rim = (x, y) => y === 0 ? x : x === W - 1 ? W + y : y === H - 1 ? 2 * W + H - x : x === 0 ? 2 * W + 2 * H - y : -1;
+      const N8 = [[1, 0, 10], [-1, 0, 10], [0, 1, 10], [0, -1, 10], [1, 1, 14], [-1, 1, 14], [1, -1, 14], [-1, -1, 14]];
+      let ci = 0;
+      for (let c0 = 0; c0 < n; c0++) {
+        if (!wet[c0] || comp[c0] >= 0) continue;
+        const cells = [c0];
+        comp[c0] = ci;
+        for (let i = 0; i < cells.length; i++) {
+          const c = cells[i], x = c % W, y = c / W | 0;
+          for (const [dx, dy] of N8) { const X = x + dx, Y = y + dy, o = Y * W + X; if (X >= 0 && Y >= 0 && X < W && Y < H && wet[o] && comp[o] < 0) { comp[o] = ci; cells.push(o); } }
+        }
+        ci++;
+        let wide = 0;
+        const ends = [];
+        for (const c of cells) { wide = Math.max(wide, D[c]); const r = rim(c % W, c / W | 0); if (r >= 0) ends.push(r); }
+        ends.sort((a, b) => a - b);
+        // The stretches of edge it meets, one where a stretch runs on past the top left corner.
+        const runs = [];
+        for (const r of ends) { const last = runs[runs.length - 1]; if (last && r - last[1] <= 4) last[1] = r; else runs.push([r, r]); }
+        const P = 2 * (W + H);
+        if (runs.length > 1 && runs[0][0] + P - runs[runs.length - 1][1] <= 4) runs[runs.length - 1][1] = runs.shift()[1] + P;
+        if (runs.length < 2 || wide > 9) continue;
+        const [first, upTo] = runs[0];
+        // Distance down the river from the end met first, in tenths of a cell along eight ways, by buckets.
+        const G = new Map(), Q = [];
+        const at = (c, g) => { if (G.has(c) && G.get(c) <= g) return; G.set(c, g); (Q[g] || (Q[g] = [])).push(c); };
+        for (const c of cells) { const r = rim(c % W, c / W | 0); if (r >= 0 && ((r >= first && r <= upTo) || (r + P >= first && r + P <= upTo))) at(c, 0); }
+        for (let g = 0; g < Q.length; g++) for (const c of Q[g] || []) {
+          if (G.get(c) !== g) continue;
+          const x = c % W, y = c / W | 0;
+          for (const [dx, dy, k] of N8) { const X = x + dx, Y = y + dy, o = Y * W + X; if (X >= 0 && Y >= 0 && X < W && Y < H && comp[o] === comp[c]) at(o, g + k); }
+        }
+        for (const [c, g] of G) { const a = g / 10 / FLOW_P * Math.PI * 2; data[c * 4] = Math.round(127.5 + 127.5 * Math.cos(a)); data[c * 4 + 1] = Math.round(127.5 + 127.5 * Math.sin(a)); data[c * 4 + 2] = 255; data[c * 4 + 3] = Math.round(Math.min(Ds[c], FLOW_BANK) / FLOW_BANK * 255); }
+      }
+      if (flowTex) flowTex.dispose();
+      flowTex = new THREE.DataTexture(data, W, H, THREE.RGBAFormat);
+      flowTex.magFilter = flowTex.minFilter = THREE.LinearFilter; flowTex.needsUpdate = true;
+      SH.tFlow.value = flowTex;
+    }
 
     function buildScenery() {
       const th = theme, rand = mulberry(M.seed + 11), sc = MODELS.scenery;
@@ -1864,6 +1932,7 @@ const World = (() => {
       hTex = new THREE.DataTexture(hd, VW, VH, THREE.RedFormat, THREE.HalfFloatType);
       hTex.magFilter = hTex.minFilter = THREE.LinearFilter; hTex.wrapS = hTex.wrapT = THREE.ClampToEdgeWrapping; hTex.needsUpdate = true;
       SH.tH.value = hTex;
+      buildFlow();
       for (const k in sky) if (typeof sky[k] === 'number') sky[k] = 0;
       Object.assign(sky, Rules.sky(S), { wind: undefined });
       sky.wet = 0; sky.day = Rules.dayAt(S.tick); waterRise.value = Math.min(1.25, sky.flood) * 0.26;

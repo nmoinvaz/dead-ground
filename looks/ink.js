@@ -19,13 +19,13 @@
       // 45 and 135 degrees, then flat and upright lines for the darkest, each line a little uneven with small gaps.
       // The ground's hatching is pinned to the map so it pans with it, the units' redraws a few times a second.
       const ink = new THREE.ShaderMaterial({ uniforms: { t: { value: null }, tSubj: { value: null }, tHeat: { value: null }, tPaper: { value: null }, res: { value: new THREE.Vector2(1, 1) }, uTime: { value: 0 }, uK: { value: 1 }, uOff: { value: new THREE.Vector2() }, uStyle: { value: 8 }, tNorm: { value: null }, tFogS: { value: null }, tLand: { value: null }, uSun2: { value: new THREE.Vector2(-1, 0) }, uUpV: { value: new THREE.Vector3(0, 1, 0) }, uRoad: { value: 0 }, uOre: { value: 0 }, uMarks: { value: 1 },
-        uWindS: { value: new THREE.Vector2() }, uView: { value: new THREE.Vector2(1, 0) }, tFx: { value: null }, tAnc: { value: null }, uDark: { value: 0 }, uInks: { value: 0 }, uFxs: { value: 0 }, uFire: { value: 0 }, uUnits: { value: 0 }, tH: SH.tH, uHSize: { value: new THREE.Vector2(1, 1) }, uHScale: { value: 1 }, uRain: { value: 0 }, uStorm: { value: 0 }, uSnowF: { value: 0 }, uSnowC: SH.uSnowC, uSnowLine: SH.uSnowLine, uFog: { value: 0 }, uMist: { value: 0 }, uNight: { value: 0 }, uWet: { value: 0 },
+        uWindS: { value: new THREE.Vector2() }, uView: { value: new THREE.Vector2(1, 0) }, tFx: { value: null }, tAnc: { value: null }, uDark: { value: 0 }, uInks: { value: 0 }, uFxs: { value: 0 }, uFire: { value: 0 }, uUnits: { value: 0 }, tH: SH.tH, uHSize: { value: new THREE.Vector2(1, 1) }, uHScale: { value: 1 }, uRain: { value: 0 }, uStorm: { value: 0 }, uSnowF: { value: 0 }, uSnowC: SH.uSnowC, uSnowLine: SH.uSnowLine, tFlow: SH.tFlow, uFog: { value: 0 }, uMist: { value: 0 }, uNight: { value: 0 }, uWet: { value: 0 },
         uDayMul: { value: new THREE.Vector3(1, 1, 1) }, uDayAdd: { value: new THREE.Vector3() }, uWaterL: { value: -0.15 }, uCloudK: SH.uCloudK, tMarks: SH.tMarks, uMap: SH.uMap,
         uCloud: SH.uCloud, uCloudT: SH.uCloudT, uSunW: SH.uSunDir, uCloudA: { value: 0 }, uCloudG: { value: 0 }, uRayK: { value: 0 }, uSand: { value: 0 },
         uInvVP: { value: new THREE.Matrix4() }, uW2S: { value: new THREE.Vector4(1, 0, 0, 1) }, uLev: { value: 1 }, tTerr: SH.tTerr, uBorder: SH.uBorder, uMe: { value: 0 },
         // Each side's colour as the anchor pass keeps it, its hue and how coloured it is, and its inks on either paper.
         uSideKey: { value: [...Array(8)].map(() => new THREE.Vector2()) }, uSideL: { value: [...Array(8)].map(() => new THREE.Vector3()) }, uSideD: { value: [...Array(8)].map(() => new THREE.Vector3()) }, uSideB: { value: [...Array(8)].map(() => new THREE.Vector3()) } }, vertexShader: vs, depthTest: false, depthWrite: false, fragmentShader: `
-        varying vec2 vUv; uniform sampler2D t, tSubj, tHeat, tPaper, tNorm, tFogS, tLand, tMarks; uniform float uMap; uniform vec2 res, uOff, uSun2, uWindS, uView, uHSize; uniform float uHScale, uFxs, uFire; uniform int uUnits, uInks; uniform float uDark; uniform sampler2D tH, tFx, tAnc; uniform vec3 uUpV, uDayMul, uDayAdd; uniform float uTime, uK, uRain, uStorm, uSnowF, uSnowC, uSnowLine, uFog, uMist, uNight, uWet, uWaterL, uCloudK, uMarks; uniform int uStyle, uRoad, uOre;
+        varying vec2 vUv; uniform sampler2D t, tSubj, tHeat, tPaper, tNorm, tFogS, tLand, tMarks; uniform float uMap; uniform vec2 res, uOff, uSun2, uWindS, uView, uHSize; uniform float uHScale, uFxs, uFire; uniform int uUnits, uInks; uniform float uDark; uniform sampler2D tH, tFx, tAnc, tFlow; uniform vec3 uUpV, uDayMul, uDayAdd; uniform float uTime, uK, uRain, uStorm, uSnowF, uSnowC, uSnowLine, uFog, uMist, uNight, uWet, uWaterL, uCloudK, uMarks; uniform int uStyle, uRoad, uOre;
         uniform vec2 uSideKey[8]; uniform vec3 uSideL[8], uSideD[8], uSideB[8];
         uniform sampler2D tTerr; uniform float uBorder, uMe;
         uniform vec2 uCloud; uniform vec3 uSunW; uniform float uCloudT, uCloudA, uCloudG, uRayK, uSand;
@@ -105,6 +105,9 @@
         // g px across at 1080p at any zoom, in two octaves that hand over as it shrinks.
         float gLm = 0.0, gLf = 0.0;
         mat2 gW2S = mat2(1.0);
+        // Value noise along a line that repeats every n, for patterns laid round a river's FLOW_P cycle.
+        #define FLOW_P 48.0
+        float pnoise(float x, float n, float seed) { float i = floor(x), f = fract(x); f = f * f * (3.0 - 2.0 * f); return mix(hash(vec2(mod(i, n), seed)), hash(vec2(mod(i + 1.0, n), seed)), f); }
         float landNoise(vec2 w, float g, vec2 o) { float s = g / 80.0 * exp2(gLm); return mix(noise(w / s + gLm * 17.0 + o), noise(w / (2.0 * s) + (gLm + 1.0) * 17.0 + o), gLf); }
         // Hachures down a bank, as survey plans draw a cutting or an embankment: strokes across the road's line,
         // every other one short, each thickest at the bank's top. ph counts strokes along the road, top is 1 at the
@@ -335,7 +338,21 @@
             // toward the middle, each thinner and more broken than the last, and a heavy line at the bank.
             float wq = pow(dep / 1.15, 0.6) * 7.0, wqw = max(fwidth(wq), 1e-4), wf = fract(wq);
             float wLine = (1.0 - smoothstep(mix(0.55, 0.25, wq / 7.0) * uK, mix(1.2, 0.8, wq / 7.0) * uK, min(wf, 1.0 - wf) / wqw)) * step(0.5, wq);
-            if (wLine > 0.0) wLine *= step(wq / 14.0, landNoise(Wl, 12.0, vec2(floor(wq) * 3.1)));
+            // A river's lines break where its current carries them: the breaks drift down its course, faster away
+            // from the bank, so the water reads as running. Still water keeps its breaks where they lie.
+            vec4 fw = texture2D(tFlow, Wl / uMap);
+            float flowK = smoothstep(0.4, 0.8, fw.b), flowS = 0.0;
+            // How far down its river this point lies, round the FLOW_P cycle.
+            if (flowK > 0.0) { vec2 cs = fw.rg * 2.0 - 1.0; flowS = (atan(cs.y, cs.x + 1e-5) / 6.2832 + 0.5) * FLOW_P; }
+            if (wLine > 0.0) {
+              float br = landNoise(Wl, 12.0, vec2(floor(wq) * 3.1)), cut = wq / 14.0;
+              if (flowK > 0.0) {
+                float u = mod(flowS - uTime * mix(0.7, 1.8, wq / 7.0), FLOW_P);
+                br = mix(br, pnoise(u / 3.0, FLOW_P / 3.0, floor(wq) * 5.7), flowK);
+                cut = mix(cut, 0.25 + wq / 14.0, flowK);
+              }
+              wLine *= step(cut, br);
+            }
             // The water lines are laid in the lilac wash below, not in black. A bridge's shadow falls on the water
             // away from the sun, about its deck's height off, and is hatched there.
             float wC = 0.0, shB = 0.0;
@@ -492,6 +509,15 @@
             base = mix(base, base * vec3(0.8, 0.78, 0.76), rfDark * 0.55 * onR);
             base = mix(base, CONT, contour * 0.55 * onR);
             float rip = isW > 0.0 ? hatch(p, -12.0, 6.5, 0.9, 57.0, 0.45) : 0.0;
+            // On a river the ripples run with the banks instead, short white strokes in rows across the whole stream
+            // that drift downstream, fastest in midstream, each a few pixels long at any zoom.
+            if (flowK > 0.0 && isW > 0.0) {
+              float bD = fw.a * 12.0, rq = bD * 2.2 * exp2(-gLm), rqw = max(fwidth(rq), 1e-4), rf = fract(rq);
+              float row = (1.0 - smoothstep(0.4 * uK, 1.1 * uK, min(rf, 1.0 - rf) / rqw)) * smoothstep(1.4, 2.0, bD) * smoothstep(0.96, 1.0, fw.b);
+              float u2 = mod(flowS - uTime * mix(0.9, 2.2, smoothstep(0.5, 4.0, bD)), FLOW_P), rL = 0.75 * exp2(gLm);
+              float dsh = mix(step(0.68, pnoise(u2 / rL, FLOW_P / rL, floor(rq) * 2.3)), step(0.68, pnoise(u2 / (2.0 * rL), FLOW_P / (2.0 * rL), floor(rq) * 2.3)), gLf);
+              rip = mix(rip, row * dsh * 1.35, flowK);
+            }
             // Water on dark paper is a deep blue, its lines and ripples lighter than it.
             vec3 WTR = dk ? vec3(0.115, 0.15, 0.235) : LILAC, WTR_D = dk ? vec3(0.32, 0.4, 0.6) : LILAC_D, RIP = dk ? vec3(0.4, 0.5, 0.7) : vec3(1.0);
             base = mix(base, mix(mix(WTR, WTR_D, wLine * 0.6), RIP, rip * 0.55 * (1.0 - wLine)), isW);
