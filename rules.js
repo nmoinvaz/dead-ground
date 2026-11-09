@@ -2398,6 +2398,30 @@ const Rules = (() => {
   // for whoever hit it, chases it up to ANS_LEASH from where it stood, and then goes back there. A unit given
   // an order, a squad holding cover, and one already fighting a unit keep to what they are doing. A unit that
   // gives up a chase answers nothing more for a while, so a gun out of its reach does not draw it back and forth.
+  // Falling back. A unit told to fall back when hurt, once below FB_AT of its health, leaves the fight for the
+  // nearest support vehicle of its side, or else the nearest headquarters, forward base, barracks or factory, and
+  // mends there until whole. It then waits there for orders.
+  const FB_AT = 0.25, FB_NEAR = 6;
+  function fallBack(S, u) {
+    // Sent off elsewhere since, and gone from its haven, it may fall back again.
+    if (u.mend && !(u.ord && u.ord.t === 'move' && u.ord.x === u.mend.at[0] && u.ord.y === u.mend.at[1]) && mhypot(u.x - u.mend.at[0], u.y - u.mend.at[1]) > FB_NEAR + 2) u.mend = null;
+    if (!u.fb || u.hp >= u.max * FB_AT || u.mend || u.d.cargo || isAir(u)) return;
+    let best = null, bd = Infinity;
+    for (const e of S.ents) {
+      if (e.team !== u.team || e.hp <= 0 || e === u) continue;
+      const ok = e.b ? (e.kind === 'hq' || e.kind === 'fob' || e.kind === 'barracks' || e.kind === 'factory') : !!e.d.repair;
+      if (!ok) continue;
+      const dd = mhypot(e.x - u.x, e.y - u.y) - (e.b ? 0 : 4);
+      if (dd < bd) { bd = dd; best = e; }
+    }
+    if (!best) return;
+    // The place beside it on the side the unit comes from.
+    const dx = u.x - best.x, dy = u.y - best.y, m = mhypot(dx, dy) || 1, off = best.b ? Math.max(best.w, best.h) / 2 + 2.5 : 2;
+    const x = clamp(best.x + dx / m * off, 1, W - 1), y = clamp(best.y + dy / m * off, 1, H - 1);
+    u.mend = { at: [x, y] };
+    u.ord = { t: 'move', x, y }; u.tgt = 0; u.home = null; u.wpT = 0; u.stuck = 0;
+    S.ev.push({ t: 'fallback', team: u.team, id: u.id, x: u.x, y: u.y });
+  }
   const ANS_R = 10, ANS_LEASH = 18;
   function answer(S, t, by) {
     if (S.tick - (t.ansT ?? -1e9) < HZ) return;
@@ -2968,12 +2992,15 @@ const Rules = (() => {
     // Veterans mend slowly, and a Support Truck mends anyone close.
     if (u.vet >= 2 && u.hp < u.max) u.hp = Math.min(u.max, u.hp + u.max * 0.002);
     if (S.tick % HZ === u.id % HZ) {
+      fallBack(S, u);
       const c = cellOf(u.x, u.y), foreign = S.terr[c] >= 0 && S.terr[c] !== u.team;
       let helped = false;
       near(S, u.x, u.y, 8, o => {
         if (o.team === u.team && o.d.repair && o.hp > 0 && mhypot(o.x - u.x, o.y - u.y) < 8) helped = true;
       });
       if (helped) u.hp = Math.min(u.max, u.hp + u.max * 0.03);
+      // Back at a haven it fell back to, a unit mends until whole.
+      else if (u.mend && u.mend.at && mhypot(u.x - u.mend.at[0], u.y - u.mend.at[1]) < FB_NEAR) { u.hp = Math.min(u.max, u.hp + u.max * 0.015); if (u.hp >= u.max) u.mend = null; }
       else if (foreign && u.hp > u.max * 0.35) {
         u.hp -= u.max * 0.005;
         u.attrition = S.tick;
@@ -3610,6 +3637,8 @@ const Rules = (() => {
     if (c.c === 'move') {
       const us = unitsOf(S, team, c.ids);
       if (us.length) {
+        // A new order ends a stay to mend.
+        for (const u of us) u.mend = null;
         for (const u of us) if (u.d.cargo && u.ord && u.ord.t === 'harvest') u.ord = null;
         orderMove(S, us, c.x, c.y, !!c.a);
       }
@@ -3661,6 +3690,9 @@ const Rules = (() => {
         u.tgt = pick; u.wpT = 0; u.stuck = 0; u.home = null;
       }
       S.ev.push({ t: 'marked', team, ids, x: c.x, y: c.y, r: c.r });
+    } else if (c.c === 'fallback') {
+      // Whether the units fall back when badly hurt. Turned off, any going back carry on but no longer mend there.
+      for (const u of unitsOf(S, team, c.ids)) { if (u.d.cargo || isAir(u)) continue; u.fb = !!c.on; if (!u.fb) u.mend = null; }
     } else if (c.c === 'stance') {
       if (!STANCES.includes(c.v)) return;
       for (const u of unitsOf(S, team, c.ids)) {
@@ -3981,7 +4013,7 @@ const Rules = (() => {
     msin, mcos, matan2, mhypot,
     BRIDGE_HP, SPELL, SKIES, WEATHERS, nightAt, skyOf, offGoing, route, weatherAt, sky, dayAt, spellOf, bridgeAt, clsOf, houseHp, hurtBridge, ignite, shielded,
     coverPoints, coverNear, COVER_R, COVER_ARC, FORMS, formOfGroup, STANCES,
-    UPGRADES, UP_AGE, upCost, upNote, upsAt, upK, upBlocked, hpOf, rangeOf, capOf, showersAt, showerAt,
+    FB_AT, UPGRADES, UP_AGE, upCost, upNote, upsAt, upK, upBlocked, hpOf, rangeOf, capOf, showersAt, showerAt,
   };
 })();
 if (typeof module !== 'undefined') module.exports = Rules;

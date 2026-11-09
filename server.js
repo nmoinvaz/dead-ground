@@ -19,7 +19,7 @@ const CMDS = {
   move: ['ids', 'x', 'y', 'a'], attack: ['ids', 'id'], strike: ['ids', 'id', 'x', 'y', 'r'], stop: ['ids'], harvest: ['ids', 'cell'],
   capture: ['ids', 'town'], train: ['kind'], build: ['kind'], research: [], hold: ['cat', 'i'], cancel: ['cat', 'i'],
   place: ['kind', 'x', 'y'], sell: ['id'], repair: ['id'], rally: ['id', 'x', 'y'], power: ['name', 'x', 'y'], launch: ['x', 'y'],
-  form: ['ids', 'f'], stance: ['ids', 'v'], upgrade: ['id', 'k'], unupgrade: ['id'],
+  form: ['ids', 'f'], stance: ['ids', 'v'], fallback: ['ids', 'on'], upgrade: ['id', 'k'], unupgrade: ['id'],
 };
 const CATS = ['bld', 'def', 'inf', 'veh', 'air', 'tech'];
 function clean(S, c) {
@@ -34,6 +34,7 @@ function clean(S, c) {
     else if (k === 'name') { if (!R.POWERS[v]) return null; o.name = v; }
     else if (k === 'f') { if (!R.FORMS.includes(v)) return null; o.f = v; }
     else if (k === 'v') { if (!R.STANCES.includes(v)) return null; o.v = v; }
+    else if (k === 'on') o.on = !!v;
     else if (k === 'k') { if (typeof v !== 'string' || !Object.prototype.hasOwnProperty.call(R.UPGRADES, v)) return null; o.k = v; }
     else if (k === 'town') { const t = v | 0; if (t < 0 || t >= S.towns.length) return null; o.town = t; }
     else {

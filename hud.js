@@ -723,6 +723,8 @@ const Hud = (() => {
         if (us.length > 1) setForm(F[(F.indexOf(Rules.formOfGroup(us)) + (e.shiftKey ? F.length - 1 : 1)) % F.length]);
         return;
       }
+      // J turns falling back when hurt on or off.
+      if (k === 'KeyJ') { toggleFallBack(); return; }
       // L steps through the stances, Shift+L back.
       if (k === 'KeyL') {
         const us = stanceUnits(), T = Rules.STANCES;
@@ -1734,6 +1736,8 @@ const Hud = (() => {
     const STANCE_NAME = { hunt: 'Seek and destroy', aggr: 'Aggressive', def: 'Defensive', hold: 'Hold ground' };
     const STANCE_NOTE = { hunt: 'hunts down the nearest enemy, anywhere', aggr: 'chases what it sees as far as it takes', def: 'chases a little, then goes back to its post', hold: 'fires from where it stands and never moves to fight' };
     const line = d => `<svg viewBox="0 0 24 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
+    // Falling back, drawn as a cross on a shield-like tent and an arrow home.
+    const FB_ICON = '<svg viewBox="0 0 24 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 8H3M6 5 3 8l3 3"/><path d="M12 3h8v10h-8z"/><path d="M16 5.5v5M13.5 8h5"/></svg>';
     const STANCE_ICON = {
       hunt: line('<circle cx="12" cy="8" r="4.5"/><path d="M12 1.5v3M12 11.5v3M5.5 8h3M15.5 8h3"/>'),
       aggr: line('<path d="M7 9.5 12 4.5l5 5M7 13.5 12 8.5l5 5"/>'),
@@ -1747,6 +1751,15 @@ const Hud = (() => {
       if (!us.length) return;
       game.order(S(), team(), { c: 'stance', ids: us.map(u => u.id), v });
       say(`${STANCE_NAME[v]}.`);
+    }
+    // Falling back when badly hurt, on or off for the selected units: on for all if any were off.
+    const fbUnits = () => state.sel.filter(e => alive(e) && !e.b && e.team === team() && !Rules.isAir(e) && !e.d.cargo);
+    function toggleFallBack() {
+      const us = fbUnits();
+      if (!us.length) return;
+      const on = !us.every(u => u.fb);
+      game.order(S(), team(), { c: 'fallback', ids: us.map(u => u.id), on });
+      say(on ? 'Falling back when badly hurt.' : 'Fighting on when hurt.');
     }
     // The selected units a formation takes in: the player's own, on the ground.
     const formUnits = () => state.sel.filter(e => alive(e) && !e.b && e.team === team() && !Rules.isAir(e));
@@ -1786,7 +1799,8 @@ const Hud = (() => {
       // A building of the player's alone shows its upgrades, which redraw as any changes state.
       const one = state.sel.length === 1 && state.sel[0].b && state.sel[0].team === team() ? state.sel[0] : null;
       const ups = one ? upState(one).map(u => u.tier + (u.here ? 'h' : '') + (u.why || '')).join() : '';
-      const box = $('sel'), list = state.sel, key = list.map(e => e.id).join() + (list[0] ? (list[0].repairing ? 'r' : '') + (list[0].team) : '') + form + stance + ups;
+      const fbu = fbUnits(), fb = fbu.length ? (fbu.every(u => u.fb) ? 'on' : fbu.some(u => u.fb) ? 'some' : 'off') : '';
+      const box = $('sel'), list = state.sel, key = list.map(e => e.id).join() + (list[0] ? (list[0].repairing ? 'r' : '') + (list[0].team) : '') + form + stance + ups + fb;
       if (key !== state.selKey) {
         state.selKey = key;
         box.hidden = !list.length;
@@ -1813,9 +1827,10 @@ const Hud = (() => {
           html += '</div>';
           if (one) html += upsHtml(one);
           if (stance) html += `<div class="forms stances"><h4>Stance <kbd>L</kbd></h4><div>${Rules.STANCES.map(v => `<button data-st="${v}" class="${v === stance ? 'on' : ''}" title="${STANCE_NAME[v]}: ${STANCE_NOTE[v]}" aria-label="${STANCE_NAME[v]}">${STANCE_ICON[v]}</button>`).join('')}</div></div>`;
+          if (fb) html += `<div class="forms fallback"><h4>Fall back <kbd>J</kbd></h4><div><button data-fb class="${fb === 'on' ? 'on' : ''}" title="Fall back when badly hurt: below a quarter of their health they go back to a support vehicle or a base building and mend there" aria-label="Fall back when badly hurt">${FB_ICON}</button></div></div>`;
           if (form) html += `<div class="forms"><h4>Formation <kbd>D</kbd></h4><div>${Rules.FORMS.map(f => `<button data-f="${f}" class="${f === form ? 'on' : ''}" title="${FORM_NAME[f]}" aria-label="${FORM_NAME[f]}">${FORM_ICON[f]}</button>`).join('')}</div></div>`;
           box.innerHTML = html;
-          box.querySelectorAll('.forms button').forEach(b => b.addEventListener('click', () => b.dataset.st ? setStance(b.dataset.st) : setForm(b.dataset.f)));
+          box.querySelectorAll('.forms button').forEach(b => b.addEventListener('click', () => b.dataset.fb !== undefined ? toggleFallBack() : b.dataset.st ? setStance(b.dataset.st) : setForm(b.dataset.f)));
           box.querySelectorAll('.many button').forEach(b => b.addEventListener('click', () => select(state.sel.filter(e => e.kind === b.dataset.k))));
           box.querySelectorAll('.ups button[data-up]').forEach(b => b.addEventListener('click', () => {
             if (b.classList.contains('busy')) game.order(S(), team(), { c: 'unupgrade', id: first.id });
