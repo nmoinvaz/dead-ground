@@ -588,13 +588,65 @@ const Game = (() => {
     document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('settings').hidden) setOpen(false); });
     document.addEventListener('pointerdown', e => { if (!$('settings').hidden && !$('settings').contains(e.target) && e.target !== $('b-set')) setOpen(false); });
 
+    // A map drawn as the pen and ink look draws the land, at px pixels square: layer tints by height lit from the upper
+    // left, contours every two thirds of a unit, water lined at its bank, brooks, woods stippled, ore, roads with ruled
+    // edges, bridges, the town houses and the wells.
+    function mapPicture(M, px, dark) {
+      const W = M.W, k = W / px, cv = document.createElement('canvas'); cv.width = cv.height = px;
+      const g = cv.getContext('2d'), im = g.createImageData(px, px), d = im.data, hs = new Float32Array(px * px);
+      for (let j = 0; j < px; j++) for (let i = 0; i < px; i++) hs[j * px + i] = Rules.terrainAt(M, (i + 0.5) * k, (j + 0.5) * k);
+      const VW = Rules.VW, RES = Rules.RES, BD = M.brookDist, ink = dark ? [0.68, 0.66, 0.6] : [0.42, 0.33, 0.24];
+      const tint = t => dark
+        ? (t < 0.5 ? [0.2 + 0.14 * t, 0.29 + 0.16 * t, 0.19 + 0.12 * t] : [0.27 + 0.56 * (t - 0.5), 0.37 + 0.26 * (t - 0.5), 0.25 + 0.24 * (t - 0.5)])
+        : (t < 0.5 ? [0.84 + 0.2 * t, 0.9 + 0.06 * t, 0.8 + 0.04 * t] : [0.94 - 0.12 * (t - 0.5), 0.93 - 0.26 * (t - 0.5), 0.82 - 0.36 * (t - 0.5)]);
+      const WTR = dark ? [0.115, 0.15, 0.235] : [0.788, 0.804, 0.902], BANK = dark ? [0.4, 0.5, 0.75] : [0.3, 0.36, 0.6];
+      const ORE = dark ? [0.72, 0.58, 0.3] : [0.86, 0.68, 0.3], WOOD = dark ? [0.16, 0.26, 0.15] : [0.62, 0.74, 0.55], DOT = dark ? [0.4, 0.55, 0.36] : [0.3, 0.45, 0.28];
+      const wetAt = (i, j) => { const h = hs[j * px + i]; if (h < M.water) return true; if (!BD) return false; const v = Math.round((j + 0.5) * k * RES) * VW + Math.round((i + 0.5) * k * RES); return BD[v] < 0.48 && M.roadDist[v] > 1.4; };
+      const ci = (i, j) => Math.floor(hs[j * px + i] / 0.66);
+      for (let j = 0; j < px; j++) for (let i = 0; i < px; i++) {
+        const o = (j * px + i) * 4, x = (i + 0.5) * k, y = (j + 0.5) * k, c = Math.min(W - 1, y | 0) * W + Math.min(W - 1, x | 0), h = hs[j * px + i];
+        let col;
+        if (wetAt(i, j)) {
+          col = WTR.slice();
+          const edge = (i > 0 && !wetAt(i - 1, j)) || (j > 0 && !wetAt(i, j - 1)) || (i < px - 1 && !wetAt(i + 1, j)) || (j < px - 1 && !wetAt(i, j + 1));
+          if (edge) col = BANK;
+        } else {
+          col = tint(Math.max(0, Math.min(1, h / 3.2)));
+          // Lit from the upper left: the fall of the land toward the lower right shades it, the rise lifts it.
+          const hx = hs[j * px + Math.min(px - 1, i + 1)] - hs[j * px + Math.max(0, i - 1)], hy = hs[Math.min(px - 1, j + 1) * px + i] - hs[Math.max(0, j - 1) * px + i];
+          const sh = Math.max(-1, Math.min(1, -(hx + hy) / (2 * k) * 0.9));
+          col = col.map(v => v * (sh < 0 ? 1 + sh * (dark ? 0.55 : 0.28) : 1 + sh * 0.06));
+          if (M.ground[c] & 8) { col = col.map((v, n) => v * 0.45 + WOOD[n] * 0.55); if (((i * 7 + j * 13) % 11) === 0 || ((i * 3 + j * 5) % 17) === 0) col = DOT; }
+          if (M.ore[c]) col = col.map((v, n) => v * 0.35 + ORE[n] * 0.65);
+          const cnt = (i < px - 1 && ci(i + 1, j) !== ci(i, j)) || (j < px - 1 && ci(i, j + 1) !== ci(i, j));
+          if (cnt) { const idx = ci(i, j) % 5 === 0 ? 0.75 : 0.4; col = col.map((v, n) => v + (ink[n] - v) * idx); }
+        }
+        d[o] = col[0] * 255; d[o + 1] = col[1] * 255; d[o + 2] = col[2] * 255; d[o + 3] = 255;
+      }
+      g.putImageData(im, 0, 0);
+      g.scale(1 / k, 1 / k);
+      const line = dark ? 'rgba(232,224,207,.85)' : 'rgba(70,52,36,.85)', paper = dark ? '#2b2722' : '#faf4e4';
+      // Roads: a paper band between two ruled edges.
+      g.lineCap = g.lineJoin = 'round';
+      for (const [w, c] of [[1.5, line], [0.75, paper]]) { g.strokeStyle = c; g.lineWidth = w; for (const rd of M.roads) { g.beginPath(); rd.forEach((p, n) => n ? g.lineTo(p[0], p[1]) : g.moveTo(p[0], p[1])); g.stroke(); } }
+      // Bridges, a deck with its ends ruled across.
+      g.lineCap = 'butt';
+      for (const br of M.bridges) { g.strokeStyle = line; g.lineWidth = br.w + 0.6; g.beginPath(); g.moveTo(br.x0, br.y0); g.lineTo(br.x1, br.y1); g.stroke(); g.strokeStyle = dark ? '#5a554d' : '#d8cfbc'; g.lineWidth = br.w - 0.6; g.beginPath(); g.moveTo(br.x0, br.y0); g.lineTo(br.x1, br.y1); g.stroke(); }
+      // The houses of the towns, and the wells.
+      g.fillStyle = dark ? '#cfc6b4' : '#6a5440';
+      for (const hz of M.houses || []) g.fillRect(hz.x + 0.15, hz.y + 0.15, hz.w - 0.3, hz.h - 0.3);
+      g.fillStyle = dark ? '#e8e0cf' : '#1f1a16';
+      for (const w of M.wells) { g.beginPath(); g.arc(w.x + 1, w.y + 1, 0.9, 0, Math.PI * 2); g.fill(); }
+      return cv;
+    }
+
     // The map's picture in the set-up: land by height, water, ore, towns, roads and bridges, and a numbered mark at
     // each seated slot's base in its colour. Each map is worked out once and kept.
     const previews = new Map();
     let previewWant = '';
     function drawPreview(key, seed, slots) {
-      const m = Rules.MAPS[key], id = m.layout + ':' + seed + ':' + (Looks.dark ? 'd' : 'l'), cv = $('preview');
-      const css = Math.max(120, cv.clientWidth || 280), px = Math.round(css * Math.min(2, devicePixelRatio || 1));
+      const m = Rules.MAPS[key], cv = $('preview');
+      const css = Math.max(120, cv.clientWidth || 280), px = Math.round(css * Math.min(2, devicePixelRatio || 1)), id = m.layout + ':' + seed + ':' + (Looks.dark ? 'd' : 'l') + ':' + px;
       // A canvas starts 300 by 150, so a 300 pixel column must still set its height.
       if (cv.width !== px || cv.height !== px) { cv.width = cv.height = px; }
       const g = cv.getContext('2d');
@@ -619,26 +671,7 @@ const Game = (() => {
       g.clearRect(0, 0, px, px);
       setTimeout(() => {
         if (previewWant !== id) return;
-        const M = Rules.mapFor(seed, m.layout), W = M.W, dark = Looks.dark;
-        const img = document.createElement('canvas'); img.width = img.height = W;
-        const c = img.getContext('2d'), d = c.createImageData(W, W);
-        const land = dark ? [[38, 38, 36], [92, 90, 84]] : [[236, 232, 214], [198, 178, 140]], water = dark ? [40, 54, 86] : [168, 184, 222], ore = dark ? [200, 154, 70] : [214, 166, 58];
-        for (let y = 0; y < W; y++) for (let x = 0; x < W; x++) {
-          const c0 = y * W + x, h = Rules.terrainAt(M, x + 0.5, y + 0.5), b = M.ground[c0], i = c0 * 4;
-          let col;
-          if (M.ore[c0]) col = ore;
-          else if (b === 7 && h < 0.3) col = water;
-          else { const t = Math.max(0, Math.min(1, h / 5)); col = land[0].map((v, j) => v + (land[1][j] - v) * t); if (b & 8) col = col.map((v, j) => v * 0.82 + (dark ? [40, 70, 40] : [120, 160, 100])[j] * 0.18); }
-          d.data[i] = col[0]; d.data[i + 1] = col[1]; d.data[i + 2] = col[2]; d.data[i + 3] = 255;
-        }
-        c.putImageData(d, 0, 0);
-        const lineC = dark ? 'rgba(220,210,190,.75)' : 'rgba(60,45,30,.7)';
-        c.strokeStyle = lineC; c.lineWidth = W / 220;
-        for (const rd of M.roads) { c.beginPath(); rd.forEach((p, j) => j ? c.lineTo(p[0], p[1]) : c.moveTo(p[0], p[1])); c.stroke(); }
-        c.lineWidth = W / 60; c.strokeStyle = dark ? 'rgba(200,190,170,.9)' : 'rgba(90,70,50,.85)';
-        for (const br of M.bridges) { c.beginPath(); c.moveTo(br.x0, br.y0); c.lineTo(br.x1, br.y1); c.stroke(); }
-        c.fillStyle = dark ? '#e8e0cf' : '#3a2e22';
-        for (const t of M.towns) c.fillRect(t.x - W / 90, t.y - W / 90, W / 45, W / 45);
+        const M = Rules.mapFor(seed, m.layout), W = M.W, dark = Looks.dark, img = mapPicture(M, px, dark);
         // The rules are set back to the game behind the title.
         if (G.S) Rules.use(G.S);
         previews.set(id, { img, bases: M.bases, W });
