@@ -2380,6 +2380,11 @@ const Rules = (() => {
     // A unit under fire with nothing better to do answers it, and so do its idle neighbours.
     // An idle unit shot at shoots back, if its weapons are any good against what shot it; otherwise it picks its
     // own target as usual, which may well be the same.
+    // Men shot at by something they cannot see make for the nearest cover, if there is any close.
+    if (!t.b && by && t.d.men && t.cov < 0 && t.st !== 'hold' && (!t.ord || t.ord.ans) && S.byId.get(by) && !seenBy(S, t.team, S.byId.get(by))) {
+      const ci = coverNear(S.map, t.x, t.y, 6), cp = ci >= 0 ? coverPoints(S.map)[ci] : null;
+      if (cp && !blocked(S, 'foot', cellOf(cp.x, cp.y))) { if (!t.home) t.home = [t.x, t.y]; t.ord = { t: 'move', x: cp.x, y: cp.y, cov: ci, stop: 0.15 }; t.tgt = 0; t.wpT = 0; t.stuck = 0; }
+    }
     if (!t.b && by && !t.ord && !t.tgt && armed(t)) {
       const a = S.byId.get(by);
       if (a && (t.d.weapons || []).some(wn => canHit(wn, a) && (WEAPONS[wn].vs[a.d.armor] ?? 1) >= 0.5)) t.tgt = by;
@@ -2469,6 +2474,44 @@ const Rules = (() => {
     if (!best) { u.ord = null; return; }
     u.expTo = best;
     u.ord = { t: 'move', x: best[0], y: best[1], exp: true }; u.wpT = 0; u.stuck = 0; u.home = null;
+  }
+  // Scattering. Shells from guns firing over the hills, a barrage, a bomb or a missile give a moment's warning:
+  // units on the ground where one will land run clear of where it falls, and a unit standing its post goes back
+  // after. Holding ground holds through it.
+  const SCAT_EVERY = 5;
+  function dangerOf(S) {
+    const out = [];
+    for (const s of S.shots) {
+      const w = WEAPONS[s.w], left = s.dur - s.t;
+      if (left < 0.25) continue;
+      if (s.kind === 'nuke') out.push({ x: s.tx, y: s.ty, r: 10, team: s.team });
+      else if (s.kind === 'barrage') out.push({ x: s.tx, y: s.ty, r: 4, team: s.team });
+      else if (s.kind === 'bomb') out.push({ x: s.tx, y: s.ty, r: (s.splash || 1.5) + 1.2, team: s.team });
+      else if (w && w.indirect) out.push({ x: s.tx, y: s.ty, r: (w.splash || 1) + 1.5, team: s.team });
+    }
+    return out;
+  }
+  function scatter(S, u, danger) {
+    if (u.b || isAir(u) || u.st === 'hold' || (u.ord && !u.ord.ans && !u.ord.scat && u.ord.t !== 'amove')) return;
+    // Already running for a place clear of them all, it keeps on.
+    if (u.ord && u.ord.scat && danger.every(z => mhypot(u.ord.x - z.x, u.ord.y - z.y) >= z.r)) return;
+    // The shells falling about it, near or on it, and the way out of them all: away from their middle, then the
+    // first of a fan of ways round that clears every one.
+    const near = danger.filter(z => z.team !== u.team && !atPeace(S, u.team, z.team) && mhypot(u.x - z.x, u.y - z.y) < z.r + 2);
+    if (!near.some(z => mhypot(u.x - z.x, u.y - z.y) < z.r)) return;
+    let mx = 0, my = 0, rr = 0;
+    for (const z of near) { mx += z.x; my += z.y; rr = Math.max(rr, z.r); }
+    mx /= near.length; my /= near.length;
+    const a0 = mhypot(u.x - mx, u.y - my) > 0.2 ? matan2(u.y - my, u.x - mx) : (u.id * 2.39996) % TAU;
+    let gx = 0, gy = 0, found = false;
+    for (const da of [0, 0.6, -0.6, 1.2, -1.2, 1.9, -1.9, PI]) for (const go of [rr + 1.5, rr + 4]) {
+      const x = u.x + mcos(a0 + da) * go, y = u.y + msin(a0 + da) * go;
+      if (!found && danger.every(z => z.team === u.team || mhypot(x - z.x, y - z.y) >= z.r + 0.5)) { gx = x; gy = y; found = true; }
+    }
+    if (!found) { gx = u.x + mcos(a0) * (rr + 4); gy = u.y + msin(a0) * (rr + 4); }
+    const c = goalCells(S, clsOf(u), clamp(gx | 0, 0, W - 1), clamp(gy | 0, 0, H - 1))[0];
+    if (!u.home && !u.ord) u.home = [u.x, u.y];
+    u.ord = { t: 'move', x: c % W + 0.5, y: (c / W | 0) + 0.5, scat: true }; u.tgt = 0; u.wpT = 0; u.stuck = 0;
   }
   const ANS_R = 10, ANS_LEASH = 18;
   function answer(S, t, by) {
@@ -3969,9 +4012,11 @@ const Rules = (() => {
     S.cmds.length = 0;
     stepEconomy(S);
     stepTowns(S);
+    const danger = S.tick % SCAT_EVERY === 0 && S.shots.length ? dangerOf(S) : null;
     for (let i = 0; i < S.ents.length; i++) {
       const e = S.ents[i];
       if (e.hp <= 0) continue;
+      if (danger && danger.length) scatter(S, e, danger);
       if (e.b) stepBuilding(S, e); else stepUnit(S, e);
     }
     stepShots(S);
