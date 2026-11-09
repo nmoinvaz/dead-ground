@@ -449,23 +449,31 @@
               tint *= 0.92 + 0.16 * (noise(Wl * 0.055) * 0.65 + noise(Wl * 0.16 + 5.0) * 0.35);
             }
             vec3 CONT = dk ? vec3(0.68, 0.66, 0.6) : vec3(0.42, 0.33, 0.24);
-            // Snow lies above the theatre's snow line the year round, its edge ragged with drifts, and leaves bare a
-            // face too steep to hold it. A survey map draws a snowfield so: white, with its contours and a fine edge in
-            // blue and its shaded slopes in grey.
-            float sNz = (noise(Wl * 0.09) - 0.5) * 2.4 + (noise(Wl * 0.31 + 7.0) - 0.5) * 0.9;
-            // The slope across a whole unit of land, smooth where the pixel's own gradient is not.
+            // Snow lies above the theatre's snow line the year round, and lies as the land has it: it fills the
+            // hollows and gullies and is blown off the ridges, holds on the shaded slopes and melts back on those
+            // facing the sun, and breaks up near the line into patches and streaks. A face too steep to hold it is
+            // bare. A survey map draws a snowfield so: white, with its contours and a fine edge in blue.
+            float sNz = (noise(Wl * 0.09) - 0.5) * 2.4 + (noise(Wl * 0.31 + 7.0) - 0.5) * 0.9 + (noise(Wl * 0.85 + 3.0) - 0.5) * 0.8;
+            // The slope and the curvature across a whole unit of land, smooth where the pixel's own are not. The
+            // curvature is positive in a hollow.
             #define HB(o) texture2D(tH, ((Wl + o) * uHScale + 0.5) / uHSize).r
-            float sSl = length(vec2(HB(vec2(1.0, 0.0)) - HB(vec2(-1.0, 0.0)), HB(vec2(0.0, 1.0)) - HB(vec2(0.0, -1.0)))) * 0.5;
-            float sF = min(lhS + sNz - uSnowLine, (1.25 - sSl) * 2.0), sW = max(fwidth(sF), 1e-4);
+            float hE = HB(vec2(1.0, 0.0)), hWs = HB(vec2(-1.0, 0.0)), hN = HB(vec2(0.0, 1.0)), hS = HB(vec2(0.0, -1.0));
+            vec2 sG = vec2(hE - hWs, hN - hS) * 0.5;
+            float sSl = length(sG), sCv = clamp((hE + hWs + hN + hS - 4.0 * HB(vec2(0.0))) * 2.5, -1.6, 1.6);
+            // How far the slope faces the light, by the same smooth reads, so the melt has no grain of its own.
+            float sSun = clamp(-dot(sG, normalize(vec2(uView.x + uView.y, uView.y - uView.x))) * 2.4, -1.0, 1.0);
+            float sF = min(lhS + sNz + sCv - sSun * (sSun > 0.0 ? 1.4 : 0.6) - uSnowLine, (1.25 - sSl) * 2.0), sW = max(fwidth(sF), 1e-4);
             float cap = smoothstep(-sW, sW, sF), capE = (1.0 - smoothstep(0.45 * sW * uK, 1.3 * sW * uK, abs(sF)));
             vec3 SNOWL = dk ? vec3(0.56, 0.68, 0.88) : vec3(0.3, 0.44, 0.7);
-            tint = mix(tint, dk ? vec3(0.6, 0.62, 0.66) : vec3(0.985, 0.985, 0.975), cap);
+            // Nor is it one white: old and wind-packed snow lies a cool grey in broad patches.
+            float sOld = smoothstep(0.35, 0.75, noise(Wl * 0.05 + 11.0));
+            tint = mix(tint, dk ? mix(vec3(0.6, 0.62, 0.66), vec3(0.5, 0.53, 0.58), sOld) : mix(vec3(0.985, 0.985, 0.975), vec3(0.89, 0.91, 0.94), sOld * 0.85), cap);
             CONT = mix(CONT, SNOWL, cap);
             // A road takes a third of the tint and the contours cross it faint, so it climbs and falls with the land
             // rather than lying flat over it.
             base = mix(base, tint, isG * (1.0 - onRoad * 0.65));
             // On dark paper a shaded slope sinks toward black and a lit one rises toward mid grey.
-            base = mix(base, base * (dk ? vec3(0.36, 0.37, 0.44) : mix(vec3(0.72, 0.70, 0.68), vec3(0.8, 0.8, 0.82), cap)), rfDark * (dk ? 0.95 : 0.65) * isG);
+            base = mix(base, base * (dk ? mix(vec3(0.36, 0.37, 0.44), vec3(0.66, 0.67, 0.71), cap) : mix(vec3(0.72, 0.70, 0.68), vec3(0.8, 0.8, 0.82), cap)), rfDark * (dk ? 0.95 : 0.65) * isG);
             base = mix(base, dk ? base + vec3(0.3, 0.27, 0.21) : min(base * 1.05 + 0.03, vec3(1.0)), rfLight * (dk ? 0.85 : 0.6) * isG);
             base = mix(base, CONT, contour * isG * (1.0 - onRoad * 0.55) * (1.0 - wet));
             base = mix(base, base * vec3(0.9, 0.93, 0.97), uWet * isG * 0.7);
@@ -474,6 +482,10 @@
             float sPh = dot(Wl - floor(Wl / 3.0) * 3.0, sTw) / (0.6 * exp2(gLm));
             float sDash = mix(step(0.4, fract(sPh)), step(0.4, fract(sPh * 0.5)), gLf);
             base = mix(base, SNOWL, capE * sDash * 0.8 * isG * (1.0 - onRoad) * (1.0 - wet));
+            // The shaded snow and the old stippled in blue dots laid on the land, as a pen tones a white field.
+            vec2 sq = Wl * 9.0 * exp2(-gLm), sj = vec2(hash(floor(sq) + 7.0), hash(floor(sq) + 19.0)) - 0.5;
+            float stip = step(0.7, hash(floor(sq) + 31.0)) * (1.0 - smoothstep(0.12, 0.2, length(fract(sq) - 0.5 - sj * 0.5))) * smoothstep(0.1, 0.6, max(-sSun, 0.0) + sOld * 0.4);
+            base = mix(base, SNOWL, stip * cap * 0.4 * isG * (1.0 - onRoad) * (1.0 - wet));
             // A raised road's shadow, a narrow band beyond its edge away from the light; none beside a cutting.
             float rCast = rShade * smoothstep(1.27, 1.33, rd) * (1.0 - smoothstep(1.3, 1.62, rd)) * (1.0 - cut * bank);
             base = mix(base, base * (dk ? vec3(0.55) : vec3(0.8, 0.79, 0.78)), rCast * isG * 0.85);
