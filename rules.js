@@ -2369,6 +2369,7 @@ const Rules = (() => {
     // Where the harm between sides falls, gathered for the war map's battles.
     if (S.hist && team >= 0 && team !== t.team) { const f = S.hist.fa || (S.hist.fa = [0, 0, 0]); f[0] += t.x * dmg; f[1] += t.y * dmg; f[2] += dmg; }
     t.under = S.tick;
+    if (by && !t.b) t.hitBy = by;
     const P = S.P[t.team];
     if (t.b && t.team !== team) {
       ownEvent(S, t.team, 'baseattack'); S.ev.push({ t: 'alert', team: t.team, x: t.x, y: t.y });
@@ -2421,6 +2422,53 @@ const Rules = (() => {
     u.mend = { at: [x, y] };
     u.ord = { t: 'move', x, y }; u.tgt = 0; u.home = null; u.wpT = 0; u.stuck = 0;
     S.ev.push({ t: 'fallback', team: u.team, id: u.id, x: u.x, y: u.y });
+  }
+  // Exploring. A scout told to explore roams by itself: to the block of the map its side has seen least, never
+  // seen before all, nearer ones first, keeping clear of the enemy defences its side has found. Shot at, it runs
+  // a dozen cells from whatever shot it, waits a little, and goes on exploring.
+  const EXP_B = 8, EXP_SAFE = 14;
+  const canExplore = u => u.d.line === 'rec';
+  function exploreTick(S, u) {
+    if (!u.exp) return;
+    const P = S.P[u.team], o = u.ord;
+    if (u.under && S.tick - u.under < 2 * HZ && u.hitBy && !(o && o.flee)) {
+      const a = S.byId.get(u.hitBy);
+      if (a) {
+        const dx = u.x - a.x, dy = u.y - a.y, m = mhypot(dx, dy) || 1;
+        u.ord = { t: 'move', x: clamp(u.x + dx / m * 12, 1, W - 1), y: clamp(u.y + dy / m * 12, 1, H - 1), exp: true, flee: true }; u.tgt = 0; u.wpT = 0; u.stuck = 0;
+        u.expWait = S.tick + 6 * HZ;
+        return;
+      }
+    }
+    if (S.tick < (u.expWait || 0)) return;
+    // Going somewhere still unseen, it carries on.
+    if (o && o.exp && !o.flee && !P.vis[cellOf(o.x, o.y)]) return;
+    if (o && !o.exp) return;
+    // A block it set out for and stopped short of is passed over from then on.
+    if (!o && u.expTo && mhypot(u.x - u.expTo[0], u.y - u.expTo[1]) > 4) { (u.expSkip || (u.expSkip = [])).push(u.expTo[2]); if (u.expSkip.length > 8) u.expSkip.shift(); }
+    u.expTo = null;
+    const danger = [];
+    for (const e of S.ents) if (e.b && e.team !== u.team && e.hp > 0 && armOf(S, e) && P.seen[cellOf(e.x, e.y)]) danger.push(e);
+    const nb = Math.ceil(W / EXP_B);
+    let best = null, top = 0;
+    for (let by = 0; by < nb; by++) for (let bx = 0; bx < nb; bx++) {
+      const cx = (bx + 0.5) * EXP_B, cy = (by + 0.5) * EXP_B;
+      const bi = by * nb + bx;
+      if (cx >= W || cy >= H || (u.expSkip && u.expSkip.includes(bi)) || danger.some(e => mhypot(e.x - cx, e.y - cy) < EXP_SAFE)) continue;
+      // Its unseen ground, and the open cell nearest its middle to make for.
+      let never = 0, dark = 0, land = 0, goal = -1, gd = Infinity;
+      for (let y = by * EXP_B; y < Math.min(H, (by + 1) * EXP_B); y += 2) for (let x = bx * EXP_B; x < Math.min(W, (bx + 1) * EXP_B); x += 2) {
+        const c = y * W + x;
+        if (!blocked(S, clsOf(u), c)) { land++; const dd = mhypot(x + 0.5 - cx, y + 0.5 - cy); if (dd < gd) { gd = dd; goal = c; } }
+        if (!P.seen[c]) never++; else if (!P.vis[c]) dark++;
+      }
+      if (land < 4) continue;
+      const sc = (never * 3 + dark) / (1 + mhypot(cx - u.x, cy - u.y) / 30);
+      if (sc > top) { top = sc; best = [goal % W + 0.5, (goal / W | 0) + 0.5, bi]; }
+    }
+    if (!best) { u.ord = null; return; }
+    u.expTo = best;
+    u.ord = { t: 'move', x: best[0], y: best[1], exp: true }; u.wpT = 0; u.stuck = 0; u.home = null;
   }
   const ANS_R = 10, ANS_LEASH = 18;
   function answer(S, t, by) {
@@ -2993,6 +3041,7 @@ const Rules = (() => {
     if (u.vet >= 2 && u.hp < u.max) u.hp = Math.min(u.max, u.hp + u.max * 0.002);
     if (S.tick % HZ === u.id % HZ) {
       fallBack(S, u);
+      exploreTick(S, u);
       const c = cellOf(u.x, u.y), foreign = S.terr[c] >= 0 && S.terr[c] !== u.team;
       let helped = false;
       near(S, u.x, u.y, 8, o => {
@@ -3637,8 +3686,8 @@ const Rules = (() => {
     if (c.c === 'move') {
       const us = unitsOf(S, team, c.ids);
       if (us.length) {
-        // A new order ends a stay to mend.
-        for (const u of us) u.mend = null;
+        // A new order ends a stay to mend, and a scout's exploring.
+        for (const u of us) { u.mend = null; u.exp = false; }
         for (const u of us) if (u.d.cargo && u.ord && u.ord.t === 'harvest') u.ord = null;
         orderMove(S, us, c.x, c.y, !!c.a);
       }
@@ -3690,6 +3739,9 @@ const Rules = (() => {
         u.tgt = pick; u.wpT = 0; u.stuck = 0; u.home = null;
       }
       S.ev.push({ t: 'marked', team, ids, x: c.x, y: c.y, r: c.r });
+    } else if (c.c === 'explore') {
+      // Scouts set to explore, or stopped from it, where they stand.
+      for (const u of unitsOf(S, team, c.ids)) { if (!canExplore(u)) continue; u.exp = !!c.on; if (u.ord && u.ord.exp) { u.ord = null; u.v = 0; } u.expWait = 0; }
     } else if (c.c === 'fallback') {
       // Whether the units fall back when badly hurt. Turned off, any going back carry on but no longer mend there.
       for (const u of unitsOf(S, team, c.ids)) { if (u.d.cargo || isAir(u)) continue; u.fb = !!c.on; if (!u.fb) u.mend = null; }
@@ -4013,7 +4065,7 @@ const Rules = (() => {
     msin, mcos, matan2, mhypot,
     BRIDGE_HP, SPELL, SKIES, WEATHERS, nightAt, skyOf, offGoing, route, weatherAt, sky, dayAt, spellOf, bridgeAt, clsOf, houseHp, hurtBridge, ignite, shielded,
     coverPoints, coverNear, COVER_R, COVER_ARC, FORMS, formOfGroup, STANCES,
-    FB_AT, UPGRADES, UP_AGE, upCost, upNote, upsAt, upK, upBlocked, hpOf, rangeOf, capOf, showersAt, showerAt,
+    FB_AT, canExplore, UPGRADES, UP_AGE, upCost, upNote, upsAt, upK, upBlocked, hpOf, rangeOf, capOf, showersAt, showerAt,
   };
 })();
 if (typeof module !== 'undefined') module.exports = Rules;

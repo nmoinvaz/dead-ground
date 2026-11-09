@@ -723,8 +723,8 @@ const Hud = (() => {
         if (us.length > 1) setForm(F[(F.indexOf(Rules.formOfGroup(us)) + (e.shiftKey ? F.length - 1 : 1)) % F.length]);
         return;
       }
-      // J turns falling back when hurt on or off.
-      if (k === 'KeyJ') { toggleFallBack(); return; }
+      // J turns falling back when hurt on or off; Shift+J sets the selected scouts exploring, or stops them.
+      if (k === 'KeyJ') { if (e.shiftKey) toggleExplore(); else toggleFallBack(); return; }
       // L steps through the stances, Shift+L back.
       if (k === 'KeyL') {
         const us = stanceUnits(), T = Rules.STANCES;
@@ -1736,6 +1736,8 @@ const Hud = (() => {
     const STANCE_NAME = { hunt: 'Seek and destroy', aggr: 'Aggressive', def: 'Defensive', hold: 'Hold ground' };
     const STANCE_NOTE = { hunt: 'hunts down the nearest enemy, anywhere', aggr: 'chases what it sees as far as it takes', def: 'chases a little, then goes back to its post', hold: 'fires from where it stands and never moves to fight' };
     const line = d => `<svg viewBox="0 0 24 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round">${d}</svg>`;
+    // Exploring, drawn as a spyglass.
+    const EXP_ICON = '<svg viewBox="0 0 24 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M4 11.5 15 4.5M6 13.5 17 6.5M4 11.5l2 2M15 4.5l2 2M17.5 4 20 2.5"/></svg>';
     // Falling back, drawn as a cross on a shield-like tent and an arrow home.
     const FB_ICON = '<svg viewBox="0 0 24 16" aria-hidden="true" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M9 8H3M6 5 3 8l3 3"/><path d="M12 3h8v10h-8z"/><path d="M16 5.5v5M13.5 8h5"/></svg>';
     const STANCE_ICON = {
@@ -1751,6 +1753,15 @@ const Hud = (() => {
       if (!us.length) return;
       game.order(S(), team(), { c: 'stance', ids: us.map(u => u.id), v });
       say(`${STANCE_NAME[v]}.`);
+    }
+    // Exploring, for the selected scouts: on for all if any were off.
+    const expUnits = () => state.sel.filter(e => alive(e) && !e.b && e.team === team() && Rules.canExplore(e));
+    function toggleExplore() {
+      const us = expUnits();
+      if (!us.length) return;
+      const on = !us.every(u => u.exp);
+      game.order(S(), team(), { c: 'explore', ids: us.map(u => u.id), on });
+      say(on ? 'Scouting ahead.' : 'Scouting stopped.');
     }
     // Falling back when badly hurt, on or off for the selected units: on for all if any were off.
     const fbUnits = () => state.sel.filter(e => alive(e) && !e.b && e.team === team() && !Rules.isAir(e) && !e.d.cargo);
@@ -1800,7 +1811,8 @@ const Hud = (() => {
       const one = state.sel.length === 1 && state.sel[0].b && state.sel[0].team === team() ? state.sel[0] : null;
       const ups = one ? upState(one).map(u => u.tier + (u.here ? 'h' : '') + (u.why || '')).join() : '';
       const fbu = fbUnits(), fb = fbu.length ? (fbu.every(u => u.fb) ? 'on' : fbu.some(u => u.fb) ? 'some' : 'off') : '';
-      const box = $('sel'), list = state.sel, key = list.map(e => e.id).join() + (list[0] ? (list[0].repairing ? 'r' : '') + (list[0].team) : '') + form + stance + ups + fb;
+      const exu = expUnits(), ex = exu.length ? (exu.every(u => u.exp) ? 'on' : 'off') : '';
+      const box = $('sel'), list = state.sel, key = list.map(e => e.id).join() + (list[0] ? (list[0].repairing ? 'r' : '') + (list[0].team) : '') + form + stance + ups + fb + ex;
       if (key !== state.selKey) {
         state.selKey = key;
         box.hidden = !list.length;
@@ -1827,10 +1839,11 @@ const Hud = (() => {
           html += '</div>';
           if (one) html += upsHtml(one);
           if (stance) html += `<div class="forms stances"><h4>Stance <kbd>L</kbd></h4><div>${Rules.STANCES.map(v => `<button data-st="${v}" class="${v === stance ? 'on' : ''}" title="${STANCE_NAME[v]}: ${STANCE_NOTE[v]}" aria-label="${STANCE_NAME[v]}">${STANCE_ICON[v]}</button>`).join('')}</div></div>`;
+          if (ex) html += `<div class="forms fallback"><h4>Explore <kbd>⇧J</kbd></h4><div><button data-ex class="${ex === 'on' ? 'on' : ''}" title="Explore: roam the map by itself to what is least seen, clear of known defences, running when shot at" aria-label="Explore">${EXP_ICON}</button></div></div>`;
           if (fb) html += `<div class="forms fallback"><h4>Fall back <kbd>J</kbd></h4><div><button data-fb class="${fb === 'on' ? 'on' : ''}" title="Fall back when badly hurt: below a quarter of their health they go back to a support vehicle or a base building and mend there" aria-label="Fall back when badly hurt">${FB_ICON}</button></div></div>`;
           if (form) html += `<div class="forms"><h4>Formation <kbd>D</kbd></h4><div>${Rules.FORMS.map(f => `<button data-f="${f}" class="${f === form ? 'on' : ''}" title="${FORM_NAME[f]}" aria-label="${FORM_NAME[f]}">${FORM_ICON[f]}</button>`).join('')}</div></div>`;
           box.innerHTML = html;
-          box.querySelectorAll('.forms button').forEach(b => b.addEventListener('click', () => b.dataset.fb !== undefined ? toggleFallBack() : b.dataset.st ? setStance(b.dataset.st) : setForm(b.dataset.f)));
+          box.querySelectorAll('.forms button').forEach(b => b.addEventListener('click', () => b.dataset.ex !== undefined ? toggleExplore() : b.dataset.fb !== undefined ? toggleFallBack() : b.dataset.st ? setStance(b.dataset.st) : setForm(b.dataset.f)));
           box.querySelectorAll('.many button').forEach(b => b.addEventListener('click', () => select(state.sel.filter(e => e.kind === b.dataset.k))));
           box.querySelectorAll('.ups button[data-up]').forEach(b => b.addEventListener('click', () => {
             if (b.classList.contains('busy')) game.order(S(), team(), { c: 'unupgrade', id: first.id });
