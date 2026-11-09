@@ -925,6 +925,37 @@ const Models = (() => {
       // Seams across the deck between its parapets, so a long bridge reads as one and not as a blank slab.
       for (let i = 1; i < 18; i++) w.box(0.008, 0.016, 0.88, -0.5 + i / 18, 0.2, 0, 0x4a4844);
       scenery.deck = w.finish();
+      // The older bridges, each a deck one unit long, scaled to the span. A timber bridge of planks between low rails
+      // on posts; a stone one with solid parapets and a coping; an iron one carried by a truss on either side.
+      const wd = G();
+      wd.box(1, 0.16, 1, 0, 0.04, 0, 0xffffff);
+      for (let i = 1; i < 30; i++) wd.box(0.006, 0.012, 0.98, -0.5 + i / 30, 0.2, 0, 0x4a3a2c);
+      for (const z of [-0.47, 0.47]) { wd.box(1, 0.03, 0.03, 0, 0.42, z, 0xffffff); for (let i = 0; i <= 12; i++) wd.box(0.02, 0.24, 0.02, -0.5 + i / 12, 0.2, z, 0xffffff); }
+      scenery.deckWood = wd.finish();
+      const sd = G();
+      sd.box(1, 0.2, 1, 0, 0, 0, 0xffffff);
+      // Paved in setts, course by course, each course's joints set off from the last's.
+      for (let i = 1; i < 24; i++) sd.box(0.005, 0.012, 0.8, -0.5 + i / 24, 0.2, 0, 0x5a554c);
+      for (let r = 0; r < 6; r++) for (let i = 0; i < 24; i++) sd.box(0.042, 0.012, 0.005, -0.5 + (i + (r % 2) * 0.5 + 0.5) / 24, 0.2, -0.4 + (r + 0.5) * 0.8 / 6 - 0.4 / 6 + 0.067, 0x5a554c);
+      for (const z of [-0.44, 0.44]) { sd.box(1, 0.26, 0.12, 0, 0.2, z, 0xffffff); sd.box(1, 0.05, 0.16, 0, 0.46, z, 0xeeeeee); }
+      scenery.deckStone = sd.finish();
+      const id = G();
+      id.box(1, 0.16, 1, 0, 0.02, 0, 0xffffff);
+      for (const z of [-0.48, 0.48]) {
+        id.box(1, 0.05, 0.06, 0, 0.9, z, 0xffffff);
+        for (let i = 0; i <= 8; i++) id.box(0.014, 0.72, 0.02, -0.5 + i / 8, 0.18, z, 0xffffff);
+        for (let i = 0; i < 8; i++) id.box(0.155, 0.014, 0.018, -0.5 + (i + 0.5) / 8, 0.54, z, 0xffffff, { rz: (i % 2 ? 1 : -1) * 1.05 });
+      }
+      for (let i = 0; i <= 8; i += 2) id.box(0.014, 0.02, 0.96, -0.5 + i / 8, 0.92, 0, 0xffffff);
+      // Overhead, a cross brace in each panel between the top chords, which reads from above.
+      for (let i = 0; i < 4; i++) for (const sg of [1, -1]) id.box(Math.hypot(0.25, 0.96), 0.016, 0.018, -0.5 + (i + 0.5) / 4, 0.93, 0, 0xffffff, { ry: sg * Math.atan2(0.96, 0.25) });
+      scenery.deckIron = id.finish();
+      // A timber trestle across the deck, its top at y = 0: posts in a row, a cap beam and a cross brace.
+      const tr = G();
+      for (const z of [-0.42, -0.14, 0.14, 0.42]) tr.box(0.12, 1, 0.12, 0, -1, z, 0xffffff);
+      tr.box(0.16, 0.08, 1, 0, -0.08, 0, 0xffffff);
+      tr.box(0.05, 0.05, 1.15, 0, -0.55, 0, 0xffffff, { rx: 0.7 });
+      scenery.trestle = tr.finish();
       const pier = G();
       pier.box(0.4, 2.4, 1.2, 0, -2.2, 0, P.concDk);
       scenery.pier = pier.finish();

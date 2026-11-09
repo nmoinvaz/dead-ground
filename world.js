@@ -83,6 +83,8 @@ const World = (() => {
       uShow: { value: [0, 1, 2, 3].map(() => new THREE.Vector4()) },
       // Up to sixteen town parks: x, y, radius and the turn of their paths.
       uPark: { value: Array.from({ length: 16 }, () => new THREE.Vector4()) },
+      // The kind of the bridges: 0 timber, 1 stone, 2 iron, 3 concrete.
+      uBridgeKind: { value: 3 },
       // How far tread marks darken the ground, none where the look draws them itself.
       uTreadK: { value: 0.34 },
       // How hard the track worn into each cell has become, in red.
@@ -1077,8 +1079,19 @@ const World = (() => {
           pier.push({ x: px, y: b.z - 0.1, z: py, a, sx: 0.7, sy: b.z - M.water + 1.2, sz: b.w + 1.7, c: 0x77746c });
         }
       }
-      const dm = lineCat(instanced(sc.deck, plainTint, dk), 0.42);
-      if (pier.length) lineCat(instanced(sc.cutwater, plainTint, pier), 0.42);
+      // Each kind of bridge, of which the one the world's age has stands: timber trestles, stone, iron trusses on
+      // stone piers, or the concrete of today. All share the decks' places, and fall alike.
+      const KIND_DECK = { wood: ['deckWood', 0x8a6a4a], stone: ['deckStone', 0xb8b0a0], iron: ['deckIron', 0x5a5e66], concrete: ['deck', 0x5e5d59] };
+      const KIND_PIER = { wood: ['trestle', 0x6a5038, 0.35], stone: ['cutwater', 0xa8a090, 1], iron: ['cutwater', 0x8a8478, 0.8], concrete: ['cutwater', 0x77746c, 1] };
+      const kinds = {};
+      for (const k of Object.keys(KIND_DECK)) {
+        const dkk = dk.map(o => Object.assign({}, o, { c: KIND_DECK[k][1], sy: k === 'iron' ? 1.4 : 1 }));
+        const m = lineCat(instanced(sc[KIND_DECK[k][0]], plainTint, dkk), 0.42);
+        dkk.forEach((o, i) => { if (i % 2) setInst(m, i, o, true); }); dirty(m);
+        const pm = pier.length ? lineCat(instanced(sc[KIND_PIER[k][0]], plainTint, pier.map(o => Object.assign({}, o, { c: KIND_PIER[k][1], sx: o.sx * KIND_PIER[k][2] }))), 0.42) : null;
+        kinds[k] = { dm: m, dk: dkk, pm };
+      }
+      const dm = kinds.concrete.dm;
       const lane = [];
       M.bridges.forEach((b, bi) => {
         const dx = b.x1 - b.x0, dy = b.y1 - b.y0, len = Math.hypot(dx, dy), a = -Math.atan2(dy, dx), n = Math.floor(len / 2);
@@ -1087,8 +1100,7 @@ const World = (() => {
       const lm = lineCat(instanced(sc.block, plainTint, lane, false), 0.42);
       const bm = lineCat(instanced(sc.rubble, plainTint, brub), 0.42);
       brub.forEach((o, i) => setInst(bm, i, o, true)); dirty(bm);
-      dk.forEach((o, i) => { if (i % 2) setInst(dm, i, o, true); }); dirty(dm);
-      scen.bridges = { dk, lane, brub, dm, lm, bm, shown: M.bridges.map(() => 'up') };
+      scen.bridges = { dk, lane, brub, dm, lm, bm, kinds, kind: '', shown: M.bridges.map(() => 'up') };
       // Stepping stones across each ford, under water when the river is up.
       const stones = [];
       for (const f of M.fords || []) for (let j = -6; j <= 6; j++) {
@@ -1461,19 +1473,25 @@ const World = (() => {
         const now = S.bridges[i].hp > 0 ? 'up' : 'down';
         if (B.shown[i] === now) return;
         B.shown[i] = now;
-        const main = B.dk[i * 2], len = b.len + 2, piece = len * 0.27, off = (len - piece) / 2;
-        if (now === 'up') { setInst(B.dm, i * 2, main); setInst(B.dm, i * 2 + 1, main, true); }
-        else {
-          setInst(B.dm, i * 2, Object.assign({}, main, { x: main.x - b.ux * off, z: main.z - b.uy * off, sx: piece, rz: -0.08 }));
-          setInst(B.dm, i * 2 + 1, Object.assign({}, main, { x: main.x + b.ux * off, z: main.z + b.uy * off, sx: piece, rz: 0.08 }));
+        const len = b.len + 2, piece = len * 0.27, off = (len - piece) / 2;
+        for (const K of Object.values(B.kinds)) {
+          const main = K.dk[i * 2];
+          if (now === 'up') { setInst(K.dm, i * 2, main); setInst(K.dm, i * 2 + 1, main, true); }
+          else {
+            setInst(K.dm, i * 2, Object.assign({}, main, { x: main.x - b.ux * off, z: main.z - b.uy * off, sx: piece, rz: -0.08 }));
+            setInst(K.dm, i * 2 + 1, Object.assign({}, main, { x: main.x + b.ux * off, z: main.z + b.uy * off, sx: piece, rz: 0.08 }));
+          }
+          dirty(K.dm);
         }
         B.lane.forEach((o, j) => { if (o.b === i) setInst(B.lm, j, o, now === 'down' && o.t > 0.22 && o.t < 0.78); });
         B.brub.forEach((o, j) => { if ((j >> 2) === i) setInst(B.bm, j, o, now === 'up'); });
         dirty(B.dm); dirty(B.lm); dirty(B.bm);
       });
       // The fords' stones go under when the river is up.
-      // A bridge's lane marks are a modern road's, from the Industrial Age.
+      // A bridge's lane marks are a modern road's, from the Industrial Age. Its kind is the world's age's.
       B.lm.visible = worldAge() >= MOTOR_AGE;
+      const age = worldAge(), kind = age <= 2 ? 'wood' : age === 3 ? 'stone' : age === 4 ? 'iron' : 'concrete';
+      if (kind !== B.kind) { B.kind = kind; for (const [k, K] of Object.entries(B.kinds)) { K.dm.visible = k === kind; if (K.pm) K.pm.visible = k === kind; } SH.uBridgeKind.value = ['wood', 'stone', 'iron', 'concrete'].indexOf(kind); }
       const Fd = scen.fords, under = S.flooded || waterRise.value > 0.12;
       if (Fd.mesh && under !== Fd.under) { Fd.under = under; Fd.list.forEach((o, i) => setInst(Fd.mesh, i, o, under)); dirty(Fd.mesh); }
       // Fences under whatever drives over them.
