@@ -450,6 +450,10 @@ const Rules = (() => {
   // feature is listed with all of its images in a row, so one town's images sit side by side.
   // How wooded a map is beyond the usual: the woods' patches grow wider, start on lower ground and stand thicker.
   // Maps not named keep the usual woods.
+  // How many brooks each map's part has. Every part of a map gets the same, so the map stays fair. A brook runs at
+  // most BROOK_REACH cells.
+  const BROOK_REACH = 90;
+  const BROOKS = { duel: 2, quad: 1, world: 1, gulf: 2, pass: 2, lakes: 1, greenwood: 2, oldforest: 1, twinlakes: 2, seas: 2, peaks: 2, highlands: 1, crater: 1 };
   // The treeline: woods thin out over TREE_BAND of height round TREE_LINE and stand no higher.
   const TREE_LINE = 8.6, TREE_BAND = 1.2;
   const WOODS = { quad: 0.7, pass: 1, lakes: 1, greenwood: 3, oldforest: 1.3, twinlakes: 0.6, ponds: 0.8, peaks: 0.6, highlands: 0.5, crater: 0.5 };
@@ -897,6 +901,107 @@ const Rules = (() => {
       }
     }
 
+    // Brooks. Each rises on middling ground in one part of the map and winds down to the river, a lake or the
+    // map's edge, or sinks into a pool, and is copied by the map's turns. It keeps clear of the bases, towns, ore and
+    // wells. A brook is shallow: men wade it, slowly, and wheels and tracks cross only at its fords, or where a road
+    // carries it in a culvert. Its dice are its own, so the rest of the map draws the same numbers as before.
+    const brooks = [], brookFords = [], bD = new Float32Array(VW * VH).fill(99), bF = new Uint8Array(VW * VH);
+    if (BROOKS[kind]) {
+      const br = mulberry((seed * 2654435761 + 0x9e37) % 4294967296);
+      const hv = (x, y) => h[clamp(Math.round(y * RES), 0, VH - 1) * VW + clamp(Math.round(x * RES), 0, VW - 1)];
+      const rdv = (x, y) => roadDist[clamp(Math.round(y * RES), 0, VH - 1) * VW + clamp(Math.round(x * RES), 0, VW - 1)];
+      // The ground a brook keeps off: a base's yard, a town's houses, an ore field and a well, each with a margin it
+      // turns away from as it nears.
+      const keepOff = [...L.bases.map(p => [p[0], p[1], 22]), ...L.towns.map(p => [p[0], p[1], 9]), ...L.ore.map(p => [p[0], p[1], p[2] + 2]), ...L.wells.map(p => [p[0], p[1], 4])];
+      const clear = (x, y) => keepOff.every(o => mhypot(x - o[0], y - o[1]) > o[2]);
+      // The brook's way from its spring: the cheapest walk over the cells to the river, a lake or the map's edge,
+      // dear uphill and dearer along a road, barred from ground it keeps off and from bridges, and made to wind by
+      // noise in the going. Past BROOK_REACH cells it gives up and sinks into a pool at the lowest ground it reached.
+      // The walk is then rounded into curves and laid as points a step apart.
+      const route = (sx, sy) => {
+        const cost = new Float32Array(N).fill(Infinity), from = new Int32Array(N).fill(-1), heap = [];
+        const push = (c, v) => { heap.push([v, c]); let i = heap.length - 1; while (i > 0) { const p = (i - 1) >> 1; if (heap[p][0] <= heap[i][0]) break; [heap[p], heap[i]] = [heap[i], heap[p]]; i = p; } };
+        const pop = () => { const top = heap[0], last = heap.pop(); if (heap.length) { heap[0] = last; let i = 0; for (;;) { const l = 2 * i + 1, r = l + 1; let m = i; if (l < heap.length && heap[l][0] < heap[m][0]) m = l; if (r < heap.length && heap[r][0] < heap[m][0]) m = r; if (m === i) break; [heap[m], heap[i]] = [heap[i], heap[m]]; i = m; } } return top; };
+        const c0 = (sy | 0) * W + (sx | 0);
+        cost[c0] = 0; push(c0, 0);
+        let end = -1, kind = 'pool', low = c0;
+        while (heap.length) {
+          const [v, c] = pop();
+          if (v > cost[c]) continue;
+          const x = c % W, y = c / W | 0, z = hv(x + 0.5, y + 0.5);
+          if (c !== c0 && (z < water + 0.05 || x === 0 || y === 0 || x === W - 1 || y === H - 1)) { end = c; kind = z < water + 0.05 ? 'water' : 'edge'; break; }
+          if (v > 12 && z < hv(low % W + 0.5, (low / W | 0) + 0.5)) low = c;
+          if (v > BROOK_REACH) continue;
+          for (const [dx, dy, len] of [[1, 0, 1], [-1, 0, 1], [0, 1, 1], [0, -1, 1], [1, 1, 1.414], [-1, 1, 1.414], [1, -1, 1.414], [-1, -1, 1.414]]) {
+            const X = x + dx, Y = y + dy;
+            if (X < 0 || Y < 0 || X >= W || Y >= H) continue;
+            const px = X + 0.5, py = Y + 0.5;
+            if (!clear(px, py) || L.bridges.some(([a, b]) => mhypot(px - (a[0] + b[0]) / 2, py - (a[1] + b[1]) / 2) < 9)) continue;
+            const up = Math.max(0, hv(px, py) - z), wind = 0.55 + 0.9 * fbm(px * 0.11 + 91, py * 0.11 + 37, 2);
+            const nv = v + len * wind + up * 9 + (rdv(px, py) < 2.6 ? 2.5 : 0), o = Y * W + X;
+            if (nv < cost[o]) { cost[o] = nv; from[o] = c; push(o, nv); }
+          }
+        }
+        if (end < 0) end = low;
+        const cells = [];
+        for (let c = end; c >= 0; c = from[c]) cells.unshift(c);
+        let pts = cells.map(c => [c % W + 0.5, (c / W | 0) + 0.5]);
+        for (let k = 0; k < 3; k++) {
+          const q = [pts[0]];
+          for (let i = 0; i + 1 < pts.length; i++) { const [ax, ay] = pts[i], [bx, by] = pts[i + 1]; q.push([ax * 0.75 + bx * 0.25, ay * 0.75 + by * 0.25], [ax * 0.25 + bx * 0.75, ay * 0.25 + by * 0.75]); }
+          q.push(pts[pts.length - 1]); pts = q;
+        }
+        const out = [pts[0]];
+        let acc = 0;
+        for (let i = 1; i < pts.length; i++) { acc += mhypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]); if (acc >= 0.8) { out.push(pts[i]); acc = 0; } }
+        return { pts: out, end: kind };
+      };
+      for (let k = 0; k < BROOKS[kind]; k++) {
+        for (let tries = 0; tries < 500; tries++) {
+          // A spring well in from the map's edge and back from the water, so its brook has some way to run.
+          const x = 18 + br() * (W - 36), y = 18 + br() * (H - 36), z = hv(x, y);
+          if (!L.domain(x | 0, y | 0) || z < 1.2 || z > 8 || !clear(x, y) || rdv(x, y) < 6 || L.river(x, y)[0] < L.river(x, y)[1] + 14) continue;
+          // Not along a brook already laid.
+          if (bD[clamp(Math.round(y * RES), 0, VH - 1) * VW + clamp(Math.round(x * RES), 0, VW - 1)] < 12 || brooks.some(b => b.pts.some(p => mhypot(p[0] - x, p[1] - y) < 12))) continue;
+          const t = route(x, y);
+          if (t.pts.length < 22) continue;
+          // A ford part way down, and a second on a long brook, each the nearest place to its mark that is clear of a
+          // road, which has its culvert.
+          const n = t.pts.length, offRoad = i => roadDist[clamp(Math.round(t.pts[i][1] * RES), 0, VH - 1) * VW + clamp(Math.round(t.pts[i][0] * RES), 0, VW - 1)] > 5;
+          const fordNear = f => { for (let d = 0; d < n * 0.5; d++) for (const i of [Math.round(f * (n - 1)) + d, Math.round(f * (n - 1)) - d]) if (i > 2 && i < n - 3 && offRoad(i)) return i; return -1; };
+          const fords = [...new Set((n > 55 ? [0.4, 0.8] : [0.5]).map(fordNear))].filter(i => i >= 0);
+          for (const T of L.syms) {
+            const pts = t.pts.map(T);
+            brooks.push({ pts, end: t.end });
+            for (const i of fords) { const a = pts[Math.max(0, i - 1)], b = pts[Math.min(pts.length - 1, i + 1)], d = mhypot(b[0] - a[0], b[1] - a[1]) || 1; brookFords.push([pts[i][0], pts[i][1], (b[0] - a[0]) / d, (b[1] - a[1]) / d]); }
+          }
+          break;
+        }
+      }
+      // The distance from each point of the land to the nearest brook, and whether that stretch is a ford.
+      for (const b of brooks) for (let k = 0; k + 1 < b.pts.length; k++) {
+        const [ax, ay] = b.pts[k], [bx, by] = b.pts[k + 1], dx = bx - ax, dy = by - ay, L2 = dx * dx + dy * dy || 1e-6, Rr = 3;
+        const i0 = Math.max(0, Math.floor((Math.min(ax, bx) - Rr) * RES)), i1 = Math.min(VW - 1, Math.ceil((Math.max(ax, bx) + Rr) * RES));
+        const j0 = Math.max(0, Math.floor((Math.min(ay, by) - Rr) * RES)), j1 = Math.min(VH - 1, Math.ceil((Math.max(ay, by) + Rr) * RES));
+        for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
+          const qx = i / RES - ax, qy = j / RES - ay, t = clamp((qx * dx + qy * dy) / L2, 0, 1), d = mhypot(qx - dx * t, qy - dy * t), c = j * VW + i;
+          if (d >= bD[c]) continue;
+          bD[c] = d;
+          const px = ax + dx * t, py = ay + dy * t;
+          bF[c] = brookFords.some(f => mhypot(px - f[0], py - f[1]) < 1.6) ? 1 : 0;
+        }
+      }
+      // Its bed: a shallow dip in the land, its floor just clear of the rivers' water, as the brook's water is drawn
+      // from its course and not from the land's height. A brook's last reach, where it sinks, ends in a pool.
+      for (const b of brooks) if (b.end === 'pool') {
+        const [ex, ey] = b.pts[b.pts.length - 1];
+        for (let j = Math.max(0, Math.floor((ey - 3) * RES)); j <= Math.min(VH - 1, Math.ceil((ey + 3) * RES)); j++) for (let i = Math.max(0, Math.floor((ex - 3) * RES)); i <= Math.min(VW - 1, Math.ceil((ex + 3) * RES)); i++) {
+          const c = j * VW + i; bD[c] = Math.min(bD[c], Math.max(0, mhypot(i / RES - ex, j / RES - ey) - 1.2));
+        }
+      }
+      for (let c = 0; c < h.length; c++) if (bD[c] < 3.2) h[c] = Math.min(h[c], lerp(water + 0.1, h[c], smooth(0.3, 3.2, bD[c])));
+    }
+
     // Decks over the water. Units walk at deck height, the terrain below stays as it was.
     const deck = new Float32Array(VW * VH), bridges = [];
     const addBridge = (a, b) => {
@@ -949,7 +1054,7 @@ const Rules = (() => {
     // and 64 hold how hard a track worn there has become, 0 to 3, set as the world goes on.
     const hAt = (x, y) => { const i = clamp(Math.round(x * RES), 0, VW - 1), j = clamp(Math.round(y * RES), 0, VH - 1); return h[j * VW + i]; };
     const deckAt = (x, y) => { const i = clamp(Math.round(x * RES), 0, VW - 1), j = clamp(Math.round(y * RES), 0, VH - 1); return deck[j * VW + i]; };
-    const ground = new Uint8Array(N), fordCells = [];
+    const ground = new Uint8Array(N), fordCells = [], wadeCells = [];
     // A cell's bits from the land alone, as if no bridge stood over it.
     const landBits = (x, y) => {
       let hi = -99, lo = 99;
@@ -957,6 +1062,10 @@ const Rules = (() => {
         const z = hAt(x + a / 2, y + b / 2);
         hi = Math.max(hi, z); lo = Math.min(lo, z);
       }
+      // A brook, by its cells' distance from its course: wading slows men and stops wheels, but for at its fords and
+      // where a road carries it in a culvert.
+      const bc = (y * RES + 1) * VW + x * RES + 1;
+      if (bD[bc] < 0.75 && roadDist[bc] > 1.6) return bF[bc] ? 4 | 16 : 1 | 4 | 16;
       if (lo < water + 0.1) return fordK(x + 0.5, y + 0.5) > 0.85 ? 4 | 16 : 7;
       const slope = hi - lo;
       // A road's carriageway is never too steep to use, however hard it climbs. It is only kept free of building.
@@ -970,7 +1079,8 @@ const Rules = (() => {
     for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
       const bits = deckAt(x + 0.5, y + 0.5) > 0 ? 4 : landBits(x, y);
       ground[y * W + x] = bits;
-      if (bits & 16) fordCells.push(y * W + x);
+      if ((bits & 17) === 17) wadeCells.push(y * W + x);
+      else if (bits & 16) fordCells.push(y * W + x);
     }
     // Each bridge's cells, and what lies under them, for when it falls.
     for (const br of bridges) {
@@ -991,7 +1101,7 @@ const Rules = (() => {
       const [rd, rw] = L.river(x, y);
       if (L.lake ? rd < rw + 5 : rd < 6.5) return false;
       const c = clamp(Math.round(y * RES), 0, VH - 1) * VW + clamp(Math.round(x * RES), 0, VW - 1);
-      return roadDist[c] > 3;
+      return roadDist[c] > 3 && bD[c] > 1.8;
     };
     for (let y = 2; y < H - 2; y++) for (let x = 2; x < W - 2; x++) {
       if (!L.domain(x, y)) continue;
@@ -1051,7 +1161,7 @@ const Rules = (() => {
     const fish = (L.fish || []).map(p => ({ x: p[0], y: p[1] }));
     let seaCells = 0;
     for (let c = 0; c < N; c++) seaCells += sea[c];
-    return { W, H, seed, kind, h, deck, water, ground, ore: oreCells, oreFields, wells, towns, roads, roadDist, bridges, scatter, houses, oreRich, bases: L.bases, faces, fords: L.fords, fordCells, sea, fish, seaCells };
+    return { W, H, seed, kind, h, deck, water, ground, ore: oreCells, oreFields, wells, towns, roads, roadDist, bridges, scatter, houses, oreRich, bases: L.bases, faces, fords: L.fords, fordCells, wadeCells, brooks, brookFords, brookDist: bD, brookFord: bF, sea, fish, seaCells };
   }
 
   // A map is kept only if vehicles can get from the first base to every other base, town and well.
@@ -3593,8 +3703,8 @@ const Rules = (() => {
       const w = sky(S), want = S.flooded ? w.flood > 0.65 : w.flood > 0.9;
       if (want !== S.flooded) {
         S.flooded = want;
-        const fc = S.map.fordCells;
-        setGround(S, fc, fc.map(() => want ? 7 : 4 | 16));
+        const fc = S.map.fordCells, wc = S.map.wadeCells || [];
+        setGround(S, fc.concat(wc), fc.map(() => want ? 7 : 4 | 16).concat(wc.map(() => want ? 7 : 1 | 4 | 16)));
         S.ev.push({ t: 'flood', on: want });
       }
     }
