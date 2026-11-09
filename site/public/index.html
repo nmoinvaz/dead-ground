@@ -603,7 +603,7 @@ body[data-look="ink"] .sheet { box-shadow: 4px 4px 0 var(--ink); }
       <div class="choice"><h2>Map sheet frame</h2><div id="s-sheet" class="two"><button data-v="on">On</button><button data-v="off">Off</button></div></div>
       <div class="choice"><h2>Shadows</h2><div id="s-shade" class="two"><button data-v="hatch">Hatched</button><button data-v="wash">Wash</button></div></div>
       <div class="choice"><h2>Music</h2><div id="s-music" class="two"><button data-v="on">On</button><button data-v="off">Off</button></div></div>
-      <p id="build">Build 799320c 2026-11-09 02:49</p>
+      <p id="build">Build 65b0469 2026-11-09 02:57</p>
     </div>
     <div id="banner" hidden></div>
     <button id="update" hidden>A new version of Dead Ground is out. <b>Reload</b></button>
@@ -1215,6 +1215,8 @@ const Rules = (() => {
   const TREE_LINE = 8.6, TREE_BAND = 1.2;
   // How thinly a map's woods are sown, a share of the usual; the desert's cactus stands are sparse.
   const THIN = { mesa: 0.35, nile: 1.6 };
+  // Mountains step into benches and sheer faces from this height up, each step this high.
+  const CLIFF_FROM = 4.2, CLIFF_STEP = 2.6;
   const WOODS = { quad: 0.7, pass: 1, lakes: 1, greenwood: 3, oldforest: 1.3, twinlakes: 0.6, ponds: 0.8, peaks: 0.6, highlands: 0.5, crater: 0.5 };
   // A point turned a quarter round the middle k times.
   const turnK = ([x, y], k) => { let dx = x - CX, dy = y - CY; for (let i = 0; i < k; i++) { const t = dx; dx = -dy; dy = t; } return [CX + dx, CY + dy]; };
@@ -1777,6 +1779,17 @@ const Rules = (() => {
     for (let c = 0; c < h.length; c++) h[c] = lerp(h[c], blur[c], smooth(5.5, 2, roadDist[c]));
     // A layout's own walls of rock, as High Pass's ridge, raised over the ground.
     if (L.wall) for (let j = 0; j < VH; j++) for (let i = 0; i < VW; i++) h[j * VW + i] += L.wall(i / RES, j / RES);
+    // Mountains break into benches with sheer faces of rock between them, which nothing climbs, so a mountain is
+    // climbed only by its ways up: spurs where the faces give out, picked by a noise the same under the map's turns,
+    // and wherever a road goes. Each step is CLIFF_STEP high, its face a quarter of the rise.
+    for (let j = 0; j < VH; j++) for (let i = 0; i < VW; i++) {
+      const c = j * VW + i, z = h[c], k = smooth(CLIFF_FROM, CLIFF_FROM + 1.5, z);
+      if (k <= 0) continue;
+      const x = i / RES, y = j / RES, way = smooth(0.42, 0.5, sym(x, y, 0.045, 2)) * smooth(4, 7, roadDist[c]);
+      if (way <= 0) continue;
+      const t = (z - CLIFF_FROM) / CLIFF_STEP, f = t - Math.floor(t), terr = CLIFF_FROM + (Math.floor(t) + smooth(0.75, 0.98, f)) * CLIFF_STEP;
+      h[c] = lerp(z, terr, k * way);
+    }
     // How much of a ford a point is in: a strip across the river a few cells wide.
     const fordK = (x, y) => {
       let k = 0;
