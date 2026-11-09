@@ -595,7 +595,7 @@ body[data-look="ink"] .sheet { box-shadow: 4px 4px 0 var(--ink); }
       <div class="choice"><h2>Picture</h2><div id="s-pic" class="two"><button data-v="sharp">Sharp</button><button data-v="fast">Faster</button></div><p id="s-pic-note"></p></div>
       <div class="choice"><h2>Ore, oil and power</h2><div id="s-gauges" class="two"><button data-v="side">In the sidebar</button><button data-v="top">In the top bar</button></div></div>
       <div class="choice"><h2>Music</h2><div id="s-music" class="two"><button data-v="on">On</button><button data-v="off">Off</button></div></div>
-      <p id="build">Build b95f890 2026-11-08 16:21</p>
+      <p id="build">Build 010e05c 2026-11-08 17:10</p>
     </div>
     <div id="banner" hidden></div>
     <button id="update" hidden>A new version of Dead Ground is out. <b>Reload</b></button>
@@ -15792,7 +15792,8 @@ const Game = (() => {
     function drawPreview(key, seed, slots) {
       const m = Rules.MAPS[key], id = m.layout + ':' + seed + ':' + (Looks.dark ? 'd' : 'l'), cv = $('preview');
       const css = Math.max(120, cv.clientWidth || 280), px = Math.round(css * Math.min(2, devicePixelRatio || 1));
-      if (cv.width !== px) { cv.width = cv.height = px; }
+      // A canvas starts 300 by 150, so a 300 pixel column must still set its height.
+      if (cv.width !== px || cv.height !== px) { cv.width = cv.height = px; }
       const g = cv.getContext('2d');
       const paint = P => {
         g.clearRect(0, 0, px, px);
