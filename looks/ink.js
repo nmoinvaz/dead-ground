@@ -933,7 +933,24 @@
           else if (uFxs < 1.5) {
             col = mix(col, dk ? vec3(0.06, 0.055, 0.05) : vec3(0.38, 0.34, 0.3), smoothstep(0.08, 0.7, min(sc, 0.75)) * gnd * 0.5);
             col = mix(col, inkC, hatch(p, 45.0, 5.0, 0.8, 61.0, 0.2) * smoothstep(0.35, 0.8, min(sc, 0.8)) * gnd * 0.3);
-          } else { float scs = min(sc, 0.8); scT = tone(p, scs > 0.6 ? 4.0 : scs > 0.35 ? 2.0 : scs > 0.12 ? 1.0 : 0.0, 61.0) * 0.85; }
+          } else {
+            // Craters, as a survey of a battlefield draws them: a ring at each lip, the inner wall turned from the
+            // light hatched, and the earth thrown round it a faint wash. They stay, so the ground keeps the story of
+            // the fight. Read on the land under the pixel, smoothed over four taps, so a small shell's ring is round.
+            vec2 Wc = landAt(vUv, F.b - 20.0), cu = Wc / uMap, co = vec2(0.45 / 1024.0);
+            float cr = 0.25 * (texture2D(tMarks, cu + co).r + texture2D(tMarks, cu - co).r + texture2D(tMarks, cu + vec2(co.x, -co.y)).r + texture2D(tMarks, cu + vec2(-co.x, co.y)).r);
+            float crw = max(fwidth(cr), 1e-4), cIn = smoothstep(0.3, 0.36, cr);
+            float lip = (1.0 - smoothstep(0.45 * uK, 1.2 * uK, abs(cr - 0.3) / crw)) * step(0.02, cr);
+            vec2 cg = vec2(dFdx(cr), dFdy(cr)), cn = cg / max(length(cg), 1e-6);
+            float cSh = smoothstep(-0.1, 0.5, -dot(cn, uSun2)) * cIn;
+            // Ticks on the lip pointing in, as a map marks a hollow, spaced along the lip on the land.
+            vec2 tl = dFdx(Wc) * -cn.y + dFdy(Wc) * cn.x;
+            float tAl = dot(Wc - floor(Wc / 3.0) * 3.0, tl / max(length(tl), 1e-6)) / (0.16 * exp2(gLm));
+            float tick = step(fract(tAl), 0.3) * smoothstep(0.3, 0.32, cr) * (1.0 - smoothstep(0.4, 0.44, cr)) * mix(0.45, 1.0, cSh);
+            // The earth thrown out round the lip, and the bowl itself a little paler.
+            col = mix(col, dk ? vec3(0.2, 0.18, 0.16) : vec3(0.72, 0.66, 0.58), smoothstep(0.03, 0.15, cr) * (1.0 - cIn * 0.7) * gnd * 0.35);
+            scT = max(max(lip * 0.8, tick * 0.7), max(hatch(p, 45.0, 3.6, 0.9, 61.0, 0.1) * cSh * 0.7, tone(p, cr > 0.62 ? 2.0 : 0.0, 61.0) * 0.4));
+          }
           col = mix(col, inkC, scT * gnd * 0.9);
           // Tread marks pressed into the ground, read from the scars on the land under the pixel, so they keep their
           // place and their width on the land at every zoom. A light sepia band with a crisp edge, darker where more
