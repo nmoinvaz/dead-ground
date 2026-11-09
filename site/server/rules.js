@@ -2298,22 +2298,37 @@ const Rules = (() => {
     return los(S.map, s.x, s.y, groundZ(S, s) + (s.b ? 1 : 0.3), t.x, t.y, groundZ(S, t));
   }
   // Picks what a unit should shoot, threats first, then whatever else is near. A unit holding cover takes only
-  // what it can hit from where it stands.
+  // what it can hit from where it stands. Each weapon looks first for what it hurts most, an anti-tank gun for
+  // armour and a machine gun for men, and a unit leaves a target its friends near by already have enough fire on
+  // to finish, so a group spreads its fire rather than spend it on one man already falling.
+  const MATCH_MIN = 0.12, MATCH_MAX = 1.4, OVERKILL_S = 1.5;
   function acquire(S, u, radius, held) {
     let best = null, score = Infinity;
-    const list = u.d.weapons || [];
+    const list = u.d.weapons || [], cand = [], load = new Map();
     near(S, u.x, u.y, radius, t => {
-      if (t.team === u.team || t.hp <= 0 || t.drop > 0 || atPeace(S, u.team, t.team)) return;
+      // Friends' fire already on each target, in damage a second.
+      if (t.team === u.team) {
+        if (t !== u && t.hp > 0 && t.tgt && t.d.weapons && t.d.weapons.length) {
+          const g = S.byId.get(t.tgt), w = WEAPONS[t.d.weapons[0]];
+          if (g && w) load.set(g.id, (load.get(g.id) || 0) + w.dmg * (w.vs[g.d.armor] ?? 1) * (w.salvo || 1) / w.cd);
+        }
+        return;
+      }
+      if (t.hp <= 0 || t.drop > 0 || atPeace(S, u.team, t.team)) return;
       const d = gap(u.x, u.y, t);
       if (d > radius) return;
-      let usable = false;
-      for (const wn of list) if (canHit(wn, t) && (!held || inRange(S, u, wn, t))) usable = true;
+      let usable = false, match = 0;
+      for (const wn of list) if (canHit(wn, t) && (!held || inRange(S, u, wn, t))) { usable = true; match = Math.max(match, WEAPONS[wn].vs[t.d.armor] ?? 1); }
       if (!usable || !seenBy(S, u.team, t)) return;
       let s = d;
       if (t.b) s += armed(t) ? 6 : 14;
       else if (!armed(t)) s += 5;
-      if (s < score) { score = s; best = t; }
+      cand.push([t, s / clamp(match, MATCH_MIN, MATCH_MAX)]);
     });
+    for (const [t, s0] of cand) {
+      const doomed = (load.get(t.id) || 0) * OVERKILL_S, s = s0 + (doomed >= t.hp ? 8 : 3 * doomed / Math.max(1, t.hp));
+      if (s < score) { score = s; best = t; }
+    }
     return best;
   }
 
@@ -2362,7 +2377,12 @@ const Rules = (() => {
     }
     else if (!t.b && t.d.cargo) { ownEvent(S, t.team, 'truckattack'); S.ev.push({ t: 'alert', team: t.team, x: t.x, y: t.y }); }
     // A unit under fire with nothing better to do answers it, and so do its idle neighbours.
-    if (!t.b && by && !t.ord && !t.tgt && armed(t)) t.tgt = by;
+    // An idle unit shot at shoots back, if its weapons are any good against what shot it; otherwise it picks its
+    // own target as usual, which may well be the same.
+    if (!t.b && by && !t.ord && !t.tgt && armed(t)) {
+      const a = S.byId.get(by);
+      if (a && (t.d.weapons || []).some(wn => canHit(wn, a) && (WEAPONS[wn].vs[a.d.armor] ?? 1) >= 0.5)) t.tgt = by;
+    }
     if (by && team >= 0 && team !== t.team) answer(S, t, by);
     if (team >= 0 && t.team >= 0 && team !== t.team && S.hist) { const k = team * S.P.length + t.team; S.hist.acc[k] = (S.hist.acc[k] || 0) + Math.min(dmg, t.hp + dmg); }
     if (t.hp <= 0) {
