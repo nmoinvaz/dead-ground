@@ -1,4 +1,4 @@
-// Dead Ground, the enemy commander. It sends the same commands a player can, on a clock set by its
+// Mapmaker's War, the enemy commander. It sends the same commands a player can, on a clock set by its
 // difficulty. It may only act on what it has seen, except that it knows where the other bases are. With
 // more than one foe it fights whichever living neighbour is nearest.
 // It draws on random numbers of its own, never the world's, since on a server only the server runs it.

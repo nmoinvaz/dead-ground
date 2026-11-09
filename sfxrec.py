@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Dead Ground's recorded sounds, cut from public-domain (CC0) packs into sfx/*.mp3. The packs are not kept here;
+"""The recorded sounds of Mapmaker's War, cut from public-domain (CC0) packs into sfx/*.mp3. The packs are not kept here;
 download them as sfx/SOURCES.md lists, unpack them into one folder, and run
 .venv/bin/python sfxrec.py PACKS. Each take is the first event in its file, cut at its onset with its own tail,
 faded out, filtered of rumble below 40 Hz and brought to the same peak as the synthesized sounds."""

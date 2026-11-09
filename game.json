@@ -1,6 +1,6 @@
 {
-  "title": "Dead Ground",
-  "alt": "Dead Ground: a real-time strategy game of modern war in three.js.",
+  "title": "Mapmaker's War",
+  "alt": "Mapmaker's War: a real-time strategy game through six ages, drawn in pen and ink, in three.js.",
   "page": "page.html",
   "art": {
     "width": 1280,
@@ -8,7 +8,7 @@
   },
   "game": {},
   "film": {
-    "global": "DeadGround",
+    "global": "MapmakersWar",
     "scripts": [
       "rules.js",
       "ai.js",

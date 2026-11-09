@@ -1,4 +1,4 @@
-// Looks: every way Dead Ground can be drawn, each a single definition, so a new style fits in without touching the
+// Looks: every way Mapmaker's War can be drawn, each a single definition, so a new style fits in without touching the
 // rest of the game. world.js renders the scene, grades it and hands a look a kit of shared buffers. The HUD, the menu
 // and the L key read the registry.
 //

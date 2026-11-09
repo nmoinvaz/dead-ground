@@ -1,4 +1,4 @@
-// Dead Ground, the closing report, after Age of Empires. A summary of each side's score, a timeline of their shares
+// Mapmaker's War, the closing report, after Age of Empires. A summary of each side's score, a timeline of their shares
 // of the field with the fighting between them, graphs of their figures over the game, and their military and
 // economic totals. All of it comes from the game's own record, so every player in a room sees the same report.
 const Report = (() => {

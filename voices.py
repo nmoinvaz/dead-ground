@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Dead Ground's spoken calls, rendered once with the Kokoro neural voice (Apache 2.0) into sfx/voice/*.mp3 and
+"""The spoken calls of Mapmaker's War, rendered once with the Kokoro neural voice (Apache 2.0) into sfx/voice/*.mp3 and
 listed in game.json's sounds. The game plays these in place of the browser's own voice, which sounds robotic.
 
     python voices.py MODEL.onnx VOICES.bin

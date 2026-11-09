@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Dead Ground's synthesized sounds, into sfx/*.mp3 through ffmpeg. .venv/bin/python sfx.py. The weapons, blasts and
+"""The synthesized sounds of Mapmaker's War, into sfx/*.mp3 through ffmpeg. .venv/bin/python sfx.py. The weapons, blasts and
 blades are recordings instead, cut by sfxrec.py."""
 import numpy as np, subprocess, os, wave
 from scipy.signal import butter, sosfilt

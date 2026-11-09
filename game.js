@@ -1,4 +1,4 @@
-// Dead Ground, the running game. Boots the picture, plays a live battle behind the title, and steps
+// Mapmaker's War, the running game. Boots the picture, plays a live battle behind the title, and steps
 // the world on a fixed clock while the picture eases between steps.
 const Game = (() => {
   const $ = id => document.getElementById(id);
@@ -1246,4 +1246,4 @@ const Game = (() => {
 })();
 
 // A film-studio page expects this, though this game has a page of its own.
-const DeadGround = Game;
+const MapmakersWar = Game;

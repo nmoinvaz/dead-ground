@@ -1,4 +1,4 @@
-// Dead Ground, the rules. A deterministic real-time strategy world stepped at a fixed rate, with no
+// Mapmaker's War, the rules. A deterministic real-time strategy world stepped at a fixed rate, with no
 // drawing, so a whole game can be played in node. Map cells are one unit wide. Heights sit on a grid
 // two to the cell. A duel's map has a half turn of symmetry and the world's a quarter turn, so no side
 // starts better placed.

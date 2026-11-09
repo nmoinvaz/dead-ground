@@ -1,4 +1,4 @@
-// Dead Ground, the units drawn as a draughtsman would: convex solids projected in parallel, each part with a heavy
+// Mapmaker's War, the units drawn as a draughtsman would: convex solids projected in parallel, each part with a heavy
 // outline, its inner edges in fine line and its shaded faces hatched by the light, over pale washes. No 3D engine.
 // The sidebar's unit pictures come from here, and so does the study in review/axo.
 const Axo = (() => {

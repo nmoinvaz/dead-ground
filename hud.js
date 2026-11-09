@@ -1,4 +1,4 @@
-// Dead Ground, the commander's desk. The sidebar, the minimap, what is drawn over the picture, and
+// Mapmaker's War, the commander's desk. The sidebar, the minimap, what is drawn over the picture, and
 // every way of giving an order, by mouse, keys or fingers.
 const Hud = (() => {
   const { HZ, UNITS, BUILDINGS, TECH, POWERS, clamp, terrainAt } = Rules;

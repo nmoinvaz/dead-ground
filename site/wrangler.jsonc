@@ -1,5 +1,5 @@
-// Dead Ground's site: the page as static assets, a Room object for each game's lobby and play, and a Directory
-// object that lists the rooms.
+// The site of Mapmaker's War, served by the worker named dead-ground: the page as static assets, a Room object for
+// each game's lobby and play, and a Directory object that lists the rooms.
 {
   "name": "dead-ground",
   "main": "server/index.js",

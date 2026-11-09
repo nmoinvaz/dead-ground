@@ -1,4 +1,4 @@
-// Dead Ground, the models. Everything is built from primitives into one mesh per moving part, with
+// Mapmaker's War, the models. Everything is built from primitives into one mesh per moving part, with
 // a colour on every vertex, a team weight saying how much takes the side's colour, and a glow weight
 // for lamps. Models face +x, stand on y = 0, and are sized in map cells.
 const Models = (() => {

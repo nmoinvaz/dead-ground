@@ -1,4 +1,4 @@
-// Dead Ground, the picture. Terrain is baked once. Units are instanced by part. Fog, borders and
+// Mapmaker's War, the picture. Terrain is baked once. Units are instanced by part. Fog, borders and
 // battle scars live in small textures every material reads. Fire and smoke are GPU particles.
 const World = (() => {
   const { RES, HZ, UNITS, BUILDINGS, clamp, lerp, smooth, terrainAt, heightAt, mulberry, noiser } = Rules;
