@@ -477,13 +477,18 @@ const Models = (() => {
       }
       return g;
     }
-    const figure = (o, cloth) => [part('body', body(o)), part('leg', legs(cloth ?? o.cloth))];
+    // A figure for the field: body and legs, and his arms with what he carries as a third part pivoted at the
+    // shoulders, so a stance can bring them round and a shot kick them.
+    const figure = (o, cloth) => {
+      const a = G(); armsInto(a, o);
+      return [part('body', body(Object.assign({}, o, { noArms: true }))), part('leg', legs(cloth ?? o.cloth)), part('arms', a, { pivot: [0, MAN_H * 0.8, 0], blow: 'shot' })];
+    };
     const man = {
       rifle: figure({ rifle: 0.22, pack: P.gear }),
       rocket: figure({ tube: true, rifle: 0, pack: P.gear }),
       engineer: figure({ cloth: 0x8a7a55, vest: P.yellow, vestT: 0, tool: true, helmetC: P.yellow, pack: P.gear }),
       sniper: figure({ cloth: 0x4b4f38, vest: 0x3f4430, rifle: 0.34, helmet: false, hair: 0x4b4f38 }),
-      hero: [part('body', body({ cloth: 0xe7ddc4, sleeve: 0xe7ddc4, vest: 0, helmet: false, hair: 0x1d1612, glasses: true, rifle: 0.2 })), part('leg', legs(0x34506e))],
+      hero: figure({ cloth: 0xe7ddc4, sleeve: 0xe7ddc4, vest: 0, helmet: false, hair: 0x1d1612, glasses: true, rifle: 0.2 }, 0x34506e),
     };
 
     const chute = (() => {

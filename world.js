@@ -2666,22 +2666,26 @@ const World = (() => {
     // swing from the shoulders as he fights, by P, his squad's pose, and i, his place in it. A thrust leans him into it.
     function drawMan(set, x, y, z, yaw, phase, moving, color, fallen = 0, P = null, i = 0) {
       const body = set[0], leg = set[1], arms = set[2];
-      const bob = moving ? Math.abs(Math.sin(phase)) * 0.018 : 0;
+      // The stance, from the squad's pose: crouched on the move, kneeling with the hip at half height, the front foot
+      // well forward and the back knee on the ground, or flat on the ground face down with the arms brought round to aim along it.
+      const c = P && !fallen ? P.crouch || 0 : 0, k = P && !fallen ? P.kneel || 0 : 0, q = P && !fallen ? P.prone || 0 : 0;
+      const bob = moving ? Math.abs(Math.sin(phase)) * 0.018 * (1 - 0.5 * c) : 0;
       if (arms && P && !fallen) heldPose(arms.def.blow, P, i * 0.04, hp2); else { hp2[0] = 0; hp2[1] = 0; }
       const lean = arms && arms.def.blow === 'thrust' ? Math.max(0, -hp2[0]) * 1.1 : 0;
-      compose(m1, x, y + bob, z, yaw, -fallen * 1.5 - lean, 0, US);
+      compose(m1, x, y + bob + (-0.06 * c - 0.16 * k + 0.04 * q) * US, z, yaw, -fallen * 1.5 - lean - 0.22 * c - 0.1 * k - 1.47 * q, 0, US);
       put(body, m1, color);
-      const sw = moving ? Math.sin(phase) * 0.62 : 0;
+      const sw = moving ? Math.sin(phase) * 0.62 * (1 - k - q) : 0;
       for (const s of [-1, 1]) {
         m2.makeTranslation(0, 0.31, s * 0.042);
-        m3.makeRotationZ(s * sw); m2.multiply(m3);
+        m3.makeRotationZ(s * sw + k * (s > 0 ? 0.9 : -0.2)); m2.multiply(m3);
+        m3.makeScale(1, 1 - 0.18 * c - k * (s > 0 ? 0.22 : 0.51), 1); m2.multiply(m3);
         mOut.multiplyMatrices(m1, m2);
         put(leg, mOut, color);
       }
       if (arms) {
         const pv = arms.def.pivot;
         m2.makeTranslation(pv[0] + hp2[1], pv[1], pv[2]);
-        m3.makeRotationZ(hp2[0]); m2.multiply(m3);
+        m3.makeRotationZ(hp2[0] + 1.47 * q); m2.multiply(m3);
         m3.makeTranslation(-pv[0], -pv[1], -pv[2]); m2.multiply(m3);
         mOut.multiplyMatrices(m1, m2);
         put(arms, mOut, color);
@@ -2763,6 +2767,12 @@ const World = (() => {
           const moving = e.v > 0.1, ph = e.anim * 7, Pz = poseOf(e, r, null, dt, alpha);
           // In a melee the ranks press forward into the enemy and jostle, so a fight reads as a scrum.
           const w0 = e.d.weapons[0] && Rules.WEAPONS[e.d.weapons[0]], scrum = Pz.eng && w0 && w0.fx === 'melee' ? 1 : 0;
+          // How the men stand. Gunmen lie flat in cover or when pinned and kneel to shoot; others kneel in cover or
+          // when pinned. Any squad crouches as it moves under fire. Each eases into its stance over a fifth of a second.
+          const gun = !set[2] || set[2].def.blow === 'shot', pin = (e.sup || 0) >= Rules.PIN, held = !moving && !scrum;
+          const cov = e.cov >= 0, tP = held && gun && (cov || pin) ? 1 : 0, tK = held && !tP && ((gun && (Pz.eng || e.tgt)) || cov || pin) ? 1 : 0;
+          const tC = moving && (Pz.eng || (e.sup || 0) > 0.1) ? 1 : 0, sk = Math.min(1, dt * 5);
+          Pz.prone = (Pz.prone || 0) + (tP - (Pz.prone || 0)) * sk; Pz.kneel = (Pz.kneel || 0) + (tK - (Pz.kneel || 0)) * sk; Pz.crouch = (Pz.crouch || 0) + (tC - (Pz.crouch || 0)) * sk;
           const fx = Math.cos(-yaw), fz = Math.sin(-yaw);
           for (let i = 0; i < r.alive; i++) {
             let [px, pz] = manAt(e.d.men, i, x, y, yaw, scrum ? 1.05 : 1.2);
