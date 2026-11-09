@@ -1470,6 +1470,21 @@ const Hud = (() => {
           if (e.vet) { og.fillStyle = '#ffd34d'; og.font = '9px system-ui'; og.textAlign = 'left'; og.fillText('★'.repeat(e.vet), o.x - bw / 2, by - 2); }
           if (e.repairing) { og.fillStyle = '#7fe0a0'; og.font = '10px system-ui'; og.textAlign = 'center'; og.fillText('+', o.x + bw / 2 + 5, by + 4); }
         }
+        // A squad's nerve, lettered over its head as a map notes a thing: pinned under fire, or broken and running,
+        // in red with a small white flag.
+        if (!e.b && e.d.men && !tagged && o.scale > 5 && ((e.sup || 0) >= Rules.PIN || e.brk)) {
+          const hy = o.y - o.r * 1.1 - 16, word = e.brk ? 'broken' : 'pinned', c = e.brk ? (ink ? '#a3301e' : '#ff8a70') : (ink ? '#1a1512' : '#f2ead8');
+          og.save(); og.setLineDash([]); og.textAlign = 'center'; og.textBaseline = 'middle';
+          og.font = ink ? `italic 600 13px ${labelFont()}` : 'italic 600 12px system-ui';
+          og.lineJoin = 'round'; og.lineWidth = 3.5; og.strokeStyle = ink ? 'rgba(250,244,228,0.92)' : 'rgba(0,0,0,0.7)'; og.strokeText(word, o.x, hy);
+          og.fillStyle = c; og.fillText(word, o.x, hy);
+          if (e.brk) {
+            const fx = o.x + og.measureText(word).width / 2 + 6;
+            og.lineWidth = 1.4; og.strokeStyle = c; og.beginPath(); og.moveTo(fx, hy + 7); og.lineTo(fx, hy - 7); og.stroke();
+            og.fillStyle = '#f8f4ea'; og.beginPath(); og.moveTo(fx, hy - 7); og.lineTo(fx + 9, hy - 4.5); og.lineTo(fx, hy - 2); og.closePath(); og.fill(); og.stroke();
+          }
+          og.restore();
+        }
         if (e.b && on && e.rally && mine) {
           const [rx, ry] = world.project(e.rally[0], terrainAt(s.map, e.rally[0], e.rally[1]) + 0.1, e.rally[1]);
           if (inked()) { og.strokeStyle = PLAN; dotted(); } else { og.strokeStyle = '#7fe0a0'; og.setLineDash([5, 4]); og.lineWidth = 1; }
@@ -1903,6 +1918,7 @@ const Hud = (() => {
           let t = `${Math.ceil(e.hp)}/${e.max}`;
           if (e.d.cargo) t += ` · load ${Math.round(e.cargo)}/${Math.round(Rules.capOf(S(), e))}`;
           if (e.vet) t += ` · ${'★'.repeat(e.vet)}`;
+          if (e.brk) t += ' · broken'; else if ((e.sup || 0) >= Rules.PIN) t += ' · pinned';
           if (e.b && e.d.power) t += ` · ${e.d.power > 0 ? '+' : ''}${e.d.power} pw`;
           if (st.textContent !== t) st.textContent = t;
         }

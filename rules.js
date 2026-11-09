@@ -2366,6 +2366,7 @@ const Rules = (() => {
     if (team >= 0 && atPeace(S, team, t.team)) return;
     dmg *= coverScale(S, t, by);
     t.hp -= dmg;
+    if (t.d.men && !t.b && t.hp > 0) shaken(S, t, dmg);
     // Where the harm between sides falls, gathered for the war map's battles.
     if (S.hist && team >= 0 && team !== t.team) { const f = S.hist.fa || (S.hist.fa = [0, 0, 0]); f[0] += t.x * dmg; f[1] += t.y * dmg; f[2] += dmg; }
     t.under = S.tick;
@@ -2411,7 +2412,7 @@ const Rules = (() => {
   function fallBack(S, u) {
     // Sent off elsewhere since, and gone from its haven, it may fall back again.
     if (u.mend && !(u.ord && u.ord.t === 'move' && u.ord.x === u.mend.at[0] && u.ord.y === u.mend.at[1]) && mhypot(u.x - u.mend.at[0], u.y - u.mend.at[1]) > FB_NEAR + 2) u.mend = null;
-    if (!u.fb || u.hp >= u.max * FB_AT || u.mend || u.d.cargo || isAir(u)) return;
+    if (!u.fb || u.brk || u.hp >= u.max * FB_AT || u.mend || u.d.cargo || isAir(u)) return;
     let best = null, bd = Infinity;
     for (const e of S.ents) {
       if (e.team !== u.team || e.hp <= 0 || e === u) continue;
@@ -2513,6 +2514,45 @@ const Rules = (() => {
     if (!u.home && !u.ord) u.home = [u.x, u.y];
     u.ord = { t: 'move', x: c % W + 0.5, y: (c / W | 0) + 0.5, scat: true }; u.tgt = 0; u.wpT = 0; u.stuck = 0;
   }
+  // Morale. Men under fire are shaken: their suppression rises with the harm done to them, and falls again when
+  // the fire stops. Above PIN they are pinned, moving and firing slower; a squad shaken through and down to half its
+  // men breaks and runs for the nearest building of its side, deaf to orders, until it rallies. Cover, a formation of
+  // friends about them and a hero or general near steady them, as does a veteran's nerve, and a squad told to hold
+  // its ground never breaks.
+  const PIN = 0.5, BREAK = 0.85, BREAK_HP = 0.5, BREAK_S = 8, RALLY_R = 8;
+  function steadiness(S, u) {
+    let k = 1 - 0.15 * (u.vet || 0);
+    if (u.cov >= 0) k *= 0.5;
+    let friends = 0, leader = false;
+    near(S, u.x, u.y, RALLY_R, o => {
+      if (o === u || o.team !== u.team || o.hp <= 0 || o.b) return;
+      const d = mhypot(o.x - u.x, o.y - u.y);
+      if ((o.d.hero || o.d.general) && d < RALLY_R) leader = true;
+      else if (o.d.men && d < 4) friends++;
+    });
+    if (u.form && u.form !== 'loose' && friends >= 2) k *= 0.75;
+    if (leader) k *= 0.5;
+    return { k, leader };
+  }
+  function shaken(S, u, dmg) {
+    const { k, leader } = steadiness(S, u);
+    u.sup = Math.min(1, (u.sup || 0) + (dmg / u.max * 3 + 0.04) * k);
+    if (u.brk || leader || u.st === 'hold' || u.d.hero || u.d.general) return;
+    if (u.sup >= BREAK && u.hp < u.max * BREAK_HP) {
+      let best = null, bd = Infinity;
+      for (const e of S.ents) if (e.b && e.team === u.team && e.hp > 0) { const dd = mhypot(e.x - u.x, e.y - u.y); if (dd < bd) { bd = dd; best = e; } }
+      const to = best ? [best.x + (u.x > best.x ? 1 : -1) * (best.w / 2 + 2), best.y + (u.y > best.y ? 1 : -1) * (best.h / 2 + 2)] : S.bases[u.team];
+      u.brk = S.tick + BREAK_S * HZ;
+      u.ord = { t: 'move', x: clamp(to[0], 1, W - 1), y: clamp(to[1], 1, H - 1), brk: true }; u.tgt = 0; u.home = null; u.wpT = 0; u.stuck = 0; u.exp = false; u.mend = null;
+      S.ev.push({ t: 'broke', team: u.team, id: u.id, x: u.x, y: u.y });
+    }
+  }
+  // A second's calm: suppression wears off, faster in cover, and a broken squad that has run its time rallies.
+  function steady(S, u) {
+    if (u.sup) { u.sup = Math.max(0, u.sup - (u.cov >= 0 ? 0.2 : 0.12)); if (u.sup < 0.01) u.sup = 0; }
+    if (u.brk && S.tick >= u.brk && (u.sup || 0) < PIN) { u.brk = 0; if (u.ord && u.ord.brk) u.ord = null; u.v = 0; S.ev.push({ t: 'rallied', team: u.team, id: u.id, x: u.x, y: u.y }); }
+  }
+  const pinned = u => (u.sup || 0) >= PIN;
   const ANS_R = 10, ANS_LEASH = 18;
   function answer(S, t, by) {
     if (S.tick - (t.ansT ?? -1e9) < HZ) return;
@@ -2521,7 +2561,7 @@ const Rules = (() => {
     t.ansT = S.tick;
     near(S, t.x, t.y, ANS_R, o => {
       // A squad in cover holds it, unless it is aggressive or hunting.
-      if (o.b || o.team !== t.team || o.hp <= 0 || o.drop > 0 || o.ord || (o.cov >= 0 && !o.st) || (o.cov >= 0 && o.st === 'def') || o.st === 'hold' || S.tick < (o.calm || 0)) return;
+      if (o.b || o.team !== t.team || o.hp <= 0 || o.drop > 0 || o.ord || o.brk || (o.cov >= 0 && !o.st) || (o.cov >= 0 && o.st === 'def') || o.st === 'hold' || S.tick < (o.calm || 0)) return;
       if (!armed(o) || o.d.cargo || o.d.engineer || o.d.move === 'jet' || mhypot(o.x - t.x, o.y - t.y) > ANS_R) return;
       const c = o.tgt && S.byId.get(o.tgt);
       if (c && c.hp > 0 && !c.b) return;
@@ -2732,7 +2772,7 @@ const Rules = (() => {
       if (u.cd[i] > 0) continue;
       if (u.d.turret && Math.abs(angleTo(u.ta, matan2(t.y - u.y, t.x - u.x))) > 0.12) continue;
       if (!clearShot(S, u, wn, t)) { readyAny = false; continue; }
-      u.cd[i] = w.cd * (u.b && S.P[u.team].low ? 2 : 1);
+      u.cd[i] = w.cd * (u.b && S.P[u.team].low ? 2 : 1) * (pinned(u) ? 1.6 : 1);
       if (w.salvo) { u.salvo = w.salvo; u.salvoT = 0; u.salvoW = wn; u.salvoBr = -1; }
       else fire(S, u, wn, t, i);
     }
@@ -2786,6 +2826,8 @@ const Rules = (() => {
       if (sh.rain || sh.snow) going *= 1 - (d.move === 'wheel' ? 0.24 * sh.rain * (1 - rk) + 0.2 * sh.snow : d.move === 'track' ? 0.1 * sh.snow : d.move === 'naval' ? 0 : 0.18 * sh.snow);
     }
     if (here & 16) going *= 0.5;
+    // Pinned men crawl.
+    if (d.men && pinned(u) && !u.brk) going *= 0.45;
     if ((here & 8) && d.move === 'foot') going *= 0.75;
     const top = (u.ord && u.ord.pace ? Math.min(d.speed, u.ord.pace) : d.speed) * speedScale * going;
     const want = matan2(dy, dx), diff = angleTo(u.a, want);
@@ -3083,6 +3125,7 @@ const Rules = (() => {
     // Veterans mend slowly, and a Support Truck mends anyone close.
     if (u.vet >= 2 && u.hp < u.max) u.hp = Math.min(u.max, u.hp + u.max * 0.002);
     if (S.tick % HZ === u.id % HZ) {
+      if (d.men) steady(S, u);
       fallBack(S, u);
       exploreTick(S, u);
       const c = cellOf(u.x, u.y), foreign = S.terr[c] >= 0 && S.terr[c] !== u.team;
@@ -3121,7 +3164,8 @@ const Rules = (() => {
     let t = u.tgt ? S.byId.get(u.tgt) : null;
     if (t && (t.hp <= 0 || atPeace(S, u.team, t.team) || (!seenBy(S, u.team, t) && !(o && (o.t === 'attack' || o.t === 'group'))))) { t = null; u.tgt = 0; }
 
-    const free = !o || o.t === 'amove' || o.t === 'capture', st = u.st || 'def';
+    if (u.brk && t) { t = null; u.tgt = 0; }
+    const free = (!o || o.t === 'amove' || o.t === 'capture') && !u.brk, st = u.st || 'def';
     if (armed(u) && free && !t && S.tick % 10 === u.id % 10) {
       const f = acquire(S, u, d.sight, (!o && u.cov >= 0 && st === 'def') || st === 'hold');
       if (f) { t = f; u.tgt = f.id; if (!o && !u.home) u.home = [u.x, u.y]; }
@@ -3729,7 +3773,8 @@ const Rules = (() => {
 
   function unitsOf(S, team, ids) {
     const out = [];
-    for (const id of ids) { const u = S.byId.get(id); if (u && u.team === team && !u.b && u.hp > 0) out.push(u); }
+    // A broken squad hears no orders until it rallies.
+    for (const id of ids) { const u = S.byId.get(id); if (u && u.team === team && !u.b && u.hp > 0 && !(u.brk && S.tick < u.brk)) out.push(u); }
     return out;
   }
 
@@ -4151,7 +4196,7 @@ const Rules = (() => {
     msin, mcos, matan2, mhypot,
     BRIDGE_HP, SPELL, SKIES, WEATHERS, nightAt, skyOf, offGoing, route, weatherAt, sky, dayAt, spellOf, bridgeAt, clsOf, houseHp, hurtBridge, ignite, shielded,
     coverPoints, coverNear, COVER_R, COVER_ARC, FORMS, formOfGroup, STANCES,
-    FB_AT, canExplore, UPGRADES, UP_AGE, upCost, upNote, upsAt, upK, upBlocked, hpOf, rangeOf, capOf, showersAt, showerAt,
+    FB_AT, PIN, canExplore, UPGRADES, UP_AGE, upCost, upNote, upsAt, upK, upBlocked, hpOf, rangeOf, capOf, showersAt, showerAt,
   };
 })();
 if (typeof module !== 'undefined') module.exports = Rules;
