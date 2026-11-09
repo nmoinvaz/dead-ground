@@ -502,6 +502,8 @@ const Rules = (() => {
   const THIN = { mesa: 0.35, nile: 1.6 };
   // Mountains step into benches and sheer faces from this height up, each step this high.
   const CLIFF_FROM = 4.2, CLIFF_STEP = 2.6;
+  // The maps whose sea coasts stand in places as cliffs.
+  const SEA_CLIFFS = new Set(['seas', 'isles', 'gulf', 'lakes', 'atlantis']);
   const WOODS = { quad: 0.7, pass: 1, lakes: 1, greenwood: 3, oldforest: 1.3, twinlakes: 0.6, ponds: 0.8, peaks: 0.6, highlands: 0.5, crater: 0.5 };
   // A point turned a quarter round the middle k times.
   const turnK = ([x, y], k) => { let dx = x - CX, dy = y - CY; for (let i = 0; i < k; i++) { const t = dx; dx = -dy; dy = t; } return [CX + dx, CY + dy]; };
@@ -1084,13 +1086,29 @@ const Rules = (() => {
       }
       return k;
     };
+    // Where the coast's cliffs stand: the noise over its open stretches, cut so about a third of them rise. The noise
+    // is averaged over the map's turns, which narrows it differently on each map, so the cut is taken from it.
+    let cliffAt = 0;
+    if (SEA_CLIFFS.has(kind)) {
+      const vals = [];
+      for (let j = 0; j < VH; j += 2) for (let i = 0; i < VW; i += 2) {
+        const x = i / RES, y = j / RES, [d, width] = L.river(x, y);
+        if (d > width && d < width + 3 && flatness(x, y) * smooth(5, 9, roadDist[j * VW + i]) > 0.9) vals.push(sym(x, y, 0.035, 5));
+      }
+      vals.sort((a, b) => a - b);
+      cliffAt = vals.length ? vals[Math.floor(vals.length * 0.66)] : 0;
+    }
     for (let j = 0; j < VH; j++) for (let i = 0; i < VW; i++) {
       const x = i / RES, y = j / RES, c = j * VW + i, [d, width] = L.river(x, y);
+      // Stretches of a sea coast stand as cliffs: the land rises to a low tableland that drops sheer into deep water.
+      // None by a road, a base, a town or anything else kept open.
+      const cliff = cliffAt && d < width + 16 ? smooth(cliffAt, cliffAt + 0.015, sym(x, y, 0.035, 5)) * flatness(x, y) * smooth(5, 9, roadDist[c]) : 0;
       if (d < width + 7) {
         // The bed, and at a ford a shallow one with gentle banks.
         const top = Math.min(h[c], 1.4), s = smooth(width - 1, width + 7, d), deep = lerp(-1.3, top, s), fk = fordK(x, y);
         h[c] = fk > 0 ? lerp(deep, lerp(-0.3, top, s), fk) : deep;
-      }
+        if (cliff > 0) h[c] = lerp(h[c], lerp(-1.3, Math.max(top, 2.7), smooth(width + 0.4, width + 1.4, d)), cliff);
+      } else if (cliff > 0) h[c] = lerp(h[c], Math.max(h[c], 2.7), cliff * (1 - smooth(width + 8, width + 16, d)));
     }
 
     // Brooks. Each rises on middling ground in one part of the map and winds down to the river, a lake or the
