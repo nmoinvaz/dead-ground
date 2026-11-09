@@ -595,7 +595,7 @@ body[data-look="ink"] .sheet { box-shadow: 4px 4px 0 var(--ink); }
       <div class="choice"><h2>Picture</h2><div id="s-pic" class="two"><button data-v="sharp">Sharp</button><button data-v="fast">Faster</button></div><p id="s-pic-note"></p></div>
       <div class="choice"><h2>Ore, oil and power</h2><div id="s-gauges" class="two"><button data-v="top">In the top bar</button><button data-v="side">In the sidebar</button></div></div>
       <div class="choice"><h2>Music</h2><div id="s-music" class="two"><button data-v="on">On</button><button data-v="off">Off</button></div></div>
-      <p id="build">Build 6c771d8 2026-11-08 18:37</p>
+      <p id="build">Build a90ff20 2026-11-08 18:44</p>
     </div>
     <div id="banner" hidden></div>
     <button id="update" hidden>A new version of Dead Ground is out. <b>Reload</b></button>
@@ -6041,6 +6041,37 @@ const Models = (() => {
       // Seams across the deck between its parapets, so a long bridge reads as one and not as a blank slab.
       for (let i = 1; i < 18; i++) w.box(0.008, 0.016, 0.88, -0.5 + i / 18, 0.2, 0, 0x4a4844);
       scenery.deck = w.finish();
+      // The older bridges, each a deck one unit long, scaled to the span. A timber bridge of planks between low rails
+      // on posts; a stone one with solid parapets and a coping; an iron one carried by a truss on either side.
+      const wd = G();
+      wd.box(1, 0.16, 1, 0, 0.04, 0, 0xffffff);
+      for (let i = 1; i < 30; i++) wd.box(0.006, 0.012, 0.98, -0.5 + i / 30, 0.2, 0, 0x4a3a2c);
+      for (const z of [-0.47, 0.47]) { wd.box(1, 0.03, 0.03, 0, 0.42, z, 0xffffff); for (let i = 0; i <= 12; i++) wd.box(0.02, 0.24, 0.02, -0.5 + i / 12, 0.2, z, 0xffffff); }
+      scenery.deckWood = wd.finish();
+      const sd = G();
+      sd.box(1, 0.2, 1, 0, 0, 0, 0xffffff);
+      // Paved in setts, course by course, each course's joints set off from the last's.
+      for (let i = 1; i < 24; i++) sd.box(0.005, 0.012, 0.8, -0.5 + i / 24, 0.2, 0, 0x5a554c);
+      for (let r = 0; r < 6; r++) for (let i = 0; i < 24; i++) sd.box(0.042, 0.012, 0.005, -0.5 + (i + (r % 2) * 0.5 + 0.5) / 24, 0.2, -0.4 + (r + 0.5) * 0.8 / 6 - 0.4 / 6 + 0.067, 0x5a554c);
+      for (const z of [-0.44, 0.44]) { sd.box(1, 0.26, 0.12, 0, 0.2, z, 0xffffff); sd.box(1, 0.05, 0.16, 0, 0.46, z, 0xeeeeee); }
+      scenery.deckStone = sd.finish();
+      const id = G();
+      id.box(1, 0.16, 1, 0, 0.02, 0, 0xffffff);
+      for (const z of [-0.48, 0.48]) {
+        id.box(1, 0.05, 0.06, 0, 0.9, z, 0xffffff);
+        for (let i = 0; i <= 8; i++) id.box(0.014, 0.72, 0.02, -0.5 + i / 8, 0.18, z, 0xffffff);
+        for (let i = 0; i < 8; i++) id.box(0.155, 0.014, 0.018, -0.5 + (i + 0.5) / 8, 0.54, z, 0xffffff, { rz: (i % 2 ? 1 : -1) * 1.05 });
+      }
+      for (let i = 0; i <= 8; i += 2) id.box(0.014, 0.02, 0.96, -0.5 + i / 8, 0.92, 0, 0xffffff);
+      // Overhead, a cross brace in each panel between the top chords, which reads from above.
+      for (let i = 0; i < 4; i++) for (const sg of [1, -1]) id.box(Math.hypot(0.25, 0.96), 0.016, 0.018, -0.5 + (i + 0.5) / 4, 0.93, 0, 0xffffff, { ry: sg * Math.atan2(0.96, 0.25) });
+      scenery.deckIron = id.finish();
+      // A timber trestle across the deck, its top at y = 0: posts in a row, a cap beam and a cross brace.
+      const tr = G();
+      for (const z of [-0.42, -0.14, 0.14, 0.42]) tr.box(0.12, 1, 0.12, 0, -1, z, 0xffffff);
+      tr.box(0.16, 0.08, 1, 0, -0.08, 0, 0xffffff);
+      tr.box(0.05, 0.05, 1.15, 0, -0.55, 0, 0xffffff, { rx: 0.7 });
+      scenery.trestle = tr.finish();
       const pier = G();
       pier.box(0.4, 2.4, 1.2, 0, -2.2, 0, P.concDk);
       scenery.pier = pier.finish();
@@ -7847,13 +7878,13 @@ if (typeof module !== 'undefined') module.exports = Looks;
       // 45 and 135 degrees, then flat and upright lines for the darkest, each line a little uneven with small gaps.
       // The ground's hatching is pinned to the map so it pans with it, the units' redraws a few times a second.
       const ink = new THREE.ShaderMaterial({ uniforms: { t: { value: null }, tSubj: { value: null }, tHeat: { value: null }, tPaper: { value: null }, res: { value: new THREE.Vector2(1, 1) }, uTime: { value: 0 }, uK: { value: 1 }, uOff: { value: new THREE.Vector2() }, uStyle: { value: 8 }, tNorm: { value: null }, tFogS: { value: null }, tLand: { value: null }, uSun2: { value: new THREE.Vector2(-1, 0) }, uUpV: { value: new THREE.Vector3(0, 1, 0) }, uRoad: { value: 0 }, uOre: { value: 0 }, uMarks: { value: 1 },
-        uWindS: { value: new THREE.Vector2() }, uView: { value: new THREE.Vector2(1, 0) }, tFx: { value: null }, tAnc: { value: null }, uDark: { value: 0 }, uInks: { value: 0 }, uFxs: { value: 0 }, uFire: { value: 0 }, uUnits: { value: 0 }, tH: SH.tH, uHSize: { value: new THREE.Vector2(1, 1) }, uHScale: { value: 1 }, uRain: { value: 0 }, uStorm: { value: 0 }, uSnowF: { value: 0 }, uSnowC: SH.uSnowC, uSnowLine: SH.uSnowLine, tFlow: SH.tFlow, tBrook: SH.tBrook, uFlora: SH.uFlora, uShow: SH.uShow, tBeach: SH.tBeach, uPark: SH.uPark, uFog: { value: 0 }, uMist: { value: 0 }, uNight: { value: 0 }, uWet: { value: 0 },
+        uWindS: { value: new THREE.Vector2() }, uView: { value: new THREE.Vector2(1, 0) }, tFx: { value: null }, tAnc: { value: null }, uDark: { value: 0 }, uInks: { value: 0 }, uFxs: { value: 0 }, uFire: { value: 0 }, uUnits: { value: 0 }, tH: SH.tH, uHSize: { value: new THREE.Vector2(1, 1) }, uHScale: { value: 1 }, uRain: { value: 0 }, uStorm: { value: 0 }, uSnowF: { value: 0 }, uSnowC: SH.uSnowC, uSnowLine: SH.uSnowLine, tFlow: SH.tFlow, tBrook: SH.tBrook, uFlora: SH.uFlora, uShow: SH.uShow, tBeach: SH.tBeach, uPark: SH.uPark, uBridgeKind: SH.uBridgeKind, uFog: { value: 0 }, uMist: { value: 0 }, uNight: { value: 0 }, uWet: { value: 0 },
         uDayMul: { value: new THREE.Vector3(1, 1, 1) }, uDayAdd: { value: new THREE.Vector3() }, uWaterL: { value: -0.15 }, uCloudK: SH.uCloudK, tMarks: SH.tMarks, uMap: SH.uMap,
         uCloud: SH.uCloud, uCloudT: SH.uCloudT, uSunW: SH.uSunDir, uCloudA: { value: 0 }, uCloudG: { value: 0 }, uRayK: { value: 0 }, uSand: { value: 0 },
         uInvVP: { value: new THREE.Matrix4() }, uW2S: { value: new THREE.Vector4(1, 0, 0, 1) }, uLev: { value: 1 }, tTerr: SH.tTerr, uBorder: SH.uBorder, uMe: { value: 0 },
         // Each side's colour as the anchor pass keeps it, its hue and how coloured it is, and its inks on either paper.
         uSideKey: { value: [...Array(8)].map(() => new THREE.Vector2()) }, uSideL: { value: [...Array(8)].map(() => new THREE.Vector3()) }, uSideD: { value: [...Array(8)].map(() => new THREE.Vector3()) }, uSideB: { value: [...Array(8)].map(() => new THREE.Vector3()) } }, vertexShader: vs, depthTest: false, depthWrite: false, fragmentShader: `
-        varying vec2 vUv; uniform sampler2D t, tSubj, tHeat, tPaper, tNorm, tFogS, tLand, tMarks; uniform float uMap; uniform vec2 res, uOff, uSun2, uWindS, uView, uHSize; uniform float uHScale, uFxs, uFire; uniform int uUnits, uInks; uniform float uDark; uniform sampler2D tH, tFx, tAnc, tFlow, tBrook, tBeach; uniform vec4 uShow[4]; uniform vec4 uPark[16]; uniform vec3 uUpV, uDayMul, uDayAdd; uniform float uTime, uK, uRain, uStorm, uSnowF, uSnowC, uSnowLine, uFlora, uFog, uMist, uNight, uWet, uWaterL, uCloudK, uMarks; uniform int uStyle, uRoad, uOre;
+        varying vec2 vUv; uniform sampler2D t, tSubj, tHeat, tPaper, tNorm, tFogS, tLand, tMarks; uniform float uMap; uniform vec2 res, uOff, uSun2, uWindS, uView, uHSize; uniform float uHScale, uFxs, uFire; uniform int uUnits, uInks; uniform float uDark; uniform sampler2D tH, tFx, tAnc, tFlow, tBrook, tBeach; uniform vec4 uShow[4]; uniform vec4 uPark[16]; uniform vec3 uUpV, uDayMul, uDayAdd; uniform float uTime, uK, uRain, uStorm, uSnowF, uSnowC, uSnowLine, uFlora, uBridgeKind, uFog, uMist, uNight, uWet, uWaterL, uCloudK, uMarks; uniform int uStyle, uRoad, uOre;
         uniform vec2 uSideKey[8]; uniform vec3 uSideL[8], uSideD[8], uSideB[8];
         uniform sampler2D tTerr; uniform float uBorder, uMe;
         uniform vec2 uCloud; uniform vec3 uSunW; uniform float uCloudT, uCloudA, uCloudG, uRayK, uSand;
@@ -8399,7 +8430,8 @@ if (typeof module !== 'undefined') module.exports = Looks;
             base = mix(base, mix(RC, RD, rH * 0.35), onRoad * isG * 0.9);
             // A bridge deck is toned and ruled, a structure over the water and not a blank gap in the map. On dark
             // paper it stands a little lighter than the land, as a roof does.
-            vec3 DECK = dk ? vec3(0.36, 0.35, 0.33) : vec3(0.8, 0.765, 0.7);
+            // Timber brown, stone pale, iron grey, concrete as before.
+            vec3 DECK = uBridgeKind < 0.5 ? (dk ? vec3(0.38, 0.31, 0.24) : vec3(0.78, 0.66, 0.5)) : uBridgeKind < 1.5 ? (dk ? vec3(0.42, 0.4, 0.37) : vec3(0.86, 0.83, 0.76)) : uBridgeKind < 2.5 ? (dk ? vec3(0.3, 0.29, 0.28) : vec3(0.56, 0.53, 0.5)) : (dk ? vec3(0.36, 0.35, 0.33) : vec3(0.8, 0.765, 0.7));
             base = mix(base, mix(DECK, DECK * 0.8, rH * 0.6), isBr * 0.95);
             // The road climbs and falls with the land: its relief shading and the contours carry across it.
             float onR = onRoad * isG * (1.0 - wet);
@@ -9066,6 +9098,8 @@ const World = (() => {
       uShow: { value: [0, 1, 2, 3].map(() => new THREE.Vector4()) },
       // Up to sixteen town parks: x, y, radius and the turn of their paths.
       uPark: { value: Array.from({ length: 16 }, () => new THREE.Vector4()) },
+      // The kind of the bridges: 0 timber, 1 stone, 2 iron, 3 concrete.
+      uBridgeKind: { value: 3 },
       // How far tread marks darken the ground, none where the look draws them itself.
       uTreadK: { value: 0.34 },
       // How hard the track worn into each cell has become, in red.
@@ -10060,8 +10094,19 @@ const World = (() => {
           pier.push({ x: px, y: b.z - 0.1, z: py, a, sx: 0.7, sy: b.z - M.water + 1.2, sz: b.w + 1.7, c: 0x77746c });
         }
       }
-      const dm = lineCat(instanced(sc.deck, plainTint, dk), 0.42);
-      if (pier.length) lineCat(instanced(sc.cutwater, plainTint, pier), 0.42);
+      // Each kind of bridge, of which the one the world's age has stands: timber trestles, stone, iron trusses on
+      // stone piers, or the concrete of today. All share the decks' places, and fall alike.
+      const KIND_DECK = { wood: ['deckWood', 0x8a6a4a], stone: ['deckStone', 0xb8b0a0], iron: ['deckIron', 0x5a5e66], concrete: ['deck', 0x5e5d59] };
+      const KIND_PIER = { wood: ['trestle', 0x6a5038, 0.35], stone: ['cutwater', 0xa8a090, 1], iron: ['cutwater', 0x8a8478, 0.8], concrete: ['cutwater', 0x77746c, 1] };
+      const kinds = {};
+      for (const k of Object.keys(KIND_DECK)) {
+        const dkk = dk.map(o => Object.assign({}, o, { c: KIND_DECK[k][1], sy: k === 'iron' ? 1.4 : 1 }));
+        const m = lineCat(instanced(sc[KIND_DECK[k][0]], plainTint, dkk), 0.42);
+        dkk.forEach((o, i) => { if (i % 2) setInst(m, i, o, true); }); dirty(m);
+        const pm = pier.length ? lineCat(instanced(sc[KIND_PIER[k][0]], plainTint, pier.map(o => Object.assign({}, o, { c: KIND_PIER[k][1], sx: o.sx * KIND_PIER[k][2] }))), 0.42) : null;
+        kinds[k] = { dm: m, dk: dkk, pm };
+      }
+      const dm = kinds.concrete.dm;
       const lane = [];
       M.bridges.forEach((b, bi) => {
         const dx = b.x1 - b.x0, dy = b.y1 - b.y0, len = Math.hypot(dx, dy), a = -Math.atan2(dy, dx), n = Math.floor(len / 2);
@@ -10070,8 +10115,7 @@ const World = (() => {
       const lm = lineCat(instanced(sc.block, plainTint, lane, false), 0.42);
       const bm = lineCat(instanced(sc.rubble, plainTint, brub), 0.42);
       brub.forEach((o, i) => setInst(bm, i, o, true)); dirty(bm);
-      dk.forEach((o, i) => { if (i % 2) setInst(dm, i, o, true); }); dirty(dm);
-      scen.bridges = { dk, lane, brub, dm, lm, bm, shown: M.bridges.map(() => 'up') };
+      scen.bridges = { dk, lane, brub, dm, lm, bm, kinds, kind: '', shown: M.bridges.map(() => 'up') };
       // Stepping stones across each ford, under water when the river is up.
       const stones = [];
       for (const f of M.fords || []) for (let j = -6; j <= 6; j++) {
@@ -10444,19 +10488,25 @@ const World = (() => {
         const now = S.bridges[i].hp > 0 ? 'up' : 'down';
         if (B.shown[i] === now) return;
         B.shown[i] = now;
-        const main = B.dk[i * 2], len = b.len + 2, piece = len * 0.27, off = (len - piece) / 2;
-        if (now === 'up') { setInst(B.dm, i * 2, main); setInst(B.dm, i * 2 + 1, main, true); }
-        else {
-          setInst(B.dm, i * 2, Object.assign({}, main, { x: main.x - b.ux * off, z: main.z - b.uy * off, sx: piece, rz: -0.08 }));
-          setInst(B.dm, i * 2 + 1, Object.assign({}, main, { x: main.x + b.ux * off, z: main.z + b.uy * off, sx: piece, rz: 0.08 }));
+        const len = b.len + 2, piece = len * 0.27, off = (len - piece) / 2;
+        for (const K of Object.values(B.kinds)) {
+          const main = K.dk[i * 2];
+          if (now === 'up') { setInst(K.dm, i * 2, main); setInst(K.dm, i * 2 + 1, main, true); }
+          else {
+            setInst(K.dm, i * 2, Object.assign({}, main, { x: main.x - b.ux * off, z: main.z - b.uy * off, sx: piece, rz: -0.08 }));
+            setInst(K.dm, i * 2 + 1, Object.assign({}, main, { x: main.x + b.ux * off, z: main.z + b.uy * off, sx: piece, rz: 0.08 }));
+          }
+          dirty(K.dm);
         }
         B.lane.forEach((o, j) => { if (o.b === i) setInst(B.lm, j, o, now === 'down' && o.t > 0.22 && o.t < 0.78); });
         B.brub.forEach((o, j) => { if ((j >> 2) === i) setInst(B.bm, j, o, now === 'up'); });
         dirty(B.dm); dirty(B.lm); dirty(B.bm);
       });
       // The fords' stones go under when the river is up.
-      // A bridge's lane marks are a modern road's, from the Industrial Age.
+      // A bridge's lane marks are a modern road's, from the Industrial Age. Its kind is the world's age's.
       B.lm.visible = worldAge() >= MOTOR_AGE;
+      const age = worldAge(), kind = age <= 2 ? 'wood' : age === 3 ? 'stone' : age === 4 ? 'iron' : 'concrete';
+      if (kind !== B.kind) { B.kind = kind; for (const [k, K] of Object.entries(B.kinds)) { K.dm.visible = k === kind; if (K.pm) K.pm.visible = k === kind; } SH.uBridgeKind.value = ['wood', 'stone', 'iron', 'concrete'].indexOf(kind); }
       const Fd = scen.fords, under = S.flooded || waterRise.value > 0.12;
       if (Fd.mesh && under !== Fd.under) { Fd.under = under; Fd.list.forEach((o, i) => setInst(Fd.mesh, i, o, under)); dirty(Fd.mesh); }
       // Fences under whatever drives over them.
