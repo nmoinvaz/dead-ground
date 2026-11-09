@@ -1157,6 +1157,23 @@ const World = (() => {
         });
         if (list.length) lineCat(instanced(sc[k], plainTint, list), 0.66);
       }
+      // A sunken city's ruins in the shallows off its shores: columns standing out of the water at all heights, some
+      // leaning, and drums toppled at the water's edge. For the picture alone; boats pass over them.
+      if (mapOf(S).ruins) {
+        const rr = mulberry(M.seed + 77), cols = [], drums = [];
+        for (let tries = 0; tries < 9000 && cols.length < 70; tries++) {
+          const x = 2 + rr() * (W - 4), y = 2 + rr() * (H - 4), z = terrainAt(M, x, y);
+          if (z > M.water - 0.25 || z < M.water - 1.1 || Rules.bridgeAt(S, x, y) >= 0) continue;
+          const n = 1 + (rr() * 4 | 0), a0 = rr() * 6.28;
+          for (let k = 0; k < n; k++) {
+            const px = x + Math.cos(a0) * k * 0.9, py = y + Math.sin(a0) * k * 0.9, pz = terrainAt(M, px, py);
+            if (pz > M.water - 0.1) { drums.push({ x: px, y: Math.max(pz, M.water - 0.05), z: py, s: 1, a: rr() * 6.28, c: 0xffffff }); continue; }
+            cols.push({ x: px, y: pz, z: py, s: 0.8 + rr() * 0.5, sy: (M.water - pz + 0.15 + rr() * 0.7) / 1.0, a: rr() * 6.28, rx: (rr() - 0.5) * 0.25, c: 0xffffff });
+          }
+        }
+        if (cols.length) instanced(sc.column, plainTint, cols);
+        if (drums.length) instanced(sc.drum, plainTint, drums);
+      }
       const rc = new THREE.Color(th.rock);
       instanced(sc.rock, plainTint, rocks.map(t => ({ x: t.x, y: terrainAt(M, t.x, t.y) - 0.06, z: t.y, s: t.s * 1.2, a: t.a, c: colA.copy(rc).multiplyScalar(0.62 + rand() * 0.3).getHex() })));
 

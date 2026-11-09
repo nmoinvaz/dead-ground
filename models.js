@@ -849,6 +849,15 @@ const Models = (() => {
       obl.add(flat(new THREE.ConeGeometry(0.155, 0.22, 4, 1)), 0, 2.41, 0, 0xd8a840, { ry: Math.PI / 4 });
       obl.box(0.42, 0.12, 0.42, 0, 0.06, 0, 0xb8a080);
       scenery.obelisk = obl.finish();
+      // A sunken column: a fluted drum broken off short, its capital still on one, half under the water; and a
+      // toppled drum lying on its side.
+      const col = G();
+      col.cyl(0.13, 0.14, 1, 0, 0.5, 0, 0xe2dccc, { seg: 10 });
+      col.box(0.34, 0.08, 0.34, 0, 1.02, 0, 0xd8d0be);
+      scenery.column = col.finish();
+      const drum = G();
+      drum.cyl(0.14, 0.14, 0.4, 0, 0.14, 0, 0xe2dccc, { seg: 10, rx: Math.PI / 2 });
+      scenery.drum = drum.finish();
       const pp = G();
       for (const [x, y, z, ry, rz] of [[0, 0.16, 0, 0.2, 0], [0.12, 0.36, 0.02, 0.9, -0.4], [-0.12, 0.34, -0.04, -0.6, 0.45], [0.02, 0.52, 0.08, 1.6, 0.1], [0.2, 0.18, -0.12, 2.2, -0.2]]) pp.sph(0.13, x, y, z, 0xffffff, { seg: 8, rings: 6, sx: 1, sy: 1.3, sz: 0.32, ry, rz });
       for (const [x, y, z] of [[0.04, 0.69, 0.08], [0.2, 0.49, 0.04], [-0.2, 0.5, -0.04]]) pp.sph(0.025, x, y, z, 0xc23c4e, { seg: 5, rings: 3 });
