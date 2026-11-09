@@ -449,7 +449,7 @@ const Rules = (() => {
   };
   const SIZES = {
     duel: 128, quad: 192, world: 256, gulf: 128, pass: 128, lakes: 192,
-    greenwood: 128, oldforest: 192, twinlakes: 128, ponds: 192, seas: 128, isles: 192, peaks: 128, highlands: 192, rivers3: 128, crater: 192, mesa: 128, nile: 128,
+    greenwood: 128, oldforest: 192, twinlakes: 128, ponds: 192, seas: 128, isles: 192, peaks: 128, highlands: 192, rivers3: 128, crater: 192, mesa: 128, nile: 128, atlantis: 192,
   };
   // The maps a game may be set on, each a layout and the most sides it seats.
   const MAPS = {
@@ -471,6 +471,7 @@ const Rules = (() => {
     crater: { name: 'Crater Lake', layout: 'crater', seats: 4, about: 'A lake inside a ring of mountains, entered through four gaps, with a base in each corner outside.' },
     // A map may fix its theatre, and draw its woods as other plants.
     nile: { name: 'The Nile', layout: 'nile', seats: 2, theatre: 'desert', flora: 'palm', names: { river: ['The Nile'] }, about: 'The great river runs between the two sides through the desert, a green strip of fields and palms along its banks, crossed by three long bridges. Pyramids, a temple and its obelisks stand on the sand.' },
+    atlantis: { name: 'Atlantis', layout: 'atlantis', seats: 4, ruins: true, about: 'A great island of rings of land and water round a central citadel, joined by bridges, with canals cut in from the sea. Ships can sail the rings.' },
     mesa: { name: 'Mesa Country', layout: 'mesa', seats: 2, theatre: 'desert', flora: 'cactus', about: 'Open desert of dunes and sheer-sided mesas, with stands of cactus. The mesas wall off the lines of march.' },
   };
   // The theatre a game on a map is fought in: the map's own, if it fixes one, or the one chosen.
@@ -648,7 +649,7 @@ const Rules = (() => {
   }
 
   // ---- The second set of maps: woods, lakes, seas, islands, mountains and rivers ----
-  const MORE = new Set(['greenwood', 'oldforest', 'twinlakes', 'ponds', 'seas', 'isles', 'peaks', 'highlands', 'rivers3', 'crater', 'mesa', 'nile']);
+  const MORE = new Set(['greenwood', 'oldforest', 'twinlakes', 'ponds', 'seas', 'isles', 'peaks', 'highlands', 'rivers3', 'crater', 'mesa', 'nile', 'atlantis']);
   function moreLayout(kind, L, all, fordAt, R) {
     const dry = () => [99, 0];
     // Two sides on the River Duel's frame, mirrored through the middle.
@@ -956,6 +957,36 @@ const Rules = (() => {
         for (const s of [-1, 1]) { const [ox, oy] = uvp(T[2] + 4.5, T[3] + s * 1.6); mons.push(['obelisk', ox, oy, 0.4, a]); }
       }
       L.monuments = mons.flatMap(m => { const q = mirror([m[1], m[2]]); return [m, [m[0], q[0], q[1], m[3], m[4] + PI]]; });
+    } else if (kind === 'atlantis') {
+      // Atlantis: a citadel island in the middle, then rings of water and land, the outer land the island's own,
+      // its coast round the bases. Canals run in from the sea along the borders between the quarters to the outer
+      // ring of water. Bridges cross each ring and each canal. Radii are in cells; a shore falls about four and a
+      // half cells inside each land's nominal edge.
+      quad(); L.lake = true;
+      const pc = (r, deg) => [CX + r * mcos(deg * PI / 180), CY + r * msin(deg * PI / 180)];
+      const RC = 22, RM0 = 28, RM1 = 56, RO0 = 62, RE = 114, CW = 1;
+      L.river = (x, y) => {
+        const dx = x - CX, dy = y - CY, r = mhypot(dx, dy), ax = Math.min(Math.abs(dx), Math.abs(dy));
+        const citadel = RC - r, middle = Math.min(r - RM0, RM1 - r), outer = Math.min(r - RO0, RE - r, ax - CW);
+        return [Math.max(0, citadel, middle, outer), 3];
+      };
+      const C = pc(90, 45), tOut = pc(86, 18), tMid = pc(42, 45);
+      for (const T of L.syms) L.bases.push(T(C));
+      all(L.towns, tOut); all(L.towns, tMid);
+      quadKit(C);
+      all(L.ore, pc(43, 16), [4.5]); all(L.ore, pc(84, 72), [5]);
+      all(L.wells, pc(40, 74)); all(L.wells, pc(72, 30));
+      L.fish = []; all(L.fish, pc(25, 20)); all(L.fish, pc(59, 45)); all(L.fish, pc(122, 45));
+      // Each bridge from land to land, its ends four cells in from either shore.
+      const bridge = (a, b) => { for (const T of L.syms) L.bridges.push([T(a), T(b)]); R(a, b, 0); };
+      bridge(pc(47.5, 22.5), pc(70.5, 22.5)); bridge(pc(47.5, 67.5), pc(70.5, 67.5));
+      bridge(pc(36.5, 45), pc(13.5, 45));
+      // Over the canal on this quarter's near border, its far end in the next quarter.
+      bridge(pc(86, 7.5), pc(86, -7.5));
+      R(C, tOut, 2); R(tOut, pc(86, 7.5), 1); R(C, pc(70.5, 67.5), 2); R(tOut, pc(70.5, 22.5), 2);
+      R(pc(47.5, 22.5), tMid, 2); R(pc(47.5, 67.5), tMid, 2); R(tMid, pc(36.5, 45), 1);
+      // The citadel at the middle, a great temple, once for all four quarters.
+      L.monuments = [['temple', CX, CY, 6, PI / 4]];
     }
     return L;
   }

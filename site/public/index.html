@@ -603,7 +603,7 @@ body[data-look="ink"] .sheet { box-shadow: 4px 4px 0 var(--ink); }
       <div class="choice"><h2>Map sheet frame</h2><div id="s-sheet" class="two"><button data-v="on">On</button><button data-v="off">Off</button></div></div>
       <div class="choice"><h2>Shadows</h2><div id="s-shade" class="two"><button data-v="hatch">Hatched</button><button data-v="wash">Wash</button></div></div>
       <div class="choice"><h2>Music</h2><div id="s-music" class="two"><button data-v="on">On</button><button data-v="off">Off</button></div></div>
-      <p id="build">Build 87c0bc2 2026-11-09 01:49</p>
+      <p id="build">Build 799320c 2026-11-09 02:49</p>
     </div>
     <div id="banner" hidden></div>
     <button id="update" hidden>A new version of Dead Ground is out. <b>Reload</b></button>
@@ -1164,7 +1164,7 @@ const Rules = (() => {
   };
   const SIZES = {
     duel: 128, quad: 192, world: 256, gulf: 128, pass: 128, lakes: 192,
-    greenwood: 128, oldforest: 192, twinlakes: 128, ponds: 192, seas: 128, isles: 192, peaks: 128, highlands: 192, rivers3: 128, crater: 192, mesa: 128, nile: 128,
+    greenwood: 128, oldforest: 192, twinlakes: 128, ponds: 192, seas: 128, isles: 192, peaks: 128, highlands: 192, rivers3: 128, crater: 192, mesa: 128, nile: 128, atlantis: 192,
   };
   // The maps a game may be set on, each a layout and the most sides it seats.
   const MAPS = {
@@ -1186,6 +1186,7 @@ const Rules = (() => {
     crater: { name: 'Crater Lake', layout: 'crater', seats: 4, about: 'A lake inside a ring of mountains, entered through four gaps, with a base in each corner outside.' },
     // A map may fix its theatre, and draw its woods as other plants.
     nile: { name: 'The Nile', layout: 'nile', seats: 2, theatre: 'desert', flora: 'palm', names: { river: ['The Nile'] }, about: 'The great river runs between the two sides through the desert, a green strip of fields and palms along its banks, crossed by three long bridges. Pyramids, a temple and its obelisks stand on the sand.' },
+    atlantis: { name: 'Atlantis', layout: 'atlantis', seats: 4, ruins: true, about: 'A great island of rings of land and water round a central citadel, joined by bridges, with canals cut in from the sea. Ships can sail the rings.' },
     mesa: { name: 'Mesa Country', layout: 'mesa', seats: 2, theatre: 'desert', flora: 'cactus', about: 'Open desert of dunes and sheer-sided mesas, with stands of cactus. The mesas wall off the lines of march.' },
   };
   // The theatre a game on a map is fought in: the map's own, if it fixes one, or the one chosen.
@@ -1363,7 +1364,7 @@ const Rules = (() => {
   }
 
   // ---- The second set of maps: woods, lakes, seas, islands, mountains and rivers ----
-  const MORE = new Set(['greenwood', 'oldforest', 'twinlakes', 'ponds', 'seas', 'isles', 'peaks', 'highlands', 'rivers3', 'crater', 'mesa', 'nile']);
+  const MORE = new Set(['greenwood', 'oldforest', 'twinlakes', 'ponds', 'seas', 'isles', 'peaks', 'highlands', 'rivers3', 'crater', 'mesa', 'nile', 'atlantis']);
   function moreLayout(kind, L, all, fordAt, R) {
     const dry = () => [99, 0];
     // Two sides on the River Duel's frame, mirrored through the middle.
@@ -1671,6 +1672,36 @@ const Rules = (() => {
         for (const s of [-1, 1]) { const [ox, oy] = uvp(T[2] + 4.5, T[3] + s * 1.6); mons.push(['obelisk', ox, oy, 0.4, a]); }
       }
       L.monuments = mons.flatMap(m => { const q = mirror([m[1], m[2]]); return [m, [m[0], q[0], q[1], m[3], m[4] + PI]]; });
+    } else if (kind === 'atlantis') {
+      // Atlantis: a citadel island in the middle, then rings of water and land, the outer land the island's own,
+      // its coast round the bases. Canals run in from the sea along the borders between the quarters to the outer
+      // ring of water. Bridges cross each ring and each canal. Radii are in cells; a shore falls about four and a
+      // half cells inside each land's nominal edge.
+      quad(); L.lake = true;
+      const pc = (r, deg) => [CX + r * mcos(deg * PI / 180), CY + r * msin(deg * PI / 180)];
+      const RC = 22, RM0 = 28, RM1 = 56, RO0 = 62, RE = 114, CW = 1;
+      L.river = (x, y) => {
+        const dx = x - CX, dy = y - CY, r = mhypot(dx, dy), ax = Math.min(Math.abs(dx), Math.abs(dy));
+        const citadel = RC - r, middle = Math.min(r - RM0, RM1 - r), outer = Math.min(r - RO0, RE - r, ax - CW);
+        return [Math.max(0, citadel, middle, outer), 3];
+      };
+      const C = pc(90, 45), tOut = pc(86, 18), tMid = pc(42, 45);
+      for (const T of L.syms) L.bases.push(T(C));
+      all(L.towns, tOut); all(L.towns, tMid);
+      quadKit(C);
+      all(L.ore, pc(43, 16), [4.5]); all(L.ore, pc(84, 72), [5]);
+      all(L.wells, pc(40, 74)); all(L.wells, pc(72, 30));
+      L.fish = []; all(L.fish, pc(25, 20)); all(L.fish, pc(59, 45)); all(L.fish, pc(122, 45));
+      // Each bridge from land to land, its ends four cells in from either shore.
+      const bridge = (a, b) => { for (const T of L.syms) L.bridges.push([T(a), T(b)]); R(a, b, 0); };
+      bridge(pc(47.5, 22.5), pc(70.5, 22.5)); bridge(pc(47.5, 67.5), pc(70.5, 67.5));
+      bridge(pc(36.5, 45), pc(13.5, 45));
+      // Over the canal on this quarter's near border, its far end in the next quarter.
+      bridge(pc(86, 7.5), pc(86, -7.5));
+      R(C, tOut, 2); R(tOut, pc(86, 7.5), 1); R(C, pc(70.5, 67.5), 2); R(tOut, pc(70.5, 22.5), 2);
+      R(pc(47.5, 22.5), tMid, 2); R(pc(47.5, 67.5), tMid, 2); R(tMid, pc(36.5, 45), 1);
+      // The citadel at the middle, a great temple, once for all four quarters.
+      L.monuments = [['temple', CX, CY, 6, PI / 4]];
     }
     return L;
   }
@@ -5514,7 +5545,9 @@ const AI = (() => {
     const wave = me.waveIds ? fight.filter(u => me.waveIds.includes(u.id)) : fight;
     const guard = me.waveIds ? fight.filter(u => !me.waveIds.includes(u.id)) : [];
     if (me.state === 'attack') {
-      const ws = wave.reduce((a, u) => a + value(u), 0);
+      // A wave is measured by what it has on land: ships cannot take a town, so a few left afloat do not hold a
+      // spent wave open.
+      const ws = wave.reduce((a, u) => a + (u.d.move === 'naval' ? 0 : value(u)), 0);
       // A wave ends when it has lost most of its worth, or when its raid time is up at a level that has one.
       if (ws < me.startStrength * 0.3 || !wave.length || (me.D.raid && S.tick >= me.attackUntil)) {
         me.state = 'build'; me.waves++; me.waveIds = null;
@@ -5536,7 +5569,7 @@ const AI = (() => {
     // A keeper holds a player's base while they are away and never sets out.
     if (me.D.stay || foeTeam < 0) return;
     if (m >= me.D.delay && strength >= need) {
-      me.state = 'attack'; me.startStrength = strength; me.attackT = S.tick; me.attackUntil = S.tick + (me.D.raid || 0) * HZ;
+      me.state = 'attack'; me.startStrength = fight.reduce((a, u) => a + (u.d.move === 'naval' ? 0 : value(u)), 0); me.attackT = S.tick; me.attackUntil = S.tick + (me.D.raid || 0) * HZ;
       me.waveIds = (me.D.pulse !== undefined ? me.D.pulse : (S.seats || S.P).length > 2) ? fight.map(u => u.id) : null;
       S.ev.push({ t: 'wave', team, n: me.waves + 1 });
     }
@@ -6423,6 +6456,15 @@ const Models = (() => {
       obl.add(flat(new THREE.ConeGeometry(0.155, 0.22, 4, 1)), 0, 2.41, 0, 0xd8a840, { ry: Math.PI / 4 });
       obl.box(0.42, 0.12, 0.42, 0, 0.06, 0, 0xb8a080);
       scenery.obelisk = obl.finish();
+      // A sunken column: a fluted drum broken off short, its capital still on one, half under the water; and a
+      // toppled drum lying on its side.
+      const col = G();
+      col.cyl(0.13, 0.14, 1, 0, 0.5, 0, 0xe2dccc, { seg: 10 });
+      col.box(0.34, 0.08, 0.34, 0, 1.02, 0, 0xd8d0be);
+      scenery.column = col.finish();
+      const drum = G();
+      drum.cyl(0.14, 0.14, 0.4, 0, 0.14, 0, 0xe2dccc, { seg: 10, rx: Math.PI / 2 });
+      scenery.drum = drum.finish();
       const pp = G();
       for (const [x, y, z, ry, rz] of [[0, 0.16, 0, 0.2, 0], [0.12, 0.36, 0.02, 0.9, -0.4], [-0.12, 0.34, -0.04, -0.6, 0.45], [0.02, 0.52, 0.08, 1.6, 0.1], [0.2, 0.18, -0.12, 2.2, -0.2]]) pp.sph(0.13, x, y, z, 0xffffff, { seg: 8, rings: 6, sx: 1, sy: 1.3, sz: 0.32, ry, rz });
       for (const [x, y, z] of [[0.04, 0.69, 0.08], [0.2, 0.49, 0.04], [-0.2, 0.5, -0.04]]) pp.sph(0.025, x, y, z, 0xc23c4e, { seg: 5, rings: 3 });
@@ -10846,6 +10888,23 @@ const World = (() => {
           return { x: m.x, y: Math.min(lo, terrainAt(M, m.x, m.y)) - 0.05, z: m.y, s: k === 'obelisk' ? 1 : m.r, a: -m.a, c: 0xffffff };
         });
         if (list.length) lineCat(instanced(sc[k], plainTint, list), 0.66);
+      }
+      // A sunken city's ruins in the shallows off its shores: columns standing out of the water at all heights, some
+      // leaning, and drums toppled at the water's edge. For the picture alone; boats pass over them.
+      if (mapOf(S).ruins) {
+        const rr = mulberry(M.seed + 77), cols = [], drums = [];
+        for (let tries = 0; tries < 9000 && cols.length < 70; tries++) {
+          const x = 2 + rr() * (W - 4), y = 2 + rr() * (H - 4), z = terrainAt(M, x, y);
+          if (z > M.water - 0.25 || z < M.water - 1.1 || Rules.bridgeAt(S, x, y) >= 0) continue;
+          const n = 1 + (rr() * 4 | 0), a0 = rr() * 6.28;
+          for (let k = 0; k < n; k++) {
+            const px = x + Math.cos(a0) * k * 0.9, py = y + Math.sin(a0) * k * 0.9, pz = terrainAt(M, px, py);
+            if (pz > M.water - 0.1) { drums.push({ x: px, y: Math.max(pz, M.water - 0.05), z: py, s: 1, a: rr() * 6.28, c: 0xffffff }); continue; }
+            cols.push({ x: px, y: pz, z: py, s: 0.8 + rr() * 0.5, sy: (M.water - pz + 0.15 + rr() * 0.7) / 1.0, a: rr() * 6.28, rx: (rr() - 0.5) * 0.25, c: 0xffffff });
+          }
+        }
+        if (cols.length) instanced(sc.column, plainTint, cols);
+        if (drums.length) instanced(sc.drum, plainTint, drums);
       }
       const rc = new THREE.Color(th.rock);
       instanced(sc.rock, plainTint, rocks.map(t => ({ x: t.x, y: terrainAt(M, t.x, t.y) - 0.06, z: t.y, s: t.s * 1.2, a: t.a, c: colA.copy(rc).multiplyScalar(0.62 + rand() * 0.3).getHex() })));
