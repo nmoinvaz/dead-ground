@@ -446,7 +446,7 @@ const Rules = (() => {
   };
   const SIZES = {
     duel: 128, quad: 192, world: 256, gulf: 128, pass: 128, lakes: 192,
-    greenwood: 128, oldforest: 192, twinlakes: 128, ponds: 192, seas: 128, isles: 192, peaks: 128, highlands: 192, rivers3: 128, crater: 192,
+    greenwood: 128, oldforest: 192, twinlakes: 128, ponds: 192, seas: 128, isles: 192, peaks: 128, highlands: 192, rivers3: 128, crater: 192, mesa: 128,
   };
   // The maps a game may be set on, each a layout and the most sides it seats.
   const MAPS = {
@@ -466,7 +466,11 @@ const Rules = (() => {
     highlands: { name: 'Highlands', layout: 'highlands', seats: 4, about: 'Ridges part four corners, crossed by passes, round a plateau each side can climb to.' },
     rivers3: { name: 'Three Rivers', layout: 'rivers3', seats: 2, about: 'Three rivers between two bases, each with its bridges and a ford. Lines to hold.' },
     crater: { name: 'Crater Lake', layout: 'crater', seats: 4, about: 'A lake inside a ring of mountains, entered through four gaps, with a base in each corner outside.' },
+    // A map may fix its theatre, and draw its woods as other plants.
+    mesa: { name: 'Mesa Country', layout: 'mesa', seats: 2, theatre: 'desert', flora: 'cactus', about: 'Open desert of dunes and sheer-sided mesas, with stands of cactus. The mesas wall off the lines of march.' },
   };
+  // The theatre a game on a map is fought in: the map's own, if it fixes one, or the one chosen.
+  const theatreOf = (map, chosen) => (MAPS[map] && MAPS[map].theatre) || chosen;
   // Which of a map's bases each seated slot starts at: spread evenly round the ring. In slot order, or given a
   // random draw rnd, with the ring turned a random step and the sides dealt the places in a random order.
   function spread(seats, n, rnd) {
@@ -489,6 +493,8 @@ const Rules = (() => {
   const BROOKS = { duel: 2, quad: 1, world: 1, gulf: 2, pass: 2, lakes: 1, greenwood: 2, oldforest: 1, twinlakes: 2, seas: 2, peaks: 2, highlands: 1, crater: 1 };
   // The treeline: woods thin out over TREE_BAND of height round TREE_LINE and stand no higher.
   const TREE_LINE = 8.6, TREE_BAND = 1.2;
+  // How thinly a map's woods are sown, a share of the usual; the desert's cactus stands are sparse.
+  const THIN = { mesa: 0.35 };
   const WOODS = { quad: 0.7, pass: 1, lakes: 1, greenwood: 3, oldforest: 1.3, twinlakes: 0.6, ponds: 0.8, peaks: 0.6, highlands: 0.5, crater: 0.5 };
   // A point turned a quarter round the middle k times.
   const turnK = ([x, y], k) => { let dx = x - CX, dy = y - CY; for (let i = 0; i < k; i++) { const t = dx; dx = -dy; dy = t; } return [CX + dx, CY + dy]; };
@@ -638,7 +644,7 @@ const Rules = (() => {
   }
 
   // ---- The second set of maps: woods, lakes, seas, islands, mountains and rivers ----
-  const MORE = new Set(['greenwood', 'oldforest', 'twinlakes', 'ponds', 'seas', 'isles', 'peaks', 'highlands', 'rivers3', 'crater']);
+  const MORE = new Set(['greenwood', 'oldforest', 'twinlakes', 'ponds', 'seas', 'isles', 'peaks', 'highlands', 'rivers3', 'crater', 'mesa']);
   function moreLayout(kind, L, all, fordAt, R) {
     const dry = () => [99, 0];
     // Two sides on the River Duel's frame, mirrored through the middle.
@@ -842,6 +848,65 @@ const Rules = (() => {
       L.fish = []; all(L.fish, polar(10, 22.5));
       const gapIn = polar(52, 45), gapOut = polar(84, 45);
       R(polar(120, 45), gapOut, 1.5); R(gapOut, gapIn, 0.5); R(gapIn, tIn, 1.5); R(tIn, polar(50, 112.5), 2); R(polar(50, 112.5), turnK(tIn, 1), 2);
+    } else if (kind === 'mesa') {
+      // Open desert between two bases: long dune ridges on the flanks and sheer-sided, flat-topped mesas that wall
+      // off the ways across, the roads winding between them.
+      duel(); L.river = dry;
+      L.bases.push(uvp(-54, 0), mirror(uvp(-54, 0)));
+      const tN = uvp(-22, 36), tS = uvp(-24, -38), tC = uvp(-10, 6), hub = uvp(-46, 0);
+      for (const t of [tN, tS, tC]) all(L.towns, t);
+      duelKit(-54, 0);
+      [[-34, 22, 5.5], [-32, -24, 5.5], [-6, -14, 5]].forEach(o => all(L.ore, uvp(o[0], o[1]), [o[2]]));
+      [[-24, 50], [-26, -52], [-16, -4]].forEach(o => all(L.wells, uvp(o[0], o[1])));
+      R(hub, tN, 2.5); R(hub, tS, 2.5); R(hub, tC, 2); R(tN, mirror(tS), 3); R(tC, [CX, CY], 1);
+      // The mesas, each a middle, a radius, a height and a turn of its ragged rim. They are laid in one half, and
+      // the other half is read from its image there, so the map stays exactly the same under its half turn. Each
+      // stands wherever a whole one fits on the map clear of what must stay open, tried in a fixed shuffled order.
+      let mesas = null;
+      const layMesas = () => {
+        const order = mulberry(4242), cand = [];
+        for (let u = -70; u <= -6; u += 4) for (let v = -84; v <= 84; v += 4) cand.push([u, v, order()]);
+        cand.sort((p, q) => p[2] - q[2]);
+        const R0 = [7, 6, 6.5, 5, 5.5, 6, 5], H0 = [5.2, 4.6, 5.6, 4.2, 4.8, 5, 4.4];
+        mesas = [];
+        for (const [u, v] of cand) {
+          if (mesas.length >= R0.length) break;
+          const r = R0[mesas.length], [x, y] = uvp(u, v);
+          if (x < r + 5 || y < r + 5 || x > W - r - 5 || y > H - r - 5) continue;
+          let ok = clearK(x, y) >= 1;
+          for (let a = 0; ok && a < TAU; a += 0.5) ok = clearK(x + mcos(a) * (r + 3), y + msin(a) * (r + 3)) >= 0.95;
+          if (!ok || mesas.some(m => mhypot(m[0] - x, m[1] - y) < m[2] + r + 10) || mhypot(x - W + x, y - H + y) < 2 * r + 10) continue;
+          mesas.push([x, y, r, H0[mesas.length], mesas.length * 1.7]);
+        }
+      };
+      // How far a point lies clear of what must stay open: the bases, towns, ore, wells and the roads' lines.
+      const segD = (p, a, b) => { const dx = b[0] - a[0], dy = b[1] - a[1], t = clamp(((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / (dx * dx + dy * dy || 1), 0, 1); return mhypot(p[0] - a[0] - dx * t, p[1] - a[1] - dy * t); };
+      let segs = null;
+      const clearK = (x, y) => {
+        if (!segs) segs = L.roads.flatMap(r => L.syms.map(T => [T(r.a), T(r.b), r.wig]));
+        let k = 1;
+        for (const o of [...L.bases.map(b => [b[0], b[1], 26]), ...L.towns.map(t => [t[0], t[1], 12]), ...L.ore.map(o => [o[0], o[1], o[2] + 4]), ...L.wells.map(w => [w[0], w[1], 6])]) k = Math.min(k, smooth(o[2], o[2] + 6, mhypot(x - o[0], y - o[1])));
+        for (const [a, b, w] of segs) k = Math.min(k, smooth(w + 4, w + 9, segD([x, y], a, b)));
+        return k;
+      };
+      L.wall = (x0, y0) => {
+        const [u0, v0] = toUV(x0, y0), [x, y] = u0 > 0 || (u0 === 0 && v0 > 0) ? mirror([x0, y0]) : [x0, y0];
+        if (!mesas) layMesas();
+        const k = clearK(x, y);
+        if (k <= 0) return 0;
+        let top = 0;
+        for (const [mx, my, r, hm, t] of mesas) {
+          const dx = x - mx, dy = y - my, d = mhypot(dx, dy);
+          if (d > r * 1.6 + 6) continue;
+          const a = matan2(dy, dx), rr = r * (1 + 0.16 * msin(3 * a + t) + 0.08 * msin(7 * a + t * 2));
+          // A flat top, a sheer face and a skirt of fallen rock below it.
+          top = Math.max(top, hm * (1 - smooth(rr - 0.8, rr + 0.8, d)) + 1.1 * (1 - smooth(rr, rr + 5, d)));
+        }
+        // Dunes in long ridges on the flanks, their crests swinging a little, the same under the map's half turn.
+        const [u, v] = toUV(x, y), f = 0.5 * (0.8 * u + 0.6 * v) + 0.8 * msin(0.11 * (u - v));
+        const c = 0.5 + 0.5 * mcos(f), dune = 1.1 * c * c * smooth(18, 32, Math.abs(v));
+        return Math.max(top, dune) * k;
+      };
     }
     return L;
   }
@@ -1155,7 +1220,7 @@ const Rules = (() => {
       };
       if (!keep(x, y)) continue;
       const w0 = wk ? 0.58 - 0.07 * wk : 0.58;
-      if (wood > w0 && r < (wk ? smooth(w0, w0 + 0.1, wood) * (0.5 + 0.35 * wk) : smooth(0.58, 0.68, wood) * 0.5)) place('tree', 0.7 + rand() * 0.7);
+      if (wood > w0 && r < (wk ? smooth(w0, w0 + 0.1, wood) * (0.5 + 0.35 * wk) : smooth(0.58, 0.68, wood) * 0.5) * (THIN[kind] || 1)) place('tree', 0.7 + rand() * 0.7);
       else if (r < 0.006) place('rock', 0.5 + rand() * 0.9);
     }
 
@@ -4241,7 +4306,7 @@ const Rules = (() => {
     msin, mcos, matan2, mhypot,
     BRIDGE_HP, SPELL, SKIES, WEATHERS, nightAt, skyOf, offGoing, route, weatherAt, sky, dayAt, spellOf, bridgeAt, clsOf, houseHp, hurtBridge, ignite, shielded,
     coverPoints, coverNear, COVER_R, COVER_ARC, FORMS, formOfGroup, STANCES,
-    FB_AT, PIN, canExplore, nameFor, townName, UPGRADES, UP_AGE, upCost, upNote, upsAt, upK, upBlocked, hpOf, rangeOf, capOf, showersAt, showerAt,
+    FB_AT, PIN, canExplore, nameFor, townName, theatreOf, UPGRADES, UP_AGE, upCost, upNote, upsAt, upK, upBlocked, hpOf, rangeOf, capOf, showersAt, showerAt,
   };
 })();
 if (typeof module !== 'undefined') module.exports = Rules;
