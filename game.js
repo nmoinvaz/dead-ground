@@ -56,7 +56,7 @@ const Game = (() => {
   // Sound. Effects are decoded once and played with a little pan and pitch from where they happen. A browser driven
   // by a test harness stays silent, sound and voice alike.
   function makeAudio(data, world) {
-    let ctx = null, master = null, bank = {}, ambient = null, voiceT = 0, rainSrc = null, rainGain = null;
+    let ctx = null, master = null, bank = {}, ambient = null, voiceT = 0, rainSrc = null, rainGain = null, held = false;
     const robot = !!navigator.webdriver;
     const decode = (k, then, fail) => {
       const bin = atob(data[k]), buf = new Uint8Array(bin.length);
@@ -115,7 +115,15 @@ const Game = (() => {
           for (const k in data) if (!lazy(k)) decode(k, b => { bank[k] = b; if (k === 'wind') a.wind(); });
           setInterval(scoreTick, 1000);
         }
-        if (ctx.state === 'suspended') ctx.resume();
+        if (ctx.state === 'suspended' && !held) ctx.resume();
+      },
+      // A paused game is silent: the whole sound stops where it is, music, wind, rain and effects alike, and takes
+      // up again from there on resume. Nothing new is queued meanwhile, nor spoken.
+      hold(on) {
+        if (on === held) return;
+        held = on;
+        if (on) { try { window.speechSynthesis && window.speechSynthesis.cancel(); } catch (e) { /* no voice here */ } }
+        if (ctx) on ? ctx.suspend() : ctx.resume();
       },
       // Fighting heard, which turns the score to battle.
       fight(n = 1) { sc.heat = Math.min(40, sc.heat + n); },
@@ -123,7 +131,7 @@ const Game = (() => {
       score() { return { piece: sc.cur ? sc.cur.p.k : null, heat: Math.round(sc.heat * 10) / 10, t: ctx ? Math.round(ctx.currentTime) : 0, next: Math.round(sc.next), pieces: PIECES.map(p => p.k) }; },
       setMusic(on) { a.musicOn = on; try { localStorage.setItem('dg-music', on ? '' : 'off'); } catch (e) { /* no store */ } scoreTick(); },
       play(name, o = {}) {
-        if (!ctx || !bank[name]) return;
+        if (!ctx || !bank[name] || held) return;
         const now = ctx.currentTime, gap = o.gap ?? 0.05;
         if (now - (last[name] || 0) < gap) return;
         last[name] = now;
@@ -149,7 +157,7 @@ const Game = (() => {
       // never a novelty or an old desktop voice, which sound robotic.
       voice(k, text, old) {
         const sp = window.speechSynthesis, now = performance.now();
-        if (robot || a.muted || !text || now < voiceT) return;
+        if (robot || a.muted || held || !text || now < voiceT) return;
         const clip = `v_${old ? 'h' : 'r'}_${text.toLowerCase().replace(/[^a-z]+/g, '_').replace(/^_|_$/g, '')}`;
         if (ctx && bank[clip]) { a.play(clip, { gain: 0.9, gap: 0 }); voiceT = now + 1800; return; }
         if (!sp) return;
@@ -193,9 +201,9 @@ const Game = (() => {
       // Each slot's name and the map of the game being played.
       names: [], mapKey: 'duel',
       // Online the world never pauses, so the veil only offers the way out.
-      togglePause() { if (!G.playing) return; veilFor(false); if (G.online) { $('veil').hidden = !$('veil').hidden; return; } G.paused = !G.paused; $('veil').hidden = !G.paused; },
+      togglePause() { if (!G.playing) return; veilFor(false); if (G.online) { $('veil').hidden = !$('veil').hidden; return; } G.paused = !G.paused; $('veil').hidden = !G.paused; G.audio.hold(G.paused); },
       // The way out from the bar, one click and a confirmation. A skirmish waits while it is asked.
-      askLeave() { if (!G.playing) return; veilFor(true); if (!G.online) G.paused = true; $('veil').hidden = false; },
+      askLeave() { if (!G.playing) return; veilFor(true); if (!G.online) { G.paused = true; G.audio.hold(true); } $('veil').hidden = false; },
       setSpeed(d) { if (G.online) return; const i = Rules.clamp(SPEEDS.indexOf(G.speed) + d, 0, SPEEDS.length - 1); G.speed = SPEEDS[i]; hud.say(`Game speed ${G.speed}x.`); $('speed').textContent = G.speed + 'x'; },
       // Every order goes to the server online, and straight into the rules otherwise.
       order(S, team, c) { if (G.online) send({ t: 'cmd', c }); else Rules.push(S, team, c); },
@@ -523,6 +531,8 @@ const Game = (() => {
         }
       }
       if (S) world.frame(Math.min(1, acc / Rules.DT), G.paused ? 0 : dt, now / 1000);
+      // The sound is held exactly while a game stands paused, however it came to be paused or let go.
+      audio.hold(G.playing && G.paused);
       hud.frame(dt);
       if (G.S) audio.weather(world.sky);
       if (gap > 0) tune(gap, (performance.now() - t0) / 1000);
