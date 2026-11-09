@@ -2445,6 +2445,27 @@ const Rules = (() => {
     S.wood[c] = 2; S.woodVer++;
     S.burn.push([c, 500 + (S.rand() * 300 | 0)]);
   }
+  // Lightning. In a storm it strikes somewhere on the map every few seconds, and under heavy cloud with no rain, on
+  // the steppe and the salt flats, now and then: dry lightning. Of three places drawn for each strike it takes the
+  // highest, a tree counting a unit higher, and a standing tree it hits catches fire. In a storm's rain the fire soon
+  // dies; dry lightning can burn a wood down. Strikes come of the seed and the time, not the world's dice.
+  const STRIKE_STORM = 0.22, STRIKE_DRY = 0.006;
+  function stepLightning(S) {
+    const w = sky(S), dry = S.theatre !== 'winter' && w.cloud > 0.6 && w.rain < 0.05 && w.snow < 0.05 ? STRIKE_DRY : 0;
+    const p = w.storm > 0.5 ? STRIKE_STORM * w.storm : dry;
+    if (!p) return;
+    const h = spellHash(S.seed + 5003, S.tick);
+    if ((h % 10000) / 10000 >= p) return;
+    let best = null, bz = -1e9;
+    for (let k = 0; k < 3; k++) {
+      const hk = spellHash(S.seed + 6007 + k * 31, S.tick), x = 1 + (hk % 10007) / 10007 * (W - 2), y = 1 + ((hk >>> 14) % 10007) / 10007 * (H - 2);
+      const c = cellOf(x, y), z = terrainAt(S.map, x, y) + ((S.gnd[c] & 8) && !S.wood[c] ? 1 : 0);
+      if (z > bz) { bz = z; best = [x, y, c]; }
+    }
+    const [x, y, c] = best, tree = (S.gnd[c] & 8) && !S.wood[c];
+    if (tree) kindle(S, c);
+    S.ev.push({ t: 'strike', x, y, fire: tree, dry: !!dry });
+  }
   const D8 = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, 1], [1, -1], [-1, -1]];
   function stepFire(S) {
     if (!S.burn.length) return;
@@ -3733,6 +3754,7 @@ const Rules = (() => {
       if (cells.length) { S.woodVer++; setGround(S, cells, cells.map(c => S.gnd[c] & ~8)); }
     }
     if (S.tick % 10 === 5) stepFire(S);
+    if (S.tick % 10 === 7) stepLightning(S);
     S.bridges.forEach((b, i) => {
       if (b.fix && S.tick >= b.fix) raiseBridge(S, i);
       if (b.c4 && S.tick >= b.c4) { const m = S.map.bridges[i]; S.ev.push({ t: 'boom', x: (m.x0 + m.x1) / 2, y: (m.y0 + m.y1) / 2, size: 3 }); dropBridge(S, i); }

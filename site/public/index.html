@@ -595,7 +595,7 @@ body[data-look="ink"] .sheet { box-shadow: 4px 4px 0 var(--ink); }
       <div class="choice"><h2>Picture</h2><div id="s-pic" class="two"><button data-v="sharp">Sharp</button><button data-v="fast">Faster</button></div><p id="s-pic-note"></p></div>
       <div class="choice"><h2>Ore, oil and power</h2><div id="s-gauges" class="two"><button data-v="top">In the top bar</button><button data-v="side">In the sidebar</button></div></div>
       <div class="choice"><h2>Music</h2><div id="s-music" class="two"><button data-v="on">On</button><button data-v="off">Off</button></div></div>
-      <p id="build">Build 0a6bb1c 2026-11-08 18:01</p>
+      <p id="build">Build c6bb61a 2026-11-08 18:10</p>
     </div>
     <div id="banner" hidden></div>
     <button id="update" hidden>A new version of Dead Ground is out. <b>Reload</b></button>
@@ -3149,6 +3149,27 @@ const Rules = (() => {
     S.wood[c] = 2; S.woodVer++;
     S.burn.push([c, 500 + (S.rand() * 300 | 0)]);
   }
+  // Lightning. In a storm it strikes somewhere on the map every few seconds, and under heavy cloud with no rain, on
+  // the steppe and the salt flats, now and then: dry lightning. Of three places drawn for each strike it takes the
+  // highest, a tree counting a unit higher, and a standing tree it hits catches fire. In a storm's rain the fire soon
+  // dies; dry lightning can burn a wood down. Strikes come of the seed and the time, not the world's dice.
+  const STRIKE_STORM = 0.22, STRIKE_DRY = 0.006;
+  function stepLightning(S) {
+    const w = sky(S), dry = S.theatre !== 'winter' && w.cloud > 0.6 && w.rain < 0.05 && w.snow < 0.05 ? STRIKE_DRY : 0;
+    const p = w.storm > 0.5 ? STRIKE_STORM * w.storm : dry;
+    if (!p) return;
+    const h = spellHash(S.seed + 5003, S.tick);
+    if ((h % 10000) / 10000 >= p) return;
+    let best = null, bz = -1e9;
+    for (let k = 0; k < 3; k++) {
+      const hk = spellHash(S.seed + 6007 + k * 31, S.tick), x = 1 + (hk % 10007) / 10007 * (W - 2), y = 1 + ((hk >>> 14) % 10007) / 10007 * (H - 2);
+      const c = cellOf(x, y), z = terrainAt(S.map, x, y) + ((S.gnd[c] & 8) && !S.wood[c] ? 1 : 0);
+      if (z > bz) { bz = z; best = [x, y, c]; }
+    }
+    const [x, y, c] = best, tree = (S.gnd[c] & 8) && !S.wood[c];
+    if (tree) kindle(S, c);
+    S.ev.push({ t: 'strike', x, y, fire: tree, dry: !!dry });
+  }
   const D8 = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, 1], [1, -1], [-1, -1]];
   function stepFire(S) {
     if (!S.burn.length) return;
@@ -4437,6 +4458,7 @@ const Rules = (() => {
       if (cells.length) { S.woodVer++; setGround(S, cells, cells.map(c => S.gnd[c] & ~8)); }
     }
     if (S.tick % 10 === 5) stepFire(S);
+    if (S.tick % 10 === 7) stepLightning(S);
     S.bridges.forEach((b, i) => {
       if (b.fix && S.tick >= b.fix) raiseBridge(S, i);
       if (b.c4 && S.tick >= b.c4) { const m = S.map.bridges[i]; S.ev.push({ t: 'boom', x: (m.x0 + m.x1) / 2, y: (m.y0 + m.y1) / 2, size: 3 }); dropBridge(S, i); }
@@ -11898,6 +11920,8 @@ const World = (() => {
     function event(e) {
       switch (e.t) {
         case 'shot': shotFX(e); startle(e.x, e.y, 4); break;
+        // Lightning leaves a burn where it strikes and startles everything near.
+        case 'strike': scorch(e.x, e.y, 0.7, 0.6); startle(e.x, e.y, 10); break;
         case 'hit': {
           const w = Rules.WEAPONS[e.w];
           startle(e.x, e.y, 8); flatten(e.x, e.y, w.splash || 0.6);
@@ -13526,13 +13550,25 @@ const Hud = (() => {
       }
       og.restore();
     }
-    // Lightning in a storm, a jagged bolt for a moment, with thunder after.
-    let bolt = null, boltT = 4;
+    // Lightning, a jagged bolt for a moment, with thunder after, later the farther off it falls. A strike the rules
+    // make comes down where it lands; in a storm, now and then, one falls far off beyond the view.
+    let bolt = null, boltT = 8;
+    function boltTo(x, y) {
+      const x0 = x + (Math.random() - 0.5) * 120, pts = [[x0, -10]];
+      for (let i = 1; i <= 8; i++) { const k = i / 8; pts.push([x0 + (x - x0) * k + (i < 8 ? (Math.random() - 0.5) * 46 * (1 - k * 0.5) : 0), -10 + (y + 10) * k]); }
+      bolt = { pts, t: 0 };
+    }
+    function strike(e) {
+      const s = game.S, [x, y] = world.project(e.x, Rules.terrainAt(s.map, e.x, e.y), e.y), c = world.cam;
+      const on = x > -20 && y > 0 && x < world.vw + 20 && y < world.vh + 20, far = Math.hypot(e.x - c.x, e.y - c.y);
+      if (on && !bolt) boltTo(x, y);
+      if (far < 90) setTimeout(() => game.audio.play('thunder', { gain: Math.max(0.25, 1 - far / 110), vary: 0.2 }), 150 + far * 28);
+    }
     function drawLightning(dt) {
       const sk = world.sky;
       boltT -= dt;
       if (sk.storm > 0.6 && boltT <= 0 && !bolt) {
-        boltT = 3 + Math.random() * 7;
+        boltT = 10 + Math.random() * 14;
         const x = world.vw * (0.15 + Math.random() * 0.7), y = world.vh * (0.3 + Math.random() * 0.55), x0 = x + (Math.random() - 0.5) * 120, pts = [[x0, -10]];
         for (let i = 1; i <= 8; i++) { const k = i / 8; pts.push([x0 + (x - x0) * k + (i < 8 ? (Math.random() - 0.5) * 46 * (1 - k * 0.5) : 0), -10 + (y + 10) * k]); }
         bolt = { pts, t: 0 };
@@ -14182,7 +14218,7 @@ const Hud = (() => {
     }
 
     return {
-      state, pickTab, say, symbol, enter, leave, select, layoutMini, pop,
+      state, pickTab, say, symbol, enter, leave, select, layoutMini, pop, strike,
       reset() {
         state.sel = []; state.groups = {}; state.mode = null; state.marks = []; state.alerts = []; state.lastAlert = null; state.selKey = null; state.fogC = null; ro = { sup: -1, oil: -1 };
         world.setGhost(null); showBanner(''); $('log').textContent = '';
@@ -16088,6 +16124,11 @@ const Game = (() => {
             drawRoster();
             break;
           case 'weather': if (G.playing) { const v = e.passed ? SKY_PASS[e.was] : SKY_SAY[e.kind]; if (v && !(e.kind === 'cloud' && e.was === 'clear')) { hud.say(v[0], v[1]); if (v[2]) audio.voice('sky', v[2], oldAge()); } } break;
+          // Lightning, and a fire it lights in a wood the player can see.
+          case 'strike':
+            if (G.playing) hud.strike(e);
+            if (G.playing && e.fire && G.team >= 0 && S.P[G.team].seen[Rules.cellOf(e.x, e.y)] && S.tick - (G.lastWildfire ?? -1e9) > 60 * Rules.HZ) { G.lastWildfire = S.tick; hud.say(e.dry ? 'Dry lightning has set a wood alight.' : 'Lightning has struck a tree.', 'bad'); }
+            break;
           case 'flood': if (G.playing) hud.say(e.on ? 'The rivers are up. The fords are closed.' : 'The rivers are down. The fords are open again.', e.on ? 'bad' : 'good'); break;
           case 'bridge': if (G.playing && G.team >= 0 && G.S.P[G.team].seen[Rules.cellOf(e.x, e.y)]) { hud.say(e.down ? 'A bridge is down.' : 'A bridge is open again.', e.down ? 'bad' : 'good'); if (e.down) audio.voice('bridge', 'Bridge destroyed', oldAge()); } break;
           case 'wave': if (G.playing && e.team !== G.team) hud.say('Radar shows the enemy massing to attack.', 'bad'); break;
