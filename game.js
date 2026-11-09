@@ -547,9 +547,9 @@ const Game = (() => {
       store.set('dg-paper', scheme);
     }));
     $('s-pic').querySelectorAll('button').forEach(b => b.addEventListener('click', () => { setPicture(b.dataset.v); audio.ui('click'); }));
-    // Ore, oil and power stand in the sidebar or in the top bar, as the player chooses. An upright phone or a short
-    // window has no room for them in its sidebar, so there they keep to the top bar.
-    let gauges = store.get('dg-gauges', 'side');
+    // Ore, oil and power stand in the top bar or in the sidebar, as the player chooses, the top bar unless told. An
+    // upright phone or a short window has no room for them in its sidebar, so there they keep to the top bar.
+    let gauges = store.get('dg-gauges', 'top');
     const cramped = matchMedia('(max-aspect-ratio: 1/1), (max-height: 520px)');
     function placeGauges() {
       const side = gauges === 'side' && !cramped.matches, list = [...document.querySelectorAll('.gauge')];
