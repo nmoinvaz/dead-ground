@@ -504,15 +504,15 @@ body[data-look="ink"] #menu, body[data-look="ink"] #watch, body[data-look="ink"]
 #maps button small { font: 12px var(--mono); opacity: .75; white-space: nowrap; }
 .preview { margin-top: 8px; }
 #preview { width: 100%; aspect-ratio: 1; display: block; border: 1.5px solid var(--ink); background: var(--paper-hi); }
-#map-about, #age-about, #weather-about, #res-about { margin: 6px 0 0; font: 500 15px/1.25 var(--ui); color: var(--ink-dim); text-wrap: pretty; }
+#map-about, #age-about, #weather-about, #res-about, #win-about { margin: 6px 0 0; font: 500 15px/1.25 var(--ui); color: var(--ink-dim); text-wrap: pretty; }
 #age-about { min-height: 2.5em; }
 /* The game's own choices stand under the players: the theatre and the age it begins in. */
 .rules { margin-top: 14px; display: grid; gap: 4px; }
 .rules h3 { margin: 8px 0 2px; }
 #m-age { grid-template-columns: repeat(6, 1fr); }
 #m-weather { grid-template-columns: repeat(4, 1fr); }
-#m-res { grid-template-columns: repeat(2, 1fr); }
-body[data-look="ink"] #age-about, body[data-look="ink"] #map-about, body[data-look="ink"] #weather-about, body[data-look="ink"] #res-about { font-family: var(--label); font-style: italic; font-weight: 400; }
+#m-res, #m-win { grid-template-columns: repeat(2, 1fr); }
+body[data-look="ink"] #age-about, body[data-look="ink"] #map-about, body[data-look="ink"] #weather-about, body[data-look="ink"] #res-about, body[data-look="ink"] #win-about { font-family: var(--label); font-style: italic; font-weight: 400; }
 .seedrow { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin: 8px 0 14px; font: 500 16px var(--ui); }
 .seedrow b { font: 15px var(--mono); }
 #slots { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
@@ -597,7 +597,7 @@ body[data-look="ink"] .sheet { box-shadow: 4px 4px 0 var(--ink); }
       <div class="choice"><h2>Picture</h2><div id="s-pic" class="two"><button data-v="sharp">Sharp</button><button data-v="fast">Faster</button></div><p id="s-pic-note"></p></div>
       <div class="choice"><h2>Ore, oil and power</h2><div id="s-gauges" class="two"><button data-v="top">In the top bar</button><button data-v="side">In the sidebar</button></div></div>
       <div class="choice"><h2>Music</h2><div id="s-music" class="two"><button data-v="on">On</button><button data-v="off">Off</button></div></div>
-      <p id="build">Build def11dd 2026-11-08 22:29</p>
+      <p id="build">Build f96d5e5 2026-11-08 22:43</p>
     </div>
     <div id="banner" hidden></div>
     <button id="update" hidden>A new version of Dead Ground is out. <b>Reload</b></button>
@@ -667,6 +667,9 @@ body[data-look="ink"] .sheet { box-shadow: 4px 4px 0 var(--ink); }
             <h3>Resources</h3>
             <div id="m-res" class="pick two"><button data-v="std">Standard</button><button data-v="free">Unlimited</button></div>
             <p id="res-about"></p>
+            <h3>Victory</h3>
+            <div id="m-win" class="pick two"><button data-v="conquest">Conquest</button><button data-v="regicide">Regicide</button></div>
+            <p id="win-about"></p>
           </div>
           <div id="chat" hidden><div id="chat-log"></div><input id="chat-in" maxlength="200" placeholder="Say something, then Enter" autocomplete="off" spellcheck="false"></div>
         </section>
@@ -823,6 +826,7 @@ const Rules = (() => {
     engineer: { name: 'Engineer', cat: 'inf', sym: 'eng', cost: 300, time: 6, hp: 50, armor: 'inf', speed: 2, sight: 8, men: 1, r: 0.4, weapons: [], move: 'foot', need: 'barracks', tech: 1, engineer: true, note: 'Takes a damaged enemy building, or mends your own.' },
     sniper: { name: 'Sniper', cat: 'inf', sym: 'snp', cost: 450, time: 9, hp: 70, armor: 'inf', speed: 2.2, sight: 15, men: 1, r: 0.4, weapons: ['sniper'], move: 'foot', need: 'barracks', tech: 2, note: 'Very long range. Kills infantry, little else.' },
     hero: { name: 'Lightning', cat: 'inf', sym: 'hero', cost: 1200, time: 15, hp: 260, armor: 'inf', speed: 2.8, sight: 12, men: 1, r: 0.45, weapons: ['hero'], move: 'foot', need: 'barracks', tech: 2, hero: true, limit: 1, note: 'Your commando. Shreds infantry and blows up any building with C4.' },
+    general: { name: 'General', cat: 'inf', sym: 'hero', cost: 600, time: 10, hp: 240, armor: 'inf', speed: 2.2, sight: 12, men: 1, r: 0.45, weapons: ['rifle'], move: 'foot', need: 'barracks', tech: 1, general: true, limit: 1, note: 'Men and machines near him fire faster and hold their nerve. In Regicide, lose him and you lose the game.' },
     truck: { name: 'Ore Truck', cat: 'veh', sym: 'sup', cost: 700, time: 10, hp: 620, armor: 'heavy', speed: 2.6, sight: 7, r: 0.95, weapons: [], move: 'wheel', need: 'factory', tech: 1, cargo: 500, note: 'Mines ore and hauls it to a refinery.' },
     humvee: { name: 'Scout Car', cat: 'veh', sym: 'rec', cost: 260, time: 6, hp: 180, armor: 'light', speed: 5.2, sight: 14, r: 0.7, weapons: ['hmg'], move: 'wheel', need: 'factory', tech: 1, turret: 5, note: 'Fast, sees far, and guns down infantry.' },
     ifv: { name: 'Stryker IFV', cat: 'veh', sym: 'ifv', cost: 420, time: 9, hp: 320, armor: 'light', speed: 4, sight: 11, r: 0.8, weapons: ['auto'], move: 'wheel', need: 'factory', tech: 1, turret: 4, note: 'Autocannon that fights anything, a little.' },
@@ -915,6 +919,7 @@ const Rules = (() => {
     snp: [null, 'longbow', 'jaeger', 'marksman', 'sniper', 'ghost'],
     eng: ['engineer'],
     hero: [null, 'hero'],
+    gen: ['general'],
     truck: ['oxcart', 'wagon', null, 'lorry', 'truck', 'hauler'],
     trade: ['tradecart', 'caravan', 'tradewagon', 'freightlorry', 'freighter', 'hovfreight'],
     ship: ['galley', 'cog', 'frigate', 'ironclad', 'destroyer', 'corvette'],
@@ -931,7 +936,7 @@ const Rules = (() => {
     jet: [null, null, null, 'biplane', 'jet', 'stealth'],
   };
   // The sidebar's lines, by the building that trains them.
-  const LINE_ORDER = { sea: ['fish', 'ship'], inf: ['inf', 'at', 'eng', 'snp', 'hero'], veh: ['truck', 'trade', 'rec', 'mount', 'ifv', 'aa', 'sup', 'siege', 'heavy'], air: ['fpv', 'heli', 'jet'] };
+  const LINE_ORDER = { sea: ['fish', 'ship'], inf: ['inf', 'at', 'eng', 'snp', 'hero', 'gen'], veh: ['truck', 'trade', 'rec', 'mount', 'ifv', 'aa', 'sup', 'siege', 'heavy'], air: ['fpv', 'heli', 'jet'] };
   function formOf(line, age) {
     const L = LINES[line];
     if (!L) return null;
@@ -998,6 +1003,37 @@ const Rules = (() => {
   const nameOf = (kind, age) => { const d = BUILDINGS[kind] || UNITS[kind] || POWERS[kind]; return (d && d.names && d.names[Math.max(1, age) - 1]) || (d ? d.name : kind); };
   // A building with arms but no weapons of its own, as the headquarters, fires only in the ages that arm it.
   const armOf = (S, e) => (e.d.arms && e.d.arms[S.P[e.team].tech - 1]) || (e.d.weapons ? e.d.weapons[0] : null);
+
+  // Place names by theatre, for the towns and for the rivers, hills and woods the map letters. A map's names come of
+  // its seed, so every player's copy reads the same.
+  const NAMES = {
+    steppe: {
+      town: ['Ashford', 'Millbrook', 'Thornbury', 'Oakham', 'Hollins', 'Brackenfield', 'Wexley', 'Stanmore', 'Fairholt', 'Larkhill', 'Edgecombe', 'Redwater', 'Coldridge', 'Highcroft', 'Marlow', 'Kestrel Down'],
+      river: ['River Wend', 'River Arle', 'The Sallow', 'River Coln', 'River Tamsey', 'The Brede', 'River Ouse', 'River Leam'],
+      hill: ['Beacon Hill', 'Grey Knoll', 'Crow Height', 'Windy Ridge', 'Hob Tor', 'Gallows Hill', 'Long Edge', 'Raven Crag'],
+      wood: ['Ashwood', 'Haverholt', 'Blackthorn Wood', 'Hazel Copse', 'Fenwick Wood', 'Oak Hanger', 'Bramble Wood', 'Kings Holt'],
+    },
+    desert: {
+      town: ['Qasr Amir', 'Bir Hasan', 'Wadi Salma', 'Ain Rafa', 'Tel Zahir', 'Ras Nuba', 'Dar Kufra', 'Sidi Barra', 'Umm Qasa', 'Hamra', 'Zawiya', 'Bir Tawil', 'Khor Anza', 'Ain Sefra', 'Tel Gharib', 'Nahla'],
+      river: ['Nahr al-Abyad', 'Nahr Sahl', 'Wadi Kebir', 'Nahr Zarqa', 'Wadi Rimal', 'Nahr Hamra', 'Wadi Tamar', 'Nahr Dhahab'],
+      hill: ['Jebel Sur', 'Jebel Ahmar', 'Gara Hawa', 'Jebel Nasr', 'Qarat Silm', 'Jebel Tarik', 'Gara Kabira', 'Jebel Malh'],
+      wood: ['Ghaba Nakhil', 'Bustan Rafa', 'The Acacia Groves', 'Ghaba Sidr', 'Bustan Amir', 'The Thorn Groves', 'Ghaba Talh', 'Bustan Zahir'],
+    },
+    winter: {
+      town: ['Kaltbrunn', 'Weissach', 'Hochfeld', 'Grauberg', 'Eisental', 'Tannwald', 'Schneeberg', 'Felsheim', 'Kaltenbach', 'Wolfsegg', 'Lindenhof', 'Steinach', 'Hornau', 'Gletsch', 'Firnbach', 'Rabenstein'],
+      river: ['Eisbach', 'Weisse Ach', 'Grauer Inn', 'Kaltwasser', 'Firnach', 'Schmelzbach', 'Felsach', 'Wolfach'],
+      hill: ['Rotkopf', 'Graues Horn', 'Adlerspitze', 'Kahler Kogel', 'Wetterstein', 'Eiskopf', 'Hohe Wand', 'Rabenhorn'],
+      wood: ['Tannwald', 'Schwarzforst', 'Fichtenhain', 'Wolfsforst', 'Lärchenwald', 'Hochforst', 'Bärenwald', 'Kiefernhain'],
+    },
+  };
+  // The n-th name of a kind for this game: the theatre's list dealt in an order its seed shuffles, with a number
+  // after if a map has more than the list.
+  function nameFor(S, kind, n) {
+    const L = (NAMES[S.theatre] || NAMES.steppe)[kind], order = L.map((_, i) => i), r = mulberry((S.seed * 7919 + kind.length * 104729) >>> 0);
+    for (let i = order.length - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1)); [order[i], order[j]] = [order[j], order[i]]; }
+    return L[order[n % L.length]] + (n >= L.length ? ' ' + (Math.floor(n / L.length) + 1) : '');
+  }
+  const townName = (S, i) => nameFor(S, 'town', i);
 
   // Support calls, made from a radar station.
   const POWERS = {
@@ -2233,6 +2269,8 @@ const Rules = (() => {
       theatre: SKIES[o.theatre] ? o.theatre : 'any', weather: WEATHERS[o.weather] ? o.weather : 'random',
       // Unlimited: no side ever runs short of ore, oil or power, so only build times and the fighting count.
       free: !!o.free,
+      // Regicide: each side has a general from the start, and a side whose general falls is out.
+      regicide: !!o.regicide,
       // The ground as it now is, which woods, bridges and fords change, and what has happened to the trees,
       // bridges and houses.
       gnd: new Uint8Array(M.ground), gndVer: 0, wood: new Uint8Array(N), woodVer: 0, burn: [], crush: [],
@@ -2342,6 +2380,7 @@ const Rules = (() => {
     addBuilding(S, 'hq', team, Math.round(b[0] - 2.5), Math.round(b[1] - 2.5), true);
     const age = S.P[team].tech, inf = formOf('inf', age);
     spawn(S, inf, team, ...at(7.0711, -2.8284)); spawn(S, inf, team, ...at(7.0711, 2.8284)); spawn(S, formOf('rec', age), team, ...at(9.1924, -0.7071));
+    if (S.regicide) spawn(S, 'general', team, ...at(4.5, 0));
   }
   // Everything a slot has goes, and it starts again from nothing at its place. Quietly, with no wrecks or
   // craters, when the slot is cleared for someone new.
@@ -2393,7 +2432,7 @@ const Rules = (() => {
   const plain = e => { const o = {}; for (const k in e) if (k !== 'd' && k[0] !== '_') o[k] = e[k]; return o; };
   function save(S) {
     return {
-      v: 1, seed: S.seed, layout: S.layout, seats: S.seats, pos: S.pos, age0: S.age0, theatre: S.theatre, weather: S.weather, free: S.free, tick: S.tick, rs: S.rs, next: S.next, occVer: S.occVer, oreVer: S.oreVer, terrVer: S.terrVer, dirty: !!S.dirty, over: S.over,
+      v: 1, seed: S.seed, layout: S.layout, seats: S.seats, pos: S.pos, age0: S.age0, theatre: S.theatre, weather: S.weather, free: S.free, regicide: S.regicide, tick: S.tick, rs: S.rs, next: S.next, occVer: S.occVer, oreVer: S.oreVer, terrVer: S.terrVer, dirty: !!S.dirty, over: S.over,
       ents: S.ents.map(plain), towns: S.towns, shots: S.shots, sweeps: S.sweeps, flights: S.flights, occLog: S.occLog,
       fields: [...S.fields].map(([k, f]) => [k, f.ver, f.used, f.made, f.reach, f.wq]),
       ore: b64.en(new Uint8Array(S.ore.buffer.slice(0))),
@@ -2405,7 +2444,7 @@ const Rules = (() => {
   }
   function diffs(a, base) { const o = []; for (let c = 0; c < a.length; c++) if (a[c] !== (base ? base[c] : 0)) o.push(c, a[c]); return o; }
   function load(o) {
-    const S = newGame({ seed: o.seed, layout: o.layout, seats: o.seats, pos: o.pos, age: o.age0 || 5, theatre: o.theatre, weather: o.weather, free: o.free, empty: true });
+    const S = newGame({ seed: o.seed, layout: o.layout, seats: o.seats, pos: o.pos, age: o.age0 || 5, theatre: o.theatre, weather: o.weather, free: o.free, regicide: o.regicide, empty: true });
     if (S.seed !== o.seed) throw new Error('map seed mismatch');
     Object.assign(S, { tick: o.tick, rs: o.rs, next: o.next, occVer: o.occVer, oreVer: o.oreVer, terrVer: o.terrVer, dirty: o.dirty, over: o.over, shots: o.shots, sweeps: o.sweeps, flights: o.flights, occLog: o.occLog || [] });
     S.towns = o.towns.map(t => Object.assign({}, t));
@@ -3259,6 +3298,13 @@ const Rules = (() => {
     if (u.brk && S.tick >= u.brk && (u.sup || 0) < PIN) { u.brk = 0; if (u.ord && u.ord.brk) u.ord = null; u.v = 0; S.ev.push({ t: 'rallied', team: u.team, id: u.id, x: u.x, y: u.y }); }
   }
   const pinned = u => (u.sup || 0) >= PIN;
+  // A general steadies the men near him, above, and quickens the fire of every unit of his side within GEN_R.
+  const GEN_R = 9, GEN_FIRE = 0.85;
+  function nearGeneral(S, u) {
+    let f = false;
+    near(S, u.x, u.y, GEN_R, o => { if (!f && o !== u && o.team === u.team && o.hp > 0 && o.d.general && mhypot(o.x - u.x, o.y - u.y) < GEN_R) f = true; });
+    return f;
+  }
   const ANS_R = 10, ANS_LEASH = 18;
   function answer(S, t, by) {
     if (S.tick - (t.ansT ?? -1e9) < HZ) return;
@@ -3478,7 +3524,7 @@ const Rules = (() => {
       if (u.cd[i] > 0) continue;
       if (u.d.turret && Math.abs(angleTo(u.ta, matan2(t.y - u.y, t.x - u.x))) > 0.12) continue;
       if (!clearShot(S, u, wn, t)) { readyAny = false; continue; }
-      u.cd[i] = w.cd * (u.b && S.P[u.team].low ? 2 : 1) * (pinned(u) ? 1.6 : 1);
+      u.cd[i] = w.cd * (u.b && S.P[u.team].low ? 2 : 1) * (pinned(u) ? 1.6 : 1) * (!u.b && nearGeneral(S, u) ? GEN_FIRE : 1);
       if (w.salvo) { u.salvo = w.salvo; u.salvoT = 0; u.salvoW = wn; u.salvoBr = -1; }
       else fire(S, u, wn, t, i);
     }
@@ -4837,11 +4883,13 @@ const Rules = (() => {
     S.sweeps = S.sweeps.filter(s => s.until > S.tick);
     // A side whose last building falls is out, and what it had left goes with it. The last side standing wins.
     if (!S.over && S.tick % HZ === 0) {
-      for (const P of S.P) if (P.alive && !S.ents.some(e => e.b && e.team === P.team && e.hp > 0)) {
+      for (const P of S.P) if (P.alive) {
+        const noBase = !S.ents.some(e => e.b && e.team === P.team && e.hp > 0), noGen = S.regicide && !S.ents.some(e => !e.b && e.team === P.team && e.hp > 0 && e.d.general);
+        if (!noBase && !noGen) continue;
         P.alive = false;
         razeSlot(S, P.team);
         territory(S); recount(S);
-        S.ev.push({ t: 'fallen', team: P.team });
+        S.ev.push({ t: 'fallen', team: P.team, regicide: noGen && !noBase });
         mark(S, P.team, 'out');
       }
       const left = S.P.filter(P => P.alive);
@@ -4902,7 +4950,7 @@ const Rules = (() => {
     msin, mcos, matan2, mhypot,
     BRIDGE_HP, SPELL, SKIES, WEATHERS, nightAt, skyOf, offGoing, route, weatherAt, sky, dayAt, spellOf, bridgeAt, clsOf, houseHp, hurtBridge, ignite, shielded,
     coverPoints, coverNear, COVER_R, COVER_ARC, FORMS, formOfGroup, STANCES,
-    FB_AT, PIN, canExplore, UPGRADES, UP_AGE, upCost, upNote, upsAt, upK, upBlocked, hpOf, rangeOf, capOf, showersAt, showerAt,
+    FB_AT, PIN, canExplore, nameFor, townName, UPGRADES, UP_AGE, upCost, upNote, upsAt, upK, upBlocked, hpOf, rangeOf, capOf, showersAt, showerAt,
   };
 })();
 if (typeof module !== 'undefined') module.exports = Rules;
@@ -5312,7 +5360,7 @@ const AI = (() => {
     bridges(S, me, P);
     powers(S, me, P);
 
-    let army = S.ents.filter(e => e.team === team && !e.b && !e.d.cargo && !e.d.repair && !e.d.engineer && !e.d.trade && !e.d.fish && e.drop <= 0);
+    let army = S.ents.filter(e => e.team === team && !e.b && !e.d.cargo && !e.d.repair && !e.d.engineer && !e.d.trade && !e.d.fish && !e.d.general && e.drop <= 0);
     army = garrison(S, me, army);
     army = towns(S, me, army);
     const fight = army.filter(u => !(u.ord && u.ord.t === 'capture') && u.d.move !== 'jet');
@@ -6572,6 +6620,8 @@ const Models = (() => {
       pike: soldier({ cloth: A.tunic2, vest: A.mail, vestT: 0.3, hat: 'kettle', arms: 'pike' }),
       musket: soldier({ cloth: A.coatR, vest: A.white, vestT: 0, hat: 'tricorne', arms: 'musket', legs: A.white }),
       rifleman: soldier({ cloth: A.khaki, vest: A.field, hat: 'brodie', arms: 'musket', legs: A.khaki, pack: A.field }),
+      // A general: a dark coat with a red sash and a tricorne, his sword drawn.
+      general: soldier({ cloth: 0x2a2e3e, vest: 0x2a2e3e, vestT: 0, hat: 'tricorne', arms: 'sword', legs: 0xd8d0be, sash: 0xb02a20 }),
       exo: soldier({ cloth: A.exo, vest: A.exoDk, vestT: 0.5, hat: 'visor', arms: 'pulse', legs: A.exoDk, pack: A.exoDk }),
       archer: soldier({ cloth: A.linen, vest: A.tunic2, vestT: 0, hat: 'crest', crest: A.tunic2, arms: 'bow' }),
       crossbow: soldier({ cloth: A.tunic, vest: A.mail, vestT: 0.3, hat: 'kettle', arms: 'xbow' }),
@@ -10009,7 +10059,7 @@ const World = (() => {
     let S = null, M = null, theme = null, viewTeam = 0, sets = {}, terrainMesh = null, waterMesh = null, statics = [], baseImage = null;
     const rs = new Map();
     let wrecks = [], corpses = [], bleeds = [], flyers = [], planes = [], falls = [], marks = null, marksTex = null, marksDirty = false, marksLast = 0, treadFade = 0;
-    let fogTex = null, fogData = null, fogR = null, fogG = null, terrTex = null, terrData = null, terrSeen = -1, hTex = null, flowTex = null, brookTex = null, beachTex = null, beachMap = null;
+    let fogTex = null, fogData = null, fogR = null, fogG = null, terrTex = null, terrData = null, terrSeen = -1, hTex = null, flowTex = null, brookTex = null, beachTex = null, beachMap = null, riverLines = [], names = null;
     // A number as a half float, for heights within a few units of the ground.
     const halfBuf = new Float32Array(1), halfBits = new Uint32Array(halfBuf.buffer);
     function toHalf(v) {
@@ -10276,6 +10326,7 @@ const World = (() => {
       const N8 = [[1, 0, 10], [-1, 0, 10], [0, 1, 10], [0, -1, 10], [1, 1, 14], [-1, 1, 14], [1, -1, 14], [-1, -1, 14]];
       let ci = 0;
       const still = [];
+      riverLines = [];
       for (let c0 = 0; c0 < n; c0++) {
         if (!wet[c0] || comp[c0] >= 0) continue;
         const cells = [c0];
@@ -10305,6 +10356,12 @@ const World = (() => {
           const x = c % W, y = c / W | 0;
           for (const [dx, dy, k] of N8) { const X = x + dx, Y = y + dy, o = Y * W + X; if (X >= 0 && Y >= 0 && X < W && Y < H && comp[o] === comp[c]) at(o, g + k); }
         }
+        // The river's middle line, for its name: in each three cells down its course, the point furthest from its banks.
+        const bins = new Map();
+        for (const [c, g] of G) { const b = Math.floor(g / 30), cur = bins.get(b); if (cur === undefined || D[c] > D[cur]) bins.set(b, c); }
+        let line = [...bins.keys()].sort((a, b) => a - b).map(k => { const c = bins.get(k); return [c % W + 0.5, (c / W | 0) + 0.5]; });
+        for (let k = 0; k < 3; k++) line = line.map((p, i) => i === 0 || i === line.length - 1 ? p : [(line[i - 1][0] + p[0] * 2 + line[i + 1][0]) / 4, (line[i - 1][1] + p[1] * 2 + line[i + 1][1]) / 4]);
+        if (line.length > 6) riverLines.push(line);
         for (const [c, g] of G) { const a = g / 10 / FLOW_P * Math.PI * 2; data[c * 4] = Math.round(127.5 + 127.5 * Math.cos(a)); data[c * 4 + 1] = Math.round(127.5 + 127.5 * Math.sin(a)); data[c * 4 + 2] = 255; data[c * 4 + 3] = Math.round(Math.min(Ds[c], FLOW_BANK) / FLOW_BANK * 255); }
       }
       if (flowTex) flowTex.dispose();
@@ -10335,6 +10392,39 @@ const World = (() => {
       beachTex.magFilter = beachTex.minFilter = THREE.LinearFilter; beachTex.needsUpdate = true;
       SH.tBeach.value = beachTex;
       beachMap = beach;
+    }
+
+    // What the map letters: the rivers by their courses, the highest hills, and the largest woods, each named from
+    // the theatre's list. Bases are left unnamed.
+    function buildNames() {
+      const hills = [], woods = [], far = (x, y, list, d) => list.every(p => Math.hypot(p.x - x, p.y - y) > d) && S.bases.every(b => Math.hypot(b[0] - x, b[1] - y) > 18);
+      // Hills: tops higher than all about them within eight cells, the highest first.
+      const tops = [];
+      for (let y = 6; y < H - 6; y += 3) for (let x = 6; x < W - 6; x += 3) {
+        const z = terrainAt(M, x, y);
+        if (z < 3.2) continue;
+        let top = true;
+        for (let j = -8; j <= 8 && top; j += 2) for (let i = -8; i <= 8; i += 2) if ((i || j) && terrainAt(M, x + i, y + j) > z) { top = false; break; }
+        if (top) tops.push({ x, y, z });
+      }
+      tops.sort((a, b) => b.z - a.z);
+      for (const t of tops) if (hills.length < Math.round(5 * W / 128) && far(t.x, t.y, hills, 24)) hills.push(t);
+      // Woods: the largest stands, by their cells joined side to side.
+      const seen = new Uint8Array(W * H);
+      const stands = [];
+      for (let c0 = 0; c0 < W * H; c0++) {
+        if (!(M.ground[c0] & 8) || seen[c0]) continue;
+        const q = [c0]; seen[c0] = 1; let sx = 0, sy = 0;
+        for (let i = 0; i < q.length; i++) { const c = q[i], x = c % W, y = c / W | 0; sx += x; sy += y; for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1], [2, 0], [0, 2], [-2, 0], [0, -2]]) { const X = x + dx, Y = y + dy, o = Y * W + X; if (X >= 0 && Y >= 0 && X < W && Y < H && !seen[o] && (M.ground[o] & 8)) { seen[o] = 1; q.push(o); } } }
+        if (q.length >= 60) stands.push({ x: sx / q.length + 0.5, y: sy / q.length + 0.5, n: q.length });
+      }
+      stands.sort((a, b) => b.n - a.n);
+      for (const s of stands) if (woods.length < Math.round(5 * W / 128) && far(s.x, s.y, woods.concat(hills), 18)) woods.push(s);
+      const rivers = riverLines.map(pts => ({ pts }));
+      rivers.forEach((r, i) => { r.name = Rules.nameFor(S, 'river', i); });
+      hills.forEach((h, i) => { h.name = Rules.nameFor(S, 'hill', i); });
+      woods.forEach((w, i) => { w.name = Rules.nameFor(S, 'wood', i); });
+      names = { rivers, hills, woods };
     }
 
     function buildScenery() {
@@ -11593,7 +11683,7 @@ const World = (() => {
       marks.ctx.globalCompositeOperation = 'source-over';
       marks.ctx.fillStyle = '#000'; marks.ctx.fillRect(0, 0, mk, mk); marksTex.needsUpdate = true;
 
-      buildTerrain(); buildWater(); buildFlow(); buildScenery(); buildSets(); buildLife(); applyLight();
+      buildTerrain(); buildWater(); buildFlow(); buildNames(); buildScenery(); buildSets(); buildLife(); applyLight();
       // The land's heights as a texture, for passes that draw the ground's form.
       if (hTex) hTex.dispose();
       const hd = new Uint16Array(M.h.length);
@@ -12937,6 +13027,7 @@ const World = (() => {
       watchAll() { viewTeam = -1; SH.uFogOn.value = 0; },
       // Where one herd of each kind stands, and a raft of ducks, for checks.
       lifeAll() { return life ? life.herds.map(h => h.kind) : []; },
+      get names() { return names; },
       // The parks, and a market day called now at one of them, for checks.
       parksDebug() { return parks.map(p => ({ x: p.x, y: p.y, r: p.r, town: p.town })); },
       fairNow(i) { const p = parks[i]; if (!p || !life) return; life.fairs = life.fairs.filter(q => q.town !== p.town); const t0 = life.fairs.length; life.fairs.push({ town: p.town, x: p.x, y: p.y, t: 120, stalls: Array.from({ length: 5 }, (_, k) => ({ a: p.a + k / 5 * 6.28 + 0.3, col: STALL_C[k] })) }); const t = M.towns[p.town]; for (let k = 0; k < 24; k++) life.folk.push({ town: p.town, visitor: 120, x: t.x + (Math.random() - 0.5) * 8, y: t.y + (Math.random() - 0.5) * 8, tx: p.x, ty: p.y, v: 0, wait: Math.random() * 3, hide: 0, col: [0xf4f0e4, 0xc84a3a, 0x5a7ab0, 0xe0c060, 0x7a9a5a, 0xd8a0a0][k % 6], a: 0, ph: 0 }); for (const f of life.folk) if (f.town === p.town) { f.tx = p.x + (Math.random() - 0.5) * 4; f.ty = p.y + (Math.random() - 0.5) * 4; f.wait = 0; } return t0; },
@@ -13891,6 +13982,62 @@ const Hud = (() => {
     const smoothstepJ = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
     // A small shell's burst as a pen draws one: a ragged star of flame for a moment, then a little scalloped cloud
     // that swells, rises and thins. Ground bursts are a pale brown smoke, air bursts the black of flak.
+    // Text along a line on the screen, each letter turned to the line, read left to right, centred on its middle.
+    function textAlong(text, pts, size, color, spacing) {
+      if (pts.length < 2) return;
+      if (pts[pts.length - 1][0] < pts[0][0]) pts = pts.slice().reverse();
+      const L = [0];
+      for (let i = 1; i < pts.length; i++) L.push(L[i - 1] + Math.hypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]));
+      const ws = [...text].map(ch => og.measureText(ch).width + spacing), total = ws.reduce((a, b) => a + b, 0) - spacing;
+      if (total > L[L.length - 1] * 0.9) return;
+      let s = (L[L.length - 1] - total) / 2;
+      const at = d => { let k = 1; while (k < L.length - 1 && L[k] < d) k++; const t = (d - L[k - 1]) / Math.max(1e-6, L[k] - L[k - 1]), a = pts[k - 1], b = pts[k]; return [a[0] + (b[0] - a[0]) * t, a[1] + (b[1] - a[1]) * t, Math.atan2(b[1] - a[1], b[0] - a[0])]; };
+      [...text].forEach((ch, i) => {
+        const [x, y, a] = at(s + ws[i] / 2);
+        og.save(); og.translate(x, y); og.rotate(a);
+        og.strokeText(ch, 0, 0); og.fillStyle = color; og.fillText(ch, 0, 0);
+        og.restore();
+        s += ws[i];
+      });
+    }
+    function drawNames(s, P) {
+      const dist = world.cam.dist, k = smoothstepJS(38, 70, dist);
+      if (k <= 0) return;
+      const N = world.names, seen = (x, y) => !P || P.seen[Rules.cellOf(x, y)], dk = blastDark || document.body.dataset.scheme === 'dark';
+      const fs = Math.round(12 + smoothstepJS(70, 200, dist) * 5);
+      og.save(); og.globalAlpha = k; og.setLineDash([]); og.textAlign = 'center'; og.textBaseline = 'middle'; og.lineJoin = 'round';
+      og.strokeStyle = dk ? 'rgba(35,32,27,0.85)' : 'rgba(250,244,228,0.9)'; og.lineWidth = 3;
+      og.font = `italic 500 ${fs + 1}px ${labelFont()}`;
+      for (const r of N.rivers) {
+        if (!r.pts.some(p => seen(p[0], p[1]))) continue;
+        // Lettered along the longest stretch of it on the screen, twice where that stretch is long.
+        const sp = r.pts.map(p => world.project(p[0], s.map.water, p[1])), on = q => q[0] > 30 && q[1] > 30 && q[0] < world.vw - 30 && q[1] < world.vh - 30;
+        let best = [], run = [];
+        for (const q of sp) { if (on(q)) run.push(q); else { if (run.length > best.length) best = run; run = []; } }
+        if (run.length > best.length) best = run;
+        let len = 0;
+        for (let i = 1; i < best.length; i++) len += Math.hypot(best[i][0] - best[i - 1][0], best[i][1] - best[i - 1][1]);
+        const n = len > 900 ? 2 : 1;
+        for (let j = 0; j < n; j++) textAlong(r.name, best.slice(Math.floor(j * best.length / n), Math.floor((j + 1) * best.length / n)), fs + 1, dk ? '#8fb0ef' : '#23458c', fs * 0.35);
+      }
+      og.font = `italic 500 ${fs}px ${labelFont()}`;
+      for (const h of N.hills) {
+        if (!seen(h.x, h.y)) continue;
+        const [x, y] = world.project(h.x, terrainAt(s.map, h.x, h.y), h.y);
+        og.fillStyle = dk ? '#d8c8a8' : '#5a4632';
+        og.beginPath(); og.moveTo(x, y - 4); og.lineTo(x + 3.5, y + 2); og.lineTo(x - 3.5, y + 2); og.closePath(); og.fill();
+        og.strokeText(h.name, x, y + fs * 0.95); og.fillText(h.name, x, y + fs * 0.95);
+        const spot = String(Math.round(h.z * 52 + 120));
+        og.font = `500 ${fs - 3}px ${labelFont()}`; og.strokeText(spot, x + 14, y - 2); og.fillText(spot, x + 14, y - 2); og.font = `italic 500 ${fs}px ${labelFont()}`;
+      }
+      og.fillStyle = dk ? '#a8c898' : '#3a5a2e';
+      for (const w of N.woods) {
+        if (!seen(w.x, w.y)) continue;
+        const [x, y] = world.project(w.x, terrainAt(s.map, w.x, w.y) + 1.5, w.y);
+        og.strokeText(w.name, x, y); og.fillText(w.name, x, y);
+      }
+      og.restore();
+    }
     let puffC = null;
     const puffSheet = n => { if (!puffC || puffC.width < n) { puffC = document.createElement('canvas'); puffC.width = puffC.height = Math.max(n, 64); } return puffC; };
     function drawPuff(f) {
@@ -14357,6 +14504,9 @@ const Hud = (() => {
       const P0 = t >= 0 ? s.P[t] : null;
       drawLamps(s);
 
+      // The map's own names, as a survey sheet letters them, once the view is drawn back far enough to want them:
+      // rivers in spaced blue italics along their courses, hills in sepia beside a spot height, woods in green.
+      if (inked() && world.names) drawNames(s, t >= 0 ? s.P[t] : null);
       // Towns show who holds them and how a capture is going. In pen and ink each is a pennant in its holder's
       // wash and a name lettered on the paper, a little larger as the view pulls back.
       const ink = inked(), dist = world.cam.dist;
@@ -14369,7 +14519,7 @@ const Hud = (() => {
           og.lineWidth = 3; og.strokeStyle = ink ? 'rgba(250,244,228,0.9)' : 'rgba(0,0,0,0.5)'; og.beginPath(); og.arc(x, y, 13, 0, 6.3); og.stroke();
           og.strokeStyle = n.capTeam >= 0 ? (ink ? SLOT_PLATE[n.capTeam] : SLOT_CSS[n.capTeam]) : '#d9d4c3'; og.beginPath(); og.arc(x, y, 13, -1.57, -1.57 + n.cap * 6.283); og.stroke();
         }
-        const name = `Town ${String.fromCharCode(65 + n.id)}`;
+        const name = Rules.townName(s, n.id);
         if (ink) {
           const fs = Math.round(12 + smoothstepJS(110, 200, dist) * 3), yy = y - 17;
           og.save(); og.setLineDash([]); og.lineJoin = 'round'; og.lineCap = 'round';
@@ -15309,7 +15459,7 @@ const Report = (() => {
     g.strokeStyle = I.light || !I.ink ? 'rgba(110,90,70,0.55)' : 'rgba(200,190,170,0.45)'; g.lineWidth = 1;
     for (const r of M.roads || []) { g.beginPath(); r.forEach(([x, y], i) => i ? g.lineTo(x * sc, y * sc) : g.moveTo(x * sc, y * sc)); g.stroke(); }
     g.font = `11px ${I.font}`; g.textAlign = 'center'; g.textBaseline = 'top';
-    const towns = S.towns.map(t => ({ x: t.x, y: t.y, name: `Town ${String.fromCharCode(65 + t.id)}` }));
+    const towns = S.towns.map(t => ({ x: t.x, y: t.y, name: Rules.townName(S, t.id) }));
     for (const t of towns) { const [x, y] = P(t.x, t.y); g.fillStyle = I.dim; g.fillRect(x - 3, y - 3, 6, 6); g.fillText(t.name, x, y + 5); }
     // The bases, each a square in its side's ink.
     for (const x of list) { const b = S.bases[x.t]; if (!b) continue; const [bx, by] = P(b[0], b[1]); g.fillStyle = I.line(x.t); g.fillRect(bx - 5, by - 5, 10, 10); }
@@ -16435,6 +16585,7 @@ const Game = (() => {
   const SKY_OF = { desert: 'Dust storms, little rain and no snow.', steppe: 'Rain, thunderstorms and fog, with a little snow.', winter: 'Deep snow and fog, and no rain.' };
   const WEATHER_OF = { random: 'In their usual measure.', mild: 'Mostly fair, with no storms of any kind.', harsh: 'Often, and the storms come hard.' };
   // What each choice of resources means, for the set-up.
+  const WIN_NOTE = { conquest: 'A side is out when its last building falls.', regicide: 'Each side starts with a general. A side is out when its general falls, or its last building.' };
   const RES_NOTE = { std: 'Ore, oil and power are dug, pumped and built for, and everything costs.', free: 'Nothing costs a thing and power never runs short. Only build times and the fighting count.' };
   const weatherNote = (theme, w) => w === 'off' ? 'Fair skies all game.' : `${SKY_OF[theme] || ''} ${WEATHER_OF[w] || ''}`;
 
@@ -16707,7 +16858,7 @@ const Game = (() => {
       const m = Rules.MAPS[sk.map], seats = [], you = sk.slots.findIndex(s => s.kind === 'you');
       sk.slots.forEach((s, t) => { if (s.kind === 'you' || s.kind === 'ai') seats.push(t); });
       if (seats.length < 2 || you < 0) return;
-      const S = Rules.newGame({ seed: params.has('seed') ? +params.get('seed') : sk.seed, layout: m.layout, seats, shuffle: Math.random, age: sk.age || 1, theatre: sk.theme, weather: sk.weather || 'random', free: sk.res === 'free' });
+      const S = Rules.newGame({ seed: params.has('seed') ? +params.get('seed') : sk.seed, layout: m.layout, seats, shuffle: Math.random, age: sk.age || 1, theatre: sk.theme, weather: sk.weather || 'random', free: sk.res === 'free', regicide: sk.win === 'regicide' });
       sk.slots.forEach((s, t) => { if (s.kind === 'ai') S.ais.push(AI.create(t, s.level, S.seed + t)); });
       G.names = sk.slots.map(s => s.kind === 'you' ? (G.name || 'You') : s.kind === 'ai' ? `Computer (${Rules.DIFFICULTY[s.level].name})` : '');
       G.theme = sk.theme; G.mapKey = sk.map; G.online = false;
@@ -16715,7 +16866,7 @@ const Game = (() => {
       enterPlay(S, G.theme, you);
       saveT = 0;
       const foes = seats.length - 1;
-      hud.say(`Deployed: ${m.name}, ${THEATRES[G.theme]}, the ${Rules.AGES[S.age0].name} Age${S.free ? ', unlimited resources' : ''}. ${foes === 1 ? 'One enemy' : foes + ' enemies'} on the map. Good hunting, Commander.`);
+      hud.say(`Deployed: ${m.name}, ${THEATRES[G.theme]}, the ${Rules.AGES[S.age0].name} Age${S.free ? ', unlimited resources' : ''}${S.regicide ? ', Regicide' : ''}. ${foes === 1 ? 'One enemy' : foes + ' enemies'} on the map. Good hunting, Commander.`);
     }
 
     // A game against the computer is kept in the browser, so a refresh or a closed tab loses nothing. The world, the
@@ -16815,7 +16966,7 @@ const Game = (() => {
           case 'over': if (G.playing) setTimeout(outcome, 1800); drawRoster(); break;
           case 'fallen':
             if (G.playing && e.team === G.team) setTimeout(outcome, 1800);
-            else if (G.playing && G.names[e.team]) hud.say(e.forfeit ? `${G.names[e.team]} has forfeited the game.` : `${G.names[e.team]} is out.`, 'good');
+            else if (G.playing && G.names[e.team]) hud.say(e.forfeit ? `${G.names[e.team]} has forfeited the game.` : e.regicide ? `${G.names[e.team]}'s general has fallen. They are out.` : `${G.names[e.team]} is out.`, 'good');
             drawRoster();
             break;
           case 'weather': if (G.playing) { const v = e.passed ? SKY_PASS[e.was] : SKY_SAY[e.kind]; if (v && !(e.kind === 'cloud' && e.was === 'clear')) { hud.say(v[0], v[1]); if (v[2]) audio.voice('sky', v[2], oldAge()); } } break;
@@ -17092,7 +17243,7 @@ const Game = (() => {
     // which: a skirmish changes here, a room asks the server, and only its host may.
     function setupView() {
       if (net.view && net.inRoom) return Object.assign({ mode: 'room' }, net.view);
-      return { mode: 'skirmish', map: sk.map, seed: sk.seed, theme: sk.theme, age: sk.age || 1, weather: sk.weather || 'random', res: sk.res || 'std', phase: 'lobby', host: true, you: sk.slots.findIndex(s => s.kind === 'you'), slots: sk.slots.map(s => s.kind === 'you' ? { kind: 'human', name: G.name || 'You', you: true } : s), watch: [] };
+      return { mode: 'skirmish', map: sk.map, seed: sk.seed, theme: sk.theme, age: sk.age || 1, weather: sk.weather || 'random', res: sk.res || 'std', win: sk.win || 'conquest', phase: 'lobby', host: true, you: sk.slots.findIndex(s => s.kind === 'you'), slots: sk.slots.map(s => s.kind === 'you' ? { kind: 'human', name: G.name || 'You', you: true } : s), watch: [] };
     }
     function renderSetup() {
       const v = setupView(), room = v.mode === 'room', edit = v.host && v.phase === 'lobby', m = Rules.MAPS[v.map];
@@ -17116,6 +17267,8 @@ const Game = (() => {
       $('weather-about').textContent = weatherNote(v.theme, v.weather || 'random');
       $('m-res').querySelectorAll('button').forEach(b => { const on = b.dataset.v === (v.res || 'std'); b.classList.toggle('on', on); b.disabled = !edit && !on; });
       $('res-about').textContent = RES_NOTE[v.res || 'std'];
+      $('m-win').querySelectorAll('button').forEach(b => { const on = b.dataset.v === (v.win || 'conquest'); b.classList.toggle('on', on); b.disabled = !edit && !on; });
+      $('win-about').textContent = WIN_NOTE[v.win || 'conquest'];
       drawPreview(v.map, v.seed, v.slots);
       // The slots.
       const list = $('slots');
@@ -17198,6 +17351,7 @@ const Game = (() => {
     $('m-age').querySelectorAll('button').forEach(b => b.addEventListener('click', () => { if (b.disabled) return; audio.ui('click'); change({ age: +b.dataset.v }); }));
     $('m-weather').querySelectorAll('button').forEach(b => b.addEventListener('click', () => { if (b.disabled) return; audio.ui('click'); change({ weather: b.dataset.v }); }));
     $('m-res').querySelectorAll('button').forEach(b => b.addEventListener('click', () => { if (b.disabled) return; audio.ui('click'); change({ res: b.dataset.v }); }));
+    $('m-win').querySelectorAll('button').forEach(b => b.addEventListener('click', () => { if (b.disabled) return; audio.ui('click'); change({ win: b.dataset.v }); }));
     $('reseed').addEventListener('click', () => { audio.ui('click'); change({ seed: newSeed() }); });
     $('b-skirmish').addEventListener('click', () => { audio.wake(); audio.ui('click'); net.inRoom = false; screen('setup'); renderSetup(); });
     $('setup-back').addEventListener('click', () => { audio.ui('click'); if (net.inRoom) { leaveRoom(); screen('rooms'); } else screen('main'); });

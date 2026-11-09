@@ -117,6 +117,7 @@ const Rules = (() => {
     engineer: { name: 'Engineer', cat: 'inf', sym: 'eng', cost: 300, time: 6, hp: 50, armor: 'inf', speed: 2, sight: 8, men: 1, r: 0.4, weapons: [], move: 'foot', need: 'barracks', tech: 1, engineer: true, note: 'Takes a damaged enemy building, or mends your own.' },
     sniper: { name: 'Sniper', cat: 'inf', sym: 'snp', cost: 450, time: 9, hp: 70, armor: 'inf', speed: 2.2, sight: 15, men: 1, r: 0.4, weapons: ['sniper'], move: 'foot', need: 'barracks', tech: 2, note: 'Very long range. Kills infantry, little else.' },
     hero: { name: 'Lightning', cat: 'inf', sym: 'hero', cost: 1200, time: 15, hp: 260, armor: 'inf', speed: 2.8, sight: 12, men: 1, r: 0.45, weapons: ['hero'], move: 'foot', need: 'barracks', tech: 2, hero: true, limit: 1, note: 'Your commando. Shreds infantry and blows up any building with C4.' },
+    general: { name: 'General', cat: 'inf', sym: 'hero', cost: 600, time: 10, hp: 240, armor: 'inf', speed: 2.2, sight: 12, men: 1, r: 0.45, weapons: ['rifle'], move: 'foot', need: 'barracks', tech: 1, general: true, limit: 1, note: 'Men and machines near him fire faster and hold their nerve. In Regicide, lose him and you lose the game.' },
     truck: { name: 'Ore Truck', cat: 'veh', sym: 'sup', cost: 700, time: 10, hp: 620, armor: 'heavy', speed: 2.6, sight: 7, r: 0.95, weapons: [], move: 'wheel', need: 'factory', tech: 1, cargo: 500, note: 'Mines ore and hauls it to a refinery.' },
     humvee: { name: 'Scout Car', cat: 'veh', sym: 'rec', cost: 260, time: 6, hp: 180, armor: 'light', speed: 5.2, sight: 14, r: 0.7, weapons: ['hmg'], move: 'wheel', need: 'factory', tech: 1, turret: 5, note: 'Fast, sees far, and guns down infantry.' },
     ifv: { name: 'Stryker IFV', cat: 'veh', sym: 'ifv', cost: 420, time: 9, hp: 320, armor: 'light', speed: 4, sight: 11, r: 0.8, weapons: ['auto'], move: 'wheel', need: 'factory', tech: 1, turret: 4, note: 'Autocannon that fights anything, a little.' },
@@ -209,6 +210,7 @@ const Rules = (() => {
     snp: [null, 'longbow', 'jaeger', 'marksman', 'sniper', 'ghost'],
     eng: ['engineer'],
     hero: [null, 'hero'],
+    gen: ['general'],
     truck: ['oxcart', 'wagon', null, 'lorry', 'truck', 'hauler'],
     trade: ['tradecart', 'caravan', 'tradewagon', 'freightlorry', 'freighter', 'hovfreight'],
     ship: ['galley', 'cog', 'frigate', 'ironclad', 'destroyer', 'corvette'],
@@ -225,7 +227,7 @@ const Rules = (() => {
     jet: [null, null, null, 'biplane', 'jet', 'stealth'],
   };
   // The sidebar's lines, by the building that trains them.
-  const LINE_ORDER = { sea: ['fish', 'ship'], inf: ['inf', 'at', 'eng', 'snp', 'hero'], veh: ['truck', 'trade', 'rec', 'mount', 'ifv', 'aa', 'sup', 'siege', 'heavy'], air: ['fpv', 'heli', 'jet'] };
+  const LINE_ORDER = { sea: ['fish', 'ship'], inf: ['inf', 'at', 'eng', 'snp', 'hero', 'gen'], veh: ['truck', 'trade', 'rec', 'mount', 'ifv', 'aa', 'sup', 'siege', 'heavy'], air: ['fpv', 'heli', 'jet'] };
   function formOf(line, age) {
     const L = LINES[line];
     if (!L) return null;
@@ -292,6 +294,37 @@ const Rules = (() => {
   const nameOf = (kind, age) => { const d = BUILDINGS[kind] || UNITS[kind] || POWERS[kind]; return (d && d.names && d.names[Math.max(1, age) - 1]) || (d ? d.name : kind); };
   // A building with arms but no weapons of its own, as the headquarters, fires only in the ages that arm it.
   const armOf = (S, e) => (e.d.arms && e.d.arms[S.P[e.team].tech - 1]) || (e.d.weapons ? e.d.weapons[0] : null);
+
+  // Place names by theatre, for the towns and for the rivers, hills and woods the map letters. A map's names come of
+  // its seed, so every player's copy reads the same.
+  const NAMES = {
+    steppe: {
+      town: ['Ashford', 'Millbrook', 'Thornbury', 'Oakham', 'Hollins', 'Brackenfield', 'Wexley', 'Stanmore', 'Fairholt', 'Larkhill', 'Edgecombe', 'Redwater', 'Coldridge', 'Highcroft', 'Marlow', 'Kestrel Down'],
+      river: ['River Wend', 'River Arle', 'The Sallow', 'River Coln', 'River Tamsey', 'The Brede', 'River Ouse', 'River Leam'],
+      hill: ['Beacon Hill', 'Grey Knoll', 'Crow Height', 'Windy Ridge', 'Hob Tor', 'Gallows Hill', 'Long Edge', 'Raven Crag'],
+      wood: ['Ashwood', 'Haverholt', 'Blackthorn Wood', 'Hazel Copse', 'Fenwick Wood', 'Oak Hanger', 'Bramble Wood', 'Kings Holt'],
+    },
+    desert: {
+      town: ['Qasr Amir', 'Bir Hasan', 'Wadi Salma', 'Ain Rafa', 'Tel Zahir', 'Ras Nuba', 'Dar Kufra', 'Sidi Barra', 'Umm Qasa', 'Hamra', 'Zawiya', 'Bir Tawil', 'Khor Anza', 'Ain Sefra', 'Tel Gharib', 'Nahla'],
+      river: ['Nahr al-Abyad', 'Nahr Sahl', 'Wadi Kebir', 'Nahr Zarqa', 'Wadi Rimal', 'Nahr Hamra', 'Wadi Tamar', 'Nahr Dhahab'],
+      hill: ['Jebel Sur', 'Jebel Ahmar', 'Gara Hawa', 'Jebel Nasr', 'Qarat Silm', 'Jebel Tarik', 'Gara Kabira', 'Jebel Malh'],
+      wood: ['Ghaba Nakhil', 'Bustan Rafa', 'The Acacia Groves', 'Ghaba Sidr', 'Bustan Amir', 'The Thorn Groves', 'Ghaba Talh', 'Bustan Zahir'],
+    },
+    winter: {
+      town: ['Kaltbrunn', 'Weissach', 'Hochfeld', 'Grauberg', 'Eisental', 'Tannwald', 'Schneeberg', 'Felsheim', 'Kaltenbach', 'Wolfsegg', 'Lindenhof', 'Steinach', 'Hornau', 'Gletsch', 'Firnbach', 'Rabenstein'],
+      river: ['Eisbach', 'Weisse Ach', 'Grauer Inn', 'Kaltwasser', 'Firnach', 'Schmelzbach', 'Felsach', 'Wolfach'],
+      hill: ['Rotkopf', 'Graues Horn', 'Adlerspitze', 'Kahler Kogel', 'Wetterstein', 'Eiskopf', 'Hohe Wand', 'Rabenhorn'],
+      wood: ['Tannwald', 'Schwarzforst', 'Fichtenhain', 'Wolfsforst', 'Lärchenwald', 'Hochforst', 'Bärenwald', 'Kiefernhain'],
+    },
+  };
+  // The n-th name of a kind for this game: the theatre's list dealt in an order its seed shuffles, with a number
+  // after if a map has more than the list.
+  function nameFor(S, kind, n) {
+    const L = (NAMES[S.theatre] || NAMES.steppe)[kind], order = L.map((_, i) => i), r = mulberry((S.seed * 7919 + kind.length * 104729) >>> 0);
+    for (let i = order.length - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1)); [order[i], order[j]] = [order[j], order[i]]; }
+    return L[order[n % L.length]] + (n >= L.length ? ' ' + (Math.floor(n / L.length) + 1) : '');
+  }
+  const townName = (S, i) => nameFor(S, 'town', i);
 
   // Support calls, made from a radar station.
   const POWERS = {
@@ -1527,6 +1560,8 @@ const Rules = (() => {
       theatre: SKIES[o.theatre] ? o.theatre : 'any', weather: WEATHERS[o.weather] ? o.weather : 'random',
       // Unlimited: no side ever runs short of ore, oil or power, so only build times and the fighting count.
       free: !!o.free,
+      // Regicide: each side has a general from the start, and a side whose general falls is out.
+      regicide: !!o.regicide,
       // The ground as it now is, which woods, bridges and fords change, and what has happened to the trees,
       // bridges and houses.
       gnd: new Uint8Array(M.ground), gndVer: 0, wood: new Uint8Array(N), woodVer: 0, burn: [], crush: [],
@@ -1636,6 +1671,7 @@ const Rules = (() => {
     addBuilding(S, 'hq', team, Math.round(b[0] - 2.5), Math.round(b[1] - 2.5), true);
     const age = S.P[team].tech, inf = formOf('inf', age);
     spawn(S, inf, team, ...at(7.0711, -2.8284)); spawn(S, inf, team, ...at(7.0711, 2.8284)); spawn(S, formOf('rec', age), team, ...at(9.1924, -0.7071));
+    if (S.regicide) spawn(S, 'general', team, ...at(4.5, 0));
   }
   // Everything a slot has goes, and it starts again from nothing at its place. Quietly, with no wrecks or
   // craters, when the slot is cleared for someone new.
@@ -1687,7 +1723,7 @@ const Rules = (() => {
   const plain = e => { const o = {}; for (const k in e) if (k !== 'd' && k[0] !== '_') o[k] = e[k]; return o; };
   function save(S) {
     return {
-      v: 1, seed: S.seed, layout: S.layout, seats: S.seats, pos: S.pos, age0: S.age0, theatre: S.theatre, weather: S.weather, free: S.free, tick: S.tick, rs: S.rs, next: S.next, occVer: S.occVer, oreVer: S.oreVer, terrVer: S.terrVer, dirty: !!S.dirty, over: S.over,
+      v: 1, seed: S.seed, layout: S.layout, seats: S.seats, pos: S.pos, age0: S.age0, theatre: S.theatre, weather: S.weather, free: S.free, regicide: S.regicide, tick: S.tick, rs: S.rs, next: S.next, occVer: S.occVer, oreVer: S.oreVer, terrVer: S.terrVer, dirty: !!S.dirty, over: S.over,
       ents: S.ents.map(plain), towns: S.towns, shots: S.shots, sweeps: S.sweeps, flights: S.flights, occLog: S.occLog,
       fields: [...S.fields].map(([k, f]) => [k, f.ver, f.used, f.made, f.reach, f.wq]),
       ore: b64.en(new Uint8Array(S.ore.buffer.slice(0))),
@@ -1699,7 +1735,7 @@ const Rules = (() => {
   }
   function diffs(a, base) { const o = []; for (let c = 0; c < a.length; c++) if (a[c] !== (base ? base[c] : 0)) o.push(c, a[c]); return o; }
   function load(o) {
-    const S = newGame({ seed: o.seed, layout: o.layout, seats: o.seats, pos: o.pos, age: o.age0 || 5, theatre: o.theatre, weather: o.weather, free: o.free, empty: true });
+    const S = newGame({ seed: o.seed, layout: o.layout, seats: o.seats, pos: o.pos, age: o.age0 || 5, theatre: o.theatre, weather: o.weather, free: o.free, regicide: o.regicide, empty: true });
     if (S.seed !== o.seed) throw new Error('map seed mismatch');
     Object.assign(S, { tick: o.tick, rs: o.rs, next: o.next, occVer: o.occVer, oreVer: o.oreVer, terrVer: o.terrVer, dirty: o.dirty, over: o.over, shots: o.shots, sweeps: o.sweeps, flights: o.flights, occLog: o.occLog || [] });
     S.towns = o.towns.map(t => Object.assign({}, t));
@@ -2553,6 +2589,13 @@ const Rules = (() => {
     if (u.brk && S.tick >= u.brk && (u.sup || 0) < PIN) { u.brk = 0; if (u.ord && u.ord.brk) u.ord = null; u.v = 0; S.ev.push({ t: 'rallied', team: u.team, id: u.id, x: u.x, y: u.y }); }
   }
   const pinned = u => (u.sup || 0) >= PIN;
+  // A general steadies the men near him, above, and quickens the fire of every unit of his side within GEN_R.
+  const GEN_R = 9, GEN_FIRE = 0.85;
+  function nearGeneral(S, u) {
+    let f = false;
+    near(S, u.x, u.y, GEN_R, o => { if (!f && o !== u && o.team === u.team && o.hp > 0 && o.d.general && mhypot(o.x - u.x, o.y - u.y) < GEN_R) f = true; });
+    return f;
+  }
   const ANS_R = 10, ANS_LEASH = 18;
   function answer(S, t, by) {
     if (S.tick - (t.ansT ?? -1e9) < HZ) return;
@@ -2772,7 +2815,7 @@ const Rules = (() => {
       if (u.cd[i] > 0) continue;
       if (u.d.turret && Math.abs(angleTo(u.ta, matan2(t.y - u.y, t.x - u.x))) > 0.12) continue;
       if (!clearShot(S, u, wn, t)) { readyAny = false; continue; }
-      u.cd[i] = w.cd * (u.b && S.P[u.team].low ? 2 : 1) * (pinned(u) ? 1.6 : 1);
+      u.cd[i] = w.cd * (u.b && S.P[u.team].low ? 2 : 1) * (pinned(u) ? 1.6 : 1) * (!u.b && nearGeneral(S, u) ? GEN_FIRE : 1);
       if (w.salvo) { u.salvo = w.salvo; u.salvoT = 0; u.salvoW = wn; u.salvoBr = -1; }
       else fire(S, u, wn, t, i);
     }
@@ -4131,11 +4174,13 @@ const Rules = (() => {
     S.sweeps = S.sweeps.filter(s => s.until > S.tick);
     // A side whose last building falls is out, and what it had left goes with it. The last side standing wins.
     if (!S.over && S.tick % HZ === 0) {
-      for (const P of S.P) if (P.alive && !S.ents.some(e => e.b && e.team === P.team && e.hp > 0)) {
+      for (const P of S.P) if (P.alive) {
+        const noBase = !S.ents.some(e => e.b && e.team === P.team && e.hp > 0), noGen = S.regicide && !S.ents.some(e => !e.b && e.team === P.team && e.hp > 0 && e.d.general);
+        if (!noBase && !noGen) continue;
         P.alive = false;
         razeSlot(S, P.team);
         territory(S); recount(S);
-        S.ev.push({ t: 'fallen', team: P.team });
+        S.ev.push({ t: 'fallen', team: P.team, regicide: noGen && !noBase });
         mark(S, P.team, 'out');
       }
       const left = S.P.filter(P => P.alive);
@@ -4196,7 +4241,7 @@ const Rules = (() => {
     msin, mcos, matan2, mhypot,
     BRIDGE_HP, SPELL, SKIES, WEATHERS, nightAt, skyOf, offGoing, route, weatherAt, sky, dayAt, spellOf, bridgeAt, clsOf, houseHp, hurtBridge, ignite, shielded,
     coverPoints, coverNear, COVER_R, COVER_ARC, FORMS, formOfGroup, STANCES,
-    FB_AT, PIN, canExplore, UPGRADES, UP_AGE, upCost, upNote, upsAt, upK, upBlocked, hpOf, rangeOf, capOf, showersAt, showerAt,
+    FB_AT, PIN, canExplore, nameFor, townName, UPGRADES, UP_AGE, upCost, upNote, upsAt, upK, upBlocked, hpOf, rangeOf, capOf, showersAt, showerAt,
   };
 })();
 if (typeof module !== 'undefined') module.exports = Rules;
