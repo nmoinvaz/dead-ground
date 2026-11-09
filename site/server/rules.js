@@ -1383,6 +1383,44 @@ const Rules = (() => {
     return o;
   }
   const sky = S => S._wx && S._wx.at === S.tick ? S._wx : (S._wx = Object.assign(weatherAt(S.seed, S.tick, skyOf(S)), { at: S.tick }));
+  // Showers. Besides the weather over the whole map, rain showers and snow flurries cross part of it: each a round
+  // patch drifting straight over the map for a few minutes, growing at its start and fading at its end. They come of
+  // the seed and the time alone, so every copy of the world has them and a save needs none, and none sets out while
+  // the whole map is wet, white or blown with sand. A lane may start one every SHOWER_EVERY ticks, rain or snow by
+  // the theatre's odds and the game's weather setting. Under one, wheels bog down in rain off the roads, everyone
+  // slows in snow, and sight is cut short.
+  const SHOWER_EVERY = 150 * HZ, SHOWER_LIFE = 210 * HZ, SHOWER_LANES = 2;
+  const SHOWER_P = { any: [0.3, 0.08], desert: [0.1, 0], steppe: [0.32, 0.05], winter: [0.08, 0.36] }, SHOWER_K = { random: 1, mild: 0.5, harsh: 1.6, off: 0 };
+  function showersAt(S, t = S.tick) {
+    if (S._sh && S._sh.at === t) return S._sh.list;
+    const list = [], P = SHOWER_P[S.theatre] || SHOWER_P.any, wk = SHOWER_K[S.weather] ?? 1, tab = skyOf(S);
+    const n = Math.floor(t / SHOWER_EVERY);
+    if (wk > 0) for (let j = Math.max(0, n - Math.ceil(SHOWER_LIFE / SHOWER_EVERY) - 1); j <= n; j++) for (let l = 0; l < SHOWER_LANES; l++) {
+      const h = spellHash(S.seed + 911 + l * 7919, j), t0 = j * SHOWER_EVERY + h % SHOWER_EVERY, age = t - t0;
+      if (age < 0 || age > SHOWER_LIFE) continue;
+      const r = (h >>> 10) % 1000 / 1000, kind = r < P[0] * wk ? 'rain' : r < (P[0] + P[1]) * wk ? 'snow' : null;
+      if (!kind) continue;
+      const sp = spellOf(S.seed, Math.floor(t0 / SPELL), tab);
+      if (sp === 'rain' || sp === 'storm' || sp === 'snow' || sp === 'sand') continue;
+      const h2 = spellHash(S.seed + 3301 + l * 104729, j), a = (h2 % 6283) / 1000, off = ((h2 >>> 13) % 1000 / 1000 - 0.5) * 0.7 * W;
+      const rad = (9 + (h2 >>> 3) % 9) * W / 128, span = W * 1.25 + 2 * rad, s = -span / 2 + span * age / SHOWER_LIFE, dx = mcos(a), dy = msin(a);
+      const k = clamp(age / (SHOWER_LIFE * 0.15), 0, 1) * clamp((SHOWER_LIFE - age) / (SHOWER_LIFE * 0.15), 0, 1);
+      list.push({ x: CX + dx * s - dy * off, y: CY + dy * s + dx * off, r: rad, kind, k });
+    }
+    S._sh = { at: t, list };
+    return list;
+  }
+  // How deep under a shower a point lies, 0 clear to 1 in its heart, for each kind.
+  function showerAt(S, x, y) {
+    let rain = 0, snow = 0;
+    for (const s of showersAt(S)) {
+      const d = mhypot(x - s.x, y - s.y);
+      if (d >= s.r) continue;
+      const v = smooth(s.r, s.r * 0.55, d) * s.k;
+      if (s.kind === 'rain') rain = Math.max(rain, v); else snow = Math.max(snow, v);
+    }
+    return { rain, snow };
+  }
   // How fast a kind of mover goes off the roads in the weather, before any worn track. Mud bogs wheels down, snow
   // slows everyone, and blown sand slows men and wheels.
   function offGoing(move, w) {
@@ -1831,6 +1869,8 @@ const Rules = (() => {
   // Sight runs along rays, keeping the steepest look-up angle so far, as a watcher on a hill would.
   function vision(S) {
     const M = S.map;
+    // The cells a shower hides, set below before any side looks.
+    let shMask = null;
     for (const P of S.P) P.vis.fill(0);
     const light = (P, x, y, r, eye, air) => {
       const R = Math.round(r), vis = P.vis, seen = P.seen;
@@ -1839,7 +1879,7 @@ const Rules = (() => {
       if (air) {
         for (let cy = Math.max(0, (y - R) | 0); cy <= Math.min(H - 1, (y + R) | 0); cy++) for (let cx = Math.max(0, (x - R) | 0); cx <= Math.min(W - 1, (x + R) | 0); cx++) {
           const ex = cx + 0.5 - x, ey = cy + 0.5 - y;
-          if (ex * ex + ey * ey <= r * r) { const c = cy * W + cx; vis[c] = 1; seen[c] = 1; }
+          if (ex * ex + ey * ey <= r * r) { const c = cy * W + cx; if (shMask && shMask[c] && ex * ex + ey * ey > 9) continue; vis[c] = 1; seen[c] = 1; }
         }
         return;
       }
@@ -1850,7 +1890,7 @@ const Rules = (() => {
           const px = ox + dx * d, py = oy + dy * d;
           if (px < 0 || py < 0 || px >= W || py >= H) break;
           const hz = terrainAt(M, px, py), slope = (hz + 0.5 - z0) / d;
-          if (slope >= top - 0.02 || d < 3) { const c = (py | 0) * W + (px | 0); vis[c] = 1; seen[c] = 1; }
+          if (slope >= top - 0.02 || d < 3) { const c = (py | 0) * W + (px | 0); if (!(shMask && shMask[c] && d > 3)) { vis[c] = 1; seen[c] = 1; } }
           const block = (hz - z0) / d;
           if (block > top) top = block;
         }
@@ -1861,12 +1901,22 @@ const Rules = (() => {
     // its searchlight.
     const w = sky(S), n = nightAt(S.tick), fk = Math.max(0.4, 1 - 0.45 * w.fog - 0.12 * w.storm - 0.4 * w.sand), fa = Math.max(0.5, 1 - 0.3 * w.fog - 0.3 * w.sand);
     const nu = 1 - 0.4 * n, nb = 1 - 0.15 * n;
+    // Under a shower sight is cut short: what stands inside one is seen only from close by, and what stands in one
+    // sees a third less itself.
+    const shw = showersAt(S), mask = shw.length ? (S._shMask && S._shMask.length === N ? S._shMask.fill(0) : (S._shMask = new Uint8Array(N))) : null;
+    if (mask) for (const s of shw) {
+      const rr = s.r * 0.8 * s.k;
+      if (rr < 2) continue;
+      for (let cy = Math.max(0, Math.floor(s.y - rr)); cy <= Math.min(H - 1, Math.ceil(s.y + rr)); cy++) for (let cx = Math.max(0, Math.floor(s.x - rr)); cx <= Math.min(W - 1, Math.ceil(s.x + rr)); cx++) if (mhypot(cx + 0.5 - s.x, cy + 0.5 - s.y) < rr) mask[cy * W + cx] = 1;
+    }
+    shMask = mask;
+    const inSh = e => mask && mask[cellOf(e.x, e.y)] ? 0.65 : 1;
     for (const e of S.ents) {
       if (e.hp <= 0) continue;
       const P = S.P[e.team];
-      if (e.b) light(P, e.x, e.y, (e.d.sight + Math.max(e.w, e.h) / 2) * fk * (armOf(S, e) ? 1 : nb), 3, false);
-      else if (e.d.move === 'air' || e.d.move === 'jet') light(P, e.x, e.y, e.d.sight * fa * (1 - 0.3 * n), 0, true);
-      else light(P, e.x, e.y, e.d.sight * fk * nu * (e.cov >= 0 ? 1.2 : 1), 1.1, false);
+      if (e.b) light(P, e.x, e.y, (e.d.sight + Math.max(e.w, e.h) / 2) * fk * (armOf(S, e) ? 1 : nb) * inSh(e), 3, false);
+      else if (e.d.move === 'air' || e.d.move === 'jet') light(P, e.x, e.y, e.d.sight * fa * (1 - 0.3 * n) * inSh(e), 0, true);
+      else light(P, e.x, e.y, e.d.sight * fk * nu * (e.cov >= 0 ? 1.2 : 1) * inSh(e), 1.1, false);
     }
     for (const t of S.towns) if (t.owner >= 0) light(S.P[t.owner], t.x, t.y, 9 * fk * (1 - 0.25 * n), 2, false);
     for (const s of S.sweeps) if (s.until > S.tick) light(S.P[s.team], s.x, s.y, s.r, 0, true);
@@ -2526,6 +2576,11 @@ const Rules = (() => {
     const tl = (here >> 5) & 3;
     let going = (tl >= 3 ? 1 : offGoing(d.move, w)) * TRACK_GO[tl];
     if (rk > 0) going = lerp(going, ROAD_GO[d.move], rk);
+    // Under a shower: mud off the roads for wheels in rain, and slow going for all in snow.
+    if (S._sh ? S._sh.list.length : showersAt(S).length) {
+      const sh = showerAt(S, u.x, u.y);
+      if (sh.rain || sh.snow) going *= 1 - (d.move === 'wheel' ? 0.24 * sh.rain * (1 - rk) + 0.2 * sh.snow : d.move === 'track' ? 0.1 * sh.snow : d.move === 'naval' ? 0 : 0.18 * sh.snow);
+    }
     if (here & 16) going *= 0.5;
     if ((here & 8) && d.move === 'foot') going *= 0.75;
     const top = (u.ord && u.ord.pace ? Math.min(d.speed, u.ord.pace) : d.speed) * speedScale * going;
@@ -3836,7 +3891,7 @@ const Rules = (() => {
     msin, mcos, matan2, mhypot,
     BRIDGE_HP, SPELL, SKIES, WEATHERS, nightAt, skyOf, offGoing, route, weatherAt, sky, dayAt, spellOf, bridgeAt, clsOf, houseHp, hurtBridge, ignite, shielded,
     coverPoints, coverNear, COVER_R, COVER_ARC, FORMS, formOfGroup, STANCES,
-    UPGRADES, UP_AGE, upCost, upNote, upsAt, upK, upBlocked, hpOf, rangeOf, capOf,
+    UPGRADES, UP_AGE, upCost, upNote, upsAt, upK, upBlocked, hpOf, rangeOf, capOf, showersAt, showerAt,
   };
 })();
 if (typeof module !== 'undefined') module.exports = Rules;
