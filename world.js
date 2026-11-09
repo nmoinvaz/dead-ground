@@ -1038,6 +1038,14 @@ const World = (() => {
     const FIELD_R = 15, FIELD_OUT = 20;
     function buildFields() {
       const n = W * H, cov = new Uint8Array(n * 4), rand = mulberry(M.seed + 59), turn = M.towns.map(() => 1 + Math.floor(rand() * 254)), BD = M.brookDist;
+      // A river valley's green strip: the cells within a few of the river's water, found by a walk out from it.
+      const valley = mapOf(S).flora === 'palm', riverNear = new Uint8Array(n);
+      if (valley) {
+        const q = [], dd = new Uint8Array(n).fill(255);
+        for (let c = 0; c < n; c++) if (terrainAt(M, c % W + 0.5, (c / W | 0) + 0.5) < M.water) { dd[c] = 0; q.push(c); }
+        for (let i = 0; i < q.length; i++) { const c = q[i], x = c % W, y = c / W | 0; for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) { const X = x + dx, Y = y + dy, o = Y * W + X; if (X >= 0 && Y >= 0 && X < W && Y < H && dd[o] > dd[c] + 1 && dd[c] < 11) { dd[o] = dd[c] + 1; q.push(o); } } }
+        for (let c = 0; c < n; c++) riverNear[c] = dd[c] >= 4 && dd[c] <= 11 ? 1 : 0;
+      }
       for (let c = 0; c < n; c++) {
         cov[c * 4] = beachMap ? beachMap[c] : 0;
         const x = c % W + 0.5, y = (c / W | 0) + 0.5;
@@ -1045,7 +1053,10 @@ const World = (() => {
         M.towns.forEach((t, i) => { const d = Math.hypot(t.x - x, t.y - y); if (d < d1) { d2 = d1; d1 = d; ti = i; } else if (d < d2) d2 = d; });
         if (ti < 0) continue;
         cov[c * 4 + 2] = turn[ti]; cov[c * 4 + 3] = Math.round(Math.min(1, d1 / FIELD_OUT) * 255);
-        if (d1 > FIELD_OUT || d1 < 3.5 || d2 - d1 < 2.5) continue;
+        // On a map of a river valley the fields line the river's banks, wherever they lie, as well as round the towns.
+        const strip = valley && riverNear[c] > 0;
+        if (strip) cov[c * 4 + 3] = Math.round(0.2 * 255);
+        if (!strip && (d1 > FIELD_OUT || d1 < 3.5 || d2 - d1 < 2.5)) continue;
         const z = terrainAt(M, x, y), v = Math.round(y * RES) * VW + Math.round(x * RES);
         const sl = Math.hypot(terrainAt(M, x + 1, y) - terrainAt(M, x - 1, y), terrainAt(M, x, y + 1) - terrainAt(M, x, y - 1)) / 2;
         if ((M.ground[c] & 27) || M.ore[c] || z < M.water + 0.35 || sl > 0.6 || (beachMap && beachMap[c] > 30) || (BD && BD[v] < 1.2) || M.roadDist[v] < 1.2) continue;
@@ -1121,13 +1132,13 @@ const World = (() => {
       const pf = THEMES.winter.leaf.map(c => new THREE.Color(c));
       // A map of cactus country grows saguaros and prickly pears in a grey sage green in place of trees, and no
       // conifers on its heights.
-      const cactus = mapOf(S).flora === 'cactus', cf = [new THREE.Color(0x6f8f5e), new THREE.Color(0x8aa070)];
+      const flora = mapOf(S).flora, cactus = flora === 'cactus', palms = flora === 'palm', cf = [new THREE.Color(0x6f8f5e), new THREE.Color(0x8aa070)];
       const tl = trees.map(t => {
-        const g = terrainAt(M, t.x, t.y), hi = !cactus && th.pine !== undefined && g > th.pine + (rand() - 0.5) * 2.4, L = cactus ? cf : hi ? pf : lf;
+        const g = terrainAt(M, t.x, t.y), hi = !cactus && !palms && th.pine !== undefined && g > th.pine + (rand() - 0.5) * 2.4, L = cactus ? cf : hi ? pf : lf;
         return { x: t.x, y: g - 0.04, z: t.y, s: t.s * 1.1, a: t.a, c: colA.copy(L[0]).lerp(L[1], rand()).getHex(), cell: t.c, hi, pear: cactus && rand() < 0.45 };
       });
       const meshes = [];
-      const treeKinds = cactus ? [[sc.saguaro, tl.filter(t => !t.pear)], [sc.pear, tl.filter(t => t.pear)]] : [[sc[th.tree], tl.filter(t => !t.hi)], [sc.conifer, tl.filter(t => t.hi)]];
+      const treeKinds = cactus ? [[sc.saguaro, tl.filter(t => !t.pear)], [sc.pear, tl.filter(t => t.pear)]] : palms ? [[sc.palm, tl.map(t => Object.assign(t, { s: t.s * 1.5 }))]] : [[sc[th.tree], tl.filter(t => !t.hi)], [sc.conifer, tl.filter(t => t.hi)]];
       for (const [geo, list] of treeKinds) {
         if (!list.length) continue;
         const m = lineCat(instanced(geo, treeTint, list), 0.459, true);
@@ -1137,6 +1148,15 @@ const World = (() => {
       const byCell = new Map();
       tl.forEach((t, i) => { if (!byCell.has(t.cell)) byCell.set(t.cell, []); byCell.get(t.cell).push(i); });
       scen.trees = { meshes, list: tl, state: new Uint8Array(tl.length), seen: -1, byCell };
+      // The map's monuments, standing on the lowest ground under them so none floats, each sized to its half size.
+      for (const k of ['pyramid', 'temple', 'obelisk']) {
+        const list = (M.monuments || []).filter(m => m.k === k).map(m => {
+          let lo = 99;
+          for (let a = 0; a < 6.3; a += 0.8) lo = Math.min(lo, terrainAt(M, m.x + Math.cos(a) * m.r * 0.9, m.y + Math.sin(a) * m.r * 0.9));
+          return { x: m.x, y: Math.min(lo, terrainAt(M, m.x, m.y)) - 0.05, z: m.y, s: k === 'obelisk' ? 1 : m.r, a: -m.a, c: 0xffffff };
+        });
+        if (list.length) lineCat(instanced(sc[k], plainTint, list), 0.66);
+      }
       const rc = new THREE.Color(th.rock);
       instanced(sc.rock, plainTint, rocks.map(t => ({ x: t.x, y: terrainAt(M, t.x, t.y) - 0.06, z: t.y, s: t.s * 1.2, a: t.a, c: colA.copy(rc).multiplyScalar(0.62 + rand() * 0.3).getHex() })));
 
@@ -1756,7 +1776,7 @@ const World = (() => {
         if (terrainAt(M, x, y) < -1.0 && Rules.bridgeAt(S, x, y) < 0) life.boats.push({ x, y, a: R() * 6.28, v: 1, ph: R() * 6 });
       }
       // Whales in the open sea, a pod of one to three to each great stretch of deep water, none on a river or lake.
-      const open = (x, y) => (M.sea ? M.sea[Rules.cellOf(x, y)] : true) && [0, 1.6, 3.2, 4.8].every(a => terrainAt(M, x + Math.cos(a) * 4, y + Math.sin(a) * 4) < -1.2);
+      const open = (x, y) => (M.sea ? M.sea[Rules.cellOf(x, y)] : true) && [0, 0.8, 1.6, 2.4, 3.2, 4, 4.8, 5.6].every(a => terrainAt(M, x + Math.cos(a) * 9, y + Math.sin(a) * 9) < -1.2);
       for (let tries = 0, pods = 0; pods < Math.round(Math.min(3, (M.seaCells || 0) / 900) * scale) && tries < 3000; tries++) {
         const x = 4 + R() * (W - 8), y = 4 + R() * (H - 8);
         if (!open(x, y)) continue;

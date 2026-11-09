@@ -828,6 +828,27 @@ const Models = (() => {
         sg.sph(0.055, s * (0.085 + len), y0 + up, 0, 0xffffff, { seg: 6, rings: 4, top: true });
       }
       scenery.saguaro = sg.finish();
+      // Egypt's monuments, sized to a half size of 1. A pyramid of dressed limestone with a gilded cap; a temple, a
+      // pylon gate of two battered towers before a court of columns and a roofed hall; and an obelisk with its cap.
+      // Each face flat, its own normal, so the faces take their own tones and the ridges are inked.
+      const flat = g => { const f = g.toNonIndexed(); f.computeVertexNormals(); return f; };
+      const pyr = G();
+      pyr.add(flat(new THREE.ConeGeometry(1.41, 1.28, 4, 1)), 0, 0.64, 0, 0xd8c49a, { ry: Math.PI / 4 });
+      pyr.add(flat(new THREE.ConeGeometry(0.14, 0.13, 4, 1)), 0, 1.22, 0, 0xd8a840, { ry: Math.PI / 4 });
+      scenery.pyramid = pyr.finish();
+      const tpl = G(), SAND = 0xd6c29a, SAND2 = 0xc8b088;
+      for (const s of [-1, 1]) tpl.add(flat(new THREE.CylinderGeometry(0.22, 0.3, 0.7, 4, 1)), 0.85, 0.35, s * 0.42, SAND, { ry: Math.PI / 4, sz: 1.6 });
+      tpl.box(0.1, 0.42, 0.24, 0.85, 0.21, 0, SAND2);
+      for (let i = 0; i < 3; i++) for (const s of [-1, 1]) tpl.cyl(0.05, 0.055, 0.38, 0.45 - i * 0.28, 0.19, s * 0.36, SAND, { seg: 8 });
+      tpl.box(0.95, 0.04, 0.9, 0.18, 0.02, 0, SAND2);
+      tpl.box(0.62, 0.4, 0.82, -0.62, 0.2, 0, SAND);
+      tpl.box(0.66, 0.05, 0.86, -0.62, 0.42, 0, SAND2);
+      scenery.temple = tpl.finish();
+      const obl = G();
+      obl.add(flat(new THREE.CylinderGeometry(0.11, 0.17, 2.3, 4, 1)), 0, 1.15, 0, 0xc89a72, { ry: Math.PI / 4 });
+      obl.add(flat(new THREE.ConeGeometry(0.155, 0.22, 4, 1)), 0, 2.41, 0, 0xd8a840, { ry: Math.PI / 4 });
+      obl.box(0.42, 0.12, 0.42, 0, 0.06, 0, 0xb8a080);
+      scenery.obelisk = obl.finish();
       const pp = G();
       for (const [x, y, z, ry, rz] of [[0, 0.16, 0, 0.2, 0], [0.12, 0.36, 0.02, 0.9, -0.4], [-0.12, 0.34, -0.04, -0.6, 0.45], [0.02, 0.52, 0.08, 1.6, 0.1], [0.2, 0.18, -0.12, 2.2, -0.2]]) pp.sph(0.13, x, y, z, 0xffffff, { seg: 8, rings: 6, sx: 1, sy: 1.3, sz: 0.32, ry, rz });
       for (const [x, y, z] of [[0.04, 0.69, 0.08], [0.2, 0.49, 0.04], [-0.2, 0.5, -0.04]]) pp.sph(0.025, x, y, z, 0xc23c4e, { seg: 5, rings: 3 });

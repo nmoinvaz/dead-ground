@@ -320,6 +320,9 @@ const Rules = (() => {
   // The n-th name of a kind for this game: the theatre's list dealt in an order its seed shuffles, with a number
   // after if a map has more than the list.
   function nameFor(S, kind, n) {
+    // A map may name its own places, as the Nile names its river.
+    const own = Object.values(MAPS).find(m => m.layout === S.layout), fixed = own && own.names && own.names[kind];
+    if (fixed) return fixed[n % fixed.length];
     const L = (NAMES[S.theatre] || NAMES.steppe)[kind], order = L.map((_, i) => i), r = mulberry((S.seed * 7919 + kind.length * 104729) >>> 0);
     for (let i = order.length - 1; i > 0; i--) { const j = Math.floor(r() * (i + 1)); [order[i], order[j]] = [order[j], order[i]]; }
     return L[order[n % L.length]] + (n >= L.length ? ' ' + (Math.floor(n / L.length) + 1) : '');
@@ -446,7 +449,7 @@ const Rules = (() => {
   };
   const SIZES = {
     duel: 128, quad: 192, world: 256, gulf: 128, pass: 128, lakes: 192,
-    greenwood: 128, oldforest: 192, twinlakes: 128, ponds: 192, seas: 128, isles: 192, peaks: 128, highlands: 192, rivers3: 128, crater: 192, mesa: 128,
+    greenwood: 128, oldforest: 192, twinlakes: 128, ponds: 192, seas: 128, isles: 192, peaks: 128, highlands: 192, rivers3: 128, crater: 192, mesa: 128, nile: 128,
   };
   // The maps a game may be set on, each a layout and the most sides it seats.
   const MAPS = {
@@ -467,6 +470,7 @@ const Rules = (() => {
     rivers3: { name: 'Three Rivers', layout: 'rivers3', seats: 2, about: 'Three rivers between two bases, each with its bridges and a ford. Lines to hold.' },
     crater: { name: 'Crater Lake', layout: 'crater', seats: 4, about: 'A lake inside a ring of mountains, entered through four gaps, with a base in each corner outside.' },
     // A map may fix its theatre, and draw its woods as other plants.
+    nile: { name: 'The Nile', layout: 'nile', seats: 2, theatre: 'desert', flora: 'palm', names: { river: ['The Nile'] }, about: 'The great river runs between the two sides through the desert, a green strip of fields and palms along its banks, crossed by three long bridges. Pyramids, a temple and its obelisks stand on the sand.' },
     mesa: { name: 'Mesa Country', layout: 'mesa', seats: 2, theatre: 'desert', flora: 'cactus', about: 'Open desert of dunes and sheer-sided mesas, with stands of cactus. The mesas wall off the lines of march.' },
   };
   // The theatre a game on a map is fought in: the map's own, if it fixes one, or the one chosen.
@@ -494,7 +498,7 @@ const Rules = (() => {
   // The treeline: woods thin out over TREE_BAND of height round TREE_LINE and stand no higher.
   const TREE_LINE = 8.6, TREE_BAND = 1.2;
   // How thinly a map's woods are sown, a share of the usual; the desert's cactus stands are sparse.
-  const THIN = { mesa: 0.35 };
+  const THIN = { mesa: 0.35, nile: 1.6 };
   const WOODS = { quad: 0.7, pass: 1, lakes: 1, greenwood: 3, oldforest: 1.3, twinlakes: 0.6, ponds: 0.8, peaks: 0.6, highlands: 0.5, crater: 0.5 };
   // A point turned a quarter round the middle k times.
   const turnK = ([x, y], k) => { let dx = x - CX, dy = y - CY; for (let i = 0; i < k; i++) { const t = dx; dx = -dy; dy = t; } return [CX + dx, CY + dy]; };
@@ -644,7 +648,7 @@ const Rules = (() => {
   }
 
   // ---- The second set of maps: woods, lakes, seas, islands, mountains and rivers ----
-  const MORE = new Set(['greenwood', 'oldforest', 'twinlakes', 'ponds', 'seas', 'isles', 'peaks', 'highlands', 'rivers3', 'crater', 'mesa']);
+  const MORE = new Set(['greenwood', 'oldforest', 'twinlakes', 'ponds', 'seas', 'isles', 'peaks', 'highlands', 'rivers3', 'crater', 'mesa', 'nile']);
   function moreLayout(kind, L, all, fordAt, R) {
     const dry = () => [99, 0];
     // Two sides on the River Duel's frame, mirrored through the middle.
@@ -657,6 +661,17 @@ const Rules = (() => {
     const quad = () => {
       L.syms = [0, 1, 2, 3].map(k => p => turnK(p, k));
       L.domain = (x, y) => x + 0.5 - CX > 0 && y + 0.5 - CY > 0;
+    };
+    // How far a point lies clear of what must stay open: the bases, towns, ore, wells and the roads' lines, 1 when
+    // clear and 0 on them, with margins scaled by s. Read once the layout is laid.
+    const segD = (p, a, b) => { const dx = b[0] - a[0], dy = b[1] - a[1], t = clamp(((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / (dx * dx + dy * dy || 1), 0, 1); return mhypot(p[0] - a[0] - dx * t, p[1] - a[1] - dy * t); };
+    let segs = null, keepOut = null;
+    const clearK = (x, y, s = 1) => {
+      if (!segs) { segs = L.roads.flatMap(r => L.syms.map(T => [T(r.a), T(r.b), r.wig])); keepOut = [...L.bases.map(b => [b[0], b[1], 26]), ...L.towns.map(t => [t[0], t[1], 12]), ...L.ore.map(o => [o[0], o[1], o[2] + 4]), ...L.wells.map(w => [w[0], w[1], 6])]; }
+      let k = 1;
+      for (const o of keepOut) k = Math.min(k, smooth(o[2] * s, (o[2] + 6) * s, mhypot(x - o[0], y - o[1])));
+      for (const [a, b, w] of segs) k = Math.min(k, smooth(w + 4 * s, w + 9 * s, segD([x, y], a, b)));
+      return k;
     };
     // A road through the middle is laid as two halves meeting there, each the other's image, so a wandering road
     // keeps the map exactly symmetric.
@@ -879,16 +894,6 @@ const Rules = (() => {
           mesas.push([x, y, r, H0[mesas.length], mesas.length * 1.7]);
         }
       };
-      // How far a point lies clear of what must stay open: the bases, towns, ore, wells and the roads' lines.
-      const segD = (p, a, b) => { const dx = b[0] - a[0], dy = b[1] - a[1], t = clamp(((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / (dx * dx + dy * dy || 1), 0, 1); return mhypot(p[0] - a[0] - dx * t, p[1] - a[1] - dy * t); };
-      let segs = null;
-      const clearK = (x, y) => {
-        if (!segs) segs = L.roads.flatMap(r => L.syms.map(T => [T(r.a), T(r.b), r.wig]));
-        let k = 1;
-        for (const o of [...L.bases.map(b => [b[0], b[1], 26]), ...L.towns.map(t => [t[0], t[1], 12]), ...L.ore.map(o => [o[0], o[1], o[2] + 4]), ...L.wells.map(w => [w[0], w[1], 6])]) k = Math.min(k, smooth(o[2], o[2] + 6, mhypot(x - o[0], y - o[1])));
-        for (const [a, b, w] of segs) k = Math.min(k, smooth(w + 4, w + 9, segD([x, y], a, b)));
-        return k;
-      };
       L.wall = (x0, y0) => {
         const [u0, v0] = toUV(x0, y0), [x, y] = u0 > 0 || (u0 === 0 && v0 > 0) ? mirror([x0, y0]) : [x0, y0];
         if (!mesas) layMesas();
@@ -907,6 +912,50 @@ const Rules = (() => {
         const c = 0.5 + 0.5 * mcos(f), dune = 1.1 * c * c * smooth(18, 32, Math.abs(v));
         return Math.max(top, dune) * k;
       };
+    } else if (kind === 'nile') {
+      // The Nile between two bases: a broad river crossed by three long bridges, a green strip of fields and palm
+      // groves along its banks, and on the sand beyond, pyramids, a temple and its obelisks.
+      duel();
+      const course = v => riverU(v) * 0.8, wide = v => 4.2 + 0.8 * mcos(v * 0.09);
+      L.river = (x, y) => { const [u, v] = toUV(x, y); return [Math.abs(u - course(v)), wide(v)]; };
+      // Palms stand only in the green strip along the banks.
+      L.grove = (x, y) => { const [d, w] = L.river(x, y); return smooth(w + 6, w + 8, d) * (1 - smooth(w + 13, w + 16, d)); };
+      L.bases.push(uvp(-60, 0), mirror(uvp(-60, 0)));
+      const tN = uvp(-22, 34), tS = uvp(-24, -36), tC = uvp(-28, 4), hub = uvp(-52, 0);
+      for (const t of [tN, tS, tC]) all(L.towns, t);
+      duelKit(-60, 0);
+      [[-40, 26, 6], [-38, -26, 5.5], [-17, -12, 5]].forEach(o => all(L.ore, uvp(o[0], o[1]), [o[2]]));
+      [[-40, 8], [-30, 20]].forEach(o => all(L.wells, uvp(o[0], o[1])));
+      R(hub, tN, 2.5); R(hub, tS, 2.5); R(hub, tC, 2);
+      for (const v of [0, 40, -40]) {
+        const u0 = course(v), a = uvp(u0 - 13, v), b = uvp(u0 + 13, v);
+        L.bridges.push([a, b]); if (v) L.bridges.push([mirror(a), mirror(b)]);
+        R(a, b, 0, false); if (v) R(mirror(a), mirror(b), 0, false);
+      }
+      R(tC, uvp(course(0) - 13, 0), 1.5); R(tN, uvp(course(40) - 13, 40), 1.5); R(tS, uvp(course(-40) - 13, -40), 1.5);
+      // The monuments, each a kind, a middle, a half size and a turn, laid where each fits clear of the roads, towns,
+      // bases, ore and wells, in one half and copied by the half turn. Three pyramids out on the sand; a temple near
+      // the green strip, facing the river, with two obelisks before its gate.
+      const dry = (x, y) => { const [d, w] = L.river(x, y); return d > w + 10; };
+      const fits = (x, y, r) => { if (x < r + 4 || y < r + 4 || x > W - r - 4 || y > H - r - 4 || mhypot(2 * x - W, 2 * y - H) < 2 * r + 12 || !dry(x, y)) return false; for (let a = 0; a < TAU; a += 0.5) if (clearK(x + mcos(a) * r, y + msin(a) * r, 0.55) < 0.98 || !dry(x + mcos(a) * r, y + msin(a) * r)) return false; return clearK(x, y, 0.55) >= 1; };
+      // Sites over the half, tried in the order given by a score, the best that fits taken.
+      const site = (r, score, ok) => {
+        const cand = [];
+        for (let u = -84; u <= -10; u += 2) for (let v = -84; v <= 84; v += 2) cand.push([u, v, score(u, v)]);
+        cand.sort((p, q) => q[2] - p[2] || p[0] - q[0] || p[1] - q[1]);
+        for (const [u, v] of cand) { const [x, y] = uvp(u, v); if (fits(x, y, r) && ok(x, y)) return [x, y, u, v]; }
+        return null;
+      };
+      // The pyramids as far out on the sand from the river as they fit; the temple as near the green strip.
+      const mons = [], P = site(7, (u, v) => Math.abs(u - course(v)), () => true);
+      if (P) [[-1.5, -1, 3], [3.6, 2.6, 1.9], [-3, 4.2, 1.4]].forEach(([du, dv, r]) => mons.push(['pyramid', ...uvp(P[2] + du, P[3] + dv), r, 0.785]));
+      const T = site(6, (u, v) => -Math.abs(Math.abs(u - course(v)) - 26), (x, y) => !P || mhypot(x - P[0], y - P[1]) > 24);
+      if (T) {
+        const [tx, ty] = uvp(T[2], T[3]), [rx, ry] = uvp(T[2] + 6, T[3]), a = matan2(ry - ty, rx - tx);
+        mons.push(['temple', tx, ty, 2.6, a]);
+        for (const s of [-1, 1]) { const [ox, oy] = uvp(T[2] + 4.5, T[3] + s * 1.6); mons.push(['obelisk', ox, oy, 0.4, a]); }
+      }
+      L.monuments = mons.flatMap(m => { const q = mirror([m[1], m[2]]); return [m, [m[0], q[0], q[1], m[3], m[4] + PI]]; });
     }
     return L;
   }
@@ -925,6 +974,7 @@ const Rules = (() => {
     L.towns.forEach(p => open.push([p[0], p[1], 11]));
     L.ore.forEach(p => open.push([p[0], p[1], p[2] + 3]));
     L.wells.forEach(p => open.push([p[0], p[1], 5]));
+    if (L.monuments) L.monuments.forEach(m => open.push([m[1], m[2], m[3] + 2]));
     const flatness = (x, y) => { let m = 1; for (const o of open) m = Math.min(m, smooth(o[2] * 0.75, o[2] * 1.5, mhypot(x - o[0], y - o[1]))); return m; };
 
     // Roads join each base to its bridges and towns.
@@ -1220,10 +1270,14 @@ const Rules = (() => {
       };
       if (!keep(x, y)) continue;
       const w0 = wk ? 0.58 - 0.07 * wk : 0.58;
-      if (wood > w0 && r < (wk ? smooth(w0, w0 + 0.1, wood) * (0.5 + 0.35 * wk) : smooth(0.58, 0.68, wood) * 0.5) * (THIN[kind] || 1)) place('tree', 0.7 + rand() * 0.7);
+      if (wood > w0 && r < (wk ? smooth(w0, w0 + 0.1, wood) * (0.5 + 0.35 * wk) : smooth(0.58, 0.68, wood) * 0.5) * (THIN[kind] || 1) * (L.grove ? L.grove(x + 0.5, y + 0.5) : 1)) place('tree', 0.7 + rand() * 0.7);
       else if (r < 0.006) place('rock', 0.5 + rand() * 0.9);
     }
 
+    // A monument blocks the cells under it, and nothing is built there.
+    if (L.monuments) for (const [, mx, my, r] of L.monuments) for (let y = Math.floor(my - r); y <= Math.ceil(my + r); y++) for (let x = Math.floor(mx - r); x <= Math.ceil(mx + r); x++) {
+      if (x >= 0 && y >= 0 && x < W && y < H && mhypot(x + 0.5 - mx, y + 0.5 - my) < r + 0.3) ground[y * W + x] |= 7;
+    }
     // Town houses block their cells. A town's middle stays clear around its flag.
     const houses = [];
     for (let i = 0; i < towns.length; i += K) {
@@ -1292,7 +1346,7 @@ const Rules = (() => {
     const fish = (L.fish || []).map(p => ({ x: p[0], y: p[1] }));
     let seaCells = 0;
     for (let c = 0; c < N; c++) seaCells += sea[c];
-    return { W, H, seed, kind, h, deck, water, ground, ore: oreCells, oreFields, wells, towns, roads, roadDist, bridges, scatter, houses, oreRich, bases: L.bases, faces, fords: L.fords, fordCells, wadeCells, brooks, brookFords, brookDist: bD, brookFord: bF, sea, fish, seaCells };
+    return { W, H, seed, kind, h, deck, water, ground, ore: oreCells, oreFields, wells, towns, roads, roadDist, bridges, scatter, houses, oreRich, bases: L.bases, faces, fords: L.fords, fordCells, wadeCells, brooks, brookFords, brookDist: bD, brookFord: bF, sea, fish, seaCells, monuments: (L.monuments || []).map(([k, x, y, r, a]) => ({ k, x, y, r, a })) };
   }
 
   // A map is kept only if vehicles can get from the first base to every other base, town and well.
