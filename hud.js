@@ -919,6 +919,35 @@ const Hud = (() => {
       og.restore();
     }
     const smoothstepJ = (a, b, x) => { const t = Math.max(0, Math.min(1, (x - a) / (b - a))); return t * t * (3 - 2 * t); };
+    // A small shell's burst as a pen draws one: a ragged star of flame for a moment, then a little scalloped cloud
+    // that swells, rises and thins. Ground bursts are a pale brown smoke, air bursts the black of flak.
+    let puffC = null;
+    const puffSheet = n => { if (!puffC || puffC.width < n) { puffC = document.createElement('canvas'); puffC.width = puffC.height = Math.max(n, 64); } return puffC; };
+    function drawPuff(f) {
+      const k = f.t / f.life, [x, y] = world.project(f.x, f.y + f.s * 0.5 * k, f.z);
+      if (x < -60 || y < -60 || x > world.vw + 60 || y > world.vh + 60) return;
+      const u = world.ppu(f.x, f.y, f.z), R = Math.min(60, f.s * u * (f.air ? 0.42 : 0.6)) * (0.55 + 0.45 * Math.min(1, k / 0.12)) * (1 + 0.5 * k);
+      if (!(R > 1)) return;
+      og.save(); og.translate(x, y); og.setLineDash([]);
+      if (k < 0.12) { og.globalAlpha = 1 - k / 0.12; star(0, 0, R * 1.1, f.seed, 7, '#e8471c', '#ffd84a', 0); }
+      // The cloud is drawn whole on a scratch sheet, then laid down faded, so its inner outlines never show through.
+      const n = 5 + (f.seed * 7 % 3 | 0), lobes = [], S2 = Math.ceil(R * 2.6), c = puffSheet(S2), g = c.getContext('2d');
+      for (let i = 0; i < n; i++) { const a = i / n * 6.283 + rnd(f.seed, i) * 0.9, d = R * (0.35 + 0.3 * rnd(f.seed, i + 5)); lobes.push([Math.cos(a) * d, Math.sin(a) * d * 0.8 - R * 0.1, R * (0.42 + 0.25 * rnd(f.seed, i + 9))]); }
+      lobes.push([0, 0, R * 0.55]);
+      const dark = blastDark, fill = f.air ? (dark ? '#1c1a18' : '#4a4540') : (dark ? '#6a6258' : '#cdc3b2'), line = f.air ? (dark ? '#8a847a' : '#1a1512') : (dark ? '#d8d0c0' : '#2a221c');
+      g.clearRect(0, 0, S2, S2); g.save(); g.translate(S2 / 2, S2 / 2);
+      g.strokeStyle = line; g.lineWidth = Math.max(1.2, R * 0.08);
+      for (const [cx, cy, r] of lobes) { g.beginPath(); g.arc(cx, cy, r, 0, 6.283); g.stroke(); }
+      g.fillStyle = fill;
+      for (const [cx, cy, r] of lobes) { g.beginPath(); g.arc(cx, cy, r, 0, 6.283); g.fill(); }
+      // A few strokes of shade on the side away from the light.
+      g.lineWidth = Math.max(0.7, R * 0.035); g.globalAlpha = 0.55;
+      for (let i = 0; i < 4; i++) { const yy = R * (0.05 + i * 0.13); g.beginPath(); g.moveTo(R * 0.05, yy); g.lineTo(R * (0.45 - i * 0.06), yy - R * 0.18); g.stroke(); }
+      g.restore();
+      og.globalAlpha = (k < 0.55 ? 1 : 1 - (k - 0.55) / 0.45) * 0.95;
+      og.drawImage(c, 0, 0, S2, S2, -S2 / 2, -S2 / 2, S2, S2);
+      og.restore(); og.globalAlpha = 1;
+    }
     function drawInk(s, t) {
       // The blasts, in the manner the look asks for: 0 the comic burst, 1 an engraver's rays and scribbled smoke, 2 an
       // ink blot with flung drops, 3 a plan's dashed circle of the blast, 4 nothing drawn over the scene.
@@ -926,6 +955,7 @@ const Hud = (() => {
       PAPER_C = blastDark ? 'rgba(0,0,0,0)' : '#f3ecdc';
       const INKC = '#1a1512', PAPERC = PAPER_C;
       for (const f of world.inkFx) {
+        if (f.k === 'puff') { drawPuff(f); continue; }
         // A burst carries the style of what went up, unless the look draws none; a muzzle flash is always a few rays.
         const fx = f.k === 'star' ? 1 : world.style.fx === 4 ? 4 : f.fx !== undefined ? f.fx : (world.style.fx || 0);
         if (fx === 4) continue;

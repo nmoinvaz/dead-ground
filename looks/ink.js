@@ -723,7 +723,8 @@
           float hr0 = max(hz.r, max(hz.g, hz.b));
           // Heat, given a boiling edge so a fireball's outline billows as a pen would draw it.
           float hn = hr0;
-          if (hr0 > 0.04) hn += (noise(px * 0.045 / uK + boil * 5.3) - 0.5) * 0.34 * smoothstep(0.04, 0.3, hr0);
+          // Two scales of billow, broad lobes and a finer ragged fringe, so no blast's edge is a smooth round line.
+          if (hr0 > 0.04) hn += ((noise(px * 0.045 / uK + boil * 5.3) - 0.5) * 0.36 + (noise(px * 0.13 / uK + boil * 2.1 + 9.0) - 0.5) * 0.22) * smoothstep(0.04, 0.3, hr0);
           float lit = step(0.26, hn), rim = 0.0;
           if (inverse) { cover = max(cover * (1.0 - lit), 0.0); cover = max(cover, rim * 0.0); }
           else { cover *= 1.0 - lit; cover = max(cover, rim); }

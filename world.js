@@ -2846,6 +2846,27 @@ const World = (() => {
       for (let i = 0; i < Math.round(6 + size * 6); i++) { const a = R() * 6.28, sp = (0.6 + R() * 1.4) * size; smoke.add(x, y + 0.15, z, Math.cos(a) * sp, 0.6 + R() * 0.8, Math.sin(a) * sp, 1.4 + R(), size * 0.5, size * 1.8, [d[0], d[1], d[2], 0.6], [d[0], d[1], d[2], 0], R() * 4 | 0, { drag: 2.2 }); }
       inkAdd({ k: 'burst', x, y: y + 0.3, z, life: 0.25, s: size * 0.7, fx: 6 });
     }
+    // A small burst, as a light shell, an autocannon round or a flak shell makes: a quick flash and a little cloud of
+    // dark smoke, in a few uneven puffs that drift and thin. High up, as flak bursts, the cloud is darker.
+    function puff(x, y, z, size, air) {
+      const R = () => Math.random(), sm = theme.smoke, k = air ? 0.55 : 1;
+      // The pen-and-ink look draws the cloud itself, a scalloped puff that swells and thins.
+      inkAdd({ k: 'puff', x, y, z, life: 1.3 + R() * 0.7, s: size, air: !!air });
+      glow.add(x, y, z, 0, 0, 0, 0.07, size * 0.5, size * 1.1, [9, 6, 3, 1], [4, 1.5, 0.3, 0], 12, { rot: R() * 6 });
+      // A small ragged flame, two or three lobes that burn out in a quarter of a second.
+      const a0 = R() * 6.28;
+      for (let i = 0, n = 2 + (R() * 2 | 0); i < n; i++) {
+        const a = a0 + (R() - 0.5) * 2.4, d = size * R() * 0.3;
+        glow.add(x + Math.cos(a) * d, y + R() * 0.15 * size, z + Math.sin(a) * d, 0, 0.6 * size, 0, 0.18 + R() * 0.14, size * (0.28 + R() * 0.2), size * (0.55 + R() * 0.3), [6, 3.4, 1.2, 1], [2, 0.45, 0.08, 0], 8, { rot: R() * 6, delay: i * 0.02 });
+      }
+      // Then the cloud: a few uneven puffs of smoke, dense at first.
+      for (let i = 0, n = 4 + (R() * 3 | 0); i < n; i++) {
+        const a = R() * 6.28, d = size * (0.1 + R() * 0.4);
+        smoke.add(x + Math.cos(a) * d, y + R() * 0.25 * size, z + Math.sin(a) * d, Math.cos(a) * 0.4 + 0.2, 0.25 + R() * 0.35, Math.sin(a) * 0.4,
+          1.6 + R() * 1.4, size * (0.45 + R() * 0.3), size * (1.1 + R() * 0.7), [sm[0] * 1.2 * k, sm[1] * 1.15 * k, sm[2] * 1.15 * k, 1], [sm[0] * 3, sm[1] * 3, sm[2] * 3, 0], R() * 4 | 0, { drag: 1.1, spin: (R() - 0.5) * 0.8, delay: 0.06 + i * 0.03 });
+      }
+      if (!air) for (let i = 0; i < 4; i++) { const a = R() * 6.28, sp = 1.5 + R() * 2; smoke.add(x, y + 0.05, z, Math.cos(a) * sp, 2 + R() * 2, Math.sin(a) * sp, 0.6 + R() * 0.4, 0.08, 0.12, [0.16, 0.13, 0.11, 1], [0.16, 0.13, 0.11, 0.9], 11, { grav: -12, spin: 6 }); }
+    }
     function explosion(x, y, z, size, fx) {
       inkAdd({ k: 'burst', x, y: y + 0.4 * size, z, life: (0.16 + size * 0.05) * (style.burstLife || 1), s: size, fx });
       const sm = theme.smoke, d = dustC(), n = Math.round(6 + size * 7), R = () => Math.random();
@@ -2854,11 +2875,17 @@ const World = (() => {
       glow.add(x, y + 0.4 * size, z, 0, 0, 0, 0.1, size * 2.6, size * 4.6, [7, 5, 3, 0.9], [3, 1.2, 0.2, 0], 8);
       // Where the look draws fire in bands of coloured ink, a fireball that swells and burns down from yellow through
       // orange to red over half a second, so the blast is seen in colour with nothing drawn over it.
-      if (style.fire === 0) for (let i = 0; i < 3; i++) {
-        glow.add(x + (R() - 0.5) * size * 0.7, y + 0.3 * size + R() * 0.4 * size, z + (R() - 0.5) * size * 0.7, 0, 0.9 * size, 0,
-          0.45 + R() * 0.25, size * 1.1, size * (2.2 + R()), [6, 3.4, 1.2, 1], [2, 0.45, 0.08, 0], 8, { rot: R() * 6 });
+      // The fire is a cluster of lobes, never one round ball: thrown more to one side than the other, of unequal
+      // size, some rising as tongues, some lighting a moment later, so no two blasts have the same shape.
+      if (style.fire === 0) {
+        const a0 = R() * 6.28, nl = Math.min(9, 3 + Math.round(size * 2.5));
+        for (let i = 0; i < nl; i++) {
+          const a = a0 + (R() - 0.5) * 2.6, d = size * (0.15 + R() * 0.8) * (i ? 1 : 0.25), tongue = R() < 0.3, rs = size * (0.45 + R() * 0.7) * (i ? 1 : 1.15);
+          glow.add(x + Math.cos(a) * d, y + 0.25 * size + R() * 0.4 * size, z + Math.sin(a) * d, Math.cos(a) * 0.5 * size, (tongue ? 2 + R() : 0.5 + R()) * size, Math.sin(a) * 0.5 * size,
+            0.28 + R() * 0.45, rs * (tongue ? 0.6 : 0.9), rs * (tongue ? 1.4 : 1.9 + R()), [6, 3.4, 1.2, 1], [2, 0.45, 0.08, 0], 8, { rot: R() * 6, delay: i ? R() * 0.09 * Math.sqrt(size) : 0, drag: 1.4 });
+        }
       }
-      glow.add(x, y + 0.2, z, 0, 0, 0, 0.06, size * 1.4, size * 1.8, [9, 7, 4.5, 1], [4, 2, 0.6, 0], 12, { rot: R() * 6 });
+      glow.add(x + (R() - 0.5) * size * 0.4, y + 0.2, z + (R() - 0.5) * size * 0.4, 0, 0, 0, 0.06, size * (1 + R() * 0.6), size * 1.8, [9, 7, 4.5, 1], [4, 2, 0.6, 0], 12, { rot: R() * 6 });
       // The fireball: puffs that leave hot, swell and roll upward, and cool to brown smoke.
       for (let i = 0; i < n; i++) {
         const a = R() * 6.28, up = 0.6 + R() * 1.6, sp = (0.6 + R() * 1.6) * size;
@@ -3021,6 +3048,12 @@ const World = (() => {
         inkAdd({ k: 'star', x: mx, y: up, z: my, life: 0.08, s: w.fx === 'tracer' ? 0.42 : 0.3 });
         streak.add(mx, up, my, e.tx + jx, e.tz, e.ty + jy, 0.1, wd, FX[w.fx]);
         if (Math.random() < 0.3) glow.add(e.tx + jx, e.tz, e.ty + jy, (Math.random() - 0.5) * 2, 1.5, (Math.random() - 0.5) * 2, 0.14, 0.18, 0.04, [6, 3.6, 1.4, 1], [3, 1, 0.2, 0], 9, { grav: -8 });
+        // Explosive rounds burst where they strike: flak in a black puff in the air, an autocannon's shells in a
+        // small cloud on the ground.
+        if (e.w === 'flak' || e.w === 'auto') {
+          const air = e.tz - heightAt(M, e.tx, e.ty) > 1.5, ox = (Math.random() - 0.5) * (air ? 1.4 : 0.5), oy = (Math.random() - 0.5) * (air ? 1.4 : 0.5);
+          if (VIS(e.tx, e.ty) && (air || Math.random() < 0.6)) puff(e.tx + ox, e.tz + (air ? (Math.random() - 0.3) * 0.8 : 0.15), e.ty + oy, air ? 0.75 : 0.45, air);
+        }
         return;
       }
       if (w.fx === 'beam') {
@@ -3178,7 +3211,9 @@ const World = (() => {
           startle(e.x, e.y, 8); flatten(e.x, e.y, w.splash || 0.6);
           if (!VIS(e.x, e.y) || w.fx === 'arrow' || w.fx === 'melee') break;
           if (w.fx === 'stone') { dustBurst(e.x, e.z, e.y, (w.splash || 1) * 0.7); scorch(e.x, e.y, 0.6, 0.4); break; }
-          explosion(e.x, e.z, e.y, w.fx === 'rocket' ? 1.1 : w.fx === 'shell' ? 0.62 : 0.5, HIT_OF[w.fx]);
+          // A light shell bursts in a small cloud; a rocket, a missile or a heavy shell with a wide blast in fire.
+          if (w.fx === 'shell' && (w.splash || 0) <= 1.1) puff(e.x, e.z + 0.2, e.y, 0.9);
+          else explosion(e.x, e.z, e.y, w.fx === 'rocket' ? 1.1 : w.fx === 'shell' ? 0.62 : 0.5, HIT_OF[w.fx]);
           if (w.fx === 'rocket' || w.fx === 'shell') scorch(e.x, e.y, w.fx === 'rocket' ? 1.1 : 0.7, 0.8);
           break;
         }
