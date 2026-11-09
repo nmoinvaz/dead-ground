@@ -9,6 +9,9 @@ and how hard, and the room plays out once everyone is ready.
   the game and sends each step's commands to every player. A Directory object lists the rooms.
   `server/rules.js` and `server/ai.js` are the same rules and commander the page runs, so every copy of a game
   stays the same.
+- `wrangler.jsonc` deploys this as the worker `mapmakers-war`, answering at mapmakerswar.com and www.mapmakerswar.com.
+- `redirect/` is the worker that served the game as Dead Ground, at dead-ground.nathan-05a.workers.dev. It now sends
+  every request on to mapmakerswar.com.
 
 Run locally with `npx wrangler dev`, deploy with `npx wrangler deploy`.
 

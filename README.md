@@ -3,7 +3,7 @@
 A real-time strategy game in three.js, after Red Alert and Rise of Nations, drawn in pen and ink. Every side
 advances through six ages, Ancient to Future, and each of its units takes a new form in each age: spearmen become
 pikemen, musketeers, riflemen, rifle squads and exo troopers. Play a skirmish against computers or open a game room
-for others to join at https://dead-ground.nathan-05a.workers.dev.
+for others to join at https://mapmakerswar.com.
 
 ## Layout
 
