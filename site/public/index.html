@@ -605,7 +605,7 @@ body[data-look="ink"] .sheet { box-shadow: 4px 4px 0 var(--ink); }
       <div class="choice"><h2>Map sheet frame</h2><div id="s-sheet" class="two"><button data-v="on">On</button><button data-v="off">Off</button></div></div>
       <div class="choice"><h2>Shadows</h2><div id="s-shade" class="two"><button data-v="hatch">Hatched</button><button data-v="wash">Wash</button></div></div>
       <div class="choice"><h2>Music</h2><div id="s-music" class="two"><button data-v="on">On</button><button data-v="off">Off</button></div></div>
-      <p id="build">Build e720a69 2026-11-10 08:19</p>
+      <p id="build">Build 6266006 2026-11-10 08:41</p>
     </div>
     <div id="banner" hidden></div>
     <button id="update" hidden>A new version of Mapmaker’s War is out. <b>Reload</b></button>
@@ -10092,7 +10092,7 @@ const World = (() => {
     }
     SH.tDetail.value = makeDetail();
 
-    let style = Looks.get('ink'), inkStyle = 8, roadStyle = 3, oreStyle = 4, shadeHatch = true;
+    let style = Looks.get('ink'), inkStyle = 8, roadStyle = 3, oreStyle = 5, shadeHatch = true;
     // The kind of thing being drawn into the line passes, shared with the pass's material, and whether it sways.
     const catU = { value: 1 }, catRef = { mat: null, norm: null, lines: null }, swayU = { value: 0 };
     const maskMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
@@ -11266,7 +11266,8 @@ const World = (() => {
       for (let c = 0; c < W * H; c++) if (M.ore[c]) cells.push(c);
       const per = low ? 1 : 2, cap = cells.length * per;
       // Laid out at full size first, so each tile's bounds hold its nuggets; updateOre then sizes them by what is left.
-      const oreMat = patch(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.5, metalness: 0.4, emissive: 0x3a2400, emissiveIntensity: 0.0, envMapIntensity: 0.55 }), { tint: true });
+      // Rough enough that the sun's glints on a nugget stay under the brightness the glow pass takes for fire.
+      const oreMat = patch(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.8, metalness: 0.4, emissive: 0x3a2400, emissiveIntensity: 0.0, envMapIntensity: 0.55 }), { tint: true });
       const rr = mulberry(M.seed + 3), rnd = [], first = [];
       for (let i = 0; i < cap; i++) {
         const r = [rr() * 0.8 + 0.1, rr() * 0.8 + 0.1, rr() * 6.28, 0.8 + rr() * 0.8, colA.setHSL(0.1 + rr() * 0.035, 0.74, 0.5 + rr() * 0.16).getHex()], c = cells[i / per | 0];
@@ -18183,7 +18184,7 @@ const Game = (() => {
         ? (t < 0.5 ? [0.2 + 0.14 * t, 0.29 + 0.16 * t, 0.19 + 0.12 * t] : [0.27 + 0.56 * (t - 0.5), 0.37 + 0.26 * (t - 0.5), 0.25 + 0.24 * (t - 0.5)])
         : (t < 0.5 ? [0.84 + 0.2 * t, 0.9 + 0.06 * t, 0.8 + 0.04 * t] : [0.94 - 0.12 * (t - 0.5), 0.93 - 0.26 * (t - 0.5), 0.82 - 0.36 * (t - 0.5)]);
       const WTR = dark ? [0.115, 0.15, 0.235] : [0.788, 0.804, 0.902], BANK = dark ? [0.4, 0.5, 0.75] : [0.3, 0.36, 0.6];
-      const ORE = dark ? [0.72, 0.58, 0.3] : [0.86, 0.68, 0.3], WOOD = dark ? [0.16, 0.26, 0.15] : [0.62, 0.74, 0.55], DOT = dark ? [0.4, 0.55, 0.36] : [0.3, 0.45, 0.28];
+      const ORE = dark ? [0.84, 0.64, 0.22] : [0.96, 0.76, 0.24], WOOD = dark ? [0.16, 0.26, 0.15] : [0.62, 0.74, 0.55], DOT = dark ? [0.4, 0.55, 0.36] : [0.3, 0.45, 0.28];
       const wetAt = (i, j) => { const h = hs[j * px + i]; if (h < M.water) return true; if (!BD) return false; const v = Math.round((j + 0.5) * k * RES) * VW + Math.round((i + 0.5) * k * RES); return BD[v] < 0.48 && M.roadDist[v] > 1.4; };
       const ci = (i, j) => Math.floor(hs[j * px + i] / 0.66);
       for (let j = 0; j < px; j++) for (let i = 0; i < px; i++) {
