@@ -632,7 +632,7 @@ body[data-look="ink"] .sheet { box-shadow: 4px 4px 0 var(--ink); }
       <div class="choice"><h2>Map sheet frame</h2><div id="s-sheet" class="two"><button data-v="on">On</button><button data-v="off">Off</button></div></div>
       <div class="choice"><h2>Shadows</h2><div id="s-shade" class="two"><button data-v="hatch">Hatched</button><button data-v="wash">Wash</button></div></div>
       <div class="choice"><h2>Music</h2><div id="s-music" class="two"><button data-v="on">On</button><button data-v="off">Off</button></div></div>
-      <p id="build">Build fd78dcd 2026-11-10 12:49</p>
+      <p id="build">Build 576bc11 2026-11-10 12:56</p>
     </div>
     <div id="banner" hidden></div>
     <button id="update" hidden>A new version of Mapmaker’s War is out. <b>Reload</b></button>
@@ -2399,8 +2399,8 @@ const Rules = (() => {
       if (snow) o.cover += up * down; else o.flood += rv * up * down;
     }
     o.cover = Math.min(1, o.cover);
-    // A storm or a dust storm keeps every aircraft on the ground.
-    o.grounded = o.storm > 0.5 || o.sand > 0.5;
+    // A storm keeps every aircraft on the ground. A dust storm grounds only those under its dust, by groundedAt.
+    o.grounded = o.storm > 0.5;
     return o;
   }
   const sky = S => S._wx && S._wx.at === S.tick ? S._wx : (S._wx = Object.assign(weatherAt(S.seed, S.tick, skyOf(S)), { at: S.tick }));
@@ -2475,6 +2475,35 @@ const Rules = (() => {
     S._sh = { at: t, list };
     return list;
   }
+  // A dust storm comes as a haboob: a wall of dust rolling across the map on its spell's wind, from beyond one edge
+  // to beyond the other over the storm's heavy part, thick for DUST_D of the map behind its front and thinning over
+  // DUST_F behind that as the dust settles, with clear air ahead of it.
+  const DUST_D = 0.3, DUST_F = 0.3;
+  // The wall at a time: the way it rolls, how far its front has come that way from the map's middle, and how strong
+  // the storm is, or null with none.
+  function dustWall(S, t = S.tick) {
+    if (S._dw && S._dw.at === t) return S._dw.wall;
+    const tab = skyOf(S), k0 = Math.floor(t / SPELL);
+    let wall = null;
+    for (let j = k0 - 1; j <= k0; j++) {
+      if (spellOf(S.seed, j, tab) !== 'sand') continue;
+      const wj = spellW(j, t);
+      if (wj <= 0) continue;
+      const a = (spellHash(S.seed + 77, j) % 6283) / 1000, front = (-0.75 + 1.5 * (t - j * SPELL) / HEAVY) * W;
+      if (!wall || wj > wall.k) wall = { dx: mcos(a), dy: msin(a), front, k: wj };
+    }
+    S._dw = { at: t, wall };
+    return wall;
+  }
+  // How thick the dust is at a point, 0 clear to 1.
+  function dustAt(S, x, y) {
+    const w = dustWall(S);
+    if (!w) return 0;
+    const e = w.front - ((x - CX) * w.dx + (y - CY) * w.dy);
+    return w.k * smooth(-2, 3, e) * (1 - smooth(DUST_D * W, (DUST_D + DUST_F) * W, e));
+  }
+  // Whether aircraft at a point must stay down: everywhere in a storm, and under a dust storm's dust.
+  const groundedAt = (S, x, y) => sky(S).grounded || dustAt(S, x, y) > 0.5;
   // How deep under a shower or a rain cloud a point lies, 0 clear to 1 in its heart, for rain, snow and storm.
   function showerAt(S, x, y) {
     let rain = 0, snow = 0, storm = 0;
@@ -2488,13 +2517,13 @@ const Rules = (() => {
     return { rain, snow, storm };
   }
   // How fast a kind of mover goes off the roads in the weather over the whole map, before any worn track. Snow
-  // slows everyone, and blown sand slows men and wheels. Rain and storms fall only from clouds, so they are found
-  // where the mover stands.
+  // slows everyone. Rain and storms fall only from clouds and blown sand only under a dust storm's wall, so those
+  // are found where the mover stands.
   function offGoing(move, w) {
     if (move === 'naval') return 1;
-    const g = move === 'wheel' ? 1 - 0.2 * w.snow - 0.25 * w.sand
-      : move === 'track' ? 1 - 0.1 * w.snow - 0.1 * w.sand
-        : 1 - 0.18 * w.snow - 0.2 * w.sand;
+    const g = move === 'wheel' ? 1 - 0.2 * w.snow
+      : move === 'track' ? 1 - 0.1 * w.snow
+        : 1 - 0.18 * w.snow;
     return Math.max(0.3, g);
   }
   // The time of day, from 0 at dawn round to 1. A day lasts twenty minutes and a game starts early in the morning.
@@ -2966,10 +2995,11 @@ const Rules = (() => {
         }
       }
     };
-    // Fog and blown sand shorten everyone's sight. Radar sweeps and flares see through them. By night a unit sees
-    // two fifths less, a building a little less by its lamps, and a building that fights not at all, by its
-    // searchlight.
-    const w = sky(S), n = nightAt(S.tick), fk = Math.max(0.4, 1 - 0.45 * w.fog - 0.4 * w.sand), fa = Math.max(0.5, 1 - 0.3 * w.fog - 0.3 * w.sand);
+    // Fog shortens everyone's sight, and blown sand the sight of what stands in a dust storm's dust. Radar sweeps and
+    // flares see through them. By night a unit sees two fifths less, a building a little less by its lamps, and a
+    // building that fights not at all, by its searchlight.
+    const w = sky(S), n = nightAt(S.tick), dusty = !!dustWall(S);
+    const fkAt = e => Math.max(0.4, 1 - 0.45 * w.fog - (dusty ? 0.4 * dustAt(S, e.x, e.y) : 0)), faAt = e => Math.max(0.5, 1 - 0.3 * w.fog - (dusty ? 0.3 * dustAt(S, e.x, e.y) : 0));
     const nu = 1 - 0.4 * n, nb = 1 - 0.15 * n;
     // Under a shower or a rain cloud sight is cut short: what stands inside one is seen only from close by, and what
     // stands in one sees a third less itself.
@@ -2984,11 +3014,11 @@ const Rules = (() => {
     for (const e of S.ents) {
       if (e.hp <= 0) continue;
       const P = S.P[e.team];
-      if (e.b) light(P, e.x, e.y, (e.d.sight + Math.max(e.w, e.h) / 2) * fk * (armOf(S, e) ? 1 : nb) * inSh(e), 3, false);
-      else if (e.d.move === 'air' || e.d.move === 'jet') light(P, e.x, e.y, e.d.sight * fa * (1 - 0.3 * n) * inSh(e), 0, true);
-      else light(P, e.x, e.y, e.d.sight * fk * nu * (e.cov >= 0 ? 1.2 : 1) * inSh(e), 1.1, false);
+      if (e.b) light(P, e.x, e.y, (e.d.sight + Math.max(e.w, e.h) / 2) * fkAt(e) * (armOf(S, e) ? 1 : nb) * inSh(e), 3, false);
+      else if (e.d.move === 'air' || e.d.move === 'jet') light(P, e.x, e.y, e.d.sight * faAt(e) * (1 - 0.3 * n) * inSh(e), 0, true);
+      else light(P, e.x, e.y, e.d.sight * fkAt(e) * nu * (e.cov >= 0 ? 1.2 : 1) * inSh(e), 1.1, false);
     }
-    for (const t of S.towns) if (t.owner >= 0) light(S.P[t.owner], t.x, t.y, 9 * fk * (1 - 0.25 * n), 2, false);
+    for (const t of S.towns) if (t.owner >= 0) light(S.P[t.owner], t.x, t.y, 9 * fkAt(t) * (1 - 0.25 * n), 2, false);
     for (const s of S.sweeps) if (s.until > S.tick) light(S.P[s.team], s.x, s.y, s.r, 0, true);
     // A unit or building that has fired lately is seen by the side it fired on, wherever it stands, by its flash.
     for (const e of S.ents) if (e.hp > 0 && e.firedUntil > S.tick && S.P[e.firedOn]) light(S.P[e.firedOn], e.x, e.y, e.b ? Math.max(e.w, e.h) / 2 + 0.5 : 0.8, 0, true);
@@ -3897,6 +3927,8 @@ const Rules = (() => {
       const sh = showerAt(S, u.x, u.y), mud = tl >= 3 ? 0 : 1 - rk;
       if (sh.rain || sh.snow || sh.storm) going *= 1 - (d.move === 'wheel' ? 0.24 * sh.rain * mud + 0.2 * sh.snow : d.move === 'track' ? 0.12 * sh.storm * mud + 0.1 * sh.snow : d.move === 'naval' ? 0.3 * sh.storm : 0.18 * sh.snow);
     }
+    // Under a dust storm's dust: blown sand off the roads slows wheels most, men less and tracks least.
+    if (!naval && dustWall(S)) { const du = dustAt(S, u.x, u.y); if (du) going *= 1 - (d.move === 'wheel' ? 0.25 : d.move === 'track' ? 0.1 : 0.2) * du * (1 - rk); }
     if (here & 16) going *= 0.5;
     // Pinned men crawl.
     if (d.men && pinned(u) && !u.brk) going *= 0.45;
@@ -4080,8 +4112,8 @@ const Rules = (() => {
   function jetTick(S, u) {
     // Parked at the airfield until told. A run flies over the target and home again.
     const home = S.ents.find(e => e.b && e.team === u.team && e.kind === 'airfield' && e.hp > 0);
-    // A storm calls every run off.
-    if (sky(S).grounded && u.ord && u.ord.t === 'attack') u.ord = null;
+    // A storm calls every run off, and a dust storm a run from under its dust or into it.
+    if (u.ord && u.ord.t === 'attack' && (groundedAt(S, u.x, u.y) || groundedAt(S, u.ord.x, u.ord.y))) u.ord = null;
     const o = u.ord;
     if (o && o.t === 'attack' && u.ammo > 0) {
       const t = S.byId.get(o.id), tx = t ? t.x : o.x, ty = t ? t.y : o.y;
@@ -4111,8 +4143,9 @@ const Rules = (() => {
 
   function airTick(S, u) {
     const d = u.d, o = u.ord;
-    // In a storm helicopters and drones go home and set down, and a drone's flying time stands still.
-    if (sky(S).grounded) {
+    // In a storm, or under a dust storm's dust, helicopters and drones go home and set down, and a drone's flying
+    // time stands still.
+    if (groundedAt(S, u.x, u.y)) {
       u.ord = null; u.tgt = 0;
       const [px, py] = padFor(S, u);
       if (flyTo(S, u, px, py, 0.6)) u.z = Math.max(0.3, u.z - 2 * DT);
@@ -4955,7 +4988,7 @@ const Rules = (() => {
     } else if (c.c === 'attack') {
       const t = S.byId.get(c.id);
       if (t && t.hp > 0 && !(t.team !== team && shielded(S, t.team))) for (const u of unitsOf(S, team, c.ids)) {
-        if (u.d.move === 'jet') { if (u.ammo > 0 && !sky(S).grounded) u.ord = { t: 'attack', id: t.id, x: t.x, y: t.y }; }
+        if (u.d.move === 'jet') { if (u.ammo > 0 && !groundedAt(S, u.x, u.y) && !groundedAt(S, t.x, t.y)) u.ord = { t: 'attack', id: t.id, x: t.x, y: t.y }; }
         else if (u.d.cargo) continue;
         else { u.ord = { t: 'attack', id: t.id }; u.tgt = t.id; u.wpT = 0; u.stuck = 0; }
       }
@@ -4965,7 +4998,7 @@ const Rules = (() => {
       if (!m) return;
       for (const u of unitsOf(S, team, c.ids)) {
         if (c.c === 'mend') { if (u.d.engineer) { u.ord = { t: 'mend', i }; u.wpT = 0; u.stuck = 0; u.tgt = 0; } continue; }
-        if (u.d.move === 'jet') { if (u.ammo > 0 && !sky(S).grounded) u.ord = { t: 'attack', id: 0, x: (m.x0 + m.x1) / 2, y: (m.y0 + m.y1) / 2 }; continue; }
+        if (u.d.move === 'jet') { if (u.ammo > 0 && !groundedAt(S, u.x, u.y) && !groundedAt(S, (m.x0 + m.x1) / 2, (m.y0 + m.y1) / 2)) u.ord = { t: 'attack', id: 0, x: (m.x0 + m.x1) / 2, y: (m.y0 + m.y1) / 2 }; continue; }
         if (u.d.cargo || u.d.engineer || isAir(u) || !(armed(u) || u.d.hero)) continue;
         u.ord = { t: 'bridge', i }; u.tgt = 0; u.wpT = 0; u.stuck = 0; u.home = null;
       }
@@ -5323,7 +5356,7 @@ const Rules = (() => {
     HZ, DT, RES, UNITS, BUILDINGS, WEAPONS, TECH, POWERS, DIFFICULTY, LAYOUT, SIZES, MAPS, spread, use,
     AGES, MAX_AGE, POWER_AGE, LINES, LINE_ORDER, formOf, lineCount, nameOf, armOf,
     get W() { return W; }, get H() { return H; }, get VW() { return VW; }, get VH() { return VH; },
-    ORE_KINDS, fishWater, newGame, step, push, spawn, addBuilding, scoreOf, worth, SERIES, pickFrom, fits, spotFor, roomy, blockedReason, near, rehash, seenBy, terrainAt, heightAt, los, isAir, armed, cellOf, summary, exitOf,
+    ORE_KINDS, fishWater, dustWall, dustAt, groundedAt, newGame, step, push, spawn, addBuilding, scoreOf, worth, SERIES, pickFrom, fits, spotFor, roomy, blockedReason, near, rehash, seenBy, terrainAt, heightAt, los, isAir, armed, cellOf, summary, exitOf,
     mulberry, noiser, clamp, lerp, smooth, angleTo, toXY, toUV, gap, setSize, save, load, hashOf, restartSlot, razeSlot, makeMap, mapFor, layoutFor,
     msin, mcos, matan2, mhypot,
     BRIDGE_HP, SPELL, SKIES, WEATHERS, nightAt, skyOf, offGoing, route, weatherAt, sky, dayAt, spellOf, bridgeAt, clsOf, houseHp, hurtBridge, ignite, shielded,
@@ -8678,14 +8711,14 @@ if (typeof module !== 'undefined') module.exports = Looks;
       const ink = new THREE.ShaderMaterial({ uniforms: { t: { value: null }, tSubj: { value: null }, tHeat: { value: null }, tPaper: { value: null }, res: { value: new THREE.Vector2(1, 1) }, uTime: { value: 0 }, uK: { value: 1 }, uOff: { value: new THREE.Vector2() }, uStyle: { value: 8 }, tNorm: { value: null }, tFogS: { value: null }, tLand: { value: null }, uSun2: { value: new THREE.Vector2(-1, 0) }, uUpV: { value: new THREE.Vector3(0, 1, 0) }, uRoad: { value: 0 }, uOre: { value: 0 }, uMarks: { value: 1 }, uRoadAge: { value: 4 }, uShadeH: { value: 1 }, tShade: { value: null },
         uWindS: { value: new THREE.Vector2() }, uView: { value: new THREE.Vector2(1, 0) }, tFx: { value: null }, tAnc: { value: null }, uDark: { value: 0 }, uTone: { value: 0 }, uInks: { value: 0 }, uFxs: { value: 0 }, uFire: { value: 0 }, uUnits: { value: 0 }, tH: SH.tH, uHSize: { value: new THREE.Vector2(1, 1) }, uHScale: { value: 1 }, uSnowF: { value: 0 }, uSnowC: SH.uSnowC, uSnowLine: SH.uSnowLine, tFlow: SH.tFlow, tBrook: SH.tBrook, uFlora: SH.uFlora, uShow: SH.uShow, uShowS: SH.uShowS, tCover: SH.tCover, uFieldK: SH.uFieldK, uFieldK2: SH.uFieldK2, uPark: SH.uPark, uBridgeKind: SH.uBridgeKind, uFog: { value: 0 }, uMist: { value: 0 }, uNight: { value: 0 },
         uDayMul: { value: new THREE.Vector3(1, 1, 1) }, uDayAdd: { value: new THREE.Vector3() }, uWaterL: { value: -0.15 }, uCloudK: SH.uCloudK, tMarks: SH.tMarks, uMap: SH.uMap,
-        uCloud: SH.uCloud, uCloudT: SH.uCloudT, uSunW: SH.uSunDir, uCloudA: { value: 0 }, uCloudG: { value: 0 }, uRayK: { value: 0 }, uSand: { value: 0 },
+        uCloud: SH.uCloud, uCloudT: SH.uCloudT, uSunW: SH.uSunDir, uCloudA: { value: 0 }, uCloudG: { value: 0 }, uRayK: { value: 0 }, uDust: { value: new THREE.Vector4() },
         uInvVP: { value: new THREE.Matrix4() }, uW2S: { value: new THREE.Vector4(1, 0, 0, 1) }, uLev: { value: 1 }, tTerr: SH.tTerr, uBorder: SH.uBorder, uMe: { value: 0 },
         // Each side's colour as the anchor pass keeps it, its hue and how coloured it is, and its inks on either paper.
         uSideKey: { value: [...Array(8)].map(() => new THREE.Vector2()) }, uSideL: { value: [...Array(8)].map(() => new THREE.Vector3()) }, uSideD: { value: [...Array(8)].map(() => new THREE.Vector3()) }, uSideB: { value: [...Array(8)].map(() => new THREE.Vector3()) } }, vertexShader: vs, depthTest: false, depthWrite: false, fragmentShader: `
         varying vec2 vUv; uniform sampler2D t, tSubj, tHeat, tPaper, tNorm, tFogS, tLand, tMarks; uniform float uMap; uniform vec2 res, uOff, uSun2, uWindS, uView, uHSize; uniform float uHScale, uFxs, uFire; uniform int uUnits, uInks; uniform float uDark, uTone; uniform sampler2D tH, tFx, tAnc, tFlow, tBrook, tCover, tShade; uniform vec4 uFieldK, uFieldK2; uniform vec4 uShow[8]; uniform vec2 uShowS[8]; uniform vec4 uPark[16]; uniform vec3 uUpV, uDayMul, uDayAdd; uniform float uTime, uK, uSnowF, uSnowC, uSnowLine, uFlora, uBridgeKind, uFog, uMist, uNight, uWaterL, uCloudK, uMarks, uRoadAge, uShadeH; uniform int uStyle, uRoad, uOre;
         uniform vec2 uSideKey[8]; uniform vec3 uSideL[8], uSideD[8], uSideB[8];
         uniform sampler2D tTerr; uniform float uBorder, uMe;
-        uniform vec2 uCloud; uniform vec3 uSunW; uniform float uCloudT, uCloudA, uCloudG, uRayK, uSand;
+        uniform vec2 uCloud; uniform vec3 uSunW; uniform float uCloudT, uCloudA, uCloudG, uRayK; uniform vec4 uDust;
         // The clouds float at CLOUD_H over the land. cloudAt gives the cloud over a point of the land at that height,
         // taken from the same field the land pass casts their shadows with, shifted along the sun, so each cloud
         // drifts over its own shadow.
@@ -9770,20 +9803,33 @@ if (typeof module !== 'undefined') module.exports = Looks;
           col = mix(col, dk ? vec3(0.25, 0.25, 0.26) : vec3(0.945, 0.94, 0.925), veil);
           float fband = veil > 0.2 ? hatch(px + vec2(uTime * 5.0 * uK, 0.0), 0.0, 10.0, 0.8, 97.0, 0.6) * smoothstep(0.2, 0.55, veil) : 0.0;
           col = mix(col, dk ? vec3(0.42, 0.44, 0.5) : vec3(0.6, 0.62, 0.67), fband * 0.2);
-          // Blown sand as an ochre veil, billowing as it is carried on the wind.
-          if (uSand > 0.0) {
+          // A dust storm's wall where it stands, uDust its way, the reach of its front and its strength: thick for a
+          // stretch behind a billowing front, thinning behind that, and clear air ahead.
+          float dust = 0.0, dustE = -1e3;
+          if (uDust.w > 0.0) {
+            dustE = uDust.z - dot(Wl - uMap * 0.5, uDust.xy) + (noise(Wl * 0.07 + vec2(uTime * 0.04, 0.0)) - 0.5) * 9.0;
+            dust = uDust.w * smoothstep(-2.0, 3.0, dustE) * (1.0 - smoothstep(0.3 * uMap, 0.6 * uMap, dustE));
+          }
+          // Blown sand as an ochre veil, billowing as it is carried on the wind, deepest at the wall's front.
+          if (dust > 0.0) {
             vec2 blw = landAt(vUv, max(hg, 0.0) + 1.5) * 0.03 + uCloud * 5.0;
             float billow = noise(blw) * 0.6 + noise(blw * 2.3 + 5.0) * 0.4, keepU = 1.0 - 0.4 * step(0.85, s0);
-            float dustV = clamp(uSand * (0.3 + 0.38 * billow) * onMap, 0.0, 0.7) * keepU;
-            col = mix(col, dk ? vec3(0.36, 0.3, 0.22) : vec3(0.86, 0.76, 0.58), dustV);
+            float wallF = 1.0 - smoothstep(0.0, 16.0, dustE);
+            float dustV = clamp(dust * (0.46 + 0.34 * billow + 0.3 * wallF) * onMap, 0.0, 0.88) * keepU;
+            col = mix(col, dk ? mix(vec3(0.36, 0.3, 0.22), vec3(0.44, 0.34, 0.22), wallF) : mix(vec3(0.85, 0.74, 0.56), vec3(0.68, 0.53, 0.36), wallF), dustV);
+          }
+          // The wall's front drawn as a ragged line in a deeper ochre, as a cloud's edge is.
+          if (uDust.w > 0.0) {
+            float fw = max(fwidth(dustE), 1e-4), fl = (1.0 - smoothstep(0.9 * uK, 2.4 * uK, abs(dustE) / fw)) * uDust.w * onMap;
+            col = mix(col, dk ? vec3(0.62, 0.5, 0.34) : vec3(0.52, 0.38, 0.22), fl * 0.7);
           }
           // Grit driven low across the page in long fine strokes.
-          if (uSand > 0.01) {
+          if (dust > 0.01) {
             float sx = uWindS.x >= 0.0 ? 1.0 : -1.0;
             vec2 sd = normalize(vec2(sx, -0.12)), sn = vec2(-sd.y, sd.x);
             float sp = 6.0 * uK, ac = dot(px, sn), al = dot(px, sd) - uTime * 700.0 * uK, ci = floor(ac / sp), per = 220.0 * uK;
             float ph = hash(vec2(ci, 9.0)) * per, row = floor((al + ph) / per), pos = mod(al + ph, per), len = (40.0 + 30.0 * hash(vec2(ci, row + 2.0))) * uK;
-            float grit = step(hash(vec2(ci, row)), uSand * 0.4) * step(pos, len) * (1.0 - smoothstep(0.2 * uK, 0.7 * uK, abs(fract(ac / sp) - 0.5) * sp));
+            float grit = step(hash(vec2(ci, row)), dust * 0.4) * step(pos, len) * (1.0 - smoothstep(0.2 * uK, 0.7 * uK, abs(fract(ac / sp) - 0.5) * sp));
             col = mix(col, dk ? vec3(0.66, 0.56, 0.4) : vec3(0.55, 0.42, 0.25), grit * 0.4);
           }
           // Rays of sun in broken cloud: a few broad beams fanning from a sun beyond the screen's edge on its side,
@@ -9913,7 +9959,7 @@ if (typeof module !== 'undefined') module.exports = Looks;
           C.uUpV.value.set(0, 1, 0).transformDirection(camera.matrixWorldInverse);
           C.uRoad.value = K.opts.road; C.uOre.value = K.opts.ore; C.uMarks.value = K.marked ? 1 : 0; C.uRoadAge.value = K.age; C.uShadeH.value = K.opts.hatch ? 1 : 0;
           C.uSnowF.value = sky.snow; C.uFog.value = sky.fog; C.uMist.value = sky.mist;
-          C.uSand.value = sky.sand || 0; C.uCloudA.value = sky.cloudA || 0; C.uCloudG.value = sky.cloudG || 0; C.uRayK.value = sky.rayK || 0;
+          const dw = sky.dust; C.uDust.value.set(dw ? dw.dx : 0, dw ? dw.dy : 0, dw ? dw.front : 0, dw ? dw.k : 0); C.uCloudA.value = sky.cloudA || 0; C.uCloudG.value = sky.cloudG || 0; C.uRayK.value = sky.rayK || 0;
           C.uNight.value = sky.night; C.uDayMul.value.set(...sky.mul); C.uDayAdd.value.set(...sky.add);
           C.uWaterL.value = K.waterLevel; C.uWindS.value.set(sky.windS, 0);
           C.uMe.value = Math.max(0, K.viewTeam); C.uView.value.set(Math.cos(K.cam.yaw), Math.sin(K.cam.yaw)); C.uHSize.value.set(Rules.VW, Rules.VH); C.uHScale.value = Rules.RES;
@@ -12471,6 +12517,8 @@ const World = (() => {
       for (const [ox, oy] of [[0, 0], [o, 0], [-o, 0], [0, o], [0, -o]]) { const h = Rules.showerAt(S, cam.x + ox, cam.y + oy); rv = Math.max(rv, h.rain); sv = Math.max(sv, h.storm); }
       sky.rainV += (rv - sky.rainV) * k; sky.stormV += (sv - sky.stormV) * k;
       sky.kind = w.kind;
+      // A dust storm's wall, where it stands now, for the picture.
+      sky.dust = Rules.dustWall(S);
       // The ground stays wet a while after the rain.
       sky.wet += ((w.rain > 0.2 ? 1 : 0) - sky.wet) * (studySky ? 1 : 1 - Math.exp(-dt * (w.rain > 0.2 ? 0.15 : 0.012)));
       const U = SH.uWind.value;
@@ -15455,7 +15503,7 @@ const Hud = (() => {
     }
     // The weather and the hour in a corner, with what the weather does, and a word of what is coming.
     const SKY_NAME = { clear: 'Fair', cloud: 'Overcast', rain: 'Rain', storm: 'Storm', fog: 'Fog', snow: 'Snow', sand: 'Dust storm' };
-    const SKY_NOTE = { rain: 'Wheels bog down under the clouds', storm: 'Aircraft grounded', fog: 'Sight cut short', snow: 'Everyone slowed', sand: 'Sight cut, aircraft grounded' };
+    const SKY_NOTE = { rain: 'Wheels bog down under the clouds', storm: 'Aircraft grounded', fog: 'Sight cut short', snow: 'Everyone slowed', sand: 'Sight cut and aircraft down under the dust' };
     const hourName = d => d < 0.05 || d >= 0.95 ? 'Dawn' : d < 0.3 ? 'Morning' : d < 0.5 ? 'Midday' : d < 0.7 ? 'Afternoon' : d < 0.8 ? 'Dusk' : 'Night';
     function drawSkyNote(s) {
       const w = Rules.sky(s), ink = inked();
@@ -17768,8 +17816,8 @@ const Game = (() => {
     rain: ['Rain clouds. Wheeled vehicles bog down off the roads under them.', '', 'Rain'], storm: ['Storm. All aircraft are grounded.', 'bad', 'Storm. Aircraft grounded'],
     fog: ['Fog. Sight is cut short.', '', 'Fog'], snow: ['Snow. Everything moves slower.', '', 'Snow'], stormsoon: ['A storm is coming. Aircraft will be grounded.', 'bad', 'Storm warning'],
     clear: ['The weather clears.', 'good', ''], cloud: ['Clouding over.', '', ''],
-    sand: ['Dust storm. Sight is cut short, men and wheels slowed, aircraft grounded.', 'bad', 'Dust storm. Aircraft grounded'],
-    sandsoon: ['A dust storm is coming. Aircraft will be grounded.', 'bad', 'Dust storm warning'],
+    sand: ['A dust storm sweeps in on the wind. Under its dust sight is cut short, men and wheels slow and aircraft stay down.', 'bad', 'Dust storm'],
+    sandsoon: ['A dust storm is coming on the wind.', 'bad', 'Dust storm warning'],
   };
   // What is said as heavy weather passes part way through its spell.
   const SKY_PASS = {
