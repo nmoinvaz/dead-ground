@@ -623,7 +623,7 @@ const Rules = (() => {
       // A ford between the two bridges, as a middle point and the river's way there.
       fordAt(fromRiver(rivers[0], sf, riverU(sf)), fromRiver(rivers[0], sf + 1, riverU(sf + 1)));
       // Shoals in the water by each base, where the boats from its dock fish.
-      L.fish = []; if (quad) all(L.fish, [172, 120]); else { all(L.fish, [230, 176]); all(L.fish, [104, 208]); }
+      L.fish = []; if (quad) { all(L.fish, [172, 120]); all(L.fish, [95, 94]); } else { all(L.fish, [230, 176]); all(L.fish, [104, 208]); all(L.fish, [127, 126]); }
       return L;
     }
     L.syms = [p => [p[0], p[1]], mirror];
@@ -651,8 +651,8 @@ const Rules = (() => {
       if (v) L.bridges.push([mirror(a), mirror(b)]);
     }
     fordAt(uvp(riverU(20), 20), uvp(riverU(21), 21));
-    // Shoals in the water by each base, where the boats from its dock fish.
-    L.fish = []; all(L.fish, [53, 68]);
+    // Shoals in the water by each base, where the boats from its dock fish, and in every other stretch of water.
+    L.fish = []; all(L.fish, [53, 68]); all(L.fish, [109, 16]);
     return L;
   }
 
@@ -759,7 +759,7 @@ const Rules = (() => {
       }
       L.river = pools(ponds);
       // Shoals in the water by each base, where the boats from its dock fish.
-      L.fish = []; all(L.fish, [180, 121]);
+      L.fish = []; all(L.fish, [180, 121]); all(L.fish, [77, 7]); all(L.fish, [116, 44]);
     } else if (kind === 'seas') {
       // Land between two seas, its coasts wandering, each base nearer the one.
       duel(); L.lake = true;
@@ -828,7 +828,7 @@ const Rules = (() => {
       // each other's.
       duel();
       // Shoals in the water by each base, where the boats from its dock fish.
-      L.fish = []; all(L.fish, [35, 52]);
+      L.fish = []; all(L.fish, [35, 52]); all(L.fish, [84, 7]); all(L.fish, [106, 22]);
       const off = [-26, 0, 26], course = (u0, v) => u0 + (u0 ? 0.6 : 1) * riverU(v);
       L.river = (x, y) => {
         const [u, v] = toUV(x, y);
@@ -3819,17 +3819,57 @@ const Rules = (() => {
     }
   }
 
-  // Fishing. A boat sails to the nearest shoal and fishes there a while, each boat at its own place round it, then
-  // lands the catch at the nearest of its side's docks and is paid for it.
+  // The bodies of water of a map, each sea cell numbered by the water it lies in, and the water each shoal lies in,
+  // worked out once for the map.
+  function watersOf(M) {
+    if (M._waters) return M._waters;
+    const MW = M.W, MH = M.H, id = new Int32Array(MW * MH).fill(-1);
+    let n = 0;
+    for (let c = 0; c < MW * MH; c++) if (M.sea[c] && id[c] < 0) {
+      const st = [c]; id[c] = n;
+      while (st.length) {
+        const v = st.pop(), x = v % MW, y = v / MW | 0;
+        for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+          const nx = x + dx, ny = y + dy, u = ny * MW + nx;
+          if (nx >= 0 && ny >= 0 && nx < MW && ny < MH && M.sea[u] && id[u] < 0) { id[u] = n; st.push(u); }
+        }
+      }
+      n++;
+    }
+    M._waters = { id };
+    M._waters.shoal = (M.fish || []).map(f => waterAt(M, f.x, f.y));
+    return M._waters;
+  }
+  // The water at a point, or the nearest within four cells, -1 for none.
+  function waterAt(M, x, y) {
+    const { id } = watersOf(M), c0 = Math.floor(y) * M.W + Math.floor(x);
+    if (x >= 0 && y >= 0 && x < M.W && y < M.H && M.sea[c0]) return id[c0];
+    let w = -1, bd = 1e9;
+    for (let dy = -4; dy <= 4; dy++) for (let dx = -4; dx <= 4; dx++) {
+      const cx = Math.floor(x) + dx, cy = Math.floor(y) + dy, d = dx * dx + dy * dy;
+      if (cx >= 0 && cy >= 0 && cx < M.W && cy < M.H && M.sea[cy * M.W + cx] && d < bd) { bd = d; w = id[cy * M.W + cx]; }
+    }
+    return w;
+  }
+  // Whether the water at a point holds a shoal, for where a dock is worth building.
+  const fishWater = (S, x, y) => { const w = waterAt(S.map, x, y); return w >= 0 && watersOf(S.map).shoal.includes(w); };
+  // Fishing. A boat sails to the nearest shoal in the water it is on and fishes there a while, each boat at its own
+  // place round it, then lands the catch at the nearest of its side's docks and is paid for it. A boat on water with
+  // no shoal waits, and its side is told once.
   function fishTick(S, u) {
     let o = u.ord;
     if (!o || o.t !== 'fish') o = u.ord = { t: 'fish' };
     const P = S.P[u.team];
     if (!o.full) {
       if (o.x === undefined) {
+        const shoal = watersOf(S.map).shoal, mine = waterAt(S.map, u.x, u.y);
         let best = null, bd = 1e9;
-        for (const f of S.map.fish || []) { const d = mhypot(f.x - u.x, f.y - u.y); if (d < bd) { bd = d; best = f; } }
-        if (!best) { u.v = 0; return; }
+        (S.map.fish || []).forEach((f, i) => { const d = mhypot(f.x - u.x, f.y - u.y); if (shoal[i] === mine && d < bd) { bd = d; best = f; } });
+        if (!best) {
+          u.v = 0;
+          if (!o.none) { o.none = true; S.ev.push({ t: 'nofish', team: u.team, id: u.id, x: u.x, y: u.y }); }
+          return;
+        }
         const a = (u.id * 2.39996) % TAU, c = goalCells(S, 'naval', clamp((best.x + mcos(a) * 2.5) | 0, 0, W - 1), clamp((best.y + msin(a) * 2.5) | 0, 0, H - 1))[0];
         o.x = c % W + 0.5; o.y = (c / W | 0) + 0.5; o.left = 10 * HZ;
       }
@@ -4509,7 +4549,7 @@ const Rules = (() => {
     HZ, DT, RES, UNITS, BUILDINGS, WEAPONS, TECH, POWERS, DIFFICULTY, LAYOUT, SIZES, MAPS, spread, use,
     AGES, MAX_AGE, POWER_AGE, LINES, LINE_ORDER, formOf, lineCount, nameOf, armOf,
     get W() { return W; }, get H() { return H; }, get VW() { return VW; }, get VH() { return VH; },
-    ORE_KINDS, newGame, step, push, spawn, addBuilding, scoreOf, worth, SERIES, pickFrom, fits, spotFor, roomy, blockedReason, near, rehash, seenBy, terrainAt, heightAt, los, isAir, armed, cellOf, summary, exitOf,
+    ORE_KINDS, fishWater, newGame, step, push, spawn, addBuilding, scoreOf, worth, SERIES, pickFrom, fits, spotFor, roomy, blockedReason, near, rehash, seenBy, terrainAt, heightAt, los, isAir, armed, cellOf, summary, exitOf,
     mulberry, noiser, clamp, lerp, smooth, angleTo, toXY, toUV, gap, setSize, save, load, hashOf, restartSlot, razeSlot, makeMap, mapFor, layoutFor,
     msin, mcos, matan2, mhypot,
     BRIDGE_HP, SPELL, SKIES, WEATHERS, nightAt, skyOf, offGoing, route, weatherAt, sky, dayAt, spellOf, bridgeAt, clsOf, houseHp, hurtBridge, ignite, shielded,

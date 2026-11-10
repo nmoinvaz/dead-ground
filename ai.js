@@ -164,7 +164,8 @@ const AI = (() => {
     if (me.dockT && S.tick < me.dockT) return me.dockAt || null;
     me.dockT = S.tick + 30 * HZ; me.dockAt = null;
     const M = S.map, b = S.bases[me.team], W = M.W, cand = [];
-    for (let c = 0; c < W * M.H; c += 2) if (M.sea[c]) cand.push([Math.hypot(c % W - b[0], (c / W | 0) - b[1]), c % W, c / W | 0]);
+    // Water that holds a shoal first, so the dock's boats have somewhere to fish.
+    for (let c = 0; c < W * M.H; c += 2) if (M.sea[c]) cand.push([Math.hypot(c % W - b[0], (c / W | 0) - b[1]) + (R.fishWater(S, c % W, c / W | 0) ? 0 : 1e4), c % W, c / W | 0]);
     cand.sort((p, q) => p[0] - q[0]);
     for (const [, x, y] of cand.slice(0, 60)) {
       const spot = R.spotFor(S, me.team, 'dock', x, y, 9, me.rand);
