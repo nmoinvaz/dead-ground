@@ -1891,14 +1891,15 @@ const Rules = (() => {
     const war = [];
     for (const k in h.acc) if (h.acc[k] >= 1) war.push(k / n | 0, k % n, Math.round(h.acc[k]));
     h.war.push(war); h.acc = {};
-    // For the war map: where each side's main army stood, as the middle of its units around the densest worth of
-    // them, and where the fighting fell. A record made before these were kept is padded to match.
+    // For the war map: where each side's main army stood on land, at the unit nearest the middle of its land units
+    // around the densest worth of them, so the mark is on ground it holds and never out on the water, and where the
+    // fighting fell. Ships and aircraft are left out. A record made before these were kept is padded to match.
     h.pos = h.pos || []; h.fight = h.fight || [];
     while (h.pos.length < h.t.length - 1) h.pos.push(null);
     while (h.fight.length < h.t.length - 1) h.fight.push(null);
     const pos = [], bins = new Map();
     for (const e of S.ents) {
-      if (e.b || e.hp <= 0 || e.team < 0 || e.team >= n || e.d.cargo || e.d.trade || !armed(e)) continue;
+      if (e.b || e.hp <= 0 || e.team < 0 || e.team >= n || e.d.cargo || e.d.trade || !armed(e) || isAir(e) || e.d.move === 'naval') continue;
       const k = e.team * 4096 + ((e.y / 12) | 0) * 64 + ((e.x / 12) | 0), v = worth(e.d);
       bins.set(k, (bins.get(k) || 0) + v);
     }
@@ -1908,11 +1909,11 @@ const Rules = (() => {
       if (best < 0 || bw < 300) { pos.push(null); continue; }
       const bx = (best % 64) * 12 + 6, by = ((best % 4096) / 64 | 0) * 12 + 6;
       let sx = 0, sy = 0, sw = 0;
-      for (const e of S.ents) {
-        if (e.b || e.hp <= 0 || e.team !== t || e.d.cargo || e.d.trade || !armed(e) || mhypot(e.x - bx, e.y - by) > 16) continue;
-        const v = worth(e.d); sx += e.x * v; sy += e.y * v; sw += v;
-      }
-      pos.push(sw ? [Math.round(sx / sw * 2) / 2, Math.round(sy / sw * 2) / 2, Math.round(sw)] : null);
+      const body = e => !(e.b || e.hp <= 0 || e.team !== t || e.d.cargo || e.d.trade || !armed(e) || isAir(e) || e.d.move === 'naval' || mhypot(e.x - bx, e.y - by) > 16);
+      for (const e of S.ents) if (body(e)) { const v = worth(e.d); sx += e.x * v; sy += e.y * v; sw += v; }
+      let near = null, nd = Infinity;
+      if (sw) for (const e of S.ents) if (body(e)) { const d = mhypot(e.x - sx / sw, e.y - sy / sw); if (d < nd) { nd = d; near = e; } }
+      pos.push(near ? [Math.round(near.x * 2) / 2, Math.round(near.y * 2) / 2, Math.round(sw)] : null);
     }
     h.pos.push(pos);
     const fa = h.fa || [0, 0, 0];

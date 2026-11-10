@@ -632,7 +632,7 @@ body[data-look="ink"] .sheet { box-shadow: 4px 4px 0 var(--ink); }
       <div class="choice"><h2>Map sheet frame</h2><div id="s-sheet" class="two"><button data-v="on">On</button><button data-v="off">Off</button></div></div>
       <div class="choice"><h2>Shadows</h2><div id="s-shade" class="two"><button data-v="hatch">Hatched</button><button data-v="wash">Wash</button></div></div>
       <div class="choice"><h2>Music</h2><div id="s-music" class="two"><button data-v="on">On</button><button data-v="off">Off</button></div></div>
-      <p id="build">Build 0b7bf26 2026-11-10 13:02</p>
+      <p id="build">Build 933743e 2026-11-10 13:11</p>
     </div>
     <div id="banner" hidden></div>
     <button id="update" hidden>A new version of Mapmaker’s War is out. <b>Reload</b></button>
@@ -2636,14 +2636,15 @@ const Rules = (() => {
     const war = [];
     for (const k in h.acc) if (h.acc[k] >= 1) war.push(k / n | 0, k % n, Math.round(h.acc[k]));
     h.war.push(war); h.acc = {};
-    // For the war map: where each side's main army stood, as the middle of its units around the densest worth of
-    // them, and where the fighting fell. A record made before these were kept is padded to match.
+    // For the war map: where each side's main army stood on land, at the unit nearest the middle of its land units
+    // around the densest worth of them, so the mark is on ground it holds and never out on the water, and where the
+    // fighting fell. Ships and aircraft are left out. A record made before these were kept is padded to match.
     h.pos = h.pos || []; h.fight = h.fight || [];
     while (h.pos.length < h.t.length - 1) h.pos.push(null);
     while (h.fight.length < h.t.length - 1) h.fight.push(null);
     const pos = [], bins = new Map();
     for (const e of S.ents) {
-      if (e.b || e.hp <= 0 || e.team < 0 || e.team >= n || e.d.cargo || e.d.trade || !armed(e)) continue;
+      if (e.b || e.hp <= 0 || e.team < 0 || e.team >= n || e.d.cargo || e.d.trade || !armed(e) || isAir(e) || e.d.move === 'naval') continue;
       const k = e.team * 4096 + ((e.y / 12) | 0) * 64 + ((e.x / 12) | 0), v = worth(e.d);
       bins.set(k, (bins.get(k) || 0) + v);
     }
@@ -2653,11 +2654,11 @@ const Rules = (() => {
       if (best < 0 || bw < 300) { pos.push(null); continue; }
       const bx = (best % 64) * 12 + 6, by = ((best % 4096) / 64 | 0) * 12 + 6;
       let sx = 0, sy = 0, sw = 0;
-      for (const e of S.ents) {
-        if (e.b || e.hp <= 0 || e.team !== t || e.d.cargo || e.d.trade || !armed(e) || mhypot(e.x - bx, e.y - by) > 16) continue;
-        const v = worth(e.d); sx += e.x * v; sy += e.y * v; sw += v;
-      }
-      pos.push(sw ? [Math.round(sx / sw * 2) / 2, Math.round(sy / sw * 2) / 2, Math.round(sw)] : null);
+      const body = e => !(e.b || e.hp <= 0 || e.team !== t || e.d.cargo || e.d.trade || !armed(e) || isAir(e) || e.d.move === 'naval' || mhypot(e.x - bx, e.y - by) > 16);
+      for (const e of S.ents) if (body(e)) { const v = worth(e.d); sx += e.x * v; sy += e.y * v; sw += v; }
+      let near = null, nd = Infinity;
+      if (sw) for (const e of S.ents) if (body(e)) { const d = mhypot(e.x - sx / sw, e.y - sy / sw); if (d < nd) { nd = d; near = e; } }
+      pos.push(near ? [Math.round(near.x * 2) / 2, Math.round(near.y * 2) / 2, Math.round(sw)] : null);
     }
     h.pos.push(pos);
     const fa = h.fa || [0, 0, 0];
@@ -16708,29 +16709,55 @@ const Report = (() => {
     const side = Math.floor(Math.max(200, Math.min(pane.clientWidth || 600, 640, room)));
     c.style.height = side + 'px'; c.style.width = side + 'px'; c.style.maxWidth = '100%';
     const { g, w } = fit(c), sc = w / MW, P = (x, y) => [x * sc, y * sc];
-    // The land: water washed, woods stippled, high ground a shade deeper, the paper left bare elsewhere.
+    // The land: the set-up's own picture of the map, drawn pixel by pixel with a smooth shore, layer tints, woods,
+    // ore and roads, washed lighter so the marches read over it. Without it, water washed and woods stippled by cell.
     g.fillStyle = I.ground; g.fillRect(0, 0, w, w);
     const water = I.light || !I.ink ? '#bccbd6' : '#2f3a44', wood = I.light || !I.ink ? 'rgba(80,110,70,0.35)' : 'rgba(150,180,140,0.3)';
-    for (let y = 0; y < MH; y++) for (let x = 0; x < MW; x++) {
+    if (o.mapPicture) {
+      g.drawImage(o.mapPicture(M, Math.round(w * Math.min(2, window.devicePixelRatio || 1)), !(I.light || !I.ink)), 0, 0, w, w);
+      g.globalAlpha = 0.38; g.fillStyle = I.ground; g.fillRect(0, 0, w, w); g.globalAlpha = 1;
+    } else for (let y = 0; y < MH; y++) for (let x = 0; x < MW; x++) {
       const gb = M.ground[y * MW + x], ht = Rules.terrainAt(M, x + 0.5, y + 0.5);
       if ((gb & 7) === 7 && ht < 0.2) { g.fillStyle = water; g.fillRect(x * sc, y * sc, sc + 0.6, sc + 0.6); continue; }
       if (ht > 1.2) { g.fillStyle = `rgba(90,70,50,${Math.min(0.16, (ht - 1.2) * 0.03)})`; g.fillRect(x * sc, y * sc, sc + 0.6, sc + 0.6); }
       if ((gb & 8) && (x + y) % 2 === 0) { g.fillStyle = wood; g.fillRect((x + 0.3) * sc, (y + 0.3) * sc, Math.max(1, sc * 0.4), Math.max(1, sc * 0.4)); }
     }
     g.strokeStyle = I.light || !I.ink ? 'rgba(110,90,70,0.55)' : 'rgba(200,190,170,0.45)'; g.lineWidth = 1;
-    for (const r of M.roads || []) { g.beginPath(); r.forEach(([x, y], i) => i ? g.lineTo(x * sc, y * sc) : g.moveTo(x * sc, y * sc)); g.stroke(); }
+    if (!o.mapPicture) for (const r of M.roads || []) { g.beginPath(); r.forEach(([x, y], i) => i ? g.lineTo(x * sc, y * sc) : g.moveTo(x * sc, y * sc)); g.stroke(); }
     g.font = `11px ${I.font}`; g.textAlign = 'center'; g.textBaseline = 'top';
     const towns = S.towns.map(t => ({ x: t.x, y: t.y, name: Rules.townName(S, t.id) }));
-    for (const t of towns) { const [x, y] = P(t.x, t.y); g.fillStyle = I.dim; g.fillRect(x - 3, y - 3, 6, 6); g.fillText(t.name, x, y + 5); }
+    // Each town's mark and name, kept as room the battles' labels stay clear of.
+    const townBoxes = [];
+    for (const t of towns) { const [x, y] = P(t.x, t.y), tw = g.measureText(t.name).width; g.fillStyle = I.dim; g.fillRect(x - 3, y - 3, 6, 6); townBoxes.push([x - tw / 2 - 2, y - 4, x + tw / 2 + 2, y + 18]); }
+    // The towns' names are lettered last, over the marches and the battles' marks, so none is lost under them.
+    const nameTowns = () => {
+      g.font = `11px ${I.font}`; g.textAlign = 'center'; g.textBaseline = 'top'; g.lineWidth = 3; g.lineJoin = 'round';
+      for (const t of towns) { const [x, y] = P(t.x, t.y); g.strokeStyle = I.ground; g.strokeText(t.name, x, y + 5); g.fillStyle = I.dim; g.fillText(t.name, x, y + 5); }
+    };
     // The bases, each a square in its side's ink.
     for (const x of list) { const b = S.bases[x.t]; if (!b) continue; const [bx, by] = P(b[0], b[1]); g.fillStyle = I.line(x.t); g.fillRect(bx - 5, by - 5, 10, 10); }
     const pos = h.pos || [], ts = h.t.map(t => t / HZ);
     let top = 1;
     for (const p of pos) if (p) for (const q of p) if (q) top = Math.max(top, q[2]);
-    // Each side's march, smoothed over three samples, drawn a leg at a time so its weight follows its strength.
+    // Each side's march, smoothed over five samples and its back and forth straightened out, drawn a leg at a time so
+    // its weight follows its strength.
+    // Ramer-Douglas-Peucker: the points of a run that bend it by more than eps cells.
+    const simplify = (run, eps) => {
+      if (run.length < 3) return run;
+      const a = run[0], b = run[run.length - 1], dx = b.x - a.x, dy = b.y - a.y, m = Math.hypot(dx, dy) || 1;
+      let far = -1, fd = 0;
+      for (let i = 1; i < run.length - 1; i++) { const d = Math.abs((run[i].x - a.x) * dy - (run[i].y - a.y) * dx) / m; if (d > fd) { fd = d; far = i; } }
+      return fd > eps ? [...simplify(run.slice(0, far + 1), eps).slice(0, -1), ...simplify(run.slice(far), eps)] : [a, b];
+    };
     for (const x of list) {
       const pts = pos.map((p, j) => p && p[x.t] ? { x: p[x.t][0], y: p[x.t][1], v: p[x.t][2], j } : null);
-      const sm = pts.map((q, j) => { if (!q) return null; let sx = 0, sy = 0, n = 0; for (let k = j - 1; k <= j + 1; k++) if (pts[k]) { sx += pts[k].x; sy += pts[k].y; n++; } return { x: sx / n, y: sy / n, v: q.v, j }; });
+      const avg = pts.map((q, j) => { if (!q) return null; let sx = 0, sy = 0, n = 0; for (let k = j - 2; k <= j + 2; k++) if (pts[k]) { sx += pts[k].x; sy += pts[k].y; n++; } return { x: sx / n, y: sy / n, v: q.v, j }; });
+      // Runs broken where the main body leaps across the map, each simplified.
+      const sm = [];
+      let run = [];
+      const flush = () => { if (run.length) sm.push(...simplify(run, 2.6)); sm.push(null); run = []; };
+      for (const q of avg) { if (!q || (run.length && Math.hypot(q.x - run[run.length - 1].x, q.y - run[run.length - 1].y) > 18)) flush(); if (q) run.push(q); }
+      flush();
       g.strokeStyle = I.line(x.t); g.fillStyle = I.line(x.t); g.lineCap = 'round'; g.lineJoin = 'round';
       let last = null, since = 0;
       for (const q of sm) {
@@ -16739,11 +16766,11 @@ const Report = (() => {
         if (last && Math.hypot(q.x - last.x, q.y - last.y) > 18) last = null;
         if (last) {
           const [ax, ay] = P(last.x, last.y), [bx, by] = P(q.x, q.y);
-          g.globalAlpha = 0.85; g.lineWidth = 1.4 + 4.6 * Math.sqrt(q.v / top);
+          g.globalAlpha = 0.7; g.lineWidth = 1.2 + 3.4 * Math.sqrt(q.v / top);
           g.beginPath(); g.moveTo(ax, ay); g.lineTo(bx, by); g.stroke();
           since += Math.hypot(bx - ax, by - ay);
           // An arrowhead every so far along the line, pointing the way it went.
-          if (since > 46 && Math.hypot(bx - ax, by - ay) > 2) {
+          if (since > 80 && Math.hypot(bx - ax, by - ay) > 2) {
             since = 0; const an = Math.atan2(by - ay, bx - ax), s = 4 + g.lineWidth;
             g.beginPath(); g.moveTo(bx, by); g.lineTo(bx - Math.cos(an - 0.45) * s, by - Math.sin(an - 0.45) * s); g.lineTo(bx - Math.cos(an + 0.45) * s, by - Math.sin(an + 0.45) * s); g.closePath(); g.fill();
           }
@@ -16764,8 +16791,17 @@ const Report = (() => {
       if (b) b.d += f.d; else battles.push({ x: f.x, y: f.y, t: f.t, d: f.d });
     }
     battles.sort((a, b) => b.d - a.d);
-    const big = battles.slice(0, 6), most = big.length ? big[0].d : 1;
+    // The six greatest, and those fought at one place at different times gathered under one mark with all their times.
+    const big = [], most = battles.length ? battles[0].d : 1;
+    for (const b of battles.slice(0, 6)) {
+      const at = big.find(q => Math.hypot(q.x - b.x, q.y - b.y) < 14);
+      if (at) { at.ts.push(b.t); at.d = Math.max(at.d, b.d); } else big.push({ x: b.x, y: b.y, d: b.d, ts: [b.t] });
+    }
     g.font = `italic 12px ${I.font}`; g.textAlign = 'left'; g.textBaseline = 'middle';
+    // Each label is set clear of the others, of the battles' marks and of the towns' names, trying the right, the
+    // left, above and below.
+    const taken = [...townBoxes, ...big.map(b => { const [x, y] = P(b.x, b.y), s = 5 + 7 * Math.sqrt(b.d / most); return [x - s, y - s, x + s, y + s]; })];
+    const clear = r => r[0] >= 2 && r[2] <= w - 2 && r[1] >= 2 && r[3] <= w - 2 && !taken.some(q => r[0] < q[2] && r[2] > q[0] && r[1] < q[3] && r[3] > q[1]);
     for (const b of big) {
       const [x, y] = P(b.x, b.y), s = 5 + 7 * Math.sqrt(b.d / most);
       g.strokeStyle = I.light || !I.ink ? '#2a221b' : '#e8e0cf'; g.lineWidth = 2; g.lineCap = 'round';
@@ -16773,9 +16809,13 @@ const Report = (() => {
       g.lineWidth = 1.4; g.beginPath(); g.moveTo(x - s * 0.55, y - s * 0.05); g.lineTo(x - s * 0.05, y - s * 0.55); g.moveTo(x + s * 0.55, y - s * 0.05); g.lineTo(x + s * 0.05, y - s * 0.55); g.stroke();
       const near = towns.reduce((a, t) => !a || Math.hypot(t.x - b.x, t.y - b.y) < Math.hypot(a.x - b.x, a.y - b.y) ? t : a, null);
       const where = near && Math.hypot(near.x - b.x, near.y - b.y) < 26 ? `near ${near.name}` : 'in the open';
-      const label = `${where} · ${clock(b.t)}`, lw = g.measureText(label).width, lx = x + s + 5 + lw > w ? x - s - 5 - lw : x + s + 5;
-      g.lineWidth = 3; g.strokeStyle = I.ground; g.strokeText(label, lx, y); g.fillStyle = I.text; g.fillText(label, lx, y);
+      const label = `${where} · ${b.ts.sort((p, q) => p - q).map(clock).join(', ')}`, lw = g.measureText(label).width;
+      const spot = [[x + s + 5, y], [x - s - 5 - lw, y], [x - lw / 2, y - s - 10], [x - lw / 2, y + s + 10]].map(([lx, ly]) => [lx, ly, [lx - 2, ly - 8, lx + lw + 2, ly + 8]]).find(q => clear(q[2]));
+      if (!spot) continue;
+      taken.push(spot[2]);
+      g.lineWidth = 3; g.strokeStyle = I.ground; g.strokeText(label, spot[0], spot[1]); g.fillStyle = I.text; g.fillText(label, spot[0], spot[1]);
     }
+    nameTowns();
     g.lineCap = 'butt';
   }
 
@@ -18217,7 +18257,7 @@ const Game = (() => {
       $('again').textContent = G.online ? 'Back to the room' : 'Again';
       $('menu').textContent = G.online ? 'Leave' : 'Menu';
       $('end').hidden = false;
-      Report.show($('end-report'), { S, name: youName, plate: plateOf(G.plate) });
+      Report.show($('end-report'), { S, name: youName, plate: plateOf(G.plate), mapPicture });
     }
 
     // Hands what the rules did to the picture, the sound and the reports.
