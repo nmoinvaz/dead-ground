@@ -622,6 +622,8 @@ const Rules = (() => {
       for (const s of [s1, s2]) { const [a, b] = span(rivers[0], s); R(a, b, 0); }
       // A ford between the two bridges, as a middle point and the river's way there.
       fordAt(fromRiver(rivers[0], sf, riverU(sf)), fromRiver(rivers[0], sf + 1, riverU(sf + 1)));
+      // Shoals in the water by each base, where the boats from its dock fish.
+      L.fish = []; if (quad) all(L.fish, [172, 120]); else { all(L.fish, [230, 176]); all(L.fish, [104, 208]); }
       return L;
     }
     L.syms = [p => [p[0], p[1]], mirror];
@@ -649,6 +651,8 @@ const Rules = (() => {
       if (v) L.bridges.push([mirror(a), mirror(b)]);
     }
     fordAt(uvp(riverU(20), 20), uvp(riverU(21), 21));
+    // Shoals in the water by each base, where the boats from its dock fish.
+    L.fish = []; all(L.fish, [53, 68]);
     return L;
   }
 
@@ -754,6 +758,8 @@ const Rules = (() => {
         for (const q of imgs) ponds.push([q[0], q[1], r]);
       }
       L.river = pools(ponds);
+      // Shoals in the water by each base, where the boats from its dock fish.
+      L.fish = []; all(L.fish, [180, 121]);
     } else if (kind === 'seas') {
       // Land between two seas, its coasts wandering, each base nearer the one.
       duel(); L.lake = true;
@@ -821,6 +827,8 @@ const Rules = (() => {
       // Three rivers across the line between the bases, the middle one its own mirror image and the outer two
       // each other's.
       duel();
+      // Shoals in the water by each base, where the boats from its dock fish.
+      L.fish = []; all(L.fish, [35, 52]);
       const off = [-26, 0, 26], course = (u0, v) => u0 + (u0 ? 0.6 : 1) * riverU(v);
       L.river = (x, y) => {
         const [u, v] = toUV(x, y);
@@ -923,6 +931,8 @@ const Rules = (() => {
       duel();
       const course = v => riverU(v) * 0.8, wide = v => 4.2 + 0.8 * mcos(v * 0.09);
       L.river = (x, y) => { const [u, v] = toUV(x, y); return [Math.abs(u - course(v)), wide(v)]; };
+      // Shoals in the water by each base, where the boats from its dock fish.
+      L.fish = []; all(L.fish, [52, 70]);
       // Palms stand only in the green strip along the banks.
       L.grove = (x, y) => { const [d, w] = L.river(x, y); return smooth(w + 6, w + 8, d) * (1 - smooth(w + 13, w + 16, d)); };
       L.bases.push(uvp(-60, 0), mirror(uvp(-60, 0)));
