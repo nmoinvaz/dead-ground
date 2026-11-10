@@ -1653,9 +1653,30 @@ const Rules = (() => {
   // slows in snow, and sight is cut short.
   const SHOWER_EVERY = 150 * HZ, SHOWER_LIFE = 210 * HZ, SHOWER_LANES = 2;
   const SHOWER_P = { any: [0.3, 0.08], desert: [0.1, 0], steppe: [0.32, 0.05], winter: [0.08, 0.36] }, SHOWER_K = { random: 1, mild: 0.5, harsh: 1.6, off: 0 };
+  // Rain and storms fall from large dark clouds over part of the map, never on the whole of it. A wet spell brings
+  // RAIN_CLOUDS of them in lanes across its wind, each carried downwind over the spell and growing and fading with
+  // it. A storm's clouds are the darkest, and its lightning strikes under them.
+  const RAIN_CLOUDS = 3;
+  function rainClouds(S, t, tab, list) {
+    const k0 = Math.floor(t / SPELL);
+    for (let j = k0 - 1; j <= k0 + 1; j++) {
+      const kd = spellOf(S.seed, j, tab), wj = spellW(j, t);
+      if ((kd !== 'rain' && kd !== 'storm') || wj <= 0) continue;
+      // The spell's own wind, as weatherAt blows it, and how far through the spell, -0.5 to 0.5.
+      const a = (spellHash(S.seed + 77, j) % 6283) / 1000, dx = mcos(a), dy = msin(a), tau = (t - (j + 0.5) * SPELL) / SPELL;
+      const storm = kd === 'storm' ? wj * heavyW(j, t) : 0;
+      for (let c = 0; c < RAIN_CLOUDS; c++) {
+        const h = spellHash(S.seed + 4409 + c * 7907, j), h2 = spellHash(S.seed + 8803 + c * 6151, j);
+        const rad = (24 + h % 13) * W / 128, off = (((c + 0.5) / RAIN_CLOUDS - 0.5) * 0.8 + ((h >>> 8) % 1000 / 1000 - 0.5) * 0.1) * W;
+        const s = ((h2 >>> 8) % 1000 / 1000 - 0.5) * 0.24 * W + (0.3 + 0.15 * (h2 % 100) / 100) * W * tau;
+        list.push({ x: CX + dx * s - dy * off, y: CY + dy * s + dx * off, r: rad, kind: 'rain', k: wj, storm, cloud: true });
+      }
+    }
+  }
   function showersAt(S, t = S.tick) {
     if (S._sh && S._sh.at === t) return S._sh.list;
     const list = [], P = SHOWER_P[S.theatre] || SHOWER_P.any, wk = SHOWER_K[S.weather] ?? 1, tab = skyOf(S);
+    rainClouds(S, t, tab, list);
     const n = Math.floor(t / SHOWER_EVERY);
     if (wk > 0) for (let j = Math.max(0, n - Math.ceil(SHOWER_LIFE / SHOWER_EVERY) - 1); j <= n; j++) for (let l = 0; l < SHOWER_LANES; l++) {
       const h = spellHash(S.seed + 911 + l * 7919, j), t0 = j * SHOWER_EVERY + h % SHOWER_EVERY, age = t - t0;
@@ -1672,23 +1693,25 @@ const Rules = (() => {
     S._sh = { at: t, list };
     return list;
   }
-  // How deep under a shower a point lies, 0 clear to 1 in its heart, for each kind.
+  // How deep under a shower or a rain cloud a point lies, 0 clear to 1 in its heart, for rain, snow and storm.
   function showerAt(S, x, y) {
-    let rain = 0, snow = 0;
+    let rain = 0, snow = 0, storm = 0;
     for (const s of showersAt(S)) {
       const d = mhypot(x - s.x, y - s.y);
       if (d >= s.r) continue;
-      const v = smooth(s.r, s.r * 0.55, d) * s.k;
+      const f = smooth(s.r, s.r * 0.55, d), v = f * s.k;
       if (s.kind === 'rain') rain = Math.max(rain, v); else snow = Math.max(snow, v);
+      if (s.storm) storm = Math.max(storm, f * s.storm);
     }
-    return { rain, snow };
+    return { rain, snow, storm };
   }
-  // How fast a kind of mover goes off the roads in the weather, before any worn track. Mud bogs wheels down, snow
-  // slows everyone, and blown sand slows men and wheels.
+  // How fast a kind of mover goes off the roads in the weather over the whole map, before any worn track. Snow
+  // slows everyone, and blown sand slows men and wheels. Rain and storms fall only from clouds, so they are found
+  // where the mover stands.
   function offGoing(move, w) {
-    if (move === 'naval') return Math.max(0.5, 1 - 0.3 * w.storm);
-    const g = move === 'wheel' ? 1 - 0.24 * w.rain - 0.2 * w.snow - 0.25 * w.sand
-      : move === 'track' ? 1 - 0.12 * w.storm - 0.1 * w.snow - 0.1 * w.sand
+    if (move === 'naval') return 1;
+    const g = move === 'wheel' ? 1 - 0.2 * w.snow - 0.25 * w.sand
+      : move === 'track' ? 1 - 0.1 * w.snow - 0.1 * w.sand
         : 1 - 0.18 * w.snow - 0.2 * w.sand;
     return Math.max(0.3, g);
   }
@@ -2161,13 +2184,13 @@ const Rules = (() => {
         }
       }
     };
-    // Fog, storms and blown sand shorten everyone's sight. Radar sweeps and flares see through them. By night a
-    // unit sees two fifths less, a building a little less by its lamps, and a building that fights not at all, by
-    // its searchlight.
-    const w = sky(S), n = nightAt(S.tick), fk = Math.max(0.4, 1 - 0.45 * w.fog - 0.12 * w.storm - 0.4 * w.sand), fa = Math.max(0.5, 1 - 0.3 * w.fog - 0.3 * w.sand);
+    // Fog and blown sand shorten everyone's sight. Radar sweeps and flares see through them. By night a unit sees
+    // two fifths less, a building a little less by its lamps, and a building that fights not at all, by its
+    // searchlight.
+    const w = sky(S), n = nightAt(S.tick), fk = Math.max(0.4, 1 - 0.45 * w.fog - 0.4 * w.sand), fa = Math.max(0.5, 1 - 0.3 * w.fog - 0.3 * w.sand);
     const nu = 1 - 0.4 * n, nb = 1 - 0.15 * n;
-    // Under a shower sight is cut short: what stands inside one is seen only from close by, and what stands in one
-    // sees a third less itself.
+    // Under a shower or a rain cloud sight is cut short: what stands inside one is seen only from close by, and what
+    // stands in one sees a third less itself.
     const shw = showersAt(S), mask = shw.length ? (S._shMask && S._shMask.length === N ? S._shMask.fill(0) : (S._shMask = new Uint8Array(N))) : null;
     if (mask) for (const s of shw) {
       const rr = s.r * 0.8 * s.k;
@@ -2877,11 +2900,17 @@ const Rules = (() => {
     return a ? [m.x0 - m.ux * 1.5, m.y0 - m.uy * 1.5] : [m.x1 + m.ux * 1.5, m.y1 + m.uy * 1.5];
   }
 
+  // How wet a point is: snow over the whole map, and rain or snow from a cloud over it.
+  function wetAt(S, x, y) {
+    const w = sky(S);
+    if (!showersAt(S).length) return Math.min(1, w.snow);
+    const sh = showerAt(S, x, y);
+    return Math.min(1, w.snow + sh.rain + sh.snow);
+  }
   // Fire in the woods. A blast among standing trees may light them, and fire spreads from tree to tree, more
   // with the wind and not at all in rain or snow, then leaves the ground burnt and open.
   function ignite(S, x, y, r, p) {
-    const w = sky(S);
-    p *= 1 - 0.8 * Math.min(1, w.rain + w.snow);
+    p *= 1 - 0.8 * wetAt(S, x, y);
     if (p <= 0 || S.burn.length >= 400) return;
     for (let cy = Math.max(0, (y - r) | 0); cy <= Math.min(H - 1, (y + r) | 0); cy++) for (let cx = Math.max(0, (x - r) | 0); cx <= Math.min(W - 1, (x + r) | 0); cx++) {
       const c = cy * W + cx;
@@ -2892,10 +2921,11 @@ const Rules = (() => {
     S.wood[c] = 2; S.woodVer++;
     S.burn.push([c, 500 + (S.rand() * 300 | 0)]);
   }
-  // Lightning. In a storm it strikes somewhere on the map every few seconds, and under heavy cloud with no rain, on
-  // the steppe and the salt flats, now and then: dry lightning. Of three places drawn for each strike it takes the
-  // highest, a tree counting a unit higher, and a standing tree it hits catches fire. In a storm's rain the fire soon
-  // dies; dry lightning can burn a wood down. Strikes come of the seed and the time, not the world's dice.
+  // Lightning. In a storm it strikes under one of the storm's clouds every few seconds, and under heavy cloud with
+  // no rain, on the steppe and the salt flats, now and then anywhere: dry lightning. Of three places drawn for each
+  // strike it takes the highest, a tree counting a unit higher, and a standing tree it hits catches fire. In a
+  // storm's rain the fire soon dies; dry lightning can burn a wood down. Strikes come of the seed and the time, not
+  // the world's dice.
   const STRIKE_STORM = 0.22, STRIKE_DRY = 0.006;
   function stepLightning(S) {
     const w = sky(S), dry = S.theatre !== 'winter' && w.cloud > 0.6 && w.rain < 0.05 && w.snow < 0.05 ? STRIKE_DRY : 0;
@@ -2903,9 +2933,16 @@ const Rules = (() => {
     if (!p) return;
     const h = spellHash(S.seed + 5003, S.tick);
     if ((h % 10000) / 10000 >= p) return;
+    const under = dry ? [] : showersAt(S).filter(s => s.storm > 0.3);
+    if (!dry && !under.length) return;
     let best = null, bz = -1e9;
     for (let k = 0; k < 3; k++) {
-      const hk = spellHash(S.seed + 6007 + k * 31, S.tick), x = 1 + (hk % 10007) / 10007 * (W - 2), y = 1 + ((hk >>> 14) % 10007) / 10007 * (H - 2);
+      const hk = spellHash(S.seed + 6007 + k * 31, S.tick);
+      let x = 1 + (hk % 10007) / 10007 * (W - 2), y = 1 + ((hk >>> 14) % 10007) / 10007 * (H - 2);
+      if (!dry) {
+        const s = under[(hk >>> 3) % under.length], a = (hk % 6283) / 1000, d = s.r * 0.8 * Math.sqrt(((hk >>> 14) % 10007) / 10007);
+        x = clamp(s.x + mcos(a) * d, 1, W - 1); y = clamp(s.y + msin(a) * d, 1, H - 1);
+      }
       const c = cellOf(x, y), z = terrainAt(S.map, x, y) + ((S.gnd[c] & 8) && !S.wood[c] ? 1 : 0);
       if (z > bz) { bz = z; best = [x, y, c]; }
     }
@@ -2916,9 +2953,9 @@ const Rules = (() => {
   const D8 = [[1, 0], [-1, 0], [0, 1], [0, -1], [1, 1], [-1, 1], [1, -1], [-1, -1]];
   function stepFire(S) {
     if (!S.burn.length) return;
-    const w = sky(S), wet = Math.min(1, w.rain + w.snow), spread = 0.06 * (1 - wet), out = [];
+    const w = sky(S), out = [];
     for (let i = S.burn.length - 1; i >= 0; i--) {
-      const b = S.burn[i], c = b[0], x = c % W, y = c / W | 0;
+      const b = S.burn[i], c = b[0], x = c % W, y = c / W | 0, wet = wetAt(S, x + 0.5, y + 0.5), spread = 0.06 * (1 - wet);
       b[1] -= 10 * (1 + wet * 3);
       if (spread > 0 && S.burn.length < 400) for (const [dx, dy] of D8) {
         const nx = x + dx, ny = y + dy;
@@ -3044,10 +3081,11 @@ const Rules = (() => {
     const tl = (here >> 5) & 3;
     let going = (tl >= 3 ? 1 : offGoing(d.move, w)) * TRACK_GO[tl];
     if (rk > 0) going = lerp(going, ROAD_GO[d.move], rk);
-    // Under a shower: mud off the roads for wheels in rain, and slow going for all in snow.
+    // Under a shower or a rain cloud: mud off the roads and worn tracks for wheels in rain, slow going for all in
+    // snow, and in a storm heavy going for tracks off the roads and a heavy sea for ships.
     if (S._sh ? S._sh.list.length : showersAt(S).length) {
-      const sh = showerAt(S, u.x, u.y);
-      if (sh.rain || sh.snow) going *= 1 - (d.move === 'wheel' ? 0.24 * sh.rain * (1 - rk) + 0.2 * sh.snow : d.move === 'track' ? 0.1 * sh.snow : d.move === 'naval' ? 0 : 0.18 * sh.snow);
+      const sh = showerAt(S, u.x, u.y), mud = tl >= 3 ? 0 : 1 - rk;
+      if (sh.rain || sh.snow || sh.storm) going *= 1 - (d.move === 'wheel' ? 0.24 * sh.rain * mud + 0.2 * sh.snow : d.move === 'track' ? 0.12 * sh.storm * mud + 0.1 * sh.snow : d.move === 'naval' ? 0.3 * sh.storm : 0.18 * sh.snow);
     }
     if (here & 16) going *= 0.5;
     // Pinned men crawl.
