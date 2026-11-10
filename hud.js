@@ -1587,6 +1587,10 @@ const Hud = (() => {
       if (!s) return;
       const selected = new Set(state.sel);
       const P0 = t >= 0 ? s.P[t] : null;
+      // With a building that trains units selected, the one its kind comes out of is lettered, where there is a
+      // choice of them.
+      const trainAt = new Set();
+      for (const q of state.sel) if (q.b && q.team === t && q.hp > 0 && Rules.TRAINERS.includes(q.kind) && (P0.counts[q.kind] || 0) > 1) trainAt.add(Rules.producerOf(s, t, q.kind));
       drawLamps(s);
 
       // The map's own names, as a survey sheet letters them, once the view is drawn back far enough to want them:
@@ -1686,6 +1690,14 @@ const Hud = (() => {
           const [rx, ry] = world.project(e.rally[0], terrainAt(s.map, e.rally[0], e.rally[1]) + 0.1, e.rally[1]);
           if (inked()) { og.strokeStyle = PLAN; dotted(); } else { og.strokeStyle = '#7fe0a0'; og.setLineDash([5, 4]); og.lineWidth = 1; }
           og.beginPath(); og.moveTo(o.x, o.y); og.lineTo(rx, ry); og.stroke(); og.setLineDash([]); og.lineCap = 'butt';
+        }
+        if (trainAt.has(e)) {
+          const hy = o.y - o.r * 0.9 - 12;
+          og.save(); og.setLineDash([]); og.textAlign = 'center'; og.textBaseline = 'middle';
+          og.font = ink ? `italic 600 13px ${labelFont()}` : 'italic 600 12px system-ui';
+          og.lineJoin = 'round'; og.lineWidth = 3.5; og.strokeStyle = ink ? 'rgba(250,244,228,0.92)' : 'rgba(0,0,0,0.7)'; og.strokeText('trains here', o.x, hy);
+          og.fillStyle = ink ? '#1a1512' : '#f2ead8'; og.fillText('trains here', o.x, hy);
+          og.restore();
         }
         if (e.b && e.c4) { og.fillStyle = '#ff5040'; og.font = '700 12px "Share Tech Mono", monospace'; og.textAlign = 'center'; og.fillText(Math.ceil((e.c4 - s.tick) / HZ) + '', o.x, o.y - 18); }
       }
@@ -2061,9 +2073,12 @@ const Hud = (() => {
       // A building of the player's alone shows its upgrades, which redraw as any changes state.
       const one = state.sel.length === 1 && state.sel[0].b && state.sel[0].team === team() ? state.sel[0] : null;
       const ups = one ? upState(one).map(u => u.tier + (u.here ? 'h' : '') + (u.why || '')).join() : '';
+      // A side with more than one building of a kind that trains units chooses which they come out of.
+      const trains = !!one && Rules.TRAINERS.includes(one.kind) && (S().P[one.team].counts[one.kind] || 0) > 1;
+      const here = trains && Rules.producerOf(S(), one.team, one.kind) === one;
       const fbu = fbUnits(), fb = fbu.length ? (fbu.every(u => u.fb) ? 'on' : fbu.some(u => u.fb) ? 'some' : 'off') : '';
       const exu = expUnits(), ex = exu.length ? (exu.every(u => u.exp) ? 'on' : 'off') : '';
-      const box = $('sel'), list = state.sel, key = list.map(e => e.id).join() + (list[0] ? (list[0].repairing ? 'r' : '') + (list[0].team) : '') + form + stance + ups + fb + ex;
+      const box = $('sel'), list = state.sel, key = list.map(e => e.id).join() + (list[0] ? (list[0].repairing ? 'r' : '') + (list[0].team) : '') + form + stance + ups + fb + ex + (trains ? (here ? 'T' : 't') : '');
       if (key !== state.selKey) {
         state.selKey = key;
         box.hidden = !list.length;
@@ -2082,6 +2097,7 @@ const Hud = (() => {
             if (first.b) {
               html += `<button id="a-rep" class="${first.repairing ? 'on' : ''}">Repair <kbd>G</kbd></button>`;
               if (first.kind !== 'hq') html += '<button id="a-sell">Sell <kbd>Del</kbd></button>';
+              if (trains) html += `<button id="a-train" class="${here ? 'on' : ''}" title="Units of this kind come out of this building">Train here</button>`;
             } else {
               html += `<button id="a-move" class="${state.attackMove ? 'on' : ''}">Attack-move <kbd>A</kbd></button><button id="a-stop">Stop <kbd>S</kbd></button>`;
             }
@@ -2103,6 +2119,7 @@ const Hud = (() => {
           const on = (id, fn) => { const b = document.getElementById(id); if (b) b.addEventListener('click', fn); };
           on('a-rep', () => game.order(S(), team(), { c: 'repair', id: first.id }));
           on('a-sell', () => { game.order(S(), team(), { c: 'sell', id: first.id }); select([]); });
+          on('a-train', () => { game.order(S(), team(), { c: 'primary', id: first.id }); game.audio.ui('click'); });
           on('a-stop', () => game.order(S(), team(), { c: 'stop', ids: orderIds() }));
           on('a-move', () => { if (state.touchUsed) { state.attackMove = !state.attackMove; state.selKey = ''; } else enter({ type: 'amove' }); });
           on('a-clear', () => select([]));
