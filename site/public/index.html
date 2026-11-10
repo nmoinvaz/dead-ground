@@ -526,7 +526,10 @@ body[data-look="ink"] #menu, body[data-look="ink"] #watch, body[data-look="ink"]
 #maps button small { font: 12px var(--mono); opacity: .75; white-space: nowrap; }
 .preview { margin-top: 8px; }
 #preview { width: 100%; aspect-ratio: 1; display: block; border: 1.5px solid var(--ink); background: var(--paper-hi); }
-#map-about, #age-about, #weather-about, #res-about, #win-about { margin: 6px 0 0; font: 500 15px/1.25 var(--ui); color: var(--ink-dim); text-wrap: pretty; }
+/* The key to the kinds of ore, each name in its metal's colour. */
+#ore-key b { font-weight: 600; } #ore-key .k-gold { color: #c8941e; } #ore-key .k-silver { color: #8a909c; } #ore-key .k-copper { color: #c0602e; } #ore-key .k-iron { color: #6e5048; }
+body[data-scheme="dark"] #ore-key .k-gold { color: #e8b84a; } body[data-scheme="dark"] #ore-key .k-silver { color: #c4c9d2; } body[data-scheme="dark"] #ore-key .k-copper { color: #e88a5a; } body[data-scheme="dark"] #ore-key .k-iron { color: #b09080; }
+#map-about, #ore-key, #age-about, #weather-about, #res-about, #win-about { margin: 6px 0 0; font: 500 15px/1.25 var(--ui); color: var(--ink-dim); text-wrap: pretty; }
 #age-about { min-height: 2.5em; }
 /* The game's own choices stand under the players: the theatre and the age it begins in. */
 .rules { margin-top: 14px; display: grid; gap: 4px; }
@@ -534,7 +537,7 @@ body[data-look="ink"] #menu, body[data-look="ink"] #watch, body[data-look="ink"]
 #m-age { grid-template-columns: repeat(6, 1fr); }
 #m-weather { grid-template-columns: repeat(4, 1fr); }
 #m-res, #m-win { grid-template-columns: repeat(2, 1fr); }
-body[data-look="ink"] #age-about, body[data-look="ink"] #map-about, body[data-look="ink"] #weather-about, body[data-look="ink"] #res-about, body[data-look="ink"] #win-about { font-family: var(--label); font-style: italic; font-weight: 400; }
+body[data-look="ink"] #age-about, body[data-look="ink"] #map-about, body[data-look="ink"] #ore-key, body[data-look="ink"] #weather-about, body[data-look="ink"] #res-about, body[data-look="ink"] #win-about { font-family: var(--label); font-style: italic; font-weight: 400; }
 .seedrow { display: flex; justify-content: space-between; align-items: center; gap: 8px; margin: 8px 0 14px; font: 500 16px var(--ui); }
 .seedrow b { font: 15px var(--mono); }
 #slots { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 4px; }
@@ -625,7 +628,7 @@ body[data-look="ink"] .sheet { box-shadow: 4px 4px 0 var(--ink); }
       <div class="choice"><h2>Map sheet frame</h2><div id="s-sheet" class="two"><button data-v="on">On</button><button data-v="off">Off</button></div></div>
       <div class="choice"><h2>Shadows</h2><div id="s-shade" class="two"><button data-v="hatch">Hatched</button><button data-v="wash">Wash</button></div></div>
       <div class="choice"><h2>Music</h2><div id="s-music" class="two"><button data-v="on">On</button><button data-v="off">Off</button></div></div>
-      <p id="build">Build 5a7da62 2026-11-10 11:38</p>
+      <p id="build">Build da7b092 2026-11-10 11:47</p>
     </div>
     <div id="banner" hidden></div>
     <button id="update" hidden>A new version of Mapmaker’s War is out. <b>Reload</b></button>
@@ -676,7 +679,7 @@ body[data-look="ink"] .sheet { box-shadow: 4px 4px 0 var(--ink); }
           <div id="maps" class="pick"></div>
         </section>
         <section class="viewcol">
-          <div class="preview"><canvas id="preview"></canvas><p id="map-about"></p></div>
+          <div class="preview"><canvas id="preview"></canvas><p id="map-about"></p><p id="ore-key"><b class="k-copper">Copper</b> and <b class="k-iron">iron</b> lie by each base, <b class="k-silver">silver</b> farther out and <b class="k-gold">gold</b> in the middle. Gold pays most a load but digs slowly and soon runs out. Iron digs fastest and lasts longest.</p></div>
           <div class="seedrow"><span>Terrain <b id="seed"></b></span><button id="reseed">New terrain</button></div>
         </section>
         <section class="slotcol">
@@ -1994,14 +1997,15 @@ const Rules = (() => {
     // Towns, ore and wells.
     L.towns.forEach(p => towns.push({ x: p[0], y: p[1], owner: -1, cap: 0, capTeam: -1, r: 14 }));
     towns.forEach((t, i) => { t.id = i; });
-    const oreCells = new Uint16Array(N), oreRich = new Uint8Array(N), oreFields = [];
-    L.ore.forEach(p => {
-      const R = p[2], field = { x: p[0], y: p[1], r: R };
+    const oreCells = new Uint16Array(N), oreRich = new Uint8Array(N), oreKind = new Uint8Array(N), oreFields = [];
+    const kinds = oreKindsFor(L);
+    L.ore.forEach((p, i) => {
+      const R = p[2], kind = kinds[i], field = { x: p[0], y: p[1], r: R, kind };
       oreFields.push(field);
       for (let y = Math.floor(p[1] - R - 2); y <= p[1] + R + 2; y++) for (let x = Math.floor(p[0] - R - 2); x <= p[0] + R + 2; x++) {
         if (x < 1 || y < 1 || x >= W - 1 || y >= H - 1) continue;
         const d = mhypot(x + 0.5 - p[0], y + 0.5 - p[1]) + (sym(x + 0.5, y + 0.5, 0.3, 2) - 0.5) * 5;
-        if (d < R) oreCells[y * W + x] = 60 + Math.round(120 * (1 - d / R));
+        if (d < R) { oreCells[y * W + x] = Math.round((60 + 120 * (1 - d / R)) * ORE_KINDS[kind].amount); oreKind[y * W + x] = kind; }
       }
     });
     L.wells.forEach(p => wells.push({ x: Math.round(p[0]), y: Math.round(p[1]) }));
@@ -2155,7 +2159,7 @@ const Rules = (() => {
     const fish = (L.fish || []).map(p => ({ x: p[0], y: p[1] }));
     let seaCells = 0;
     for (let c = 0; c < N; c++) seaCells += sea[c];
-    return { W, H, seed, kind, h, deck, water, ground, ore: oreCells, oreFields, wells, towns, roads, roadDist, bridges, scatter, houses, oreRich, bases: L.bases, faces, fords: L.fords, fordCells, wadeCells, brooks, brookFords, brookDist: bD, brookFord: bF, sea, fish, seaCells, monuments: (L.monuments || []).map(([k, x, y, r, a]) => ({ k, x, y, r, a })) };
+    return { W, H, seed, kind, h, deck, water, ground, ore: oreCells, oreKind, oreFields, wells, towns, roads, roadDist, bridges, scatter, houses, oreRich, bases: L.bases, faces, fords: L.fords, fordCells, wadeCells, brooks, brookFords, brookDist: bD, brookFord: bF, sea, fish, seaCells, monuments: (L.monuments || []).map(([k, x, y, r, a]) => ({ k, x, y, r, a })) };
   }
 
   // A map is kept only if vehicles can get from the first base to every other base, town and well.
@@ -2392,6 +2396,26 @@ const Rules = (() => {
     return o;
   }
   const sky = S => S._wx && S._wx.at === S.tick ? S._wx : (S._wx = Object.assign(weatherAt(S.seed, S.tick, skyOf(S)), { at: S.tick }));
+  // Kinds of ore. Each pays about the same while a truck digs, but a load of gold is worth most and takes longest
+  // to dig, and its fields are small, while iron digs fastest and its fields last longest. So gold pays best far
+  // from home, where trips are long, at the cost of trucks standing longer in the open, and iron keeps a base going.
+  // worth: a load's worth to its refinery, dig: how fast a truck digs it, amount: how much a field holds.
+  const ORE_KINDS = [
+    { key: 'gold', name: 'Gold', worth: 1.6, dig: 0.625, amount: 0.6 },
+    { key: 'silver', name: 'Silver', worth: 1.25, dig: 0.8, amount: 0.8 },
+    { key: 'copper', name: 'Copper', worth: 1, dig: 1, amount: 1 },
+    { key: 'iron', name: 'Iron', worth: 0.9, dig: 1 / 0.9, amount: 1.5 },
+  ];
+  // Each field's kind, by how far it lies from its nearest base, alike for every side: copper in the nearest of a
+  // base's home fields and iron in the next, gold in those farthest out, and silver between.
+  function oreKindsFor(L) {
+    const dist = L.ore.map(p => Math.min(...L.bases.map(b => mhypot(p[0] - b[0], p[1] - b[1])))), key = (p, i) => Math.round(dist[i] * 2) / 2 + '|' + p[2];
+    const classes = [...new Set(L.ore.map(key))].map(k => +k.split('|')[0]).sort((a, b) => a - b), far = Math.max(...dist);
+    return L.ore.map((p, i) => {
+      const d = Math.round(dist[i] * 2) / 2, rank = classes.indexOf(d);
+      return d >= far * 0.85 ? 0 : rank === 0 ? 2 : rank === 1 ? 3 : 1;
+    });
+  }
   // Showers. Besides the weather over the whole map, rain showers and snow flurries cross part of it: each a round
   // patch drifting straight over the map for a few minutes, growing at its start and fading at its end. They come of
   // the seed and the time alone, so every copy of the world has them and a save needs none, and none sets out while
@@ -3944,11 +3968,11 @@ const Rules = (() => {
     if (o.phase === 'unload') {
       const r = S.byId.get(o.ref);
       if (!r || r.hp <= 0) { o.phase = null; return; }
-      const take = Math.min(u.cargo, cap / (3 * HZ));
-      u.cargo -= take;
-      const P = S.P[u.team], got = take * P.income;
+      const take = Math.min(u.cargo, cap / (3 * HZ)), worth = u.cargo > 0 ? (u.cargoV ?? u.cargo) * take / u.cargo : 0;
+      u.cargo -= take; u.cargoV = (u.cargoV ?? u.cargo + take) - worth;
+      const P = S.P[u.team], got = worth * P.income;
       P.supply += got; P.stats.mined += got;
-      if (u.cargo <= 0.1) { u.cargo = 0; o.phase = null; r.dockedBy = 0; }
+      if (u.cargo <= 0.1) { u.cargo = 0; u.cargoV = 0; o.phase = null; r.dockedBy = 0; }
       return;
     }
     if (u.cargo >= cap - 0.5 || (o.phase === 'return')) {
@@ -3972,8 +3996,9 @@ const Rules = (() => {
     }
     const tx = o.cell % W + 0.5, ty = (o.cell / W | 0) + 0.5;
     if (drive(S, u, tx, ty, 0.9, 1)) {
-      const rate = cap / (16 * HZ), take = Math.min(rate, S.ore[o.cell], cap - u.cargo);
+      const K = ORE_KINDS[S.map.oreKind[o.cell]], rate = cap / (16 * HZ) * K.dig, take = Math.min(rate, S.ore[o.cell], cap - u.cargo);
       S.ore[o.cell] = Math.max(0, S.ore[o.cell] - Math.max(1, Math.round(take * 0.6)));
+      u.cargoV = (u.cargoV ?? u.cargo) + take * K.worth;
       u.cargo += take;
       u.mining = S.tick;
       S.oreVer++;
@@ -4614,7 +4639,7 @@ const Rules = (() => {
       if (!k || k === u.kind) continue;
       const d = UNITS[k], f = u.hp / u.max, m = hpOf(S, team, d);
       u.kind = k; u.d = d; u.max = m; u.hp = Math.max(1, m * f); u.cd = d.weapons.map(() => 0);
-      if (d.cargo) u.cargo = Math.min(u.cargo, capOf(S, u));
+      if (d.cargo && u.cargo > capOf(S, u)) { const c = capOf(S, u); u.cargoV = (u.cargoV ?? u.cargo) * c / u.cargo; u.cargo = c; }
       if (d.bombs) u.ammo = d.bombs.n;
       if (d.alt) u.z = Math.max(u.z, d.alt * 0.5);
       S.ev.push({ t: 'upgrade', id: u.id, kind: k, team, x: u.x, y: u.y });
@@ -5218,7 +5243,7 @@ const Rules = (() => {
     HZ, DT, RES, UNITS, BUILDINGS, WEAPONS, TECH, POWERS, DIFFICULTY, LAYOUT, SIZES, MAPS, spread, use,
     AGES, MAX_AGE, POWER_AGE, LINES, LINE_ORDER, formOf, lineCount, nameOf, armOf,
     get W() { return W; }, get H() { return H; }, get VW() { return VW; }, get VH() { return VH; },
-    newGame, step, push, spawn, addBuilding, scoreOf, worth, SERIES, pickFrom, fits, spotFor, roomy, blockedReason, near, rehash, seenBy, terrainAt, heightAt, los, isAir, armed, cellOf, summary, exitOf,
+    ORE_KINDS, newGame, step, push, spawn, addBuilding, scoreOf, worth, SERIES, pickFrom, fits, spotFor, roomy, blockedReason, near, rehash, seenBy, terrainAt, heightAt, los, isAir, armed, cellOf, summary, exitOf,
     mulberry, noiser, clamp, lerp, smooth, angleTo, toXY, toUV, gap, setSize, save, load, hashOf, restartSlot, razeSlot, makeMap, mapFor, layoutFor,
     msin, mcos, matan2, mhypot,
     BRIDGE_HP, SPELL, SKIES, WEATHERS, nightAt, skyOf, offGoing, route, weatherAt, sky, dayAt, spellOf, bridgeAt, clsOf, houseHp, hurtBridge, ignite, shielded,
@@ -9340,8 +9365,18 @@ if (typeof module !== 'undefined') module.exports = Looks;
               // Far out the facets merge into one even gold, so a field reads as a patch, not a scatter.
               else if (uOre == 4) oreC = mix(up > 0.7 ? vec3(0.99, 0.86, 0.45) : nV.x < 0.0 ? vec3(0.9, 0.67, 0.27) : vec3(0.72, 0.5, 0.2), vec3(0.9, 0.74, 0.4), zo * 0.85);
               else if (uOre == 5) {
-                oreC = up > 0.75 ? vec3(1.0, 0.95, 0.72) : nV.x < 0.0 ? vec3(0.98, 0.78, 0.22) : vec3(0.8, 0.56, 0.1);
-                oreC = mix(oreC, vec3(1.0), step(0.985, hash(floor(p / (3.0 * uK)) + 91.0)) * step(0.5, up));
+                // The kind of ore, from the hue and saturation of the nugget's own colour: silver nearly grey, iron a
+                // steel blue, copper an orange red, and gold its gold. Each in gold leaf's manner in its own metal.
+                vec2 hs = texture2D(tAnc, vUv).zw;
+                int ok = hs.y < 0.2 ? 1 : hs.x > 0.4 && hs.x < 0.8 ? 3 : hs.x < 0.075 || hs.x > 0.95 ? 2 : 0;
+                vec3 top = vec3(1.0, 0.95, 0.72), lit = vec3(0.98, 0.78, 0.22), drk = vec3(0.8, 0.56, 0.1);
+                if (ok == 1) { top = vec3(0.98, 0.99, 1.0); lit = vec3(0.8, 0.83, 0.88); drk = vec3(0.55, 0.59, 0.66); }
+                else if (ok == 2) { top = vec3(1.0, 0.8, 0.62); lit = vec3(0.9, 0.52, 0.3); drk = vec3(0.62, 0.31, 0.18); }
+                else if (ok == 3) { top = vec3(0.84, 0.62, 0.5); lit = vec3(0.68, 0.42, 0.3); drk = vec3(0.44, 0.27, 0.2); }
+                oreC = up > 0.75 ? top : nV.x < 0.0 ? lit : drk;
+                // Copper greens over here and there, and every metal but iron catches the light in a white glint.
+                if (ok == 2) oreC = mix(oreC, vec3(0.45, 0.7, 0.6), step(0.72, hash(floor(Wl * 1.4) + 5.0)) * step(0.5, up) * 0.8);
+                if (ok != 3) oreC = mix(oreC, vec3(1.0), step(0.985, hash(floor(p / (3.0 * uK)) + 91.0)) * step(0.5, up));
               }
               if (uOre != 0) base = mix(base, oreC, isO);
               // The stippled deposit spreads its dots onto the ground round each field.
@@ -11310,7 +11345,11 @@ const World = (() => {
       const oreMat = patch(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.8, metalness: 0.4, emissive: 0x3a2400, emissiveIntensity: 0.0, envMapIntensity: 0.55 }), { tint: true });
       const rr = mulberry(M.seed + 3), rnd = [], first = [];
       for (let i = 0; i < cap; i++) {
-        const r = [rr() * 0.8 + 0.1, rr() * 0.8 + 0.1, rr() * 6.28, 0.8 + rr() * 0.8, colA.setHSL(0.1 + rr() * 0.035, 0.74, 0.5 + rr() * 0.16).getHex()], c = cells[i / per | 0];
+        // A nugget's colour tells the ink pass its kind, by hue and saturation: gold's own gold, silver nearly grey,
+        // copper an orange red, and iron given a steel blue that no other kind has.
+        const c = cells[i / per | 0], r = [rr() * 0.8 + 0.1, rr() * 0.8 + 0.1, rr() * 6.28, 0.8 + rr() * 0.8], hue = 0.1 + rr() * 0.035, lit = 0.5 + rr() * 0.16;
+        const [kh, ks] = [[hue, 0.74], [0.6, 0.03], [0.045, 0.72], [0.62, 0.4]][M.oreKind ? M.oreKind[c] : 0];
+        r.push(colA.setHSL(kh, ks, lit).getHex());
         rnd.push(r);
         const px = c % W + r[0], pz = (c / W | 0) + r[1];
         first.push({ x: px, y: terrainAt(M, px, pz) - 0.02, z: pz, a: r[2], s: 0.95 * r[3], c: r[4] });
@@ -18229,7 +18268,8 @@ const Game = (() => {
         ? (t < 0.5 ? [0.2 + 0.14 * t, 0.29 + 0.16 * t, 0.19 + 0.12 * t] : [0.27 + 0.56 * (t - 0.5), 0.37 + 0.26 * (t - 0.5), 0.25 + 0.24 * (t - 0.5)])
         : (t < 0.5 ? [0.84 + 0.2 * t, 0.9 + 0.06 * t, 0.8 + 0.04 * t] : [0.94 - 0.12 * (t - 0.5), 0.93 - 0.26 * (t - 0.5), 0.82 - 0.36 * (t - 0.5)]);
       const WTR = dark ? [0.115, 0.15, 0.235] : [0.788, 0.804, 0.902], BANK = dark ? [0.4, 0.5, 0.75] : [0.3, 0.36, 0.6];
-      const ORE = dark ? [0.84, 0.64, 0.22] : [0.96, 0.76, 0.24], WOOD = dark ? [0.16, 0.26, 0.15] : [0.62, 0.74, 0.55], DOT = dark ? [0.4, 0.55, 0.36] : [0.3, 0.45, 0.28];
+      // Ore by its kind: gold, silver, copper and iron.
+      const ORES = dark ? [[0.84, 0.64, 0.22], [0.74, 0.76, 0.8], [0.8, 0.46, 0.28], [0.6, 0.4, 0.32]] : [[0.96, 0.76, 0.24], [0.8, 0.82, 0.87], [0.88, 0.5, 0.3], [0.64, 0.4, 0.3]], WOOD = dark ? [0.16, 0.26, 0.15] : [0.62, 0.74, 0.55], DOT = dark ? [0.4, 0.55, 0.36] : [0.3, 0.45, 0.28];
       const wetAt = (i, j) => { const h = hs[j * px + i]; if (h < M.water) return true; if (!BD) return false; const v = Math.round((j + 0.5) * k * RES) * VW + Math.round((i + 0.5) * k * RES); return BD[v] < 0.48 && M.roadDist[v] > 1.4; };
       const ci = (i, j) => Math.floor(hs[j * px + i] / 0.66);
       for (let j = 0; j < px; j++) for (let i = 0; i < px; i++) {
@@ -18246,7 +18286,7 @@ const Game = (() => {
           const sh = Math.max(-1, Math.min(1, -(hx + hy) / (2 * k) * 0.9));
           col = col.map(v => v * (sh < 0 ? 1 + sh * (dark ? 0.55 : 0.28) : 1 + sh * 0.06));
           if (M.ground[c] & 8) { col = col.map((v, n) => v * 0.45 + WOOD[n] * 0.55); if (((i * 7 + j * 13) % 11) === 0 || ((i * 3 + j * 5) % 17) === 0) col = DOT; }
-          if (M.ore[c]) col = col.map((v, n) => v * 0.35 + ORE[n] * 0.65);
+          if (M.ore[c]) { const O = ORES[M.oreKind ? M.oreKind[c] : 0]; col = col.map((v, n) => v * 0.35 + O[n] * 0.65); }
           const cnt = (i < px - 1 && ci(i + 1, j) !== ci(i, j)) || (j < px - 1 && ci(i, j + 1) !== ci(i, j));
           if (cnt) { const idx = ci(i, j) % 5 === 0 ? 0.75 : 0.4; col = col.map((v, n) => v + (ink[n] - v) * idx); }
         }

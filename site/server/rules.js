@@ -1257,14 +1257,15 @@ const Rules = (() => {
     // Towns, ore and wells.
     L.towns.forEach(p => towns.push({ x: p[0], y: p[1], owner: -1, cap: 0, capTeam: -1, r: 14 }));
     towns.forEach((t, i) => { t.id = i; });
-    const oreCells = new Uint16Array(N), oreRich = new Uint8Array(N), oreFields = [];
-    L.ore.forEach(p => {
-      const R = p[2], field = { x: p[0], y: p[1], r: R };
+    const oreCells = new Uint16Array(N), oreRich = new Uint8Array(N), oreKind = new Uint8Array(N), oreFields = [];
+    const kinds = oreKindsFor(L);
+    L.ore.forEach((p, i) => {
+      const R = p[2], kind = kinds[i], field = { x: p[0], y: p[1], r: R, kind };
       oreFields.push(field);
       for (let y = Math.floor(p[1] - R - 2); y <= p[1] + R + 2; y++) for (let x = Math.floor(p[0] - R - 2); x <= p[0] + R + 2; x++) {
         if (x < 1 || y < 1 || x >= W - 1 || y >= H - 1) continue;
         const d = mhypot(x + 0.5 - p[0], y + 0.5 - p[1]) + (sym(x + 0.5, y + 0.5, 0.3, 2) - 0.5) * 5;
-        if (d < R) oreCells[y * W + x] = 60 + Math.round(120 * (1 - d / R));
+        if (d < R) { oreCells[y * W + x] = Math.round((60 + 120 * (1 - d / R)) * ORE_KINDS[kind].amount); oreKind[y * W + x] = kind; }
       }
     });
     L.wells.forEach(p => wells.push({ x: Math.round(p[0]), y: Math.round(p[1]) }));
@@ -1418,7 +1419,7 @@ const Rules = (() => {
     const fish = (L.fish || []).map(p => ({ x: p[0], y: p[1] }));
     let seaCells = 0;
     for (let c = 0; c < N; c++) seaCells += sea[c];
-    return { W, H, seed, kind, h, deck, water, ground, ore: oreCells, oreFields, wells, towns, roads, roadDist, bridges, scatter, houses, oreRich, bases: L.bases, faces, fords: L.fords, fordCells, wadeCells, brooks, brookFords, brookDist: bD, brookFord: bF, sea, fish, seaCells, monuments: (L.monuments || []).map(([k, x, y, r, a]) => ({ k, x, y, r, a })) };
+    return { W, H, seed, kind, h, deck, water, ground, ore: oreCells, oreKind, oreFields, wells, towns, roads, roadDist, bridges, scatter, houses, oreRich, bases: L.bases, faces, fords: L.fords, fordCells, wadeCells, brooks, brookFords, brookDist: bD, brookFord: bF, sea, fish, seaCells, monuments: (L.monuments || []).map(([k, x, y, r, a]) => ({ k, x, y, r, a })) };
   }
 
   // A map is kept only if vehicles can get from the first base to every other base, town and well.
@@ -1655,6 +1656,26 @@ const Rules = (() => {
     return o;
   }
   const sky = S => S._wx && S._wx.at === S.tick ? S._wx : (S._wx = Object.assign(weatherAt(S.seed, S.tick, skyOf(S)), { at: S.tick }));
+  // Kinds of ore. Each pays about the same while a truck digs, but a load of gold is worth most and takes longest
+  // to dig, and its fields are small, while iron digs fastest and its fields last longest. So gold pays best far
+  // from home, where trips are long, at the cost of trucks standing longer in the open, and iron keeps a base going.
+  // worth: a load's worth to its refinery, dig: how fast a truck digs it, amount: how much a field holds.
+  const ORE_KINDS = [
+    { key: 'gold', name: 'Gold', worth: 1.6, dig: 0.625, amount: 0.6 },
+    { key: 'silver', name: 'Silver', worth: 1.25, dig: 0.8, amount: 0.8 },
+    { key: 'copper', name: 'Copper', worth: 1, dig: 1, amount: 1 },
+    { key: 'iron', name: 'Iron', worth: 0.9, dig: 1 / 0.9, amount: 1.5 },
+  ];
+  // Each field's kind, by how far it lies from its nearest base, alike for every side: copper in the nearest of a
+  // base's home fields and iron in the next, gold in those farthest out, and silver between.
+  function oreKindsFor(L) {
+    const dist = L.ore.map(p => Math.min(...L.bases.map(b => mhypot(p[0] - b[0], p[1] - b[1])))), key = (p, i) => Math.round(dist[i] * 2) / 2 + '|' + p[2];
+    const classes = [...new Set(L.ore.map(key))].map(k => +k.split('|')[0]).sort((a, b) => a - b), far = Math.max(...dist);
+    return L.ore.map((p, i) => {
+      const d = Math.round(dist[i] * 2) / 2, rank = classes.indexOf(d);
+      return d >= far * 0.85 ? 0 : rank === 0 ? 2 : rank === 1 ? 3 : 1;
+    });
+  }
   // Showers. Besides the weather over the whole map, rain showers and snow flurries cross part of it: each a round
   // patch drifting straight over the map for a few minutes, growing at its start and fading at its end. They come of
   // the seed and the time alone, so every copy of the world has them and a save needs none, and none sets out while
@@ -3207,11 +3228,11 @@ const Rules = (() => {
     if (o.phase === 'unload') {
       const r = S.byId.get(o.ref);
       if (!r || r.hp <= 0) { o.phase = null; return; }
-      const take = Math.min(u.cargo, cap / (3 * HZ));
-      u.cargo -= take;
-      const P = S.P[u.team], got = take * P.income;
+      const take = Math.min(u.cargo, cap / (3 * HZ)), worth = u.cargo > 0 ? (u.cargoV ?? u.cargo) * take / u.cargo : 0;
+      u.cargo -= take; u.cargoV = (u.cargoV ?? u.cargo + take) - worth;
+      const P = S.P[u.team], got = worth * P.income;
       P.supply += got; P.stats.mined += got;
-      if (u.cargo <= 0.1) { u.cargo = 0; o.phase = null; r.dockedBy = 0; }
+      if (u.cargo <= 0.1) { u.cargo = 0; u.cargoV = 0; o.phase = null; r.dockedBy = 0; }
       return;
     }
     if (u.cargo >= cap - 0.5 || (o.phase === 'return')) {
@@ -3235,8 +3256,9 @@ const Rules = (() => {
     }
     const tx = o.cell % W + 0.5, ty = (o.cell / W | 0) + 0.5;
     if (drive(S, u, tx, ty, 0.9, 1)) {
-      const rate = cap / (16 * HZ), take = Math.min(rate, S.ore[o.cell], cap - u.cargo);
+      const K = ORE_KINDS[S.map.oreKind[o.cell]], rate = cap / (16 * HZ) * K.dig, take = Math.min(rate, S.ore[o.cell], cap - u.cargo);
       S.ore[o.cell] = Math.max(0, S.ore[o.cell] - Math.max(1, Math.round(take * 0.6)));
+      u.cargoV = (u.cargoV ?? u.cargo) + take * K.worth;
       u.cargo += take;
       u.mining = S.tick;
       S.oreVer++;
@@ -3877,7 +3899,7 @@ const Rules = (() => {
       if (!k || k === u.kind) continue;
       const d = UNITS[k], f = u.hp / u.max, m = hpOf(S, team, d);
       u.kind = k; u.d = d; u.max = m; u.hp = Math.max(1, m * f); u.cd = d.weapons.map(() => 0);
-      if (d.cargo) u.cargo = Math.min(u.cargo, capOf(S, u));
+      if (d.cargo && u.cargo > capOf(S, u)) { const c = capOf(S, u); u.cargoV = (u.cargoV ?? u.cargo) * c / u.cargo; u.cargo = c; }
       if (d.bombs) u.ammo = d.bombs.n;
       if (d.alt) u.z = Math.max(u.z, d.alt * 0.5);
       S.ev.push({ t: 'upgrade', id: u.id, kind: k, team, x: u.x, y: u.y });
@@ -4481,7 +4503,7 @@ const Rules = (() => {
     HZ, DT, RES, UNITS, BUILDINGS, WEAPONS, TECH, POWERS, DIFFICULTY, LAYOUT, SIZES, MAPS, spread, use,
     AGES, MAX_AGE, POWER_AGE, LINES, LINE_ORDER, formOf, lineCount, nameOf, armOf,
     get W() { return W; }, get H() { return H; }, get VW() { return VW; }, get VH() { return VH; },
-    newGame, step, push, spawn, addBuilding, scoreOf, worth, SERIES, pickFrom, fits, spotFor, roomy, blockedReason, near, rehash, seenBy, terrainAt, heightAt, los, isAir, armed, cellOf, summary, exitOf,
+    ORE_KINDS, newGame, step, push, spawn, addBuilding, scoreOf, worth, SERIES, pickFrom, fits, spotFor, roomy, blockedReason, near, rehash, seenBy, terrainAt, heightAt, los, isAir, armed, cellOf, summary, exitOf,
     mulberry, noiser, clamp, lerp, smooth, angleTo, toXY, toUV, gap, setSize, save, load, hashOf, restartSlot, razeSlot, makeMap, mapFor, layoutFor,
     msin, mcos, matan2, mhypot,
     BRIDGE_HP, SPELL, SKIES, WEATHERS, nightAt, skyOf, offGoing, route, weatherAt, sky, dayAt, spellOf, bridgeAt, clsOf, houseHp, hurtBridge, ignite, shielded,
