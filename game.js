@@ -739,7 +739,7 @@ const Game = (() => {
         const b = document.createElement('button');
         b.innerHTML = `<span></span><small>${d.seats} players</small>`; b.firstChild.textContent = d.name;
         b.classList.toggle('on', k === v.map); b.disabled = !edit && k !== v.map;
-        b.addEventListener('click', () => { if (!edit || k === v.map) return; audio.ui('click'); change({ map: k }); });
+        b.addEventListener('click', () => { if (!edit || k === v.map) return; audio.ui('click'); change(net.inRoom ? { map: k } : { map: k, picked: true }); });
         $('maps').append(b);
       }
       $('map-about').textContent = m.about;
@@ -816,8 +816,8 @@ const Game = (() => {
       if (net.inRoom) { send(Object.assign({ t: 'set' }, o)); return; }
       Object.assign(sk, o);
       if (o.map) fitSlots(sk);
-      // A map that fixes its theatre keeps it.
-      sk.theme = Rules.theatreOf(sk.map, sk.theme);
+      // A map that fixes its theatre keeps it, and any other is in the player's own.
+      sk.theme = Rules.theatreOf(sk.map, sk.myTheme || sk.theme);
       saveSk(); renderSetup();
     }
     function setSlot(i, kind, level) {
@@ -834,13 +834,23 @@ const Game = (() => {
       saveSk(); renderSetup();
     }
 
-    $('m-theme').querySelectorAll('button').forEach(b => b.addEventListener('click', () => { if (b.disabled) return; audio.ui('click'); change({ theme: b.dataset.v }); }));
+    $('m-theme').querySelectorAll('button').forEach(b => b.addEventListener('click', () => { if (b.disabled) return; audio.ui('click'); change(net.inRoom ? { theme: b.dataset.v } : { theme: b.dataset.v, myTheme: b.dataset.v }); }));
     $('m-age').querySelectorAll('button').forEach(b => b.addEventListener('click', () => { if (b.disabled) return; audio.ui('click'); change({ age: +b.dataset.v }); }));
     $('m-weather').querySelectorAll('button').forEach(b => b.addEventListener('click', () => { if (b.disabled) return; audio.ui('click'); change({ weather: b.dataset.v }); }));
     $('m-res').querySelectorAll('button').forEach(b => b.addEventListener('click', () => { if (b.disabled) return; audio.ui('click'); change({ res: b.dataset.v }); }));
     $('m-win').querySelectorAll('button').forEach(b => b.addEventListener('click', () => { if (b.disabled) return; audio.ui('click'); change({ win: b.dataset.v }); }));
     $('reseed').addEventListener('click', () => { audio.ui('click'); change({ seed: newSeed() }); });
-    $('b-skirmish').addEventListener('click', () => { audio.wake(); audio.ui('click'); net.inRoom = false; screen('setup'); renderSetup(); });
+    // Until the player picks a map by hand, the set-up opens on one of the two-player maps at random, in the
+    // player's own theatre unless the map has one of its own.
+    function pickMap() {
+      if (!sk.myTheme) sk.myTheme = sk.theme;
+      const two = Object.keys(Rules.MAPS).filter(k => Rules.MAPS[k].seats === 2);
+      sk.map = two[Math.floor(Math.random() * two.length)];
+      fitSlots(sk);
+      sk.theme = Rules.theatreOf(sk.map, sk.myTheme || sk.theme);
+      saveSk();
+    }
+    $('b-skirmish').addEventListener('click', () => { audio.wake(); audio.ui('click'); net.inRoom = false; if (!sk.picked) pickMap(); screen('setup'); renderSetup(); });
     $('setup-back').addEventListener('click', () => { audio.ui('click'); if (net.inRoom) { leaveRoom(); screen('rooms'); } else screen('main'); });
     $('deploy').addEventListener('click', () => {
       audio.wake(); audio.ui('click'); store.set('dg-played', '1');
