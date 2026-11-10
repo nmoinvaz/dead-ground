@@ -2707,9 +2707,33 @@ const Rules = (() => {
     S.ev.push({ t: 'fallback', team: u.team, id: u.id, x: u.x, y: u.y });
   }
   // Exploring. A scout told to explore roams by itself: to the block of the map its side has seen least, never
-  // seen before all, nearer ones first, keeping clear of the enemy defences its side has found. Shot at, it runs
-  // a dozen cells from whatever shot it, waits a little, and goes on exploring.
+  // seen before all, nearer ones first, keeping clear of the enemy defences its side has found. It makes only for
+  // land it can get to, never the middle of a lake or an island it cannot reach, and counts what lies beyond its
+  // reach at less than its own ground, as only a look from the shore. A block it has reached, or set out for and
+  // stopped short of, is passed over for a while after. Shot at, it runs a dozen cells from whatever shot it, waits
+  // a little, and goes on exploring.
   const EXP_B = 8, EXP_SAFE = 14;
+  // The stretches of land a kind of mover can cross, each open cell numbered by the stretch it lies in, from the
+  // ground alone. Made again when the ground changes.
+  function landOf(S, cls) {
+    const L = S._land || (S._land = {});
+    if (L[cls] && L[cls].ver === S.gndVer) return L[cls].id;
+    const none = L.none || (L.none = new Uint8Array(N)), id = new Int32Array(N).fill(-1);
+    let n = 0;
+    for (let c = 0; c < N; c++) if (id[c] < 0 && !blocked(S, cls, c, none)) {
+      const st = [c]; id[c] = n;
+      while (st.length) {
+        const v = st.pop(), x = v % W, y = v / W | 0;
+        for (const [dx, dy] of D8) {
+          const nx = x + dx, ny = y + dy, w = ny * W + nx;
+          if (nx >= 0 && ny >= 0 && nx < W && ny < H && id[w] < 0 && !blocked(S, cls, w, none)) { id[w] = n; st.push(w); }
+        }
+      }
+      n++;
+    }
+    L[cls] = { ver: S.gndVer, id };
+    return id;
+  }
   const canExplore = u => u.d.line === 'rec';
   function exploreTick(S, u) {
     if (!u.exp) return;
@@ -2727,25 +2751,29 @@ const Rules = (() => {
     // Going somewhere still unseen, it carries on.
     if (o && o.exp && !o.flee && !P.vis[cellOf(o.x, o.y)]) return;
     if (o && !o.exp) return;
-    // A block it set out for and stopped short of is passed over from then on.
-    if (!o && u.expTo && mhypot(u.x - u.expTo[0], u.y - u.expTo[1]) > 4) { (u.expSkip || (u.expSkip = [])).push(u.expTo[2]); if (u.expSkip.length > 8) u.expSkip.shift(); }
+    // A block it set out for, reached or not, is passed over for its next two dozen choices.
+    if (!o && u.expTo) { (u.expSkip || (u.expSkip = [])).push(u.expTo[2]); if (u.expSkip.length > 24) u.expSkip.shift(); }
     u.expTo = null;
     const danger = [];
     for (const e of S.ents) if (e.b && e.team !== u.team && e.hp > 0 && armOf(S, e) && P.seen[cellOf(e.x, e.y)]) danger.push(e);
-    const nb = Math.ceil(W / EXP_B);
+    const nb = Math.ceil(W / EXP_B), land = landOf(S, clsOf(u));
+    // The stretch of land the scout stands on, or the nearest it can step onto.
+    let mine = land[cellOf(u.x, u.y)];
+    for (let r = 1; mine < 0 && r <= 2; r++) for (const [dx, dy] of D8) if (mine < 0) mine = land[cellOf(clamp(u.x + dx * r, 0, W - 1), clamp(u.y + dy * r, 0, H - 1))];
     let best = null, top = 0;
     for (let by = 0; by < nb; by++) for (let bx = 0; bx < nb; bx++) {
       const cx = (bx + 0.5) * EXP_B, cy = (by + 0.5) * EXP_B;
       const bi = by * nb + bx;
       if (cx >= W || cy >= H || (u.expSkip && u.expSkip.includes(bi)) || danger.some(e => mhypot(e.x - cx, e.y - cy) < EXP_SAFE)) continue;
-      // Its unseen ground, and the open cell nearest its middle to make for.
-      let never = 0, dark = 0, land = 0, goal = -1, gd = Infinity;
+      // Its unseen ground, what the scout can reach counted whole and the rest at a third, and the reachable open
+      // cell nearest its middle to make for.
+      let never = 0, dark = 0, open = 0, goal = -1, gd = Infinity;
       for (let y = by * EXP_B; y < Math.min(H, (by + 1) * EXP_B); y += 2) for (let x = bx * EXP_B; x < Math.min(W, (bx + 1) * EXP_B); x += 2) {
-        const c = y * W + x;
-        if (!blocked(S, clsOf(u), c)) { land++; const dd = mhypot(x + 0.5 - cx, y + 0.5 - cy); if (dd < gd) { gd = dd; goal = c; } }
-        if (!P.seen[c]) never++; else if (!P.vis[c]) dark++;
+        const c = y * W + x, mineC = land[c] === mine && !blocked(S, clsOf(u), c), k = mineC ? 1 : 1 / 3;
+        if (mineC) { open++; const dd = mhypot(x + 0.5 - cx, y + 0.5 - cy); if (dd < gd) { gd = dd; goal = c; } }
+        if (!P.seen[c]) never += k; else if (!P.vis[c]) dark += k;
       }
-      if (land < 4) continue;
+      if (open < 4) continue;
       const sc = (never * 3 + dark) / (1 + mhypot(cx - u.x, cy - u.y) / 30);
       if (sc > top) { top = sc; best = [goal % W + 0.5, (goal / W | 0) + 0.5, bi]; }
     }
