@@ -398,7 +398,7 @@ const Game = (() => {
       $('again').textContent = G.online ? 'Back to the room' : 'Again';
       $('menu').textContent = G.online ? 'Leave' : 'Menu';
       $('end').hidden = false;
-      Report.show($('end-report'), { S, name: youName, plate: plateOf(G.plate) });
+      Report.show($('end-report'), { S, name: youName, plate: plateOf(G.plate), mapPicture });
     }
 
     // Hands what the rules did to the picture, the sound and the reports.
