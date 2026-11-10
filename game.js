@@ -18,7 +18,7 @@ const Game = (() => {
   };
   // What each turn of the weather means, written and spoken.
   const SKY_SAY = {
-    rain: ['Rain. Wheeled vehicles bog down off the roads.', '', 'Rain'], storm: ['Storm. All aircraft are grounded.', 'bad', 'Storm. Aircraft grounded'],
+    rain: ['Rain clouds. Wheeled vehicles bog down off the roads under them.', '', 'Rain'], storm: ['Storm. All aircraft are grounded.', 'bad', 'Storm. Aircraft grounded'],
     fog: ['Fog. Sight is cut short.', '', 'Fog'], snow: ['Snow. Everything moves slower.', '', 'Snow'], stormsoon: ['A storm is coming. Aircraft will be grounded.', 'bad', 'Storm warning'],
     clear: ['The weather clears.', 'good', ''], cloud: ['Clouding over.', '', ''],
     sand: ['Dust storm. Sight is cut short, men and wheels slowed, aircraft grounded.', 'bad', 'Dust storm. Aircraft grounded'],
@@ -171,11 +171,11 @@ const Game = (() => {
       },
       ack(u, attack) { if (!u) return; a.play(attack ? 'ack2' : 'ack1', { gain: 0.34, gap: 0.5, vary: 0.08 }); },
       wind() { if (ambient || !bank.wind) return; ambient = ctx.createBufferSource(); ambient.buffer = bank.wind; ambient.loop = true; const g = ctx.createGain(); g.gain.value = 0.22; ambient.connect(g); g.connect(master); ambient.start(); },
-      // Rain under everything, as loud as it is raining.
+      // Rain under everything, as loud as it is raining where the view is.
       weather(sky) {
         if (!ctx || !bank.rain) return;
         if (!rainSrc) { rainSrc = ctx.createBufferSource(); rainSrc.buffer = bank.rain; rainSrc.loop = true; rainGain = ctx.createGain(); rainGain.gain.value = 0; rainSrc.connect(rainGain); rainGain.connect(master); rainSrc.start(); }
-        rainGain.gain.value = Math.min(1, sky.rain) * (0.28 + 0.2 * sky.storm);
+        rainGain.gain.value = Math.min(1, sky.rainV) * (0.28 + 0.2 * sky.stormV);
       },
       toggle() { a.muted = !a.muted; if (master) master.gain.value = a.muted ? 0 : 0.8; try { localStorage.setItem('dg-mute', a.muted ? '1' : ''); } catch (e) { /* no store */ } },
     };

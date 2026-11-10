@@ -19,13 +19,13 @@
       // 45 and 135 degrees, then flat and upright lines for the darkest, each line a little uneven with small gaps.
       // The ground's hatching is pinned to the map so it pans with it, the units' redraws a few times a second.
       const ink = new THREE.ShaderMaterial({ uniforms: { t: { value: null }, tSubj: { value: null }, tHeat: { value: null }, tPaper: { value: null }, res: { value: new THREE.Vector2(1, 1) }, uTime: { value: 0 }, uK: { value: 1 }, uOff: { value: new THREE.Vector2() }, uStyle: { value: 8 }, tNorm: { value: null }, tFogS: { value: null }, tLand: { value: null }, uSun2: { value: new THREE.Vector2(-1, 0) }, uUpV: { value: new THREE.Vector3(0, 1, 0) }, uRoad: { value: 0 }, uOre: { value: 0 }, uMarks: { value: 1 }, uRoadAge: { value: 4 }, uShadeH: { value: 1 }, tShade: { value: null },
-        uWindS: { value: new THREE.Vector2() }, uView: { value: new THREE.Vector2(1, 0) }, tFx: { value: null }, tAnc: { value: null }, uDark: { value: 0 }, uInks: { value: 0 }, uFxs: { value: 0 }, uFire: { value: 0 }, uUnits: { value: 0 }, tH: SH.tH, uHSize: { value: new THREE.Vector2(1, 1) }, uHScale: { value: 1 }, uRain: { value: 0 }, uStorm: { value: 0 }, uSnowF: { value: 0 }, uSnowC: SH.uSnowC, uSnowLine: SH.uSnowLine, tFlow: SH.tFlow, tBrook: SH.tBrook, uFlora: SH.uFlora, uShow: SH.uShow, tCover: SH.tCover, uFieldK: SH.uFieldK, uFieldK2: SH.uFieldK2, uPark: SH.uPark, uBridgeKind: SH.uBridgeKind, uFog: { value: 0 }, uMist: { value: 0 }, uNight: { value: 0 }, uWet: { value: 0 },
+        uWindS: { value: new THREE.Vector2() }, uView: { value: new THREE.Vector2(1, 0) }, tFx: { value: null }, tAnc: { value: null }, uDark: { value: 0 }, uInks: { value: 0 }, uFxs: { value: 0 }, uFire: { value: 0 }, uUnits: { value: 0 }, tH: SH.tH, uHSize: { value: new THREE.Vector2(1, 1) }, uHScale: { value: 1 }, uSnowF: { value: 0 }, uSnowC: SH.uSnowC, uSnowLine: SH.uSnowLine, tFlow: SH.tFlow, tBrook: SH.tBrook, uFlora: SH.uFlora, uShow: SH.uShow, uShowS: SH.uShowS, tCover: SH.tCover, uFieldK: SH.uFieldK, uFieldK2: SH.uFieldK2, uPark: SH.uPark, uBridgeKind: SH.uBridgeKind, uFog: { value: 0 }, uMist: { value: 0 }, uNight: { value: 0 },
         uDayMul: { value: new THREE.Vector3(1, 1, 1) }, uDayAdd: { value: new THREE.Vector3() }, uWaterL: { value: -0.15 }, uCloudK: SH.uCloudK, tMarks: SH.tMarks, uMap: SH.uMap,
         uCloud: SH.uCloud, uCloudT: SH.uCloudT, uSunW: SH.uSunDir, uCloudA: { value: 0 }, uCloudG: { value: 0 }, uRayK: { value: 0 }, uSand: { value: 0 },
         uInvVP: { value: new THREE.Matrix4() }, uW2S: { value: new THREE.Vector4(1, 0, 0, 1) }, uLev: { value: 1 }, tTerr: SH.tTerr, uBorder: SH.uBorder, uMe: { value: 0 },
         // Each side's colour as the anchor pass keeps it, its hue and how coloured it is, and its inks on either paper.
         uSideKey: { value: [...Array(8)].map(() => new THREE.Vector2()) }, uSideL: { value: [...Array(8)].map(() => new THREE.Vector3()) }, uSideD: { value: [...Array(8)].map(() => new THREE.Vector3()) }, uSideB: { value: [...Array(8)].map(() => new THREE.Vector3()) } }, vertexShader: vs, depthTest: false, depthWrite: false, fragmentShader: `
-        varying vec2 vUv; uniform sampler2D t, tSubj, tHeat, tPaper, tNorm, tFogS, tLand, tMarks; uniform float uMap; uniform vec2 res, uOff, uSun2, uWindS, uView, uHSize; uniform float uHScale, uFxs, uFire; uniform int uUnits, uInks; uniform float uDark; uniform sampler2D tH, tFx, tAnc, tFlow, tBrook, tCover, tShade; uniform vec4 uFieldK, uFieldK2; uniform vec4 uShow[4]; uniform vec4 uPark[16]; uniform vec3 uUpV, uDayMul, uDayAdd; uniform float uTime, uK, uRain, uStorm, uSnowF, uSnowC, uSnowLine, uFlora, uBridgeKind, uFog, uMist, uNight, uWet, uWaterL, uCloudK, uMarks, uRoadAge, uShadeH; uniform int uStyle, uRoad, uOre;
+        varying vec2 vUv; uniform sampler2D t, tSubj, tHeat, tPaper, tNorm, tFogS, tLand, tMarks; uniform float uMap; uniform vec2 res, uOff, uSun2, uWindS, uView, uHSize; uniform float uHScale, uFxs, uFire; uniform int uUnits, uInks; uniform float uDark; uniform sampler2D tH, tFx, tAnc, tFlow, tBrook, tCover, tShade; uniform vec4 uFieldK, uFieldK2; uniform vec4 uShow[8]; uniform vec2 uShowS[8]; uniform vec4 uPark[16]; uniform vec3 uUpV, uDayMul, uDayAdd; uniform float uTime, uK, uSnowF, uSnowC, uSnowLine, uFlora, uBridgeKind, uFog, uMist, uNight, uWaterL, uCloudK, uMarks, uRoadAge, uShadeH; uniform int uStyle, uRoad, uOre;
         uniform vec2 uSideKey[8]; uniform vec3 uSideL[8], uSideD[8], uSideB[8];
         uniform sampler2D tTerr; uniform float uBorder, uMe;
         uniform vec2 uCloud; uniform vec3 uSunW; uniform float uCloudT, uCloudA, uCloudG, uRayK, uSand;
@@ -184,6 +184,25 @@
           need += abs(dFdx(need)) + abs(dFdy(need));
           need += abs(dFdx(need)) + abs(dFdy(need));
           vec3 col = vec3(0.0), paperC = dk ? DPAPER : PAPER, inkC = dk ? DINK : INK;
+          // Showers and rain clouds over part of the map: how deep under rain, under snow and under a storm the
+          // ground here lies, how deep under the cloud, which is drawn over the ground it falls on so the two read as
+          // one, and how dark that cloud is. A cloud's ragged edge reaches 1.54 of its radius at most, so a pixel
+          // farther off is not worked out. The edges' noise is laid on the land, one for all of them.
+          float shR = 0.0, shS = 0.0, shC = 0.0, shD = 0.0, shT = 0.0, nE = -1.0, nC = 0.0;
+          for (int i = 0; i < 8; i++) {
+            vec4 s = uShow[i];
+            if (s.z <= 0.0) continue;
+            float d0 = length(Wl - s.xy);
+            if (d0 >= s.z * 1.54) continue;
+            if (nE < 0.0) { nE = noise(Wl * 0.12); nC = noise(Wl * 0.1); }
+            float f = smoothstep(s.z, s.z * 0.5, d0 * (1.0 + (nE - 0.5) * 0.45)), v = f * abs(s.w);
+            if (s.w > 0.0) shR = max(shR, v); else shS = max(shS, v);
+            shT = max(shT, f * uShowS[i].y);
+            float c = smoothstep(s.z * 1.15, s.z * 0.6, d0 * (1.0 + (nC - 0.5) * 0.5)) * abs(s.w);
+            shC = max(shC, c); shD = max(shD, c * uShowS[i].x);
+          }
+          // The ground is wet where rain falls, and dry around it.
+          float wetL = shR;
           if (uStyle != 8 || need > 0.0) {
             // Work whose result is weighted by nothing at a pixel is skipped there, so the open ground stays cheap.
             vec2 uv = vUv;
@@ -395,7 +414,7 @@
               float ditchK = (1.0 - smoothstep(0.03, 0.1, -rXs)) * (1.0 - onRoad);
               float ditch = (1.0 - smoothstep(0.35 * uK, 0.9 * uK, abs(rd - 1.62) / rw)) * ditchK;
               if (ditch > 0.0) ditch *= step(0.3, landNoise(Wl, 18.0, vec2(5.0)));
-              float ditchW = (1.0 - smoothstep(0.08, 0.15, abs(rd - 1.62))) * ditchK * uWet;
+              float ditchW = (1.0 - smoothstep(0.08, 0.15, abs(rd - 1.62))) * ditchK * wetL;
               gC = max(gC * (1.0 - bankIn * 0.85), max(hach * 0.8, ditch * 0.55));
               // Rivers water-lined as old maps do: lines that follow the shore, close at the bank and further apart
               // toward the middle, each thinner and more broken than the last, and a heavy line at the bank.
@@ -620,7 +639,7 @@
                 base = mix(base, dk ? vec3(0.78, 0.76, 0.72) : vec3(0.22, 0.2, 0.19), max(rk * 0.8, crest * 0.75) * mix(1.0, 0.75, zo) * (dk ? 0.8 : 1.0) * rock * isG * (1.0 - wet));
               }
               base = mix(base, fEdgeC, fEdge * isG * (1.0 - wet) * 0.85);
-              base = mix(base, base * vec3(0.9, 0.93, 0.97), uWet * isG * 0.7);
+              base = mix(base, base * vec3(0.9, 0.93, 0.97), wetL * isG * 0.7);
               if (snowy) {
                 // The snowfield's edge is dashed, as a map bounds land cover, so it never reads as a shore.
                 vec2 sg = vec2(dFdx(sF), dFdy(sF)), sTw = normalize(S2W * vec2(-sg.y, sg.x) + 1e-6);
@@ -999,10 +1018,10 @@
             if (tBand > 0.0) tGrain = mix(0.3 + 0.7 * step(0.3, noise(Wm * 5.0)), 0.8, smoothstep(0.25, 0.8, tGrW));
             // In snow a track is a trough in blue-grey, pocked with the prints of feet and treads. In mud it is a dark
             // rut, with water standing along the deepest of them.
-            float tSnow = gSnow * tBand, tMud = uWet * (1.0 - gSnow) * tBand;
+            float tSnow = gSnow * tBand, tMud = wetL * (1.0 - gSnow) * tBand;
             vec3 trC = mix(dk ? vec3(0.44, 0.42, 0.39) : vec3(0.55, 0.46, 0.35), dk ? vec3(0.42, 0.5, 0.66) : vec3(0.6, 0.67, 0.8), gSnow);
-            trC = mix(trC, dk ? vec3(0.22, 0.19, 0.15) : vec3(0.47, 0.38, 0.28), uWet * (1.0 - gSnow));
-            col = mix(col, trC, tBand * (0.24 + 0.36 * smoothstep(0.1, 0.45, tG)) * mix(tGrain, 1.0, max(gSnow, uWet)));
+            trC = mix(trC, dk ? vec3(0.22, 0.19, 0.15) : vec3(0.47, 0.38, 0.28), wetL * (1.0 - gSnow));
+            col = mix(col, trC, tBand * (0.24 + 0.36 * smoothstep(0.1, 0.45, tG)) * mix(tGrain, 1.0, max(gSnow, wetL)));
             if (tSnow > 0.0) {
               vec2 pq = Wm * 7.0 * exp2(-gLm), pj = vec2(hash(floor(pq) + 3.0), hash(floor(pq) + 8.0)) * 0.4 + 0.3;
               float tPrint = step(0.45, hash(floor(pq) + 21.0)) * (1.0 - smoothstep(0.12, 0.2, length(fract(pq) - pj)));
@@ -1112,26 +1131,14 @@
             if (!dk) col = mix(col, col * vec3(0.93, 0.94, 0.97), uRayK * (1.0 - beam) * 0.6 * (1.0 - smoothstep(0.7, 2.7, far)));
             col = mix(col, dk ? vec3(0.8, 0.72, 0.52) : vec3(1.0, 0.9, 0.64), uRayK * beam * (dk ? 0.32 : 0.4));
           }
-          // Showers over part of the map: how deep under rain and under snow the ground here lies, and how deep under
-          // the shower's cloud, which is drawn over the ground it falls on so the two read as one.
-          vec2 Wg = Wl, WgC = Wg;
-          float shR = 0.0, shS = 0.0, shC = 0.0;
-          for (int i = 0; i < 4; i++) {
-            vec4 s = uShow[i];
-            if (s.z <= 0.0) continue;
-            float ragged = 1.0 + (noise(Wg * 0.12 + float(i) * 13.0) - 0.5) * 0.45;
-            float v = smoothstep(s.z, s.z * 0.5, length(Wg - s.xy) * ragged) * abs(s.w);
-            if (s.w > 0.0) shR = max(shR, v); else shS = max(shS, v);
-            shC = max(shC, smoothstep(s.z * 1.15, s.z * 0.6, length(WgC - s.xy) * (1.0 + (noise(WgC * 0.1 + float(i) * 7.0) - 0.5) * 0.5)) * abs(s.w));
-          }
           col = mix(col, col * (dk ? vec3(0.74, 0.77, 0.84) : vec3(0.8, 0.83, 0.89)), max(shR, shS) * 0.6);
-          float rainL = max(uRain, shR * 0.85);
+          float rainL = shR * 0.85;
           // Rain in slanted pen strokes, leaning with the wind, and rings where the drops land.
           if (rainL > 0.01) {
             vec2 rd = normalize(vec2(uWindS.x * 0.45 + 0.1, -1.0)), rn = vec2(-rd.y, rd.x);
             float sp = 7.0 * uK, ac = dot(px, rn), al = dot(px, rd) - uTime * 1000.0 * uK, ci = floor(ac / sp), per = 160.0 * uK;
-            float ph = hash(vec2(ci, 3.0)) * per, row = floor((al + ph) / per), pos = mod(al + ph, per), len = (16.0 + 14.0 * uStorm) * uK;
-            float drop = step(hash(vec2(ci, row)), rainL * (0.5 + 0.45 * uStorm)) * step(pos, len) * (1.0 - smoothstep(0.25 * uK, 0.8 * uK, abs(fract(ac / sp) - 0.5) * sp));
+            float ph = hash(vec2(ci, 3.0)) * per, row = floor((al + ph) / per), pos = mod(al + ph, per), len = (16.0 + 14.0 * shT) * uK;
+            float drop = step(hash(vec2(ci, row)), rainL * (0.5 + 0.45 * shT)) * step(pos, len) * (1.0 - smoothstep(0.25 * uK, 0.8 * uK, abs(fract(ac / sp) - 0.5) * sp));
             col = mix(col, dk ? vec3(0.55, 0.62, 0.74) : vec3(0.3, 0.36, 0.48), drop * 0.45);
             vec2 sq = (px - uOff) / (20.0 * uK), si = floor(sq), sf = fract(sq) - 0.5;
             float st = fract(uTime * 1.3 + hash(si + 7.0));
@@ -1151,22 +1158,25 @@
               col = mix(col, vec3(1.0), inner * has);
             }
           }
-          // A shower's cloud, a grey wash over it, drawn with a ragged edge as the other clouds are.
-          float shZ = mix(0.6, 1.0, smoothstep(1.0, 2.2, uLev)) * (1.0 - 0.45 * step(0.85, s0));
-          col = mix(col, dk ? vec3(0.42, 0.44, 0.5) : vec3(0.64, 0.67, 0.75), shC * 0.55 * shZ);
+          // A shower's cloud, a grey wash over it, a rain cloud's darker and a storm's darkest, drawn with a ragged
+          // edge as the other clouds are.
+          float shZ = mix(0.6, 1.0, smoothstep(1.0, 2.2, uLev)) * (1.0 - 0.45 * step(0.85, s0)), shK = shD / max(shC, 1e-3);
+          col = mix(col, dk ? mix(vec3(0.42, 0.44, 0.5), vec3(0.33, 0.34, 0.38), shK) : mix(vec3(0.64, 0.67, 0.75), vec3(0.4, 0.42, 0.47), shK), shC * mix(0.55, 0.78, shK) * shZ);
           float shW = max(fwidth(shC), 1e-4), shE = (1.0 - smoothstep(0.6 * uK, 1.6 * uK, abs(shC - 0.35) / shW)) * step(0.02, shC);
-          col = mix(col, dk ? vec3(0.7, 0.72, 0.78) : vec3(0.4, 0.44, 0.54), shE * 0.7 * shZ);
+          col = mix(col, dk ? vec3(0.7, 0.72, 0.78) : mix(vec3(0.4, 0.44, 0.54), vec3(0.26, 0.28, 0.36), shK), shE * 0.7 * shZ);
           // The clouds themselves over everything, see-through washes drifting with the wind, white in fair weather and
           // grey in foul, each edged with a light scalloped line as a drawn cloud is. They thin when the view is close
           // and over units, so nothing below is lost.
           if (uCloudA > 0.01) {
             vec2 cxz = landAt(vUv, CLOUD_H) - sunH * CLOUD_H;
             float cb = cloudAt(cxz);
-            float ca = cb * uCloudA * (1.0 - 0.5 * uCloudG) * mix(0.55, 1.0, smoothstep(1.0, 2.2, uLev)) * (1.0 - 0.45 * step(0.85, s0));
+            // Under a rain cloud the fair-weather clouds give way to it.
+            float under = 1.0 - 0.8 * shC * shK;
+            float ca = cb * uCloudA * (1.0 - 0.5 * uCloudG) * mix(0.55, 1.0, smoothstep(1.0, 2.2, uLev)) * (1.0 - 0.45 * step(0.85, s0)) * under;
             vec3 cc = dk ? mix(vec3(0.64, 0.65, 0.68), vec3(0.44, 0.45, 0.49), uCloudG) : mix(vec3(1.0, 1.0, 1.0), vec3(0.74, 0.76, 0.82), uCloudG * 0.85);
             col = mix(col, cc, ca);
             float cw = max(fwidth(cb), 1e-4), cl0 = (1.0 - smoothstep(0.6 * uK, 1.6 * uK, abs(cb - 0.5) / cw)) * step(0.15, noise(cxz * 0.9 + 3.0));
-            col = mix(col, dk ? vec3(0.78, 0.79, 0.82) : vec3(0.48, 0.52, 0.6), cl0 * min(1.0, uCloudA * 1.6) * (1.0 - 0.5 * uCloudG));
+            col = mix(col, dk ? vec3(0.78, 0.79, 0.82) : vec3(0.48, 0.52, 0.6), cl0 * min(1.0, uCloudA * 1.6) * (1.0 - 0.5 * uCloudG) * under);
           }
           // The hour: rose at dawn, amber toward dusk, and night as a blue wash over the page.
           col = col * uDayMul + uDayAdd;
@@ -1226,9 +1236,9 @@
           // The world's up in view space, to tell a building's roof from its walls.
           C.uUpV.value.set(0, 1, 0).transformDirection(camera.matrixWorldInverse);
           C.uRoad.value = K.opts.road; C.uOre.value = K.opts.ore; C.uMarks.value = K.marked ? 1 : 0; C.uRoadAge.value = K.age; C.uShadeH.value = K.opts.hatch ? 1 : 0;
-          C.uRain.value = sky.rain; C.uStorm.value = sky.storm; C.uSnowF.value = sky.snow; C.uFog.value = sky.fog; C.uMist.value = sky.mist;
+          C.uSnowF.value = sky.snow; C.uFog.value = sky.fog; C.uMist.value = sky.mist;
           C.uSand.value = sky.sand || 0; C.uCloudA.value = sky.cloudA || 0; C.uCloudG.value = sky.cloudG || 0; C.uRayK.value = sky.rayK || 0;
-          C.uNight.value = sky.night; C.uWet.value = sky.wet; C.uDayMul.value.set(...sky.mul); C.uDayAdd.value.set(...sky.add);
+          C.uNight.value = sky.night; C.uDayMul.value.set(...sky.mul); C.uDayAdd.value.set(...sky.add);
           C.uWaterL.value = K.waterLevel; C.uWindS.value.set(sky.windS, 0);
           C.uMe.value = Math.max(0, K.viewTeam); C.uView.value.set(Math.cos(K.cam.yaw), Math.sin(K.cam.yaw)); C.uHSize.value.set(Rules.VW, Rules.VH); C.uHScale.value = Rules.RES;
           K.run(ink, null);

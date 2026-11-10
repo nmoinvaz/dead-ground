@@ -1363,7 +1363,7 @@ const Hud = (() => {
       og.restore();
     }
     // Lightning, a jagged bolt for a moment, with thunder after, later the farther off it falls. A strike the rules
-    // make comes down where it lands; in a storm, now and then, one falls far off beyond the view.
+    // make comes down where it lands; in a storm, now and then, one falls under a storm cloud in the view.
     let bolt = null, boltT = 8;
     function boltTo(x, y) {
       const x0 = x + (Math.random() - 0.5) * 120, pts = [[x0, -10]];
@@ -1381,10 +1381,15 @@ const Hud = (() => {
       boltT -= dt;
       if (sk.storm > 0.6 && boltT <= 0 && !bolt) {
         boltT = 10 + Math.random() * 14;
-        const x = world.vw * (0.15 + Math.random() * 0.7), y = world.vh * (0.3 + Math.random() * 0.55), x0 = x + (Math.random() - 0.5) * 120, pts = [[x0, -10]];
-        for (let i = 1; i <= 8; i++) { const k = i / 8; pts.push([x0 + (x - x0) * k + (i < 8 ? (Math.random() - 0.5) * 46 * (1 - k * 0.5) : 0), -10 + (y + 10) * k]); }
-        bolt = { pts, t: 0 };
-        setTimeout(() => game.audio.play('thunder', { gain: 0.9, vary: 0.2 }), 400 + Math.random() * 1600);
+        const under = Rules.showersAt(game.S).filter(c => c.storm > 0.3), c = under[Math.floor(Math.random() * under.length)];
+        if (c) {
+          const a = Math.random() * 6.283, d = c.r * 0.7 * Math.sqrt(Math.random()), wx = c.x + Math.cos(a) * d, wy = c.y + Math.sin(a) * d;
+          const [x, y] = world.project(wx, Rules.terrainAt(game.S.map, wx, wy), wy);
+          if (x > world.vw * 0.05 && x < world.vw * 0.95 && y > world.vh * 0.2 && y < world.vh * 0.95) {
+            boltTo(x, y);
+            setTimeout(() => game.audio.play('thunder', { gain: 0.9, vary: 0.2 }), 400 + Math.random() * 1600);
+          }
+        }
       }
       if (!bolt) return;
       bolt.t += dt;
@@ -1406,7 +1411,7 @@ const Hud = (() => {
     }
     // The weather and the hour in a corner, with what the weather does, and a word of what is coming.
     const SKY_NAME = { clear: 'Fair', cloud: 'Overcast', rain: 'Rain', storm: 'Storm', fog: 'Fog', snow: 'Snow', sand: 'Dust storm' };
-    const SKY_NOTE = { rain: 'Wheels bog down off the roads', storm: 'Aircraft grounded', fog: 'Sight cut short', snow: 'Everyone slowed', sand: 'Sight cut, aircraft grounded' };
+    const SKY_NOTE = { rain: 'Wheels bog down under the clouds', storm: 'Aircraft grounded', fog: 'Sight cut short', snow: 'Everyone slowed', sand: 'Sight cut, aircraft grounded' };
     const hourName = d => d < 0.05 || d >= 0.95 ? 'Dawn' : d < 0.3 ? 'Morning' : d < 0.5 ? 'Midday' : d < 0.7 ? 'Afternoon' : d < 0.8 ? 'Dusk' : 'Night';
     function drawSkyNote(s) {
       const w = Rules.sky(s), ink = inked();
