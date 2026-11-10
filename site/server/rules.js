@@ -3804,6 +3804,18 @@ const Rules = (() => {
     }
   }
 
+  // The buildings units come out of, and the one a side's units of a kind come out of: the one it chose, or else its
+  // first.
+  const TRAINERS = ['barracks', 'factory', 'dock', 'airfield'];
+  function producerOf(S, team, kind) {
+    let best = null;
+    for (const e of S.ents) if (e.b && e.team === team && e.kind === kind && e.hp > 0 && (!best || e.primary)) best = e;
+    return best;
+  }
+  function makePrimary(S, team, e) {
+    e.primary = true;
+    for (const o of S.ents) if (o !== e && o.b && o.team === team && o.kind === e.kind) o.primary = false;
+  }
   function producers(S, P, cat) {
     const k = cat === 'inf' ? 'barracks' : cat === 'veh' ? 'factory' : cat === 'sea' ? 'dock' : 'airfield';
     return P.counts[k] || 0;
@@ -3834,8 +3846,7 @@ const Rules = (() => {
       return;
     }
     const need = cat === 'inf' ? 'barracks' : cat === 'veh' ? 'factory' : cat === 'sea' ? 'dock' : 'airfield';
-    let best = null, n = 0;
-    for (const e of S.ents) if (e.b && e.team === P.team && e.kind === need && e.hp > 0) { n++; if (!best || e.primary) best = e; }
+    const best = producerOf(S, P.team, need);
     if (!best) return;
     // A ship is launched into the open water nearest its dock.
     const [x, y] = cat === 'sea' ? (c => [c % W + 0.5, (c / W | 0) + 0.5])(goalCells(S, 'naval', best.x | 0, best.y | 0)[0]) : exitOf(S, best);
@@ -4168,7 +4179,11 @@ const Rules = (() => {
       if (e && e.b && e.team === team) e.repairing = !e.repairing;
     } else if (c.c === 'rally') {
       const e = S.byId.get(c.id);
-      if (e && e.b && e.team === team) { e.rally = [c.x, c.y]; e.primary = true; for (const o of S.ents) if (o !== e && o.b && o.team === team && o.kind === e.kind) o.primary = false; }
+      if (e && e.b && e.team === team) { e.rally = [c.x, c.y]; makePrimary(S, team, e); }
+    } else if (c.c === 'primary') {
+      // Units of the building's kind come out of it from now on.
+      const e = S.byId.get(c.id);
+      if (e && e.b && e.team === team && TRAINERS.includes(e.kind)) makePrimary(S, team, e);
     } else if (c.c === 'power') {
       callPower(S, team, c.name, c.x, c.y);
     } else if (c.c === 'income') {
@@ -4422,7 +4437,7 @@ const Rules = (() => {
     msin, mcos, matan2, mhypot,
     BRIDGE_HP, SPELL, SKIES, WEATHERS, nightAt, skyOf, offGoing, route, weatherAt, sky, dayAt, spellOf, bridgeAt, clsOf, houseHp, hurtBridge, ignite, shielded,
     coverPoints, coverNear, COVER_R, COVER_ARC, FORMS, formOfGroup, STANCES,
-    FB_AT, PIN, canExplore, nameFor, townName, theatreOf, UPGRADES, UP_AGE, upCost, upNote, upsAt, upK, upBlocked, hpOf, rangeOf, capOf, showersAt, showerAt,
+    FB_AT, PIN, TRAINERS, producerOf, canExplore, nameFor, townName, theatreOf, UPGRADES, UP_AGE, upCost, upNote, upsAt, upK, upBlocked, hpOf, rangeOf, capOf, showersAt, showerAt,
   };
 })();
 if (typeof module !== 'undefined') module.exports = Rules;

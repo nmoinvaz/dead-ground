@@ -605,7 +605,7 @@ body[data-look="ink"] .sheet { box-shadow: 4px 4px 0 var(--ink); }
       <div class="choice"><h2>Map sheet frame</h2><div id="s-sheet" class="two"><button data-v="on">On</button><button data-v="off">Off</button></div></div>
       <div class="choice"><h2>Shadows</h2><div id="s-shade" class="two"><button data-v="hatch">Hatched</button><button data-v="wash">Wash</button></div></div>
       <div class="choice"><h2>Music</h2><div id="s-music" class="two"><button data-v="on">On</button><button data-v="off">Off</button></div></div>
-      <p id="build">Build 47a45f2 2026-11-09 16:32</p>
+      <p id="build">Build f2e6ea1 2026-11-09 16:40</p>
     </div>
     <div id="banner" hidden></div>
     <button id="update" hidden>A new version of Mapmaker’s War is out. <b>Reload</b></button>
@@ -4521,6 +4521,18 @@ const Rules = (() => {
     }
   }
 
+  // The buildings units come out of, and the one a side's units of a kind come out of: the one it chose, or else its
+  // first.
+  const TRAINERS = ['barracks', 'factory', 'dock', 'airfield'];
+  function producerOf(S, team, kind) {
+    let best = null;
+    for (const e of S.ents) if (e.b && e.team === team && e.kind === kind && e.hp > 0 && (!best || e.primary)) best = e;
+    return best;
+  }
+  function makePrimary(S, team, e) {
+    e.primary = true;
+    for (const o of S.ents) if (o !== e && o.b && o.team === team && o.kind === e.kind) o.primary = false;
+  }
   function producers(S, P, cat) {
     const k = cat === 'inf' ? 'barracks' : cat === 'veh' ? 'factory' : cat === 'sea' ? 'dock' : 'airfield';
     return P.counts[k] || 0;
@@ -4551,8 +4563,7 @@ const Rules = (() => {
       return;
     }
     const need = cat === 'inf' ? 'barracks' : cat === 'veh' ? 'factory' : cat === 'sea' ? 'dock' : 'airfield';
-    let best = null, n = 0;
-    for (const e of S.ents) if (e.b && e.team === P.team && e.kind === need && e.hp > 0) { n++; if (!best || e.primary) best = e; }
+    const best = producerOf(S, P.team, need);
     if (!best) return;
     // A ship is launched into the open water nearest its dock.
     const [x, y] = cat === 'sea' ? (c => [c % W + 0.5, (c / W | 0) + 0.5])(goalCells(S, 'naval', best.x | 0, best.y | 0)[0]) : exitOf(S, best);
@@ -4885,7 +4896,11 @@ const Rules = (() => {
       if (e && e.b && e.team === team) e.repairing = !e.repairing;
     } else if (c.c === 'rally') {
       const e = S.byId.get(c.id);
-      if (e && e.b && e.team === team) { e.rally = [c.x, c.y]; e.primary = true; for (const o of S.ents) if (o !== e && o.b && o.team === team && o.kind === e.kind) o.primary = false; }
+      if (e && e.b && e.team === team) { e.rally = [c.x, c.y]; makePrimary(S, team, e); }
+    } else if (c.c === 'primary') {
+      // Units of the building's kind come out of it from now on.
+      const e = S.byId.get(c.id);
+      if (e && e.b && e.team === team && TRAINERS.includes(e.kind)) makePrimary(S, team, e);
     } else if (c.c === 'power') {
       callPower(S, team, c.name, c.x, c.y);
     } else if (c.c === 'income') {
@@ -5139,7 +5154,7 @@ const Rules = (() => {
     msin, mcos, matan2, mhypot,
     BRIDGE_HP, SPELL, SKIES, WEATHERS, nightAt, skyOf, offGoing, route, weatherAt, sky, dayAt, spellOf, bridgeAt, clsOf, houseHp, hurtBridge, ignite, shielded,
     coverPoints, coverNear, COVER_R, COVER_ARC, FORMS, formOfGroup, STANCES,
-    FB_AT, PIN, canExplore, nameFor, townName, theatreOf, UPGRADES, UP_AGE, upCost, upNote, upsAt, upK, upBlocked, hpOf, rangeOf, capOf, showersAt, showerAt,
+    FB_AT, PIN, TRAINERS, producerOf, canExplore, nameFor, townName, theatreOf, UPGRADES, UP_AGE, upCost, upNote, upsAt, upK, upBlocked, hpOf, rangeOf, capOf, showersAt, showerAt,
   };
 })();
 if (typeof module !== 'undefined') module.exports = Rules;
@@ -15377,6 +15392,10 @@ const Hud = (() => {
       if (!s) return;
       const selected = new Set(state.sel);
       const P0 = t >= 0 ? s.P[t] : null;
+      // With a building that trains units selected, the one its kind comes out of is lettered, where there is a
+      // choice of them.
+      const trainAt = new Set();
+      for (const q of state.sel) if (q.b && q.team === t && q.hp > 0 && Rules.TRAINERS.includes(q.kind) && (P0.counts[q.kind] || 0) > 1) trainAt.add(Rules.producerOf(s, t, q.kind));
       drawLamps(s);
 
       // The map's own names, as a survey sheet letters them, once the view is drawn back far enough to want them:
@@ -15476,6 +15495,14 @@ const Hud = (() => {
           const [rx, ry] = world.project(e.rally[0], terrainAt(s.map, e.rally[0], e.rally[1]) + 0.1, e.rally[1]);
           if (inked()) { og.strokeStyle = PLAN; dotted(); } else { og.strokeStyle = '#7fe0a0'; og.setLineDash([5, 4]); og.lineWidth = 1; }
           og.beginPath(); og.moveTo(o.x, o.y); og.lineTo(rx, ry); og.stroke(); og.setLineDash([]); og.lineCap = 'butt';
+        }
+        if (trainAt.has(e)) {
+          const hy = o.y - o.r * 0.9 - 12;
+          og.save(); og.setLineDash([]); og.textAlign = 'center'; og.textBaseline = 'middle';
+          og.font = ink ? `italic 600 13px ${labelFont()}` : 'italic 600 12px system-ui';
+          og.lineJoin = 'round'; og.lineWidth = 3.5; og.strokeStyle = ink ? 'rgba(250,244,228,0.92)' : 'rgba(0,0,0,0.7)'; og.strokeText('trains here', o.x, hy);
+          og.fillStyle = ink ? '#1a1512' : '#f2ead8'; og.fillText('trains here', o.x, hy);
+          og.restore();
         }
         if (e.b && e.c4) { og.fillStyle = '#ff5040'; og.font = '700 12px "Share Tech Mono", monospace'; og.textAlign = 'center'; og.fillText(Math.ceil((e.c4 - s.tick) / HZ) + '', o.x, o.y - 18); }
       }
@@ -15851,9 +15878,12 @@ const Hud = (() => {
       // A building of the player's alone shows its upgrades, which redraw as any changes state.
       const one = state.sel.length === 1 && state.sel[0].b && state.sel[0].team === team() ? state.sel[0] : null;
       const ups = one ? upState(one).map(u => u.tier + (u.here ? 'h' : '') + (u.why || '')).join() : '';
+      // A side with more than one building of a kind that trains units chooses which they come out of.
+      const trains = !!one && Rules.TRAINERS.includes(one.kind) && (S().P[one.team].counts[one.kind] || 0) > 1;
+      const here = trains && Rules.producerOf(S(), one.team, one.kind) === one;
       const fbu = fbUnits(), fb = fbu.length ? (fbu.every(u => u.fb) ? 'on' : fbu.some(u => u.fb) ? 'some' : 'off') : '';
       const exu = expUnits(), ex = exu.length ? (exu.every(u => u.exp) ? 'on' : 'off') : '';
-      const box = $('sel'), list = state.sel, key = list.map(e => e.id).join() + (list[0] ? (list[0].repairing ? 'r' : '') + (list[0].team) : '') + form + stance + ups + fb + ex;
+      const box = $('sel'), list = state.sel, key = list.map(e => e.id).join() + (list[0] ? (list[0].repairing ? 'r' : '') + (list[0].team) : '') + form + stance + ups + fb + ex + (trains ? (here ? 'T' : 't') : '');
       if (key !== state.selKey) {
         state.selKey = key;
         box.hidden = !list.length;
@@ -15872,6 +15902,7 @@ const Hud = (() => {
             if (first.b) {
               html += `<button id="a-rep" class="${first.repairing ? 'on' : ''}">Repair <kbd>G</kbd></button>`;
               if (first.kind !== 'hq') html += '<button id="a-sell">Sell <kbd>Del</kbd></button>';
+              if (trains) html += `<button id="a-train" class="${here ? 'on' : ''}" title="Units of this kind come out of this building">Train here</button>`;
             } else {
               html += `<button id="a-move" class="${state.attackMove ? 'on' : ''}">Attack-move <kbd>A</kbd></button><button id="a-stop">Stop <kbd>S</kbd></button>`;
             }
@@ -15893,6 +15924,7 @@ const Hud = (() => {
           const on = (id, fn) => { const b = document.getElementById(id); if (b) b.addEventListener('click', fn); };
           on('a-rep', () => game.order(S(), team(), { c: 'repair', id: first.id }));
           on('a-sell', () => { game.order(S(), team(), { c: 'sell', id: first.id }); select([]); });
+          on('a-train', () => { game.order(S(), team(), { c: 'primary', id: first.id }); game.audio.ui('click'); });
           on('a-stop', () => game.order(S(), team(), { c: 'stop', ids: orderIds() }));
           on('a-move', () => { if (state.touchUsed) { state.attackMove = !state.attackMove; state.selKey = ''; } else enter({ type: 'amove' }); });
           on('a-clear', () => select([]));
