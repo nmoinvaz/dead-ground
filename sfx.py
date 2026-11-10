@@ -52,7 +52,9 @@ def boom(d, k, rumble, crack=0.5, f0=120, f1=30):
 write('boom_x', boom(4.5, 0.9, 2.2, 0.3, 60, 18))
 write('scream', low(noise(0.18), 500) * env(0.18, 0.004, 26))
 write('click', band(noise(0.03), 2000, 6000) * env(0.03, 0.0005, 160) + np.sin(2 * np.pi * 1800 * t_(0.03)) * env(0.03, 0.0005, 120) * 0.5)
-write('deny', mix(np.sign(np.sin(2 * np.pi * 220 * t_(0.09))) * 0.3, np.concatenate([np.zeros(int(SR * 0.11)), np.sign(np.sin(2 * np.pi * 170 * t_(0.12))) * 0.3])) * 0.8)
+# A refusal: a soft two-note "nope", marimba-like, falling a fourth, quieter than the other interface sounds.
+nope = lambda f: mix(np.sin(2 * np.pi * f * t_(0.16)) * env(0.16, 0.003, 26), np.sin(2 * np.pi * f * 3 * t_(0.16)) * env(0.16, 0.002, 45) * 0.25)
+write('deny', mix(nope(660), np.concatenate([np.zeros(int(SR * 0.1)), nope(494)])), 0.55)
 write('place', mix(thump(0.4, 140, 50, 12) * 1.2, band(noise(0.4), 300, 3000) * env(0.4, 0.002, 14), np.sin(2 * np.pi * 1250 * t_(0.4)) * env(0.4, 0.002, 18) * 0.15))
 write('launch', mix(low(noise(3.2), 900, 3) * np.minimum(1, t_(3.2) * 2) * np.exp(-t_(3.2) * 0.7), whoosh(3.2, 200, 1200, 0.8), thump(3.2, 90, 30, 1.2)))
 def chirp(f, d=0.09):
