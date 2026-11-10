@@ -436,7 +436,7 @@ const Game = (() => {
           case 'fallen': {
             // A plate of the fall for the report: where the side's last building went down, or else its base.
             const at = G.falls[e.team] || (S.bases[e.team] ? { x: S.bases[e.team][0], y: S.bases[e.team][1] } : null);
-            if (at && !e.forfeit) world.plate(at.x, at.y, url => { G.plate = { url, team: e.team, kind: at.kind, tick: S.tick, x: at.x, y: at.y, regicide: e.regicide }; });
+            if (at && !e.forfeit) world.plate(at.x, at.y, url => { G.plate = { url, team: e.team, kind: at.kind, tick: S.tick, x: at.x, y: at.y, regicide: e.regicide }; }, undefined, true);
             if (G.playing && e.team === G.team) setTimeout(outcome, 1800);
             else if (G.playing && G.names[e.team]) hud.say(e.forfeit ? `${G.names[e.team]} has forfeited the game.` : e.regicide ? `${G.names[e.team]}'s general has fallen. They are out.` : `${G.names[e.team]} is out.`, 'good');
             drawRoster();

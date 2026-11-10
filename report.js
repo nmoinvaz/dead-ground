@@ -445,7 +445,7 @@ const Report = (() => {
       pane.replaceChildren(); tip.hidden = true; cur.redraw = null;
       const S = o.S;
       if (k === 'sum') {
-        // The decisive moment as a plate, engraved and captioned, at the head of the summary.
+        // The decisive moment as a plate, in colour as the game draws it and captioned, at the head of the summary.
         if (o.plate) {
           const f = el('figure', 'rplate'), img = el('img'), cap = el('figcaption', '', `Plate I. ${o.plate.caption}`);
           img.src = o.plate.url; img.alt = o.plate.caption;
