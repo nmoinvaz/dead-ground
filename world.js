@@ -2464,6 +2464,8 @@ const World = (() => {
       for (const [ox, oy] of [[0, 0], [o, 0], [-o, 0], [0, o], [0, -o]]) { const h = Rules.showerAt(S, cam.x + ox, cam.y + oy); rv = Math.max(rv, h.rain); sv = Math.max(sv, h.storm); }
       sky.rainV += (rv - sky.rainV) * k; sky.stormV += (sv - sky.stormV) * k;
       sky.kind = w.kind;
+      // A dust storm's wall, where it stands now, for the picture.
+      sky.dust = Rules.dustWall(S);
       // The ground stays wet a while after the rain.
       sky.wet += ((w.rain > 0.2 ? 1 : 0) - sky.wet) * (studySky ? 1 : 1 - Math.exp(-dt * (w.rain > 0.2 ? 0.15 : 0.012)));
       const U = SH.uWind.value;

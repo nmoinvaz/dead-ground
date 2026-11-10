@@ -21,14 +21,14 @@
       const ink = new THREE.ShaderMaterial({ uniforms: { t: { value: null }, tSubj: { value: null }, tHeat: { value: null }, tPaper: { value: null }, res: { value: new THREE.Vector2(1, 1) }, uTime: { value: 0 }, uK: { value: 1 }, uOff: { value: new THREE.Vector2() }, uStyle: { value: 8 }, tNorm: { value: null }, tFogS: { value: null }, tLand: { value: null }, uSun2: { value: new THREE.Vector2(-1, 0) }, uUpV: { value: new THREE.Vector3(0, 1, 0) }, uRoad: { value: 0 }, uOre: { value: 0 }, uMarks: { value: 1 }, uRoadAge: { value: 4 }, uShadeH: { value: 1 }, tShade: { value: null },
         uWindS: { value: new THREE.Vector2() }, uView: { value: new THREE.Vector2(1, 0) }, tFx: { value: null }, tAnc: { value: null }, uDark: { value: 0 }, uTone: { value: 0 }, uInks: { value: 0 }, uFxs: { value: 0 }, uFire: { value: 0 }, uUnits: { value: 0 }, tH: SH.tH, uHSize: { value: new THREE.Vector2(1, 1) }, uHScale: { value: 1 }, uSnowF: { value: 0 }, uSnowC: SH.uSnowC, uSnowLine: SH.uSnowLine, tFlow: SH.tFlow, tBrook: SH.tBrook, uFlora: SH.uFlora, uShow: SH.uShow, uShowS: SH.uShowS, tCover: SH.tCover, uFieldK: SH.uFieldK, uFieldK2: SH.uFieldK2, uPark: SH.uPark, uBridgeKind: SH.uBridgeKind, uFog: { value: 0 }, uMist: { value: 0 }, uNight: { value: 0 },
         uDayMul: { value: new THREE.Vector3(1, 1, 1) }, uDayAdd: { value: new THREE.Vector3() }, uWaterL: { value: -0.15 }, uCloudK: SH.uCloudK, tMarks: SH.tMarks, uMap: SH.uMap,
-        uCloud: SH.uCloud, uCloudT: SH.uCloudT, uSunW: SH.uSunDir, uCloudA: { value: 0 }, uCloudG: { value: 0 }, uRayK: { value: 0 }, uSand: { value: 0 },
+        uCloud: SH.uCloud, uCloudT: SH.uCloudT, uSunW: SH.uSunDir, uCloudA: { value: 0 }, uCloudG: { value: 0 }, uRayK: { value: 0 }, uDust: { value: new THREE.Vector4() },
         uInvVP: { value: new THREE.Matrix4() }, uW2S: { value: new THREE.Vector4(1, 0, 0, 1) }, uLev: { value: 1 }, tTerr: SH.tTerr, uBorder: SH.uBorder, uMe: { value: 0 },
         // Each side's colour as the anchor pass keeps it, its hue and how coloured it is, and its inks on either paper.
         uSideKey: { value: [...Array(8)].map(() => new THREE.Vector2()) }, uSideL: { value: [...Array(8)].map(() => new THREE.Vector3()) }, uSideD: { value: [...Array(8)].map(() => new THREE.Vector3()) }, uSideB: { value: [...Array(8)].map(() => new THREE.Vector3()) } }, vertexShader: vs, depthTest: false, depthWrite: false, fragmentShader: `
         varying vec2 vUv; uniform sampler2D t, tSubj, tHeat, tPaper, tNorm, tFogS, tLand, tMarks; uniform float uMap; uniform vec2 res, uOff, uSun2, uWindS, uView, uHSize; uniform float uHScale, uFxs, uFire; uniform int uUnits, uInks; uniform float uDark, uTone; uniform sampler2D tH, tFx, tAnc, tFlow, tBrook, tCover, tShade; uniform vec4 uFieldK, uFieldK2; uniform vec4 uShow[8]; uniform vec2 uShowS[8]; uniform vec4 uPark[16]; uniform vec3 uUpV, uDayMul, uDayAdd; uniform float uTime, uK, uSnowF, uSnowC, uSnowLine, uFlora, uBridgeKind, uFog, uMist, uNight, uWaterL, uCloudK, uMarks, uRoadAge, uShadeH; uniform int uStyle, uRoad, uOre;
         uniform vec2 uSideKey[8]; uniform vec3 uSideL[8], uSideD[8], uSideB[8];
         uniform sampler2D tTerr; uniform float uBorder, uMe;
-        uniform vec2 uCloud; uniform vec3 uSunW; uniform float uCloudT, uCloudA, uCloudG, uRayK, uSand;
+        uniform vec2 uCloud; uniform vec3 uSunW; uniform float uCloudT, uCloudA, uCloudG, uRayK; uniform vec4 uDust;
         // The clouds float at CLOUD_H over the land. cloudAt gives the cloud over a point of the land at that height,
         // taken from the same field the land pass casts their shadows with, shifted along the sun, so each cloud
         // drifts over its own shadow.
@@ -1113,20 +1113,33 @@
           col = mix(col, dk ? vec3(0.25, 0.25, 0.26) : vec3(0.945, 0.94, 0.925), veil);
           float fband = veil > 0.2 ? hatch(px + vec2(uTime * 5.0 * uK, 0.0), 0.0, 10.0, 0.8, 97.0, 0.6) * smoothstep(0.2, 0.55, veil) : 0.0;
           col = mix(col, dk ? vec3(0.42, 0.44, 0.5) : vec3(0.6, 0.62, 0.67), fband * 0.2);
-          // Blown sand as an ochre veil, billowing as it is carried on the wind.
-          if (uSand > 0.0) {
+          // A dust storm's wall where it stands, uDust its way, the reach of its front and its strength: thick for a
+          // stretch behind a billowing front, thinning behind that, and clear air ahead.
+          float dust = 0.0, dustE = -1e3;
+          if (uDust.w > 0.0) {
+            dustE = uDust.z - dot(Wl - uMap * 0.5, uDust.xy) + (noise(Wl * 0.07 + vec2(uTime * 0.04, 0.0)) - 0.5) * 9.0;
+            dust = uDust.w * smoothstep(-2.0, 3.0, dustE) * (1.0 - smoothstep(0.3 * uMap, 0.6 * uMap, dustE));
+          }
+          // Blown sand as an ochre veil, billowing as it is carried on the wind, deepest at the wall's front.
+          if (dust > 0.0) {
             vec2 blw = landAt(vUv, max(hg, 0.0) + 1.5) * 0.03 + uCloud * 5.0;
             float billow = noise(blw) * 0.6 + noise(blw * 2.3 + 5.0) * 0.4, keepU = 1.0 - 0.4 * step(0.85, s0);
-            float dustV = clamp(uSand * (0.3 + 0.38 * billow) * onMap, 0.0, 0.7) * keepU;
-            col = mix(col, dk ? vec3(0.36, 0.3, 0.22) : vec3(0.86, 0.76, 0.58), dustV);
+            float wallF = 1.0 - smoothstep(0.0, 16.0, dustE);
+            float dustV = clamp(dust * (0.46 + 0.34 * billow + 0.3 * wallF) * onMap, 0.0, 0.88) * keepU;
+            col = mix(col, dk ? mix(vec3(0.36, 0.3, 0.22), vec3(0.44, 0.34, 0.22), wallF) : mix(vec3(0.85, 0.74, 0.56), vec3(0.68, 0.53, 0.36), wallF), dustV);
+          }
+          // The wall's front drawn as a ragged line in a deeper ochre, as a cloud's edge is.
+          if (uDust.w > 0.0) {
+            float fw = max(fwidth(dustE), 1e-4), fl = (1.0 - smoothstep(0.9 * uK, 2.4 * uK, abs(dustE) / fw)) * uDust.w * onMap;
+            col = mix(col, dk ? vec3(0.62, 0.5, 0.34) : vec3(0.52, 0.38, 0.22), fl * 0.7);
           }
           // Grit driven low across the page in long fine strokes.
-          if (uSand > 0.01) {
+          if (dust > 0.01) {
             float sx = uWindS.x >= 0.0 ? 1.0 : -1.0;
             vec2 sd = normalize(vec2(sx, -0.12)), sn = vec2(-sd.y, sd.x);
             float sp = 6.0 * uK, ac = dot(px, sn), al = dot(px, sd) - uTime * 700.0 * uK, ci = floor(ac / sp), per = 220.0 * uK;
             float ph = hash(vec2(ci, 9.0)) * per, row = floor((al + ph) / per), pos = mod(al + ph, per), len = (40.0 + 30.0 * hash(vec2(ci, row + 2.0))) * uK;
-            float grit = step(hash(vec2(ci, row)), uSand * 0.4) * step(pos, len) * (1.0 - smoothstep(0.2 * uK, 0.7 * uK, abs(fract(ac / sp) - 0.5) * sp));
+            float grit = step(hash(vec2(ci, row)), dust * 0.4) * step(pos, len) * (1.0 - smoothstep(0.2 * uK, 0.7 * uK, abs(fract(ac / sp) - 0.5) * sp));
             col = mix(col, dk ? vec3(0.66, 0.56, 0.4) : vec3(0.55, 0.42, 0.25), grit * 0.4);
           }
           // Rays of sun in broken cloud: a few broad beams fanning from a sun beyond the screen's edge on its side,
@@ -1256,7 +1269,7 @@
           C.uUpV.value.set(0, 1, 0).transformDirection(camera.matrixWorldInverse);
           C.uRoad.value = K.opts.road; C.uOre.value = K.opts.ore; C.uMarks.value = K.marked ? 1 : 0; C.uRoadAge.value = K.age; C.uShadeH.value = K.opts.hatch ? 1 : 0;
           C.uSnowF.value = sky.snow; C.uFog.value = sky.fog; C.uMist.value = sky.mist;
-          C.uSand.value = sky.sand || 0; C.uCloudA.value = sky.cloudA || 0; C.uCloudG.value = sky.cloudG || 0; C.uRayK.value = sky.rayK || 0;
+          const dw = sky.dust; C.uDust.value.set(dw ? dw.dx : 0, dw ? dw.dy : 0, dw ? dw.front : 0, dw ? dw.k : 0); C.uCloudA.value = sky.cloudA || 0; C.uCloudG.value = sky.cloudG || 0; C.uRayK.value = sky.rayK || 0;
           C.uNight.value = sky.night; C.uDayMul.value.set(...sky.mul); C.uDayAdd.value.set(...sky.add);
           C.uWaterL.value = K.waterLevel; C.uWindS.value.set(sky.windS, 0);
           C.uMe.value = Math.max(0, K.viewTeam); C.uView.value.set(Math.cos(K.cam.yaw), Math.sin(K.cam.yaw)); C.uHSize.value.set(Rules.VW, Rules.VH); C.uHScale.value = Rules.RES;

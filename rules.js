@@ -1654,8 +1654,8 @@ const Rules = (() => {
       if (snow) o.cover += up * down; else o.flood += rv * up * down;
     }
     o.cover = Math.min(1, o.cover);
-    // A storm or a dust storm keeps every aircraft on the ground.
-    o.grounded = o.storm > 0.5 || o.sand > 0.5;
+    // A storm keeps every aircraft on the ground. A dust storm grounds only those under its dust, by groundedAt.
+    o.grounded = o.storm > 0.5;
     return o;
   }
   const sky = S => S._wx && S._wx.at === S.tick ? S._wx : (S._wx = Object.assign(weatherAt(S.seed, S.tick, skyOf(S)), { at: S.tick }));
@@ -1730,6 +1730,35 @@ const Rules = (() => {
     S._sh = { at: t, list };
     return list;
   }
+  // A dust storm comes as a haboob: a wall of dust rolling across the map on its spell's wind, from beyond one edge
+  // to beyond the other over the storm's heavy part, thick for DUST_D of the map behind its front and thinning over
+  // DUST_F behind that as the dust settles, with clear air ahead of it.
+  const DUST_D = 0.3, DUST_F = 0.3;
+  // The wall at a time: the way it rolls, how far its front has come that way from the map's middle, and how strong
+  // the storm is, or null with none.
+  function dustWall(S, t = S.tick) {
+    if (S._dw && S._dw.at === t) return S._dw.wall;
+    const tab = skyOf(S), k0 = Math.floor(t / SPELL);
+    let wall = null;
+    for (let j = k0 - 1; j <= k0; j++) {
+      if (spellOf(S.seed, j, tab) !== 'sand') continue;
+      const wj = spellW(j, t);
+      if (wj <= 0) continue;
+      const a = (spellHash(S.seed + 77, j) % 6283) / 1000, front = (-0.75 + 1.5 * (t - j * SPELL) / HEAVY) * W;
+      if (!wall || wj > wall.k) wall = { dx: mcos(a), dy: msin(a), front, k: wj };
+    }
+    S._dw = { at: t, wall };
+    return wall;
+  }
+  // How thick the dust is at a point, 0 clear to 1.
+  function dustAt(S, x, y) {
+    const w = dustWall(S);
+    if (!w) return 0;
+    const e = w.front - ((x - CX) * w.dx + (y - CY) * w.dy);
+    return w.k * smooth(-2, 3, e) * (1 - smooth(DUST_D * W, (DUST_D + DUST_F) * W, e));
+  }
+  // Whether aircraft at a point must stay down: everywhere in a storm, and under a dust storm's dust.
+  const groundedAt = (S, x, y) => sky(S).grounded || dustAt(S, x, y) > 0.5;
   // How deep under a shower or a rain cloud a point lies, 0 clear to 1 in its heart, for rain, snow and storm.
   function showerAt(S, x, y) {
     let rain = 0, snow = 0, storm = 0;
@@ -1743,13 +1772,13 @@ const Rules = (() => {
     return { rain, snow, storm };
   }
   // How fast a kind of mover goes off the roads in the weather over the whole map, before any worn track. Snow
-  // slows everyone, and blown sand slows men and wheels. Rain and storms fall only from clouds, so they are found
-  // where the mover stands.
+  // slows everyone. Rain and storms fall only from clouds and blown sand only under a dust storm's wall, so those
+  // are found where the mover stands.
   function offGoing(move, w) {
     if (move === 'naval') return 1;
-    const g = move === 'wheel' ? 1 - 0.2 * w.snow - 0.25 * w.sand
-      : move === 'track' ? 1 - 0.1 * w.snow - 0.1 * w.sand
-        : 1 - 0.18 * w.snow - 0.2 * w.sand;
+    const g = move === 'wheel' ? 1 - 0.2 * w.snow
+      : move === 'track' ? 1 - 0.1 * w.snow
+        : 1 - 0.18 * w.snow;
     return Math.max(0.3, g);
   }
   // The time of day, from 0 at dawn round to 1. A day lasts twenty minutes and a game starts early in the morning.
@@ -2221,10 +2250,11 @@ const Rules = (() => {
         }
       }
     };
-    // Fog and blown sand shorten everyone's sight. Radar sweeps and flares see through them. By night a unit sees
-    // two fifths less, a building a little less by its lamps, and a building that fights not at all, by its
-    // searchlight.
-    const w = sky(S), n = nightAt(S.tick), fk = Math.max(0.4, 1 - 0.45 * w.fog - 0.4 * w.sand), fa = Math.max(0.5, 1 - 0.3 * w.fog - 0.3 * w.sand);
+    // Fog shortens everyone's sight, and blown sand the sight of what stands in a dust storm's dust. Radar sweeps and
+    // flares see through them. By night a unit sees two fifths less, a building a little less by its lamps, and a
+    // building that fights not at all, by its searchlight.
+    const w = sky(S), n = nightAt(S.tick), dusty = !!dustWall(S);
+    const fkAt = e => Math.max(0.4, 1 - 0.45 * w.fog - (dusty ? 0.4 * dustAt(S, e.x, e.y) : 0)), faAt = e => Math.max(0.5, 1 - 0.3 * w.fog - (dusty ? 0.3 * dustAt(S, e.x, e.y) : 0));
     const nu = 1 - 0.4 * n, nb = 1 - 0.15 * n;
     // Under a shower or a rain cloud sight is cut short: what stands inside one is seen only from close by, and what
     // stands in one sees a third less itself.
@@ -2239,11 +2269,11 @@ const Rules = (() => {
     for (const e of S.ents) {
       if (e.hp <= 0) continue;
       const P = S.P[e.team];
-      if (e.b) light(P, e.x, e.y, (e.d.sight + Math.max(e.w, e.h) / 2) * fk * (armOf(S, e) ? 1 : nb) * inSh(e), 3, false);
-      else if (e.d.move === 'air' || e.d.move === 'jet') light(P, e.x, e.y, e.d.sight * fa * (1 - 0.3 * n) * inSh(e), 0, true);
-      else light(P, e.x, e.y, e.d.sight * fk * nu * (e.cov >= 0 ? 1.2 : 1) * inSh(e), 1.1, false);
+      if (e.b) light(P, e.x, e.y, (e.d.sight + Math.max(e.w, e.h) / 2) * fkAt(e) * (armOf(S, e) ? 1 : nb) * inSh(e), 3, false);
+      else if (e.d.move === 'air' || e.d.move === 'jet') light(P, e.x, e.y, e.d.sight * faAt(e) * (1 - 0.3 * n) * inSh(e), 0, true);
+      else light(P, e.x, e.y, e.d.sight * fkAt(e) * nu * (e.cov >= 0 ? 1.2 : 1) * inSh(e), 1.1, false);
     }
-    for (const t of S.towns) if (t.owner >= 0) light(S.P[t.owner], t.x, t.y, 9 * fk * (1 - 0.25 * n), 2, false);
+    for (const t of S.towns) if (t.owner >= 0) light(S.P[t.owner], t.x, t.y, 9 * fkAt(t) * (1 - 0.25 * n), 2, false);
     for (const s of S.sweeps) if (s.until > S.tick) light(S.P[s.team], s.x, s.y, s.r, 0, true);
     // A unit or building that has fired lately is seen by the side it fired on, wherever it stands, by its flash.
     for (const e of S.ents) if (e.hp > 0 && e.firedUntil > S.tick && S.P[e.firedOn]) light(S.P[e.firedOn], e.x, e.y, e.b ? Math.max(e.w, e.h) / 2 + 0.5 : 0.8, 0, true);
@@ -3152,6 +3182,8 @@ const Rules = (() => {
       const sh = showerAt(S, u.x, u.y), mud = tl >= 3 ? 0 : 1 - rk;
       if (sh.rain || sh.snow || sh.storm) going *= 1 - (d.move === 'wheel' ? 0.24 * sh.rain * mud + 0.2 * sh.snow : d.move === 'track' ? 0.12 * sh.storm * mud + 0.1 * sh.snow : d.move === 'naval' ? 0.3 * sh.storm : 0.18 * sh.snow);
     }
+    // Under a dust storm's dust: blown sand off the roads slows wheels most, men less and tracks least.
+    if (!naval && dustWall(S)) { const du = dustAt(S, u.x, u.y); if (du) going *= 1 - (d.move === 'wheel' ? 0.25 : d.move === 'track' ? 0.1 : 0.2) * du * (1 - rk); }
     if (here & 16) going *= 0.5;
     // Pinned men crawl.
     if (d.men && pinned(u) && !u.brk) going *= 0.45;
@@ -3335,8 +3367,8 @@ const Rules = (() => {
   function jetTick(S, u) {
     // Parked at the airfield until told. A run flies over the target and home again.
     const home = S.ents.find(e => e.b && e.team === u.team && e.kind === 'airfield' && e.hp > 0);
-    // A storm calls every run off.
-    if (sky(S).grounded && u.ord && u.ord.t === 'attack') u.ord = null;
+    // A storm calls every run off, and a dust storm a run from under its dust or into it.
+    if (u.ord && u.ord.t === 'attack' && (groundedAt(S, u.x, u.y) || groundedAt(S, u.ord.x, u.ord.y))) u.ord = null;
     const o = u.ord;
     if (o && o.t === 'attack' && u.ammo > 0) {
       const t = S.byId.get(o.id), tx = t ? t.x : o.x, ty = t ? t.y : o.y;
@@ -3366,8 +3398,9 @@ const Rules = (() => {
 
   function airTick(S, u) {
     const d = u.d, o = u.ord;
-    // In a storm helicopters and drones go home and set down, and a drone's flying time stands still.
-    if (sky(S).grounded) {
+    // In a storm, or under a dust storm's dust, helicopters and drones go home and set down, and a drone's flying
+    // time stands still.
+    if (groundedAt(S, u.x, u.y)) {
       u.ord = null; u.tgt = 0;
       const [px, py] = padFor(S, u);
       if (flyTo(S, u, px, py, 0.6)) u.z = Math.max(0.3, u.z - 2 * DT);
@@ -4210,7 +4243,7 @@ const Rules = (() => {
     } else if (c.c === 'attack') {
       const t = S.byId.get(c.id);
       if (t && t.hp > 0 && !(t.team !== team && shielded(S, t.team))) for (const u of unitsOf(S, team, c.ids)) {
-        if (u.d.move === 'jet') { if (u.ammo > 0 && !sky(S).grounded) u.ord = { t: 'attack', id: t.id, x: t.x, y: t.y }; }
+        if (u.d.move === 'jet') { if (u.ammo > 0 && !groundedAt(S, u.x, u.y) && !groundedAt(S, t.x, t.y)) u.ord = { t: 'attack', id: t.id, x: t.x, y: t.y }; }
         else if (u.d.cargo) continue;
         else { u.ord = { t: 'attack', id: t.id }; u.tgt = t.id; u.wpT = 0; u.stuck = 0; }
       }
@@ -4220,7 +4253,7 @@ const Rules = (() => {
       if (!m) return;
       for (const u of unitsOf(S, team, c.ids)) {
         if (c.c === 'mend') { if (u.d.engineer) { u.ord = { t: 'mend', i }; u.wpT = 0; u.stuck = 0; u.tgt = 0; } continue; }
-        if (u.d.move === 'jet') { if (u.ammo > 0 && !sky(S).grounded) u.ord = { t: 'attack', id: 0, x: (m.x0 + m.x1) / 2, y: (m.y0 + m.y1) / 2 }; continue; }
+        if (u.d.move === 'jet') { if (u.ammo > 0 && !groundedAt(S, u.x, u.y) && !groundedAt(S, (m.x0 + m.x1) / 2, (m.y0 + m.y1) / 2)) u.ord = { t: 'attack', id: 0, x: (m.x0 + m.x1) / 2, y: (m.y0 + m.y1) / 2 }; continue; }
         if (u.d.cargo || u.d.engineer || isAir(u) || !(armed(u) || u.d.hero)) continue;
         u.ord = { t: 'bridge', i }; u.tgt = 0; u.wpT = 0; u.stuck = 0; u.home = null;
       }
@@ -4578,7 +4611,7 @@ const Rules = (() => {
     HZ, DT, RES, UNITS, BUILDINGS, WEAPONS, TECH, POWERS, DIFFICULTY, LAYOUT, SIZES, MAPS, spread, use,
     AGES, MAX_AGE, POWER_AGE, LINES, LINE_ORDER, formOf, lineCount, nameOf, armOf,
     get W() { return W; }, get H() { return H; }, get VW() { return VW; }, get VH() { return VH; },
-    ORE_KINDS, fishWater, newGame, step, push, spawn, addBuilding, scoreOf, worth, SERIES, pickFrom, fits, spotFor, roomy, blockedReason, near, rehash, seenBy, terrainAt, heightAt, los, isAir, armed, cellOf, summary, exitOf,
+    ORE_KINDS, fishWater, dustWall, dustAt, groundedAt, newGame, step, push, spawn, addBuilding, scoreOf, worth, SERIES, pickFrom, fits, spotFor, roomy, blockedReason, near, rehash, seenBy, terrainAt, heightAt, los, isAir, armed, cellOf, summary, exitOf,
     mulberry, noiser, clamp, lerp, smooth, angleTo, toXY, toUV, gap, setSize, save, load, hashOf, restartSlot, razeSlot, makeMap, mapFor, layoutFor,
     msin, mcos, matan2, mhypot,
     BRIDGE_HP, SPELL, SKIES, WEATHERS, nightAt, skyOf, offGoing, route, weatherAt, sky, dayAt, spellOf, bridgeAt, clsOf, houseHp, hurtBridge, ignite, shielded,

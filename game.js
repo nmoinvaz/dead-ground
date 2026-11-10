@@ -21,8 +21,8 @@ const Game = (() => {
     rain: ['Rain clouds. Wheeled vehicles bog down off the roads under them.', '', 'Rain'], storm: ['Storm. All aircraft are grounded.', 'bad', 'Storm. Aircraft grounded'],
     fog: ['Fog. Sight is cut short.', '', 'Fog'], snow: ['Snow. Everything moves slower.', '', 'Snow'], stormsoon: ['A storm is coming. Aircraft will be grounded.', 'bad', 'Storm warning'],
     clear: ['The weather clears.', 'good', ''], cloud: ['Clouding over.', '', ''],
-    sand: ['Dust storm. Sight is cut short, men and wheels slowed, aircraft grounded.', 'bad', 'Dust storm. Aircraft grounded'],
-    sandsoon: ['A dust storm is coming. Aircraft will be grounded.', 'bad', 'Dust storm warning'],
+    sand: ['A dust storm sweeps in on the wind. Under its dust sight is cut short, men and wheels slow and aircraft stay down.', 'bad', 'Dust storm'],
+    sandsoon: ['A dust storm is coming on the wind.', 'bad', 'Dust storm warning'],
   };
   // What is said as heavy weather passes part way through its spell.
   const SKY_PASS = {
