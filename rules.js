@@ -1260,12 +1260,15 @@ const Rules = (() => {
     const oreCells = new Uint16Array(N), oreRich = new Uint8Array(N), oreKind = new Uint8Array(N), oreFields = [];
     const kinds = oreKindsFor(L);
     L.ore.forEach((p, i) => {
-      const R = p[2], kind = kinds[i], field = { x: p[0], y: p[1], r: R, kind };
+      const R = p[2], [kind, vein] = kinds[i], field = { x: p[0], y: p[1], r: R, kind, vein };
       oreFields.push(field);
       for (let y = Math.floor(p[1] - R - 2); y <= p[1] + R + 2; y++) for (let x = Math.floor(p[0] - R - 2); x <= p[0] + R + 2; x++) {
         if (x < 1 || y < 1 || x >= W - 1 || y >= H - 1) continue;
         const d = mhypot(x + 0.5 - p[0], y + 0.5 - p[1]) + (sym(x + 0.5, y + 0.5, 0.3, 2) - 0.5) * 5;
-        if (d < R) { oreCells[y * W + x] = Math.round((60 + 120 * (1 - d / R)) * ORE_KINDS[kind].amount); oreKind[y * W + x] = kind; }
+        if (d >= R) continue;
+        // A vein of the second kind winds through a mixed deposit, from noise shared by every side's copy of it.
+        const k = vein >= 0 && Math.abs(sym(x + 0.5, y + 0.5, 0.8, 2) - 0.5) < VEIN ? vein : kind;
+        oreCells[y * W + x] = Math.round((60 + 120 * (1 - d / R)) * ORE_KINDS[k].amount); oreKind[y * W + x] = k;
       }
     });
     L.wells.forEach(p => wells.push({ x: Math.round(p[0]), y: Math.round(p[1]) }));
@@ -1666,14 +1669,17 @@ const Rules = (() => {
     { key: 'copper', name: 'Copper', worth: 1, dig: 1, amount: 1 },
     { key: 'iron', name: 'Iron', worth: 0.9, dig: 1 / 0.9, amount: 1.5 },
   ];
+  // How wide a vein of a mixed deposit's second kind runs, in the noise that draws it.
+  const VEIN = 0.035;
   // Each field's kind, by how far it lies from its nearest base, alike for every side: copper in the nearest of a
-  // base's home fields and iron in the next, gold in those farthest out, and silver between.
+  // base's home fields and iron in the next, gold in those farthest out, and silver between. Some deposits hold a
+  // second kind in veins: copper through the iron, and gold through the silver. Each is [kind, vein kind or -1].
   function oreKindsFor(L) {
     const dist = L.ore.map(p => Math.min(...L.bases.map(b => mhypot(p[0] - b[0], p[1] - b[1])))), key = (p, i) => Math.round(dist[i] * 2) / 2 + '|' + p[2];
     const classes = [...new Set(L.ore.map(key))].map(k => +k.split('|')[0]).sort((a, b) => a - b), far = Math.max(...dist);
     return L.ore.map((p, i) => {
       const d = Math.round(dist[i] * 2) / 2, rank = classes.indexOf(d);
-      return d >= far * 0.85 ? 0 : rank === 0 ? 2 : rank === 1 ? 3 : 1;
+      return d >= far * 0.85 ? [0, -1] : rank === 0 ? [2, -1] : rank === 1 ? [3, 2] : [1, 0];
     });
   }
   // Showers. Besides the weather over the whole map, rain showers and snow flurries cross part of it: each a round
