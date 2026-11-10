@@ -232,6 +232,8 @@ body[data-look="ink"][data-scheme="dark"] #end, body[data-look="ink"][data-schem
 #update:hover b, #update:focus-visible b { color: var(--redink, #a3301e); }
 /* Which build this page is, from the source commit it was made from. */
 #build { margin: 10px 0 0; font: 12px var(--mono); opacity: .7; }
+/* The build on the lobby pages, beside the credit and under the open games. */
+#t-rooms .ver { margin: 8px 0 0; font: 12px var(--mono); color: var(--ink-dim, #8d8c78); }
 #s-pic-note { margin: 5px 0 0; font: 12px var(--mono); opacity: .7; }
 /* The boot screen shows before the page knows its look, so it is drawn as the pen and ink look a game opens in:
    Jost on light paper. */
@@ -628,7 +630,7 @@ body[data-look="ink"] .sheet { box-shadow: 4px 4px 0 var(--ink); }
       <div class="choice"><h2>Map sheet frame</h2><div id="s-sheet" class="two"><button data-v="on">On</button><button data-v="off">Off</button></div></div>
       <div class="choice"><h2>Shadows</h2><div id="s-shade" class="two"><button data-v="hatch">Hatched</button><button data-v="wash">Wash</button></div></div>
       <div class="choice"><h2>Music</h2><div id="s-music" class="two"><button data-v="on">On</button><button data-v="off">Off</button></div></div>
-      <p id="build">Build ad509b5 2026-11-10 11:51</p>
+      <p id="build">Build 7982899 2026-11-10 12:05</p>
     </div>
     <div id="banner" hidden></div>
     <button id="update" hidden>A new version of Mapmaker’s War is out. <b>Reload</b></button>
@@ -668,7 +670,7 @@ body[data-look="ink"] .sheet { box-shadow: 4px 4px 0 var(--ink); }
         <dt>K</dt><dd>Another pen technique</dd>
         <dt>Enter</dt><dd>In a game with other people, say something to everyone; the microphone in the bar puts you on voice</dd>
       </dl>
-      <div id="credit">x.com/nmnvzr &middot; Opus 5.5</div>
+      <div id="credit">x.com/nmnvzr &middot; Opus 5.5<span class="ver"></span></div>
     </div>
 
     <div id="t-setup" class="sheet" hidden>
@@ -714,6 +716,7 @@ body[data-look="ink"] .sheet { box-shadow: 4px 4px 0 var(--ink); }
       <h3>Open games</h3>
       <div class="rooms-wrap"><table id="rooms"><thead><tr><th>Game</th><th>Host</th><th>Map</th><th>Players</th><th></th></tr></thead><tbody></tbody></table>
       <p id="rooms-none">No games are open. Open one, and it shows here for others to join.</p></div>
+      <p class="ver"></p>
       <footer><input id="room-title" maxlength="32" placeholder="Name your game" autocomplete="off" spellcheck="false"><button id="create">Open a game</button></footer>
     </div>
   </div>
@@ -18243,6 +18246,8 @@ const Game = (() => {
     // reload; the game in hand is saved as the page goes and comes back after it. Only a stamped page served from
     // the site asks, as a file or an artifact has no version to read.
     const myBuild = ($('build').textContent || '').replace(/^Build /, '').trim();
+    // The build on the lobby pages too, when the page has one.
+    if (!myBuild.includes('__BUILD__')) document.querySelectorAll('.ver').forEach(e => { e.textContent = (e.closest('#credit') ? ' · ' : '') + 'Build ' + myBuild; });
     let updateShown = false;
     async function checkUpdate() {
       if (updateShown || myBuild.includes('__BUILD__') || !/^https?:$/.test(location.protocol) || /claude\.ai$/.test(location.hostname)) return;
