@@ -617,6 +617,8 @@ const Game = (() => {
     // reload; the game in hand is saved as the page goes and comes back after it. Only a stamped page served from
     // the site asks, as a file or an artifact has no version to read.
     const myBuild = ($('build').textContent || '').replace(/^Build /, '').trim();
+    // The build on the lobby pages too, when the page has one.
+    if (!myBuild.includes('__BUILD__')) document.querySelectorAll('.ver').forEach(e => { e.textContent = (e.closest('#credit') ? ' · ' : '') + 'Build ' + myBuild; });
     let updateShown = false;
     async function checkUpdate() {
       if (updateShown || myBuild.includes('__BUILD__') || !/^https?:$/.test(location.protocol) || /claude\.ai$/.test(location.hostname)) return;

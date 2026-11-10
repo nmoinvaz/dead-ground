@@ -227,6 +227,8 @@ body[data-look="ink"][data-scheme="dark"] #end, body[data-look="ink"][data-schem
 #update:hover b, #update:focus-visible b { color: var(--redink, #a3301e); }
 /* Which build this page is, from the source commit it was made from. */
 #build { margin: 10px 0 0; font: 12px var(--mono); opacity: .7; }
+/* The build on the lobby pages, beside the credit and under the open games. */
+#t-rooms .ver { margin: 8px 0 0; font: 12px var(--mono); color: var(--ink-dim, #8d8c78); }
 #s-pic-note { margin: 5px 0 0; font: 12px var(--mono); opacity: .7; }
 /* The boot screen shows before the page knows its look, so it is drawn as the pen and ink look a game opens in:
    Jost on light paper. */
@@ -661,7 +663,7 @@ body[data-look="ink"] .sheet { box-shadow: 4px 4px 0 var(--ink); }
         <dt>K</dt><dd>Another pen technique</dd>
         <dt>Enter</dt><dd>In a game with other people, say something to everyone; the microphone in the bar puts you on voice</dd>
       </dl>
-      <div id="credit">x.com/nmnvzr &middot; Opus 5.5</div>
+      <div id="credit">x.com/nmnvzr &middot; Opus 5.5<span class="ver"></span></div>
     </div>
 
     <div id="t-setup" class="sheet" hidden>
@@ -707,6 +709,7 @@ body[data-look="ink"] .sheet { box-shadow: 4px 4px 0 var(--ink); }
       <h3>Open games</h3>
       <div class="rooms-wrap"><table id="rooms"><thead><tr><th>Game</th><th>Host</th><th>Map</th><th>Players</th><th></th></tr></thead><tbody></tbody></table>
       <p id="rooms-none">No games are open. Open one, and it shows here for others to join.</p></div>
+      <p class="ver"></p>
       <footer><input id="room-title" maxlength="32" placeholder="Name your game" autocomplete="off" spellcheck="false"><button id="create">Open a game</button></footer>
     </div>
   </div>
