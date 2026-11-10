@@ -2197,7 +2197,7 @@ const Hud = (() => {
         shares.map((o, i) => [o.p - whole[i], i]).sort((a, b) => b[0] - a[0]).slice(0, short).forEach(([, i]) => whole[i]++);
         oreTip.innerHTML = shares.map((o, i) => `<b class="k-${Rules.ORE_KINDS[o.k].key}">${Rules.ORE_KINDS[o.k].name}</b> ${whole[i]}%`).join(' &middot; ');
       }
-      oreTip.style.left = (px + 16) + 'px'; oreTip.style.top = (py + 18) + 'px';
+      oreTip.style.left = (px + 12) + 'px'; oreTip.style.top = (py + 14) + 'px';
       oreTip.hidden = false;
     }
 
