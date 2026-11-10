@@ -349,7 +349,13 @@ const Report = (() => {
   // battles marked with crossed swords, the nearest town and the minute.
   function warMap(c, tip, pane, o, list) {
     const S = o.S, h = S.hist, M = S.map, MW = M.W, MH = M.H, I = inks();
-    const side = Math.min(pane.clientWidth || 600, 640);
+    // The map takes the room the panel has left once its title, tabs, key and buttons are laid out, so it fits a
+    // short window without scrolling.
+    const root = pane.parentElement, panel = root && root.parentElement, out = panel && panel.parentElement;
+    let room = 640;
+    // Two pixels spare, so rounding never leaves the report a pixel too tall to fit.
+    if (out) room = out.clientHeight - 32 - (panel.offsetHeight - root.clientHeight) - (root.scrollHeight - c.offsetHeight) - 2;
+    const side = Math.floor(Math.max(200, Math.min(pane.clientWidth || 600, 640, room)));
     c.style.height = side + 'px'; c.style.width = side + 'px'; c.style.maxWidth = '100%';
     const { g, w } = fit(c), sc = w / MW, P = (x, y) => [x * sc, y * sc];
     // The land: water washed, woods stippled, high ground a shade deeper, the paper left bare elsewhere.
