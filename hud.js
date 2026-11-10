@@ -173,11 +173,13 @@ const Hud = (() => {
     // The cards show only what the side's age has opened: one card for each line, in its form for that age, and
     // the buildings, defences and calls of that age.
     const sameLine = (a, b) => a === b || (!!UNITS[a] && !!UNITS[b] && UNITS[a].line === UNITS[b].line);
-    let listAge = 0;
+    let listAge = 0, listFish = null;
     function lineLists(age) {
-      if (age === listAge) return;
-      listAge = age;
-      for (const cat of ['inf', 'veh', 'air', 'sea']) LISTS[cat] = Rules.LINE_ORDER[cat].map(l => Rules.formOf(l, age)).filter(Boolean);
+      // A map with no fishing grounds has no fishing boats to offer.
+      const fish = !!(game.S && (game.S.map.fish || []).length);
+      if (age === listAge && fish === listFish) return;
+      listAge = age; listFish = fish;
+      for (const cat of ['inf', 'veh', 'air', 'sea']) LISTS[cat] = Rules.LINE_ORDER[cat].filter(l => fish || l !== 'fish').map(l => Rules.formOf(l, age)).filter(Boolean);
       const opened = k => k === 'tech' || ((k === 'launch' ? BUILDINGS.silo : BUILDINGS[k] || POWERS[k]).tech || 1) <= age;
       for (const cat in ALL) LISTS[cat] = ALL[cat].filter(opened);
     }
