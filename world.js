@@ -1415,7 +1415,8 @@ const World = (() => {
       for (let c = 0; c < W * H; c++) if (M.ore[c]) cells.push(c);
       const per = low ? 1 : 2, cap = cells.length * per;
       // Laid out at full size first, so each tile's bounds hold its nuggets; updateOre then sizes them by what is left.
-      const oreMat = patch(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.5, metalness: 0.4, emissive: 0x3a2400, emissiveIntensity: 0.0, envMapIntensity: 0.55 }), { tint: true });
+      // Rough enough that the sun's glints on a nugget stay under the brightness the glow pass takes for fire.
+      const oreMat = patch(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.8, metalness: 0.4, emissive: 0x3a2400, emissiveIntensity: 0.0, envMapIntensity: 0.55 }), { tint: true });
       const rr = mulberry(M.seed + 3), rnd = [], first = [];
       for (let i = 0; i < cap; i++) {
         const r = [rr() * 0.8 + 0.1, rr() * 0.8 + 0.1, rr() * 6.28, 0.8 + rr() * 0.8, colA.setHSL(0.1 + rr() * 0.035, 0.74, 0.5 + rr() * 0.16).getHex()], c = cells[i / per | 0];
