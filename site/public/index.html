@@ -632,7 +632,7 @@ body[data-look="ink"] .sheet { box-shadow: 4px 4px 0 var(--ink); }
       <div class="choice"><h2>Map sheet frame</h2><div id="s-sheet" class="two"><button data-v="on">On</button><button data-v="off">Off</button></div></div>
       <div class="choice"><h2>Shadows</h2><div id="s-shade" class="two"><button data-v="hatch">Hatched</button><button data-v="wash">Wash</button></div></div>
       <div class="choice"><h2>Music</h2><div id="s-music" class="two"><button data-v="on">On</button><button data-v="off">Off</button></div></div>
-      <p id="build">Build 13382f8 2026-11-10 12:11</p>
+      <p id="build">Build 1abb93b 2026-11-10 12:24</p>
     </div>
     <div id="banner" hidden></div>
     <button id="update" hidden>A new version of Mapmaker’s War is out. <b>Reload</b></button>
@@ -1368,7 +1368,7 @@ const Rules = (() => {
       // A ford between the two bridges, as a middle point and the river's way there.
       fordAt(fromRiver(rivers[0], sf, riverU(sf)), fromRiver(rivers[0], sf + 1, riverU(sf + 1)));
       // Shoals in the water by each base, where the boats from its dock fish.
-      L.fish = []; if (quad) all(L.fish, [172, 120]); else { all(L.fish, [230, 176]); all(L.fish, [104, 208]); }
+      L.fish = []; if (quad) { all(L.fish, [172, 120]); all(L.fish, [95, 94]); } else { all(L.fish, [230, 176]); all(L.fish, [104, 208]); all(L.fish, [127, 126]); }
       return L;
     }
     L.syms = [p => [p[0], p[1]], mirror];
@@ -1396,8 +1396,8 @@ const Rules = (() => {
       if (v) L.bridges.push([mirror(a), mirror(b)]);
     }
     fordAt(uvp(riverU(20), 20), uvp(riverU(21), 21));
-    // Shoals in the water by each base, where the boats from its dock fish.
-    L.fish = []; all(L.fish, [53, 68]);
+    // Shoals in the water by each base, where the boats from its dock fish, and in every other stretch of water.
+    L.fish = []; all(L.fish, [53, 68]); all(L.fish, [109, 16]);
     return L;
   }
 
@@ -1504,7 +1504,7 @@ const Rules = (() => {
       }
       L.river = pools(ponds);
       // Shoals in the water by each base, where the boats from its dock fish.
-      L.fish = []; all(L.fish, [180, 121]);
+      L.fish = []; all(L.fish, [180, 121]); all(L.fish, [77, 7]); all(L.fish, [116, 44]);
     } else if (kind === 'seas') {
       // Land between two seas, its coasts wandering, each base nearer the one.
       duel(); L.lake = true;
@@ -1573,7 +1573,7 @@ const Rules = (() => {
       // each other's.
       duel();
       // Shoals in the water by each base, where the boats from its dock fish.
-      L.fish = []; all(L.fish, [35, 52]);
+      L.fish = []; all(L.fish, [35, 52]); all(L.fish, [84, 7]); all(L.fish, [106, 22]);
       const off = [-26, 0, 26], course = (u0, v) => u0 + (u0 ? 0.6 : 1) * riverU(v);
       L.river = (x, y) => {
         const [u, v] = toUV(x, y);
@@ -4564,17 +4564,57 @@ const Rules = (() => {
     }
   }
 
-  // Fishing. A boat sails to the nearest shoal and fishes there a while, each boat at its own place round it, then
-  // lands the catch at the nearest of its side's docks and is paid for it.
+  // The bodies of water of a map, each sea cell numbered by the water it lies in, and the water each shoal lies in,
+  // worked out once for the map.
+  function watersOf(M) {
+    if (M._waters) return M._waters;
+    const MW = M.W, MH = M.H, id = new Int32Array(MW * MH).fill(-1);
+    let n = 0;
+    for (let c = 0; c < MW * MH; c++) if (M.sea[c] && id[c] < 0) {
+      const st = [c]; id[c] = n;
+      while (st.length) {
+        const v = st.pop(), x = v % MW, y = v / MW | 0;
+        for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+          const nx = x + dx, ny = y + dy, u = ny * MW + nx;
+          if (nx >= 0 && ny >= 0 && nx < MW && ny < MH && M.sea[u] && id[u] < 0) { id[u] = n; st.push(u); }
+        }
+      }
+      n++;
+    }
+    M._waters = { id };
+    M._waters.shoal = (M.fish || []).map(f => waterAt(M, f.x, f.y));
+    return M._waters;
+  }
+  // The water at a point, or the nearest within four cells, -1 for none.
+  function waterAt(M, x, y) {
+    const { id } = watersOf(M), c0 = Math.floor(y) * M.W + Math.floor(x);
+    if (x >= 0 && y >= 0 && x < M.W && y < M.H && M.sea[c0]) return id[c0];
+    let w = -1, bd = 1e9;
+    for (let dy = -4; dy <= 4; dy++) for (let dx = -4; dx <= 4; dx++) {
+      const cx = Math.floor(x) + dx, cy = Math.floor(y) + dy, d = dx * dx + dy * dy;
+      if (cx >= 0 && cy >= 0 && cx < M.W && cy < M.H && M.sea[cy * M.W + cx] && d < bd) { bd = d; w = id[cy * M.W + cx]; }
+    }
+    return w;
+  }
+  // Whether the water at a point holds a shoal, for where a dock is worth building.
+  const fishWater = (S, x, y) => { const w = waterAt(S.map, x, y); return w >= 0 && watersOf(S.map).shoal.includes(w); };
+  // Fishing. A boat sails to the nearest shoal in the water it is on and fishes there a while, each boat at its own
+  // place round it, then lands the catch at the nearest of its side's docks and is paid for it. A boat on water with
+  // no shoal waits, and its side is told once.
   function fishTick(S, u) {
     let o = u.ord;
     if (!o || o.t !== 'fish') o = u.ord = { t: 'fish' };
     const P = S.P[u.team];
     if (!o.full) {
       if (o.x === undefined) {
+        const shoal = watersOf(S.map).shoal, mine = waterAt(S.map, u.x, u.y);
         let best = null, bd = 1e9;
-        for (const f of S.map.fish || []) { const d = mhypot(f.x - u.x, f.y - u.y); if (d < bd) { bd = d; best = f; } }
-        if (!best) { u.v = 0; return; }
+        (S.map.fish || []).forEach((f, i) => { const d = mhypot(f.x - u.x, f.y - u.y); if (shoal[i] === mine && d < bd) { bd = d; best = f; } });
+        if (!best) {
+          u.v = 0;
+          if (!o.none) { o.none = true; S.ev.push({ t: 'nofish', team: u.team, id: u.id, x: u.x, y: u.y }); }
+          return;
+        }
         const a = (u.id * 2.39996) % TAU, c = goalCells(S, 'naval', clamp((best.x + mcos(a) * 2.5) | 0, 0, W - 1), clamp((best.y + msin(a) * 2.5) | 0, 0, H - 1))[0];
         o.x = c % W + 0.5; o.y = (c / W | 0) + 0.5; o.left = 10 * HZ;
       }
@@ -4677,7 +4717,8 @@ const Rules = (() => {
     S.ev.push({ t: 'built', team: P.team, kind, id: u.id, x, y });
     ownEvent(S, P.team, 'unitready');
     if (u.d.move === 'jet') { u.ord = null; return; }
-    if (!u.d.cargo) {
+    // Trucks go to dig and fishing boats to fish at once, without waiting at the rally point.
+    if (!u.d.cargo && !u.d.fish) {
       const r = best.rally, raid = P.raid && S.tick - P.raid.tick < 12 * HZ ? P.raid : null, fix = u.d.engineer && fixFor(S, u);
       // A new engineer goes straight into a hurt building of its base to mend it.
       if (fix) { u.ord = { t: 'attack', id: fix.id, fix: true }; u.tgt = fix.id; u.wpT = 0; u.stuck = 0; }
@@ -5254,7 +5295,7 @@ const Rules = (() => {
     HZ, DT, RES, UNITS, BUILDINGS, WEAPONS, TECH, POWERS, DIFFICULTY, LAYOUT, SIZES, MAPS, spread, use,
     AGES, MAX_AGE, POWER_AGE, LINES, LINE_ORDER, formOf, lineCount, nameOf, armOf,
     get W() { return W; }, get H() { return H; }, get VW() { return VW; }, get VH() { return VH; },
-    ORE_KINDS, newGame, step, push, spawn, addBuilding, scoreOf, worth, SERIES, pickFrom, fits, spotFor, roomy, blockedReason, near, rehash, seenBy, terrainAt, heightAt, los, isAir, armed, cellOf, summary, exitOf,
+    ORE_KINDS, fishWater, newGame, step, push, spawn, addBuilding, scoreOf, worth, SERIES, pickFrom, fits, spotFor, roomy, blockedReason, near, rehash, seenBy, terrainAt, heightAt, los, isAir, armed, cellOf, summary, exitOf,
     mulberry, noiser, clamp, lerp, smooth, angleTo, toXY, toUV, gap, setSize, save, load, hashOf, restartSlot, razeSlot, makeMap, mapFor, layoutFor,
     msin, mcos, matan2, mhypot,
     BRIDGE_HP, SPELL, SKIES, WEATHERS, nightAt, skyOf, offGoing, route, weatherAt, sky, dayAt, spellOf, bridgeAt, clsOf, houseHp, hurtBridge, ignite, shielded,
@@ -5432,7 +5473,8 @@ const AI = (() => {
     if (me.dockT && S.tick < me.dockT) return me.dockAt || null;
     me.dockT = S.tick + 30 * HZ; me.dockAt = null;
     const M = S.map, b = S.bases[me.team], W = M.W, cand = [];
-    for (let c = 0; c < W * M.H; c += 2) if (M.sea[c]) cand.push([Math.hypot(c % W - b[0], (c / W | 0) - b[1]), c % W, c / W | 0]);
+    // Water that holds a shoal first, so the dock's boats have somewhere to fish.
+    for (let c = 0; c < W * M.H; c += 2) if (M.sea[c]) cand.push([Math.hypot(c % W - b[0], (c / W | 0) - b[1]) + (R.fishWater(S, c % W, c / W | 0) ? 0 : 1e4), c % W, c / W | 0]);
     cand.sort((p, q) => p[0] - q[0]);
     for (const [, x, y] of cand.slice(0, 60)) {
       const spot = R.spotFor(S, me.team, 'dock', x, y, 9, me.rand);
@@ -18105,6 +18147,8 @@ const Game = (() => {
             break;
           }
           case 'weather': if (G.playing) { const v = e.passed ? SKY_PASS[e.was] : SKY_SAY[e.kind]; if (v && !(e.kind === 'cloud' && e.was === 'clear')) { hud.say(v[0], v[1]); if (v[2]) audio.voice('sky', v[2], oldAge()); } } break;
+          // One of the player's fishing boats on water with no fishing ground, said once a minute at most.
+          case 'nofish': if (G.playing && e.team === G.team && S.tick - (G.lastNoFish ?? -1e9) > 60 * Rules.HZ) { G.lastNoFish = S.tick; hud.say('A fishing boat has no fishing grounds in its water. Build its dock on other water.', 'bad'); } break;
           // One of the player's squads breaking, said now and then, not for every squad.
           case 'broke': if (G.playing && e.team === G.team && S.tick - (G.lastBroke ?? -1e9) > 20 * Rules.HZ) { G.lastBroke = S.tick; hud.say('A squad has broken and is running.', 'bad'); } break;
           // Lightning, and a fire it lights in a wood the player can see.
