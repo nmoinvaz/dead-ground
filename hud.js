@@ -2172,6 +2172,35 @@ const Hud = (() => {
       if (n > 0 && mini.width !== n) { mini.width = mini.height = n; }
     }
 
+    // The make-up of the ore field under the pointer, each kind's share of what is left in it, in a note that follows
+    // the pointer. Worked out again only when the field or what is left of it changes.
+    const oreTip = document.createElement('div');
+    oreTip.id = 'oretip'; oreTip.hidden = true; view.append(oreTip);
+    let tipKey = '';
+    function oreTipAt(px, py) {
+      const s = S(), g = world.pick(px, py), c = g ? Rules.cellOf(g.x, g.y) : -1;
+      let f = null, fd = 1e9;
+      if (c >= 0 && s.ore[c] && s.P[team()].seen[c]) for (const q of s.map.oreFields) { const d = Math.hypot(g.x - q.x, g.y - q.y); if (d < q.r + 3 && d < fd) { fd = d; f = q; } }
+      if (!f) { oreTip.hidden = true; tipKey = ''; return; }
+      const key = f.x + ',' + f.y + ':' + s.oreVer;
+      if (key !== tipKey) {
+        tipKey = key;
+        const left = Rules.ORE_KINDS.map(() => 0), W = s.map.W, R = f.r + 3;
+        for (let y = Math.max(0, Math.floor(f.y - R)); y <= Math.min(s.map.H - 1, f.y + R); y++) for (let x = Math.max(0, Math.floor(f.x - R)); x <= Math.min(W - 1, f.x + R); x++) {
+          const cc = y * W + x;
+          if (s.ore[cc] && Math.hypot(x + 0.5 - f.x, y + 0.5 - f.y) < R) left[s.map.oreKind[cc]] += s.ore[cc];
+        }
+        const all = left.reduce((a, b) => a + b, 0) || 1;
+        // Whole percents that add up to a hundred, the largest first.
+        const shares = left.map((v, k) => ({ k, p: v / all * 100 })).filter(o => o.p > 0).sort((a, b) => b.p - a.p);
+        const whole = shares.map(o => Math.floor(o.p)), short = 100 - whole.reduce((a, b) => a + b, 0);
+        shares.map((o, i) => [o.p - whole[i], i]).sort((a, b) => b[0] - a[0]).slice(0, short).forEach(([, i]) => whole[i]++);
+        oreTip.innerHTML = shares.map((o, i) => `<b class="k-${Rules.ORE_KINDS[o.k].key}">${Rules.ORE_KINDS[o.k].name}</b> ${whole[i]}%`).join(' &middot; ');
+      }
+      oreTip.style.left = (px + 16) + 'px'; oreTip.style.top = (py + 18) + 'px';
+      oreTip.hidden = false;
+    }
+
     return {
       state, pickTab, say, symbol, enter, leave, select, layoutMini, pop, strike,
       reset() {
@@ -2185,6 +2214,8 @@ const Hud = (() => {
         if (game.playing) { scroll(dt); updateCams(); updateReadouts(); drawMini(dt); }
         const hover = game.playing && state.mouse.in && !state.drag ? entAt(state.mouse.x, state.mouse.y) : null;
         state.hover = hover;
+        if (game.playing && state.mouse.in && !state.drag && !hover && !state.mode) oreTipAt(state.mouse.x, state.mouse.y);
+        else if (!oreTip.hidden) { oreTip.hidden = true; tipKey = ''; }
         if (game.playing) {
           const m = state.mode, en = hover && hover.team !== team(), mine = state.sel.some(e => !e.b && e.team === team());
           view.dataset.cur = m ? (m.type === 'place' ? 'place' : 'aim') : en && mine ? 'attack' : mine ? 'order' : hover ? 'pick' : '';
