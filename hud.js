@@ -312,7 +312,9 @@ const Hud = (() => {
           off = !!Rules.blockedReason(s, t, k);
           const q = queueOf(k);
           for (const it of q) if (sameLine(it.kind, k)) count++;
-          const head = q[0];
+          // Units are trained at several buildings at once, so a unit's card shows the one of its kind furthest on.
+          let head = q[0];
+          if (UNITS[k]) for (const it of q) if (sameLine(it.kind, k) && (!sameLine(head.kind, k) || it.prog > head.prog)) head = it;
           if (head && sameLine(head.kind, k)) { prog = head.prog; if (head.prog >= 1 && BUILDINGS[k]) { ready = true; prog = 0; label = 'READY'; } else if (head.hold) label = 'HOLD'; else if (head.short) label = 'FUNDS'; }
           else if (head && BUILDINGS[k]) off = true;
           if (count) off = false;

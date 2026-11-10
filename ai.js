@@ -134,7 +134,8 @@ const AI = (() => {
     const behind = ['inf', 'veh', 'air'].filter(c => share[c] > 0).sort((a, b) => under(a) - under(b))[0];
     const ready = c => P.supply > GATE[c] + (c === behind ? 0 : AHEAD);
     const buy = k => R.push(S, me.team, { c: 'train', kind: k });
-    if (has(P, 'factory') && P.q.veh.length < 2) {
+    // A unit queued for each building that trains it, as each trains its own at once, and two at least.
+    if (has(P, 'factory') && P.q.veh.length < Math.max(2, P.counts.factory || 0)) {
       const truck = R.formOf('truck', P.tech);
       // Caravans once there are two posts to run between, a few more for a stronger commander.
       const trade = R.formOf('trade', P.tech), posts = 1 + S.towns.filter(t => t.owner === me.team).length, want = me.level === 'veteran' ? 4 : me.level === 'regular' ? 3 : 2;
@@ -147,13 +148,13 @@ const AI = (() => {
         if (!(UNITS[k].repair && R.lineCount(P, 'sup') >= 2) && !R.blockedReason(S, me.team, k)) buy(k);
       }
     }
-    if (has(P, 'barracks') && P.q.inf.length < 2 && ready('inf')) {
+    if (has(P, 'barracks') && P.q.inf.length < Math.max(2, P.counts.barracks || 0) && ready('inf')) {
       const mix = forms(P, INF_MIX);
       buy(mix[(me.plan * 3 + (m | 0)) % mix.length]);
     }
-    if (air.length && P.q.air.length < 1 && ready('air')) buy(air[me.plan % air.length]);
+    if (air.length && P.q.air.length < Math.max(1, P.counts.airfield || 0) && ready('air')) buy(air[me.plan % air.length]);
     // At a dock: fishing boats for the shoals, then warships, a few more as the army grows.
-    if (has(P, 'dock') && P.q.sea.length < 2) {
+    if (has(P, 'dock') && P.q.sea.length < Math.max(2, P.counts.dock || 0)) {
       const boat = R.formOf('fish', P.tech), ship = R.formOf('ship', P.tech), shoals = (S.map.fish || []).length;
       if (boat && shoals && R.lineCount(P, 'fish') < Math.min(3, shoals) && P.supply > 300) buy(boat);
       else if (ship && R.lineCount(P, 'ship') < Math.min(6, 1 + count / 10 | 0) && P.supply > 700 && !R.blockedReason(S, me.team, ship)) buy(ship);

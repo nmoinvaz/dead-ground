@@ -3960,14 +3960,13 @@ const Rules = (() => {
       for (const k in P.cooldown) if (P.cooldown[k] > 0) P.cooldown[k] -= DT * relay;
       for (const cat of ['bld', 'def', 'inf', 'veh', 'air', 'sea', 'tech']) {
         const q = P.q[cat];
+        if (!q.length) continue;
+        if (cat !== 'bld' && cat !== 'def' && cat !== 'tech') { trainTick(S, P, cat, q); continue; }
         const item = q[0];
-        if (!item) continue;
         if (item.prog >= 1) { if (cat === 'bld' || cat === 'def') continue; finish(S, P, cat, item); q.shift(); continue; }
         if (item.hold) continue;
         const d = item.cost;
-        const c = cat === 'tech' ? 1 : cat === 'bld' || cat === 'def' ? 1 : producers(S, P, cat);
-        if (c <= 0) continue;
-        const rate = DT / d.time * (1 + 0.5 * (c - 1)) * (P.low ? 0.5 : 1) * (cat === 'inf' ? upK(S, P.team, 'drill') : 1);
+        const rate = DT / d.time * (P.low ? 0.5 : 1);
         const pay = (d.cost || 0) * rate, payOil = (d.oil || 0) * rate;
         if (P.supply < pay || P.oil < payOil) { if (!item.short) { item.short = true; ownEvent(S, P.team, P.supply < pay ? 'nosupply' : 'nooil'); } continue; }
         item.short = false;
@@ -3981,6 +3980,32 @@ const Rules = (() => {
     }
   }
 
+  // Units are trained at every building that can train them at once: each building takes its own unit from the head of
+  // the queue, the side's chosen building the first, and the unit comes out of the building that made it. A unit held
+  // gives its place to the next. Each takes its own time and is paid for as it goes, as one at a time would be.
+  function trainTick(S, P, cat, q) {
+    const halls = trainersOf(S, P.team, TRAINER_OF[cat]);
+    let slot = 0;
+    for (let i = 0; i < q.length && slot < halls.length; i++) {
+      const item = q[i];
+      if (item.hold) continue;
+      const by = halls[slot++];
+      if (item.prog >= 1) { finish(S, P, cat, item, by); q.splice(i, 1); i--; continue; }
+      const d = item.cost, rate = DT / d.time * (P.low ? 0.5 : 1) * (cat === 'inf' ? upK(S, P.team, 'drill') : 1);
+      const pay = (d.cost || 0) * rate, payOil = (d.oil || 0) * rate;
+      if (P.supply < pay || P.oil < payOil) { if (!item.short) { item.short = true; ownEvent(S, P.team, P.supply < pay ? 'nosupply' : 'nooil'); } continue; }
+      item.short = false;
+      P.supply -= pay; P.oil -= payOil; item.paid += pay; item.paidOil += payOil; P.stats.spent += pay; P.stats.spentOil += payOil;
+      item.prog = Math.min(1, item.prog + rate);
+    }
+  }
+  const TRAINER_OF = { inf: 'barracks', veh: 'factory', sea: 'dock', air: 'airfield' };
+  // A side's standing buildings of a kind, its chosen one first.
+  function trainersOf(S, team, kind) {
+    const out = [];
+    for (const e of S.ents) if (e.b && e.team === team && e.kind === kind && e.hp > 0) { if (e.primary) out.unshift(e); else out.push(e); }
+    return out;
+  }
   // The buildings units come out of, and the one a side's units of a kind come out of: the one it chose, or else its
   // first.
   const TRAINERS = ['barracks', 'factory', 'dock', 'airfield'];
@@ -3992,10 +4017,6 @@ const Rules = (() => {
   function makePrimary(S, team, e) {
     e.primary = true;
     for (const o of S.ents) if (o !== e && o.b && o.team === team && o.kind === e.kind) o.primary = false;
-  }
-  function producers(S, P, cat) {
-    const k = cat === 'inf' ? 'barracks' : cat === 'veh' ? 'factory' : cat === 'sea' ? 'dock' : 'airfield';
-    return P.counts[k] || 0;
   }
 
   // A new age turns every unit of the side into its line's form for that age, keeping its share of health.
@@ -4013,7 +4034,7 @@ const Rules = (() => {
     }
     recount(S);
   }
-  function finish(S, P, cat, item) {
+  function finish(S, P, cat, item, by) {
     if (cat === 'tech') {
       P.tech = item.level;
       S.ev.push({ t: 'tech', team: P.team, level: item.level });
@@ -4023,7 +4044,7 @@ const Rules = (() => {
       return;
     }
     const need = cat === 'inf' ? 'barracks' : cat === 'veh' ? 'factory' : cat === 'sea' ? 'dock' : 'airfield';
-    const best = producerOf(S, P.team, need);
+    const best = by || producerOf(S, P.team, need);
     if (!best) return;
     // A ship is launched into the open water nearest its dock.
     const [x, y] = cat === 'sea' ? (c => [c % W + 0.5, (c / W | 0) + 0.5])(goalCells(S, 'naval', best.x | 0, best.y | 0)[0]) : exitOf(S, best);
