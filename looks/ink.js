@@ -789,8 +789,18 @@
               // Far out the facets merge into one even gold, so a field reads as a patch, not a scatter.
               else if (uOre == 4) oreC = mix(up > 0.7 ? vec3(0.99, 0.86, 0.45) : nV.x < 0.0 ? vec3(0.9, 0.67, 0.27) : vec3(0.72, 0.5, 0.2), vec3(0.9, 0.74, 0.4), zo * 0.85);
               else if (uOre == 5) {
-                oreC = up > 0.75 ? vec3(1.0, 0.95, 0.72) : nV.x < 0.0 ? vec3(0.98, 0.78, 0.22) : vec3(0.8, 0.56, 0.1);
-                oreC = mix(oreC, vec3(1.0), step(0.985, hash(floor(p / (3.0 * uK)) + 91.0)) * step(0.5, up));
+                // The kind of ore, from the hue and saturation of the nugget's own colour: silver nearly grey, iron a
+                // steel blue, copper an orange red, and gold its gold. Each in gold leaf's manner in its own metal.
+                vec2 hs = texture2D(tAnc, vUv).zw;
+                int ok = hs.y < 0.2 ? 1 : hs.x > 0.4 && hs.x < 0.8 ? 3 : hs.x < 0.075 || hs.x > 0.95 ? 2 : 0;
+                vec3 top = vec3(1.0, 0.95, 0.72), lit = vec3(0.98, 0.78, 0.22), drk = vec3(0.8, 0.56, 0.1);
+                if (ok == 1) { top = vec3(0.98, 0.99, 1.0); lit = vec3(0.8, 0.83, 0.88); drk = vec3(0.55, 0.59, 0.66); }
+                else if (ok == 2) { top = vec3(1.0, 0.8, 0.62); lit = vec3(0.9, 0.52, 0.3); drk = vec3(0.62, 0.31, 0.18); }
+                else if (ok == 3) { top = vec3(0.84, 0.62, 0.5); lit = vec3(0.68, 0.42, 0.3); drk = vec3(0.44, 0.27, 0.2); }
+                oreC = up > 0.75 ? top : nV.x < 0.0 ? lit : drk;
+                // Copper greens over here and there, and every metal but iron catches the light in a white glint.
+                if (ok == 2) oreC = mix(oreC, vec3(0.45, 0.7, 0.6), step(0.72, hash(floor(Wl * 1.4) + 5.0)) * step(0.5, up) * 0.8);
+                if (ok != 3) oreC = mix(oreC, vec3(1.0), step(0.985, hash(floor(p / (3.0 * uK)) + 91.0)) * step(0.5, up));
               }
               if (uOre != 0) base = mix(base, oreC, isO);
               // The stippled deposit spreads its dots onto the ground round each field.

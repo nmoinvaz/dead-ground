@@ -1419,7 +1419,11 @@ const World = (() => {
       const oreMat = patch(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.8, metalness: 0.4, emissive: 0x3a2400, emissiveIntensity: 0.0, envMapIntensity: 0.55 }), { tint: true });
       const rr = mulberry(M.seed + 3), rnd = [], first = [];
       for (let i = 0; i < cap; i++) {
-        const r = [rr() * 0.8 + 0.1, rr() * 0.8 + 0.1, rr() * 6.28, 0.8 + rr() * 0.8, colA.setHSL(0.1 + rr() * 0.035, 0.74, 0.5 + rr() * 0.16).getHex()], c = cells[i / per | 0];
+        // A nugget's colour tells the ink pass its kind, by hue and saturation: gold's own gold, silver nearly grey,
+        // copper an orange red, and iron given a steel blue that no other kind has.
+        const c = cells[i / per | 0], r = [rr() * 0.8 + 0.1, rr() * 0.8 + 0.1, rr() * 6.28, 0.8 + rr() * 0.8], hue = 0.1 + rr() * 0.035, lit = 0.5 + rr() * 0.16;
+        const [kh, ks] = [[hue, 0.74], [0.6, 0.03], [0.045, 0.72], [0.62, 0.4]][M.oreKind ? M.oreKind[c] : 0];
+        r.push(colA.setHSL(kh, ks, lit).getHex());
         rnd.push(r);
         const px = c % W + r[0], pz = (c / W | 0) + r[1];
         first.push({ x: px, y: terrainAt(M, px, pz) - 0.02, z: pz, a: r[2], s: 0.95 * r[3], c: r[4] });

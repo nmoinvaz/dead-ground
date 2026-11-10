@@ -648,7 +648,8 @@ const Game = (() => {
         ? (t < 0.5 ? [0.2 + 0.14 * t, 0.29 + 0.16 * t, 0.19 + 0.12 * t] : [0.27 + 0.56 * (t - 0.5), 0.37 + 0.26 * (t - 0.5), 0.25 + 0.24 * (t - 0.5)])
         : (t < 0.5 ? [0.84 + 0.2 * t, 0.9 + 0.06 * t, 0.8 + 0.04 * t] : [0.94 - 0.12 * (t - 0.5), 0.93 - 0.26 * (t - 0.5), 0.82 - 0.36 * (t - 0.5)]);
       const WTR = dark ? [0.115, 0.15, 0.235] : [0.788, 0.804, 0.902], BANK = dark ? [0.4, 0.5, 0.75] : [0.3, 0.36, 0.6];
-      const ORE = dark ? [0.84, 0.64, 0.22] : [0.96, 0.76, 0.24], WOOD = dark ? [0.16, 0.26, 0.15] : [0.62, 0.74, 0.55], DOT = dark ? [0.4, 0.55, 0.36] : [0.3, 0.45, 0.28];
+      // Ore by its kind: gold, silver, copper and iron.
+      const ORES = dark ? [[0.84, 0.64, 0.22], [0.74, 0.76, 0.8], [0.8, 0.46, 0.28], [0.6, 0.4, 0.32]] : [[0.96, 0.76, 0.24], [0.8, 0.82, 0.87], [0.88, 0.5, 0.3], [0.64, 0.4, 0.3]], WOOD = dark ? [0.16, 0.26, 0.15] : [0.62, 0.74, 0.55], DOT = dark ? [0.4, 0.55, 0.36] : [0.3, 0.45, 0.28];
       const wetAt = (i, j) => { const h = hs[j * px + i]; if (h < M.water) return true; if (!BD) return false; const v = Math.round((j + 0.5) * k * RES) * VW + Math.round((i + 0.5) * k * RES); return BD[v] < 0.48 && M.roadDist[v] > 1.4; };
       const ci = (i, j) => Math.floor(hs[j * px + i] / 0.66);
       for (let j = 0; j < px; j++) for (let i = 0; i < px; i++) {
@@ -665,7 +666,7 @@ const Game = (() => {
           const sh = Math.max(-1, Math.min(1, -(hx + hy) / (2 * k) * 0.9));
           col = col.map(v => v * (sh < 0 ? 1 + sh * (dark ? 0.55 : 0.28) : 1 + sh * 0.06));
           if (M.ground[c] & 8) { col = col.map((v, n) => v * 0.45 + WOOD[n] * 0.55); if (((i * 7 + j * 13) % 11) === 0 || ((i * 3 + j * 5) % 17) === 0) col = DOT; }
-          if (M.ore[c]) col = col.map((v, n) => v * 0.35 + ORE[n] * 0.65);
+          if (M.ore[c]) { const O = ORES[M.oreKind ? M.oreKind[c] : 0]; col = col.map((v, n) => v * 0.35 + O[n] * 0.65); }
           const cnt = (i < px - 1 && ci(i + 1, j) !== ci(i, j)) || (j < px - 1 && ci(i, j + 1) !== ci(i, j));
           if (cnt) { const idx = ci(i, j) % 5 === 0 ? 0.75 : 0.4; col = col.map((v, n) => v + (ink[n] - v) * idx); }
         }
