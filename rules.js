@@ -3972,7 +3972,8 @@ const Rules = (() => {
     S.ev.push({ t: 'built', team: P.team, kind, id: u.id, x, y });
     ownEvent(S, P.team, 'unitready');
     if (u.d.move === 'jet') { u.ord = null; return; }
-    if (!u.d.cargo) {
+    // Trucks go to dig and fishing boats to fish at once, without waiting at the rally point.
+    if (!u.d.cargo && !u.d.fish) {
       const r = best.rally, raid = P.raid && S.tick - P.raid.tick < 12 * HZ ? P.raid : null, fix = u.d.engineer && fixFor(S, u);
       // A new engineer goes straight into a hurt building of its base to mend it.
       if (fix) { u.ord = { t: 'attack', id: fix.id, fix: true }; u.tgt = fix.id; u.wpT = 0; u.stuck = 0; }
