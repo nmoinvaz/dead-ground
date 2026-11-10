@@ -35,22 +35,38 @@ body[data-look="ink"] #settings { background: var(--paper-hi); border: 1.5px sol
 body[data-look="ink"][data-scheme="dark"] {
   --paper: #23201b; --paper-hi: #2b2722; --paper-lo: #1a1814; --ink: #e8e0cf; --ink-dim: #a49a89; --redink: #e07a62; --blueink: #8fb0ef;
   --good: #7fbf8a; --warn: #e0b050; --amber-dim: #8a5a4e;
+  --paper-rgb: 35,32,27; --paper-hi-rgb: 43,39,34; --paper-lo-rgb: 26,24,20; --ink-rgb: 232,224,207; --shade-rgb: 20,18,15;
+  --soft: #cfc6b4; --off: #6e665a; --tone: brightness(1);
 }
-body[data-look="ink"][data-scheme="dark"] #ov, body[data-look="ink"][data-scheme="dark"] #map { filter: invert(.93) hue-rotate(180deg); }
+/* The dark paper's themes: night blue, a navy sheet in pale blue ink, and graphite, greys with colour kept where it
+   means something. The picture's pass remaps its own colours, and the overlay and minimap, drawn for light paper and
+   turned over, are remapped after by the same matrix in the page's #tone filters. */
+body[data-look="ink"][data-scheme="dark"][data-tone="night"] {
+  --paper: #141c2a; --paper-hi: #1b2536; --paper-lo: #0f1520; --ink: #dfe7f5; --ink-dim: #93a3bd;
+  --paper-rgb: 20,28,42; --paper-hi-rgb: 27,37,54; --paper-lo-rgb: 15,21,32; --ink-rgb: 223,231,245; --shade-rgb: 10,14,22;
+  --soft: #c3cede; --off: #5c6a82; --tone: url(#tone-night);
+}
+body[data-look="ink"][data-scheme="dark"][data-tone="graphite"] {
+  --paper: #1e1e1e; --paper-hi: #272727; --paper-lo: #161616; --ink: #e6e6e2; --ink-dim: #9a9a96;
+  --paper-rgb: 30,30,30; --paper-hi-rgb: 39,39,39; --paper-lo-rgb: 22,22,22; --ink-rgb: 230,230,226; --shade-rgb: 14,14,14;
+  --soft: #cdcdc8; --off: #66665f; --tone: url(#tone-graphite);
+}
+body[data-look="ink"][data-scheme="dark"] #ov, body[data-look="ink"][data-scheme="dark"] #map { filter: invert(.93) hue-rotate(180deg) var(--tone); }
+body[data-look="ink"][data-scheme="dark"] #preview { filter: var(--tone); }
 /* The pictures of things to build and of the selected unit, turned over to pale lines and laid on the dark paper
    with screen, as the light scheme lays them with multiply. The portrait's own ground is white so it turns dark. */
 body[data-look="ink"][data-scheme="dark"] .cam::before { filter: grayscale(1) contrast(1.5) brightness(1.08) invert(.93); mix-blend-mode: screen; }
 body[data-look="ink"][data-scheme="dark"] #sel .ups button.busy { background: linear-gradient(90deg, rgba(224,122,98,.34) var(--p, 0%), var(--paper-hi) var(--p, 0%)); }
 body[data-look="ink"][data-scheme="dark"] #sel img { background: #fff; border-color: #1f1a16; filter: grayscale(1) contrast(1.45) brightness(1.06) invert(.93); mix-blend-mode: screen; }
-body[data-look="ink"][data-scheme="dark"] #side { background: repeating-linear-gradient(135deg, rgba(232,224,207,.035) 0 1px, transparent 1px 7px), var(--paper); }
+body[data-look="ink"][data-scheme="dark"] #side { background: repeating-linear-gradient(135deg, rgba(var(--ink-rgb),.035) 0 1px, transparent 1px 7px), var(--paper); }
 body[data-look="ink"][data-scheme="dark"] .gauge, body[data-look="ink"][data-scheme="dark"] .tools button, body[data-look="ink"][data-scheme="dark"] #sel, body[data-look="ink"][data-scheme="dark"] #stats div, body[data-look="ink"][data-scheme="dark"] #banner { box-shadow: 2px 2px 0 rgba(0,0,0,.5); }
-body[data-look="ink"][data-scheme="dark"] #roster, body[data-look="ink"][data-scheme="dark"] #objective, body[data-look="ink"][data-scheme="dark"] .line { background: rgba(43,39,34,.92); box-shadow: 2px 2px 0 rgba(0,0,0,.4); }
-body[data-look="ink"][data-scheme="dark"] .tools button.off { color: #6e665a; }
-body[data-look="ink"][data-scheme="dark"] .cam.busy::after { background: conic-gradient(rgba(0,0,0,0) var(--p), rgba(35,32,27,.72) var(--p)); }
-body[data-look="ink"][data-scheme="dark"] #tip p, body[data-look="ink"][data-scheme="dark"] #title .lede, body[data-look="ink"][data-scheme="dark"] .help, body[data-look="ink"][data-scheme="dark"] #end th { color: #cfc6b4; }
-body[data-look="ink"][data-scheme="dark"] #cams { scrollbar-color: #6e665a transparent; }
-body[data-look="ink"][data-scheme="dark"] #title { background: linear-gradient(90deg, rgba(35,32,27,.95) 0, rgba(35,32,27,.82) 34%, rgba(35,32,27,0) 64%); }
-body[data-look="ink"][data-scheme="dark"] #end, body[data-look="ink"][data-scheme="dark"] #veil { background: rgba(20,18,15,.55); }
+body[data-look="ink"][data-scheme="dark"] #roster, body[data-look="ink"][data-scheme="dark"] #objective, body[data-look="ink"][data-scheme="dark"] .line { background: rgba(var(--paper-hi-rgb),.92); box-shadow: 2px 2px 0 rgba(0,0,0,.4); }
+body[data-look="ink"][data-scheme="dark"] .tools button.off { color: var(--off); }
+body[data-look="ink"][data-scheme="dark"] .cam.busy::after { background: conic-gradient(rgba(0,0,0,0) var(--p), rgba(var(--paper-rgb),.72) var(--p)); }
+body[data-look="ink"][data-scheme="dark"] #tip p, body[data-look="ink"][data-scheme="dark"] #title .lede, body[data-look="ink"][data-scheme="dark"] .help, body[data-look="ink"][data-scheme="dark"] #end th { color: var(--soft); }
+body[data-look="ink"][data-scheme="dark"] #cams { scrollbar-color: var(--off) transparent; }
+body[data-look="ink"][data-scheme="dark"] #title { background: linear-gradient(90deg, rgba(var(--paper-rgb),.95) 0, rgba(var(--paper-rgb),.82) 34%, rgba(var(--paper-rgb),0) 64%); }
+body[data-look="ink"][data-scheme="dark"] #end, body[data-look="ink"][data-scheme="dark"] #veil { background: rgba(var(--shade-rgb),.55); }
 #view[data-cur="order"] { cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='28' height='28'%3E%3Cpath d='M14 3l7 8h-4v5h-6v-5H7z' fill='%237fe0a0' stroke='%23000'/%3E%3Cpath d='M6 22l8 3 8-3' fill='none' stroke='%237fe0a0' stroke-width='2'/%3E%3C/svg%3E") 14 24, pointer; }
 #view[data-cur="attack"] { cursor: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='30' height='30'%3E%3Ccircle cx='15' cy='15' r='9' fill='none' stroke='%23000' stroke-width='4'/%3E%3Ccircle cx='15' cy='15' r='9' fill='none' stroke='%23ff5a40' stroke-width='2'/%3E%3Cpath d='M15 1v8M15 21v8M1 15h8M21 15h8' stroke='%23ff5a40' stroke-width='2'/%3E%3C/svg%3E") 15 15, crosshair; }
 #view[data-cur="aim"], #view[data-cur="place"] { cursor: crosshair; }
@@ -301,7 +317,7 @@ body:not(.online) #b-chat, body:not(.online) #b-voice, body:not(.online) #gchat 
 #roster .mic { font-size: 11px; opacity: .55; }
 #roster .mic.talk { opacity: 1; color: var(--good); }
 body[data-look="ink"] #gchat-in { background: var(--paper); color: var(--ink); border: 1.5px solid var(--ink); }
-body[data-look="ink"][data-scheme="dark"] #gchat-in { background: rgba(43,39,34,.95); }
+body[data-look="ink"][data-scheme="dark"] #gchat-in { background: rgba(var(--paper-hi-rgb),.95); }
 body[data-look="ink"] #b-voice.on { color: var(--redink); }
 body[data-look="ink"] #roster { background: rgba(250,244,228,.92); border: 1.5px solid var(--ink); color: var(--ink); box-shadow: 2px 2px 0 rgba(31,26,22,.4); }
 body[data-look="ink"] #roster .cpu span { color: var(--ink-dim); }
@@ -452,7 +468,7 @@ body[data-look="ink"] .rtabs button.on, body[data-look="ink"] .rseries button.on
 body[data-look="ink"] .rtabs button:hover:not(.on), body[data-look="ink"] .rseries button:hover:not(.on) { color: var(--redink); }
 body[data-look="ink"] #end thead th, body[data-look="ink"] #end .rkey, body[data-look="ink"] #end .rcap { font-family: var(--label); }
 body[data-look="ink"] #end tbody tr + tr > * { border-top-color: rgba(31,26,22,.14); }
-body[data-look="ink"][data-scheme="dark"] #end tbody tr + tr > * { border-top-color: rgba(232,224,207,.12); }
+body[data-look="ink"][data-scheme="dark"] #end tbody tr + tr > * { border-top-color: rgba(var(--ink-rgb),.12); }
 body[data-look="ink"] .slot { border-color: var(--ink); }
 body[data-look="ink"] .br.kill i { box-shadow: inset 0 0 0 1px var(--ink); }
 body[data-look="ink"] .rbar .nm, body[data-look="ink"] .rtip { font-family: var(--label); }
@@ -566,10 +582,14 @@ body[data-look="ink"] #age-about, body[data-look="ink"] #map-about, body[data-lo
   #m-age { grid-template-columns: repeat(3, 1fr); }
 }
 body[data-look="ink"] #title.on-sheet { background: rgba(242,232,210,.62); }
-body[data-look="ink"][data-scheme="dark"] #title.on-sheet { background: rgba(26,24,20,.7); }
+body[data-look="ink"][data-scheme="dark"] #title.on-sheet { background: rgba(var(--paper-lo-rgb),.7); }
 body[data-look="ink"] .sheet { box-shadow: 4px 4px 0 var(--ink); }
 </style>
 
+<svg width="0" height="0" style="position:absolute" aria-hidden="true"><defs>
+  <filter id="tone-night" color-interpolation-filters="sRGB"><feColorMatrix type="matrix" values="0.5901 0.2751 0.0534 0 0.0149  0.1471 0.7387 0.0561 0 0.0435  0.1505 0.2956 0.5074 0 0.1128  0 0 0 1 0"/></filter>
+  <filter id="tone-graphite" color-interpolation-filters="sRGB"><feColorMatrix type="matrix" values="0.4850 0.3631 0.0705 0 0.0549  0.1850 0.6631 0.0705 0 0.0549  0.1763 0.3460 0.3672 0 0.0616  0 0 0 1 0"/></filter>
+</defs></svg>
 <div id="app">
   <div id="view">
     <canvas id="gl" aria-label="Mapmaker’s War battlefield"></canvas>
@@ -592,7 +612,7 @@ body[data-look="ink"] .sheet { box-shadow: 4px 4px 0 var(--ink); }
     </div>
     <div id="notes"><div id="objective" hidden></div><div id="log"></div><div id="gchat"><div id="gchat-log"></div><input id="gchat-in" maxlength="200" placeholder="Say to everyone. Enter sends, Esc closes." autocomplete="off" spellcheck="false" hidden></div></div>
     <div id="settings" hidden role="dialog" aria-label="Settings">
-      <div class="choice"><h2>Paper</h2><div id="s-scheme"><button data-v="light">Light</button><button data-v="dark">Dark</button><button data-v="auto">As the system</button></div></div>
+      <div class="choice"><h2>Paper</h2><div id="s-scheme"><button data-v="light">Light</button><button data-v="dark">Dark</button><button data-v="night">Night blue</button><button data-v="graphite">Graphite</button><button data-v="auto">As the system</button></div></div>
       <div class="choice"><h2>Picture</h2><div id="s-pic" class="two"><button data-v="sharp">Sharp</button><button data-v="fast">Faster</button></div><p id="s-pic-note"></p></div>
       <div class="choice"><h2>Ore, oil and power</h2><div id="s-gauges" class="two"><button data-v="top">In the top bar</button><button data-v="side">In the sidebar</button></div></div>
       <div class="choice"><h2>Map sheet frame</h2><div id="s-sheet" class="two"><button data-v="on">On</button><button data-v="off">Off</button></div></div>

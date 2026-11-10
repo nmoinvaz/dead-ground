@@ -568,9 +568,12 @@ const Game = (() => {
       G.picAge = age;
       hud.setCameos(Object.assign({}, renders, own, Axo.pictures(scheme, SLOT_CSS[Math.max(0, G.team || 0)])));
     }
+    // Night blue and graphite are themes of the dark paper.
+    const TONES = { night: 1, graphite: 2 };
     function applyScheme() {
-      const dark = scheme === 'dark' || (scheme === 'auto' && !!darkQ && darkQ.matches);
-      Looks.dark = dark; document.body.dataset.scheme = dark ? 'dark' : 'light';
+      const tone = TONES[scheme] || 0, dark = scheme === 'dark' || !!tone || (scheme === 'auto' && !!darkQ && darkQ.matches);
+      Looks.dark = dark; Looks.tone = tone; document.body.dataset.scheme = dark ? 'dark' : 'light';
+      document.body.dataset.tone = tone ? scheme : '';
       $('s-scheme').querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.v === scheme));
       if (!$('t-setup').hidden) renderSetup();
       pictures();
