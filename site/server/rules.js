@@ -4061,6 +4061,7 @@ const Rules = (() => {
     } else if ((d.tech || 1) > P.tech) return 'Needs the ' + AGES[d.tech].name + ' Age';
     if (d.need && !P.counts[d.need]) return 'Needs ' + nameOf(d.need, P.tech);
     if (d.shore && !S.map.seaCells) return 'Needs open water on the map';
+    if (d.fish && !(S.map.fish || []).length) return 'No fishing grounds on this map';
     if (BUILDINGS[kind] && !(P.counts.hq || P.counts.fob)) return 'Needs Headquarters';
     if (d.limit) {
       const made = (P.counts[kind] || 0) + P.q[d.cat].filter(i => i.kind === kind).length;

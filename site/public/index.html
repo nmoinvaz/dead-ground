@@ -605,7 +605,7 @@ body[data-look="ink"] .sheet { box-shadow: 4px 4px 0 var(--ink); }
       <div class="choice"><h2>Map sheet frame</h2><div id="s-sheet" class="two"><button data-v="on">On</button><button data-v="off">Off</button></div></div>
       <div class="choice"><h2>Shadows</h2><div id="s-shade" class="two"><button data-v="hatch">Hatched</button><button data-v="wash">Wash</button></div></div>
       <div class="choice"><h2>Music</h2><div id="s-music" class="two"><button data-v="on">On</button><button data-v="off">Off</button></div></div>
-      <p id="build">Build 6266006 2026-11-10 08:41</p>
+      <p id="build">Build bebcd9f 2026-11-10 08:50</p>
     </div>
     <div id="banner" hidden></div>
     <button id="update" hidden>A new version of Mapmaker’s War is out. <b>Reload</b></button>
@@ -4778,6 +4778,7 @@ const Rules = (() => {
     } else if ((d.tech || 1) > P.tech) return 'Needs the ' + AGES[d.tech].name + ' Age';
     if (d.need && !P.counts[d.need]) return 'Needs ' + nameOf(d.need, P.tech);
     if (d.shore && !S.map.seaCells) return 'Needs open water on the map';
+    if (d.fish && !(S.map.fish || []).length) return 'No fishing grounds on this map';
     if (BUILDINGS[kind] && !(P.counts.hq || P.counts.fob)) return 'Needs Headquarters';
     if (d.limit) {
       const made = (P.counts[kind] || 0) + P.q[d.cat].filter(i => i.kind === kind).length;
@@ -14040,11 +14041,13 @@ const Hud = (() => {
     // The cards show only what the side's age has opened: one card for each line, in its form for that age, and
     // the buildings, defences and calls of that age.
     const sameLine = (a, b) => a === b || (!!UNITS[a] && !!UNITS[b] && UNITS[a].line === UNITS[b].line);
-    let listAge = 0;
+    let listAge = 0, listFish = null;
     function lineLists(age) {
-      if (age === listAge) return;
-      listAge = age;
-      for (const cat of ['inf', 'veh', 'air', 'sea']) LISTS[cat] = Rules.LINE_ORDER[cat].map(l => Rules.formOf(l, age)).filter(Boolean);
+      // A map with no fishing grounds has no fishing boats to offer.
+      const fish = !!(game.S && (game.S.map.fish || []).length);
+      if (age === listAge && fish === listFish) return;
+      listAge = age; listFish = fish;
+      for (const cat of ['inf', 'veh', 'air', 'sea']) LISTS[cat] = Rules.LINE_ORDER[cat].filter(l => fish || l !== 'fish').map(l => Rules.formOf(l, age)).filter(Boolean);
       const opened = k => k === 'tech' || ((k === 'launch' ? BUILDINGS.silo : BUILDINGS[k] || POWERS[k]).tech || 1) <= age;
       for (const cat in ALL) LISTS[cat] = ALL[cat].filter(opened);
     }
