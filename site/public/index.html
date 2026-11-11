@@ -632,7 +632,7 @@ body[data-look="ink"] .sheet { box-shadow: 4px 4px 0 var(--ink); }
       <div class="choice"><h2>Map sheet frame</h2><div id="s-sheet" class="two"><button data-v="on">On</button><button data-v="off">Off</button></div></div>
       <div class="choice"><h2>Shadows</h2><div id="s-shade" class="two"><button data-v="hatch">Hatched</button><button data-v="wash">Wash</button></div></div>
       <div class="choice"><h2>Music</h2><div id="s-music" class="two"><button data-v="on">On</button><button data-v="off">Off</button></div></div>
-      <p id="build">Build b055715 2026-11-10 18:14</p>
+      <p id="build">Build ef07c5c 2026-11-10 18:19</p>
     </div>
     <div id="banner" hidden></div>
     <button id="update" hidden>A new version of Mapmaker’s War is out. <b>Reload</b></button>
@@ -667,6 +667,7 @@ body[data-look="ink"] .sheet { box-shadow: 4px 4px 0 var(--ink); }
         <dt>A / S</dt><dd>Attack-move, stop</dd>
         <dt>D</dt><dd>Next formation for the selected units: line, block, column, wedge, square, loose</dd>
         <dt>L</dt><dd>Next stance: seek and destroy, aggressive, defensive, or hold ground</dd><dt>J</dt><dd>Fall back when badly hurt, on or off</dd><dt>Shift+J</dt><dd>Selected scouts explore by themselves, or stop</dd><dt>Right-click your own</dt><dd>Guard that unit or building: follow it and fight what comes at it</dd>
+        <dt>Alt-click</dt><dd>On a unit's card, train it over and over until Alt-clicked again</dd>
         <dt>Ctrl 1-9</dt><dd>Set a group, then 1-9 picks it</dd>
         <dt>Arrows</dt><dd>Move the view; on a trackpad swipe to move and pinch to zoom</dd>
         <dt>K</dt><dd>Another pen technique</dd>
@@ -4765,9 +4766,9 @@ const Rules = (() => {
       const relay = upK(S, P.team, 'relay');
       for (const k in P.cooldown) if (P.cooldown[k] > 0) P.cooldown[k] -= DT * relay;
       for (const cat of ['bld', 'def', 'inf', 'veh', 'air', 'sea', 'tech']) {
-        const q = P.q[cat];
-        if (!q.length) continue;
-        if (cat !== 'bld' && cat !== 'def' && cat !== 'tech') { trainTick(S, P, cat, q); continue; }
+        const q = P.q[cat], units = cat !== 'bld' && cat !== 'def' && cat !== 'tech';
+        if (!q.length && !(units && P.repeat)) continue;
+        if (units) { trainTick(S, P, cat, q); continue; }
         const item = q[0];
         if (item.prog >= 1) { if (cat === 'bld' || cat === 'def') continue; finish(S, P, cat, item); q.shift(); continue; }
         if (item.hold) continue;
@@ -4791,6 +4792,14 @@ const Rules = (() => {
   // gives its place to the next. Each takes its own time and is paid for as it goes, as one at a time would be.
   function trainTick(S, P, cat, q) {
     const halls = trainersOf(S, P.team, TRAINER_OF[cat]);
+    // A line set to repeat keeps one of its units queued for each building that trains it, so each stays busy.
+    if (P.repeat && halls.length) for (const line in P.repeat) {
+      const kind = formOf(line, P.tech);
+      if (!kind || UNITS[kind].cat !== cat || q.length >= 9) continue;
+      if (q.filter(i => UNITS[i.kind] && UNITS[i.kind].line === line).length >= halls.length) continue;
+      if (blockedReason(S, P.team, kind)) continue;
+      q.push({ kind, cost: UNITS[kind], prog: 0, paid: 0, paidOil: 0, hold: false });
+    }
     let slot = 0;
     for (let i = 0; i < q.length && slot < halls.length; i++) {
       const item = q[i];
@@ -5143,6 +5152,12 @@ const Rules = (() => {
       if (c.c === 'build' && q.length) return;
       if (q.length >= 9) return;
       q.push({ kind, cost: d, prog: 0, paid: 0, paidOil: 0, hold: false });
+    } else if (c.c === 'repeat') {
+      // A unit's line trained over and over without end, or no longer.
+      const d = UNITS[c.kind];
+      if (!d) return;
+      P.repeat = P.repeat || {};
+      if (c.on) P.repeat[d.line] = true; else delete P.repeat[d.line];
     } else if (c.c === 'research') {
       const lv = P.tech + 1, d = TECH[lv];
       if (!d || P.q.tech.length || !P.counts.hq) return;
@@ -14488,7 +14503,8 @@ const Hud = (() => {
         // A unit's line drawing is already in the look's inks, so it is laid on as it is.
         if (img && img.startsWith('data:image/svg')) b.classList.add('axo');
         c.remove();
-        b.addEventListener('click', e => { e.preventDefault(); camClick(k, e.shiftKey ? 5 : 1); });
+        // Alt-click, Option on a Mac, sets a unit to be trained over and over without end, or stops it.
+        b.addEventListener('click', e => { e.preventDefault(); if (e.altKey && UNITS[k]) camRepeat(k); else camClick(k, e.shiftKey ? 5 : 1); });
         b.addEventListener('contextmenu', e => { e.preventDefault(); camCancel(k); });
         b.addEventListener('pointerenter', () => { state.tipKind = k; drawTip(); });
         b.addEventListener('pointerleave', () => { if (state.tipKind === k) { state.tipKind = null; drawTip(); } });
@@ -14531,6 +14547,14 @@ const Hud = (() => {
       }
       if (why) { say(why + '.'); game.audio.ui('deny'); return; }
       for (let i = 0; i < n; i++) game.order(s, t, { c: 'train', kind: k });
+      game.audio.ui('click');
+    }
+    const repeating = k => { const p = P(), d = UNITS[k]; return !!(p && d && p.repeat && p.repeat[d.line]); };
+    function camRepeat(k) {
+      const s = S(), on = !repeating(k), why = Rules.blockedReason(s, team(), k);
+      if (on && why) { say(why + '.'); game.audio.ui('deny'); return; }
+      game.order(s, team(), { c: 'repeat', kind: k, on });
+      say(on ? `${UNITS[k].name}: trained over and over. Alt-click the card again to stop.` : `${UNITS[k].name}: no longer repeated.`);
       game.audio.ui('click');
     }
     function camCancel(k) {
@@ -14578,7 +14602,8 @@ const Hud = (() => {
         b.style.setProperty('--p', (prog * 360).toFixed(1) + 'deg');
         b.classList.toggle('busy', prog > 0);
         if (st.textContent !== label) st.textContent = label;
-        const show = count > 1 && UNITS[k] ? count : '';
+        // A line set to repeat is marked with a looping arrow beside its count.
+        const show = (count > 1 && UNITS[k] ? count : '') + (UNITS[k] && repeating(k) ? ' ↻' : '');
         if (qty.textContent !== String(show)) qty.textContent = show;
         const price = info.cost ? '$' + info.cost + (info.oil ? ' · ' + info.oil + ' oil' : '') : '';
         if (ct.textContent !== price) ct.textContent = price;
