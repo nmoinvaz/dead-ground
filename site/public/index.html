@@ -660,7 +660,7 @@ body[data-look="ink"] .sheet { box-shadow: 4px 4px 0 var(--ink); }
       <div class="choice"><h2>Shadow strength</h2><div id="s-shadow"><button data-v="full">Full</button><button data-v="light">Light</button><button data-v="off">Off</button></div></div>
       <div class="choice"><h2>Edge lines</h2><div id="s-edges" class="two"><button data-v="quick">Quick</button><button data-v="exact">Exact</button></div></div>
       <div class="choice"><h2>Music</h2><div id="s-music" class="two"><button data-v="on">On</button><button data-v="off">Off</button></div></div>
-      <p id="build">Build 1658eda 2026-11-11 14:18</p>
+      <p id="build">Build 9e248e6 2026-11-11 14:47</p>
       <p id="source"><a href="https://github.com/nmoinvaz/mapmakers-war" target="_blank" rel="noopener">Source on GitHub</a></p>
     </div>
     <div id="banner" hidden></div>
@@ -3223,13 +3223,27 @@ const Rules = (() => {
     return RAYS[R] = out;
   }
 
-  // Sight runs along rays, keeping the steepest look-up angle so far, as a watcher on a hill would.
+  // Whether water lies in any of the map's 8 by 8 blocks within r of a point, from the map's water, worked out once.
+  function wetNear(M, x, y, r) {
+    if (!M._wetB) {
+      const BW = Math.ceil(W / 8), BH = Math.ceil(H / 8), b = new Uint8Array(BW * BH);
+      for (let cy = 0; cy < H; cy++) for (let cx = 0; cx < W; cx++) if (terrainAt(M, cx + 0.5, cy + 0.5) < waterLevel(M, cx + 0.5, cy + 0.5)) b[(cy >> 3) * BW + (cx >> 3)] = 1;
+      M._wetB = { b, BW, BH };
+    }
+    const { b, BW, BH } = M._wetB;
+    for (let by = Math.max(0, Math.floor((y - r) / 8)); by <= Math.min(BH - 1, Math.floor((y + r) / 8)); by++) for (let bx = Math.max(0, Math.floor((x - r) / 8)); bx <= Math.min(BW - 1, Math.floor((x + r) / 8)); bx++) if (b[by * BW + bx]) return true;
+    return false;
+  }
+
+  // Sight runs along rays, keeping the steepest look-up angle so far, as a watcher on a hill would. Heights are the
+  // water's surface where water lies, and open water, which hides nothing, is seen wk times as far: a ray goes on past
+  // the sight's reach while it is over water, and stops at the far bank.
   function vision(S) {
     const M = S.map;
     // The cells a shower hides, set below before any side looks.
     let shMask = null;
     for (const P of S.P) P.vis.fill(0);
-    const light = (P, x, y, r, eye, air) => {
+    const light = (P, x, y, r, eye, air, wk = 1) => {
       const R = Math.round(r), vis = P.vis, seen = P.seen;
       const ox = x, oy = y, c0 = cellOf(ox, oy);
       vis[c0] = 1; seen[c0] = 1;
@@ -3240,13 +3254,18 @@ const Rules = (() => {
         }
         return;
       }
-      const z0 = terrainAt(M, ox, oy) + eye;
-      for (const [dx, dy] of raysFor(r)) {
+      // The eye is on a bridge's deck or the water's surface where the ground under it is lower.
+      const lv = (px, py) => M.wl ? waterLevel(M, px, py) : M.water;
+      const z0 = Math.max(heightAt(M, ox, oy), lv(ox, oy)) + eye;
+      const RW = wk > 1 && wetNear(M, x, y, r * wk) ? Math.round(r * wk) : R;
+      for (const [dx, dy] of raysFor(RW)) {
         let top = -1e9;
-        for (let d = 1; d <= R; d++) {
+        for (let d = 1; d <= RW; d++) {
           const px = ox + dx * d, py = oy + dy * d;
           if (px < 0 || py < 0 || px >= W || py >= H) break;
-          const hz = terrainAt(M, px, py), slope = (hz + 0.5 - z0) / d;
+          const t = terrainAt(M, px, py), wl = lv(px, py), wet = t < wl;
+          if (d > R && !wet) break;
+          const hz = wet ? wl : t, slope = (hz + 0.5 - z0) / d;
           if (slope >= top - 0.02 || d < 3) { const c = (py | 0) * W + (px | 0); if (!(shMask && shMask[c] && d > 3)) { vis[c] = 1; seen[c] = 1; } }
           const block = (hz - z0) / d;
           if (block > top) top = block;
@@ -3276,7 +3295,9 @@ const Rules = (() => {
       const up = satUp(S, e.team);
       if (e.b) light(P, e.x, e.y, (e.d.sight + Math.max(e.w, e.h) / 2) * (up ? 1 : fkAt(e) * (armOf(S, e) ? 1 : nb) * inSh(e)), 3, false);
       else if (e.d.move === 'air' || e.d.move === 'jet') light(P, e.x, e.y, e.d.sight * (up ? 1 : faAt(e) * (1 - 0.3 * n) * inSh(e)), 0, true);
-      else light(P, e.x, e.y, e.d.sight * (up ? 1 : fkAt(e) * nu * inSh(e)) * (e.cov >= 0 ? 1.2 : 1), 1.1, false);
+      // A ground unit sees a half again as far across open water, and a scout two and a half times as far. A ship's
+      // sight is its own.
+      else light(P, e.x, e.y, e.d.sight * (up ? 1 : fkAt(e) * nu * inSh(e)) * (e.cov >= 0 ? 1.2 : 1), 1.1, false, e.d.move === 'naval' ? 1 : canExplore(e) ? 2.5 : 1.5);
     }
     for (const t of S.towns) if (t.owner >= 0) light(S.P[t.owner], t.x, t.y, 9 * fkAt(t) * (1 - 0.25 * n), 2, false);
     for (const s of S.sweeps) if (s.until > S.tick) light(S.P[s.team], s.x, s.y, s.r, 0, true);
