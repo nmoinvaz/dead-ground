@@ -660,7 +660,7 @@ body[data-look="ink"] .sheet { box-shadow: 4px 4px 0 var(--ink); }
       <div class="choice"><h2>Shadow strength</h2><div id="s-shadow"><button data-v="full">Full</button><button data-v="light">Light</button><button data-v="off">Off</button></div></div>
       <div class="choice"><h2>Edge lines</h2><div id="s-edges" class="two"><button data-v="quick">Quick</button><button data-v="exact">Exact</button></div></div>
       <div class="choice"><h2>Music</h2><div id="s-music" class="two"><button data-v="on">On</button><button data-v="off">Off</button></div></div>
-      <p id="build">Build 9e248e6 2026-11-11 14:47</p>
+      <p id="build">Build 1574500 2026-11-11 14:53</p>
       <p id="source"><a href="https://github.com/nmoinvaz/mapmakers-war" target="_blank" rel="noopener">Source on GitHub</a></p>
     </div>
     <div id="banner" hidden></div>
@@ -7668,6 +7668,38 @@ const Models = (() => {
       };
       scenery.folk = civilian(false);
       scenery.folk2 = civilian(true);
+      // Bathers on a beach, bare-armed and bare-legged, the costume the instance's colour: a man in trunks, and a
+      // one-piece, which the Industrial Age's bathers of both kinds wear. Built as the townsfolk are.
+      const SKIN = 0xe0c0a0;
+      const bareLeg = () => { const g = G(); limb(g, [0, 0.02, 0], [0.01, -0.137, 0], 0.032, 0.022, SKIN); limb(g, [0.01, -0.137, 0], [0, -0.27, 0], 0.022, 0.015, SKIN); g.box(0.06, 0.02, 0.03, 0.012, -MAN_H * 0.47 - 0.02, 0, SKIN); return g; };
+      const bather = onePiece => {
+        const g = G(), hip = MAN_H * 0.5, shoulder = hip + MAN_H * 0.3, hy = shoulder + 0.03 + head * 0.5, TB1 = { t: 1 };
+        trunk(g, onePiece ? 0xffffff : SKIN, hip, onePiece ? 0.95 : 1, onePiece ? TB1 : {});
+        if (!onePiece) g.add(new THREE.LatheGeometry(TRUNK.slice(0, 3).map(v => new THREE.Vector2(v.x * 1.06, v.y)), 8), 0, hip, 0, 0xffffff, { sx: 0.64, t: 1 });
+        const leg = bareLeg();
+        for (const z of [-0.042, 0.042]) g.merge(leg, 0, hip, z);
+        const ps = POSES.none;
+        for (const [sh, el, hd] of [[SHO[0], ps.RE, ps.R], [SHO[1], ps.LE, ps.L]]) { limb(g, sh, el, 0.019, 0.015, SKIN); limb(g, el, hd, 0.015, 0.012, SKIN); g.sph(0.013, hd[0], hd[1], hd[2], SKIN, { seg: 5, rings: 4 }); }
+        g.cyl(0.016, 0.019, 0.04, 0.003, shoulder + 0.028, 0, SKIN, { seg: 5 });
+        g.sph(head * 0.46, 0.005, hy, 0, SKIN, { seg: 8, rings: 6, sy: 1.18 });
+        g.sph(head * 0.5, -0.006, hy + 0.012, 0, onePiece ? 0x6a4a30 : 0x3a2e24, { seg: 8, rings: 4, top: true, sy: 0.85 });
+        return G().merge(g, 0, 0, 0, 0, 1.2).finish();
+      };
+      scenery.bather = bather(false);
+      scenery.bather2 = bather(true);
+      // A towel on the sand, a beach umbrella, and a bathing machine, a hut on wheels pulled to the water's edge;
+      // the cloth in the instance's colour.
+      scenery.towel = G().box(0.66, 0.012, 0.3, 0, 0, 0, 0xffffff, { t: 1 }).finish();
+      const umb = G();
+      umb.cyl(0.008, 0.009, 0.6, 0, 0.3, 0, 0x6a6058, { seg: 4 });
+      umb.cyl(0.012, 0.3, 0.11, 0, 0.6, 0, 0xffffff, { seg: 8, t: 1 });
+      scenery.umbrella = umb.finish();
+      const mach = G();
+      mach.box(0.32, 0.34, 0.26, 0, 0.1, 0, 0xffffff, { t: 1 });
+      mach.prism([[-0.15, 0], [0, 0.1], [0.15, 0]], 0.36, 0, 0.44, 0, 0x6a6058, { ry: Math.PI / 2 });
+      for (const [x, z] of [[0.1, 0.14], [-0.1, 0.14], [0.1, -0.14], [-0.1, -0.14]]) mach.cyl(0.06, 0.06, 0.02, x, 0.06, z, 0x4e3a26, { axis: 'z', seg: 8 });
+      mach.box(0.03, 0.16, 0.12, 0.17, 0.14, 0, 0x4e3a26);
+      scenery.bmachine = mach.finish();
       // A fishing boat, along x: a pointed hull, a wheelhouse, a short mast.
       const boat = G();
       boat.prism([[-0.75, 0], [0.6, 0], [0.85, 0.26], [-0.8, 0.26]], 0.5, 0, -0.06, 0, 0xffffff);
@@ -11917,7 +11949,7 @@ const World = (() => {
     let ore = null, oreSeen = -1, flagMeshes = [], ghost = null, ghostCells = null;
     // How far the rivers stand above their usual line.
     const waterRise = { value: 0 };
-    const m1 = new THREE.Matrix4(), m2 = new THREE.Matrix4(), m3 = new THREE.Matrix4(), mOut = new THREE.Matrix4();
+    const m1 = new THREE.Matrix4(), m2 = new THREE.Matrix4(), m3 = new THREE.Matrix4(), mOut = new THREE.Matrix4(), v1 = new THREE.Vector3();
     const q1 = new THREE.Quaternion(), q2 = new THREE.Quaternion(), e1 = new THREE.Euler(0, 0, 0, 'YXZ'), p1 = new THREE.Vector3(), s1 = new THREE.Vector3(1, 1, 1), s2 = new THREE.Vector3(1, 1, 1);
     const axisZ = new THREE.Vector3(0, 0, 1), axisY = new THREE.Vector3(0, 1, 0), axisX = new THREE.Vector3(1, 0, 0);
     const colA = new THREE.Color(), teamCol = SLOT_COLORS.map(c => new THREE.Color(c)), burnt = new THREE.Color(0x141414), neutral = new THREE.Color(0xc9c5b6);
@@ -13229,7 +13261,7 @@ const World = (() => {
         m.setColorAt(0, neutral); m.instanceColor.setUsage(THREE.DynamicDrawUsage);
         return add(m);
       };
-      life = { herds: [], rafts: [], cars: [], folk: [], boats: [], flocks: [], birds: [], alarm: [], danger: [], rise: [], scanT: 0, beastM: {}, carM: mk(sc.car, 32), cartM: mk(sc.cart, 32), folkM: mk(sc.folk, 400, folkMat), folkM2: mk(sc.folk2, 400, folkMat), stallM: mk(sc.stall, 24), fairs: [], boatM: mk(sc.boat, 12), whales: [], whaleM: mk(sc.whale, 16), armM: mk(new THREE.BoxGeometry(0.62, 0.035, 0.035), 60) };
+      life = { herds: [], rafts: [], cars: [], folk: [], boats: [], flocks: [], birds: [], alarm: [], danger: [], rise: [], scanT: 0, beastM: {}, carM: mk(sc.car, 32), cartM: mk(sc.cart, 32), folkM: mk(sc.folk, 400, folkMat), folkM2: mk(sc.folk2, 400, folkMat), batherM: mk(sc.bather, 120, folkMat), batherM2: mk(sc.bather2, 120, folkMat), towelM: mk(sc.towel, 80, folkMat), umbM: mk(sc.umbrella, 40, folkMat), bmachM: mk(sc.bmachine, 16, folkMat), shoreBoatM: mk(sc.boat, 16), beaches: [], stallM: mk(sc.stall, 24), fairs: [], boatM: mk(sc.boat, 12), whales: [], whaleM: mk(sc.whale, 16), armM: mk(new THREE.BoxGeometry(0.62, 0.035, 0.035), 60) };
       // The theatre's herds by their shares, its wolf packs, and its ducks.
       // The kinds dealt out in proportion to their shares, in a shuffled order, so each comes.
       const deal = (theme.fauna || [['deer', 1]]).flatMap(([k, w]) => Array(w).fill(k)).sort(() => Math.random() - 0.5);
@@ -13259,6 +13291,35 @@ const World = (() => {
       const CARS = [0xb8402e, 0x2f5a8a, 0xe8e0cc, 0x5d7a46, 0x3a3a3a, 0xe0b040], long = life.roads.filter(r => r.len > 14);
       for (let i = 0; i < Math.min(long.length, Math.round(8 * scale)); i++) { const r = long[(i * 7) % long.length]; life.cars.push({ r, s: R() * r.len, dir: R() < 0.5 ? 1 : -1, v: 0, wait: R() * 3, col: CARS[i % CARS.length], x: r.pts[0][0], y: r.pts[0][1], a: 0, turn: false, careless: R() < 0.3 }); }
       M.towns.forEach((t, ti) => { for (let k = 0; k < TOWNFOLK; k++) life.folk.push({ town: ti, x: t.x + (R() - 0.5) * 5, y: t.y + (R() - 0.5) * 5, tx: t.x, ty: t.y, v: 0, wait: R() * 4, hide: 0, col: SHIRTS[(ti * 5 + k) % SHIRTS.length], a: R() * 6.28, ph: R() * 6 }); });
+      // Beachgoers. A town with a beach near it has a few people at leisure on the stretch nearest it: three lying
+      // on the sand, two strolling along it, one wading in the shallows and the rest standing about, with now and then
+      // a child among them.
+      if (beachMap) M.towns.forEach((t, ti) => {
+        let best = -1, bd = 1e9;
+        for (let y = Math.max(1, Math.floor(t.y - 22)); y < Math.min(H - 1, t.y + 22); y++) for (let x = Math.max(1, Math.floor(t.x - 22)); x < Math.min(W - 1, t.x + 22); x++) {
+          const c = y * W + x;
+          if (beachMap[c] < 150) continue;
+          const d = Math.hypot(x + 0.5 - t.x, y + 0.5 - t.y);
+          if (d < bd) { bd = d; best = c; }
+        }
+        if (best < 0 || bd > 22) return;
+        const bx = best % W + 0.5, by = Math.floor(best / W) + 0.5, sand = [], wet = [];
+        for (let y = Math.floor(by - 7); y <= by + 7; y++) for (let x = Math.floor(bx - 7); x <= bx + 7; x++) {
+          if (x < 1 || y < 1 || x >= W - 1 || y >= H - 1 || Math.hypot(x + 0.5 - bx, y + 0.5 - by) > 7) continue;
+          const d = wAt(x + 0.5, y + 0.5) - terrainAt(M, x + 0.5, y + 0.5);
+          if (beachMap[y * W + x] > 110 && d < -0.05) sand.push([x + 0.5, y + 0.5]);
+          else if (d > 0.04 && d < 0.35) wet.push([x + 0.5, y + 0.5]);
+        }
+        if (sand.length < 8) return;
+        const edge = wet.length ? wet.reduce((p, q) => Math.hypot(q[0] - bx, q[1] - by) < Math.hypot(p[0] - bx, p[1] - by) ? q : p) : [bx, by];
+        const toWater = Math.atan2(edge[1] - by, edge[0] - bx), people = [], n = 6 + Math.floor(R() * 4);
+        for (let k = 0; k < n; k++) {
+          const kind = k < 3 ? 'lie' : k < 5 ? 'walk' : k < 6 && wet.length ? 'wade' : 'stand';
+          const sp = kind === 'wade' ? wet[Math.floor(R() * wet.length)] : sand[Math.floor(R() * sand.length)];
+          people.push({ kind, x: sp[0] + (R() - 0.5) * 0.6, y: sp[1] + (R() - 0.5) * 0.6, a: kind === 'lie' || kind === 'walk' ? R() * 6.28 : toWater + (R() - 0.5) * 0.8, v: 0, ph: R() * 6, wait: R() * 5, tx: sp[0], ty: sp[1], w: R() < 0.5, child: kind === 'stand' && R() < 0.4, col: SWIM[(ti * 3 + k) % SWIM.length], towel: SWIM[(ti + k + 2) % SWIM.length] });
+        }
+        life.beaches.push({ town: ti, x: bx, y: by, sand, edge, toWater, people });
+      });
       for (let tries = 0; life.boats.length < Math.round(2 * scale) && tries < 4000; tries++) {
         const x = 2 + R() * (W - 4), y = 2 + R() * (H - 4);
         if (terrainAt(M, x, y) < -1.0 && Rules.bridgeAt(S, x, y) < 0) life.boats.push({ x, y, a: R() * 6.28, v: 1, ph: R() * 6 });
@@ -13288,6 +13349,8 @@ const World = (() => {
     const SHIRTS = [0xf4f0e4, 0xc84a3a, 0x5a7ab0, 0xe0c060, 0x7a9a5a, 0xd8a0a0];
     // People living in each town, and how many more come to its market day.
     const TOWNFOLK = 12, FAIR_EXTRA = 24;
+    // Bathing costumes, towels and umbrellas.
+    const SWIM = [0xc84a3a, 0x3a6aa8, 0xe0b040, 0x2a8a7a, 0xd87aa0, 0xf0ece0, 0x2e3a5a];
     // Market awnings in faded canvas: cream, rust, slate, ochre and sage.
     const STALL_C = [0xe0d6c0, 0xb88a72, 0xa0aab4, 0xc8b88c, 0xa8b098];
     function crash(c, o) {
@@ -13611,6 +13674,15 @@ const World = (() => {
         if (openAt(nx, ny)) { f.x = nx; f.y = ny; } else { f.tx = f.x; f.ty = f.y; }
       }
       if (L.folk.some(f => f.gone)) L.folk = L.folk.filter(f => !f.gone);
+      // A beach's strollers walk from one spot on the sand to another and stop there a while.
+      for (const g of L.beaches) for (const b of g.people) {
+        if (b.kind !== 'walk') continue;
+        if (b.wait > 0) { b.wait -= dt; b.v = 0; continue; }
+        const dx = b.tx - b.x, dy = b.ty - b.y, d = Math.hypot(dx, dy);
+        if (d < 0.2) { const sp = g.sand[Math.floor(Math.random() * g.sand.length)]; b.tx = sp[0]; b.ty = sp[1]; b.wait = 2 + Math.random() * 6; continue; }
+        b.v = 0.6; b.a = Math.atan2(dy, dx); b.ph += dt * 7;
+        b.x += dx / d * b.v * dt; b.y += dy / d * b.v * dt;
+      }
       // Market days. Now and then, by day and in peace, a town with a park holds a market there for a few minutes:
       // stalls go up round the fountain, its people crowd in, and more come from round about. Trouble ends it at once.
       for (let i = L.fairs.length - 1; i >= 0; i--) { const q = L.fairs[i]; q.t -= dt; if (q.t <= 0 || L.danger[q.town] || night > 0.6 || storm > 0.5) L.fairs.splice(i, 1); }
@@ -13742,6 +13814,33 @@ const World = (() => {
         if (f.w) { L.folkM2.setMatrixAt(n2, m1); L.folkM2.setColorAt(n2, colA.set(f.col)); n2++; }
         else { L.folkM.setMatrixAt(n, m1); L.folkM.setColorAt(n, colA.set(f.col)); n++; }
       }
+      // Beachgoers, on a fine day while their town is at peace, dressed and furnished by the age: the townsfolk in
+      // their clothes by a boat drawn up before the Industrial Age, bathing costumes and a bathing machine in it, and
+      // trunks, one-pieces, towels and umbrellas after.
+      const fine = sky.night < 0.45 && sky.storm < 0.2 && (sky.rain || 0) < 0.25 && (sky.snow || 0) < 0.2 && (sky.fog || 0) < 0.35 && !((sky.sand || 0) > 0.2);
+      const bAge = worldAge(), bathe = bAge >= 4;
+      let nb = 0, nb2 = 0, nt = 0, nu = 0, nm = 0, nbo = 0;
+      if (fine) for (const g of L.beaches) {
+        if (L.danger[g.town] || !VIS(g.x, g.y)) continue;
+        const ex = g.edge[0], ey = g.edge[1];
+        if (bAge === 4 && nm < 16) { compose(m1, ex, heightAt(M, ex, ey), ey, -g.toWater, 0, 0, 1); L.bmachM.setMatrixAt(nm, m1); L.bmachM.setColorAt(nm, colA.set(SWIM[g.town % SWIM.length])); nm++; }
+        else if (bAge < 4 && nbo < 16) { const bx = (ex + g.x) / 2, by = (ey + g.y) / 2; compose(m1, bx, heightAt(M, bx, by) + 0.04, by, -g.toWater, 0, 0.12, 0.6); L.shoreBoatM.setMatrixAt(nbo, m1); L.shoreBoatM.setColorAt(nbo, colA.set(0x8a6a46)); nbo++; }
+        g.people.forEach((b, k) => {
+          const wade = b.kind === 'wade', lie = b.kind === 'lie', gh = heightAt(M, b.x, b.y), h = wade ? wAt(b.x, b.y) - 0.13 : gh, hop = b.v > 0 ? Math.abs(Math.sin(b.ph)) * 0.03 : 0;
+          compose(m1, b.x, h + (lie ? 0.05 : hop), b.y, -b.a, lie ? -1.5 : 0, 0, b.child ? 0.65 : 1);
+          const mesh = bathe ? (bAge === 4 || b.w ? L.batherM2 : L.batherM) : (b.w ? L.folkM2 : L.folkM);
+          const i = mesh === L.batherM ? nb++ : mesh === L.batherM2 ? nb2++ : mesh === L.folkM2 ? n2++ : n++;
+          if (i >= (bathe ? 120 : 400)) return;
+          mesh.setMatrixAt(i, m1); mesh.setColorAt(i, colA.set(b.col));
+          if (lie && bAge >= 5) {
+            // A towel under the body, and an umbrella beside every other.
+            v1.set(0, 0.37, 0).applyMatrix4(m1);
+            if (nt < 80) { compose(m1, v1.x, gh + 0.012, v1.z, -b.a, 0, 0, 1); L.towelM.setMatrixAt(nt, m1); L.towelM.setColorAt(nt, colA.set(b.towel)); nt++; }
+            if (k % 2 === 0 && nu < 40) { const ux = v1.x + Math.sin(b.a) * 0.35, uy = v1.z - Math.cos(b.a) * 0.35; compose(m1, ux, heightAt(M, ux, uy), uy, 0, 0.12, 0, 1); L.umbM.setMatrixAt(nu, m1); L.umbM.setColorAt(nu, colA.set(SWIM[(k + g.town) % SWIM.length])); nu++; }
+          }
+        });
+      }
+      for (const [mesh, c] of [[L.batherM, nb], [L.batherM2, nb2], [L.towelM, nt], [L.umbM, nu], [L.bmachM, nm], [L.shoreBoatM, nbo]]) { mesh.count = c; dirty(mesh); }
       L.folkM.count = n; dirty(L.folkM); L.folkM2.count = n2; dirty(L.folkM2);
       // The stalls of a market day, round the park's fountain.
       let ns = 0;
