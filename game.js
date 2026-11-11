@@ -4,7 +4,7 @@ const Game = (() => {
   const $ = id => document.getElementById(id);
   // Each call: what is written in the log, its tone, and what is spoken when that differs, as a recorded line.
   const VOICE = {
-    buildready: ['Construction complete', ''], unitready: ['Unit ready', ''], lowpower: ['Low power, build a power plant', 'bad', 'Low power'], powerok: ['Power restored', 'good'], reconlost: ['Recon aircraft lost', 'bad'], reconover: ['Enemy recon aircraft overhead', 'bad'], baseattack: ['Our base is under attack', 'bad'],
+    buildready: ['Construction complete', ''], unitready: ['Unit ready', ''], lowpower: ['Low power, build a power plant', 'bad', 'Low power'], powerok: ['Power restored', 'good'], reconlost: ['Recon aircraft lost', 'bad'], reconover: ['Enemy recon aircraft overhead', 'bad'], sheltered: ['The general is safe in the capitol', 'good', 'General sheltered'], baseattack: ['Our base is under attack', 'bad'],
     truckattack: ['Ore truck under attack', 'bad'], nosupply: ['Insufficient supply', 'bad'], nooil: ['Insufficient oil', 'bad'], newtech: ['New technology available', ''],
     towntaken: ['Town captured', 'good'], townlost: ['Town lost', 'bad'], captured: ['Building captured', 'good'], lostbuilding: ['Building lost', 'bad'],
     siloready: ['Missile ready', 'good'], missile: ['Warning, missile launch detected', 'bad'], upgraded: ['Upgrade complete', 'good'],
@@ -15,6 +15,7 @@ const Game = (() => {
     buildready: ['The work is done', ''], unitready: ['At your command', ''], baseattack: ['To arms, we are attacked', 'bad'],
     truckattack: ['Our carts are attacked', 'bad'], nosupply: ['We lack the supplies', 'bad'], newtech: ['New learning is ours', ''],
     towntaken: ['The town is ours', 'good'], townlost: ['The town is lost', 'bad'], captured: ['It is ours now', 'good'], lostbuilding: ['A building has fallen', 'bad'],
+    sheltered: ['Our general is within the walls', 'good'],
     upgraded: ['Our craft is bettered', 'good'],
   };
   // What each turn of the weather means, written and spoken.
@@ -455,6 +456,15 @@ const Game = (() => {
           // A finished tier names itself and what the side now has, and the call says only that it is done.
           case 'upgraded': if (G.playing && e.team === G.team) { const v = (oldAge() && VOICE_OLD.upgraded) || VOICE.upgraded; hud.say(`${Rules.UPGRADES[e.k].names[e.tier - 1]}. ${Rules.upNote(e.k, e.tier)}`, 'good'); audio.voice('upgraded', v[0], oldAge()); } break;
           case 'trade': if (G.playing && e.team === G.team) hud.pop(e.x, e.y, '+' + e.n); break;
+          // A levy names what it raised, and that the towns pay half for a while after.
+          case 'levy':
+            if (G.playing && e.team === G.team) {
+              const ore = Math.round(e.ore), oil = Math.round(e.oil), name = Rules.nameOf('levy', S.P[e.team].tech);
+              hud.pop(e.x, e.y, '+' + ore);
+              hud.say(`${name}: $${ore.toLocaleString()}${oil ? ` and ${oil} oil` : ''} from ${e.towns} ${e.towns === 1 ? 'town' : 'towns'}, which pay half for four minutes.`, 'good');
+              audio.voice('levy', oldAge() ? 'The tribute is gathered' : 'Funds raised', oldAge());
+            }
+            break;
           case 'hint': if (G.playing && e.team === G.team && e.hint === 'attrition') hud.say('Attrition: troops wear down abroad. A Support Truck stops it.', 'bad'); break;
           case 'launch': if (G.playing && e.team === G.team) audio.play('launch', { gain: 0.9 }); break;
           case 'placed': if (G.playing && e.team === G.team) audio.at('place', e.x, e.y, { gain: 0.8 }); break;

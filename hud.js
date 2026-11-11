@@ -50,6 +50,9 @@ const Hud = (() => {
       case 'dat': for (let i = -1; i <= 1; i++) { g.moveTo(-a * 0.6, i * b * 0.45); g.lineTo(a * 0.6, i * b * 0.45); } break;
       case 'flare': for (let i = 0; i < 8; i++) { const an = i * 0.785; g.moveTo(Math.cos(an) * a * 0.3, Math.sin(an) * b * 0.3); g.lineTo(Math.cos(an) * a, Math.sin(an) * b); } break;
       case 'par': g.arc(0, 0, a * 0.7, Math.PI, 0); g.moveTo(-a * 0.7, 0); g.lineTo(0, b); g.lineTo(a * 0.7, 0); break;
+      // A dome over columns, and a stack of coins.
+      case 'cap': g.arc(0, -b * 0.1, a * 0.45, Math.PI, 0); for (let i = -2; i <= 2; i++) { g.moveTo(i * a * 0.3, -b * 0.1); g.lineTo(i * a * 0.3, b * 0.7); } g.moveTo(-a * 0.75, b * 0.7); g.lineTo(a * 0.75, b * 0.7); break;
+      case 'levy': for (let i = 0; i < 3; i++) { g.moveTo(a * 0.55, b * (0.6 - i * 0.5)); g.ellipse(0, b * (0.6 - i * 0.5), a * 0.55, b * 0.22, 0, 0, Math.PI * 2); } break;
       default: g.rect(-a * 0.5, -b * 0.5, a, b);
     }
     g.stroke();
@@ -140,7 +143,7 @@ const Hud = (() => {
     return [x0 - pt, y - h, w + 2 * pt, 2 * h];
   }
   // Each building's mark on the map in each age, after its name in that age.
-  const SHORT = { hq: 'HQ', power: 'PWR', refinery: 'ORE', barracks: 'BAR', factory: 'FAC', radar: 'RAD', airfield: 'AIR', fob: 'FOB', derrick: 'OIL', silo: 'SILO', bunker: 'MG', atgun: 'AT', sam: 'SAM', rail: 'RAIL' };
+  const SHORT = { hq: 'HQ', power: 'PWR', refinery: 'ORE', barracks: 'BAR', factory: 'FAC', radar: 'RAD', airfield: 'AIR', fob: 'FOB', derrick: 'OIL', silo: 'SILO', capitol: 'CAP', bunker: 'MG', atgun: 'AT', sam: 'SAM', rail: 'RAIL' };
   const SHORT_NAME = {
     Citadel: 'CIT', Castle: 'CAS', Fort: 'FORT', 'Command Nexus': 'CMD', 'Fusion Plant': 'FUS', Smelter: 'SMLT', Stables: 'STBL', Foundry: 'FDRY', Fabricator: 'FAB',
     Watchtower: 'WTCH', 'Signal Tower': 'SIG', 'Radio Station': 'RAD', 'Sensor Array': 'SENS', Skyport: 'SKY', Outpost: 'OUT', Redoubt: 'RDT', 'Orbital Lance': 'LNCE',
@@ -165,9 +168,9 @@ const Hud = (() => {
     ];
     // Everything a side may come to build; the sidebar shows what its age has opened.
     const ALL = {
-      bld: ['power', 'refinery', 'barracks', 'factory', 'radar', 'derrick', 'fob', 'airfield', 'dock', 'silo', 'datacenter'],
+      bld: ['power', 'refinery', 'barracks', 'factory', 'radar', 'derrick', 'fob', 'airfield', 'dock', 'silo', 'datacenter', 'capitol'],
       def: ['bunker', 'atgun', 'sam', 'rail'],
-      pow: ['tech', 'flare', 'uav', 'barrage', 'para', 'sat', 'launch'],
+      pow: ['tech', 'flare', 'uav', 'barrage', 'para', 'sat', 'launch', 'levy'],
     };
     const LISTS = { bld: [], def: [], inf: [], veh: [], air: [], sea: [], pow: [] };
     // The build keys run along the top row, past P, which pauses, to [ for a tenth picture.
@@ -263,7 +266,13 @@ const Hud = (() => {
       if (k === 'launch') { const si = s.ents.find(e => e.b && e.team === t && e.kind === 'silo' && e.charge >= e.d.charge); if (si) enter({ type: 'launch' }); return; }
       if (POWERS[k]) {
         const d = POWERS[k];
-        if (p.cooldown[k] > 0 || p.tech < d.tech || (!d.free && !p.counts.radar) || p.supply < d.cost) { game.audio.ui('deny'); return; }
+        if (p.cooldown[k] > 0 || p.tech < d.tech || Rules.callOff(p, d) || p.supply < d.cost) { game.audio.ui('deny'); return; }
+        // A call with no spot to pick goes at once.
+        if (d.now) {
+          if (k === 'levy' && !s.towns.some(q => q.owner === t)) { say('Hold a town to levy it.'); game.audio.ui('deny'); return; }
+          game.order(s, t, { c: 'power', name: k }); game.audio.ui('click');
+          return;
+        }
         enter({ type: 'power', name: k });
         return;
       }
@@ -318,7 +327,7 @@ const Hud = (() => {
           off = !si; if (si) { prog = si.charge / si.d.charge; ready = prog >= 1; if (ready) prog = 0; label = ready ? 'FIRE' : si ? Math.ceil(si.d.charge - si.charge) + 's' : ''; }
         } else if (POWERS[k]) {
           const cd = p.cooldown[k], d = POWERS[k];
-          off = (!d.free && (!p.counts.radar || p.low)) || p.tech < d.tech;
+          off = Rules.callOff(p, d) || p.tech < d.tech;
           if (cd > 0) { prog = 1 - cd / d.cd; label = Math.ceil(cd) + 's'; }
         } else {
           off = !!Rules.blockedReason(s, t, k);
@@ -378,7 +387,9 @@ const Hud = (() => {
     function drawTip() {
       const tip = $('tip'), k = state.tipKind;
       if (!k) { if (tip.dataset.k) { tip.dataset.k = ''; tip.innerHTML = '<p class="idle">Hover a picture for what it does.</p>'; } return; }
-      const info = camInfo(k), why = UNITS[k] || BUILDINGS[k] ? Rules.blockedReason(S(), team(), k) : null;
+      // A call names the building it waits on.
+      const pw = POWERS[k], need = pw && P() && !P().counts[Rules.callNeed(pw)] ? Rules.callNeed(pw) : null;
+      const info = camInfo(k), why = UNITS[k] || BUILDINGS[k] ? Rules.blockedReason(S(), team(), k) : need ? 'Needs ' + Rules.nameOf(need, P().tech) : null;
       const at = state.camAt[k];
       const html = `<h3>${info.name}</h3><p class="price">${info.cost ? '$' + info.cost : ''}${info.oil ? ' &middot; ' + info.oil + ' oil' : ''}${info.power ? ' &middot; ' + (info.power > 0 ? '+' : '') + info.power + ' power' : ''}</p><p>${info.note || ''}</p>${at ? `<p class="at">${at}</p>` : ''}${why ? `<p class="why">${why}</p>` : ''}`;
       if (tip.innerHTML !== html) tip.innerHTML = html;
@@ -487,7 +498,7 @@ const Hud = (() => {
         if (add && state.sel.includes(e)) { state.sel = state.sel.filter(q => q !== e); state.selDirty = true; return; }
         select([e], add && e.team === team() && !e.b);
         if (e.team === team() && !e.b) game.audio.ack(e);
-        if (e.b && e.team === team()) { const tab = e.kind === 'barracks' ? 'inf' : e.kind === 'factory' ? 'veh' : e.kind === 'airfield' ? 'air' : e.kind === 'radar' || e.kind === 'silo' ? 'pow' : e.kind === 'hq' ? 'bld' : null; if (tab && tab !== state.tab) pickTab(tab); }
+        if (e.b && e.team === team()) { const tab = e.kind === 'barracks' ? 'inf' : e.kind === 'factory' ? 'veh' : e.kind === 'airfield' ? 'air' : e.kind === 'radar' || e.kind === 'silo' || e.kind === 'capitol' ? 'pow' : e.kind === 'hq' ? 'bld' : null; if (tab && tab !== state.tab) pickTab(tab); }
       } else if (!add) select([]);
     }
 
@@ -524,6 +535,15 @@ const Hud = (() => {
         else game.order(s, t, { c: 'strike', ids, id: e.id, x: e.x, y: e.y, r: STRIKE_R });
         marker(e.x, e.y, '#ff5a40');
         game.audio.ack(us[0], true);
+        return;
+      }
+      // The general shelters in the side's capitol, and any sent with him guard it.
+      if (e && e.b && e.team === t && e.d.civic && us.some(u => u.d.general)) {
+        const gen = us.filter(u => u.d.general), rest = us.filter(u => !u.d.general && !Rules.isAir(u) && !u.d.cargo).map(u => u.id);
+        game.order(s, t, { c: 'shelter', ids: gen.map(u => u.id), id: e.id });
+        if (rest.length) game.order(s, t, { c: 'guard', ids: rest, id: e.id });
+        marker(e.x, e.y, '#7fc0ff'); game.audio.ack(gen[0]);
+        say(`The general goes into the ${Rules.nameOf(e.kind, s.P[t].tech)}.`);
         return;
       }
       if (e && e.b && e.team === t && us.some(u => u.d.engineer)) { game.order(s, t, { c: 'attack', ids: us.filter(u => u.d.engineer).map(u => u.id), id: e.id }); marker(e.x, e.y, '#7fe0a0'); return; }
@@ -2109,7 +2129,7 @@ const Hud = (() => {
         const costs = ['Training and building at half speed', 'Upgrades and research at half speed'];
         if (p.counts.silo) costs.push('Missile silo not charging');
         if (p.counts.datacenter) costs.push('AI Data Center off');
-        const calls = Object.values(POWERS).filter(d => !d.free && d.tech <= p.tech).map(d => (d.names && d.names[p.tech]) || d.name);
+        const calls = Object.keys(POWERS).filter(k => Rules.callNeed(POWERS[k]) === 'radar' && POWERS[k].tech <= p.tech).map(k => Rules.nameOf(k, p.tech));
         if (p.counts.radar && calls.length) costs.push(`Calls unavailable: ${calls.join(', ')}`);
         const note = `Low power: ${p.use - p.prod} short. Build a power plant.\n` + costs.join('\n');
         if (gauge.title !== note) { gauge.title = note; warn.title = note; }
@@ -2255,7 +2275,7 @@ const Hud = (() => {
       const here = trains && Rules.producerOf(S(), one.team, one.kind) === one;
       const fbu = fbUnits(), fb = fbu.length ? (fbu.every(u => u.fb) ? 'on' : fbu.some(u => u.fb) ? 'some' : 'off') : '';
       const exu = expUnits(), ex = exu.length ? (exu.every(u => u.exp) ? 'on' : 'off') : '';
-      const box = $('sel'), list = state.sel, key = list.map(e => e.id).join() + (list[0] ? (list[0].repairing ? 'r' : '') + (list[0].team) : '') + form + stance + ups + fb + ex + (trains ? (here ? 'T' : 't') : '');
+      const box = $('sel'), list = state.sel, key = list.map(e => e.id).join() + (list[0] ? (list[0].repairing ? 'r' : '') + (list[0].team) : '') + form + stance + ups + fb + ex + (trains ? (here ? 'T' : 't') : '') + (one && one.held ? 'H' : '');
       if (key !== state.selKey) {
         state.selKey = key;
         box.hidden = !list.length;
@@ -2274,6 +2294,7 @@ const Hud = (() => {
             if (first.b) {
               html += `<button id="a-rep" class="${first.repairing ? 'on' : ''}">Repair <kbd>G</kbd></button>`;
               if (first.kind !== 'hq') html += '<button id="a-sell">Sell <kbd>Del</kbd></button>';
+              if (first.held) html += '<button id="a-out" title="The general steps out at the door">Let the general out</button>';
               if (trains) html += `<button id="a-train" class="${here ? 'on' : ''}" title="Units of this kind come out of this building">Train here</button>`;
             } else {
               html += `<button id="a-move" class="${state.attackMove ? 'on' : ''}">Attack-move <kbd>A</kbd></button><button id="a-stop">Stop <kbd>S</kbd></button>`;
@@ -2296,6 +2317,7 @@ const Hud = (() => {
           const on = (id, fn) => { const b = document.getElementById(id); if (b) b.addEventListener('click', fn); };
           on('a-rep', () => game.order(S(), team(), { c: 'repair', id: first.id }));
           on('a-sell', () => { game.order(S(), team(), { c: 'sell', id: first.id }); select([]); });
+          on('a-out', () => { game.order(S(), team(), { c: 'release', id: first.id }); game.audio.ui('click'); });
           on('a-train', () => { game.order(S(), team(), { c: 'primary', id: first.id }); game.audio.ui('click'); });
           on('a-stop', () => game.order(S(), team(), { c: 'stop', ids: orderIds() }));
           on('a-move', () => { if (state.touchUsed) { state.attackMove = !state.attackMove; state.selKey = ''; } else enter({ type: 'amove' }); });
@@ -2311,6 +2333,7 @@ const Hud = (() => {
           if (e.vet) t += ` · ${'★'.repeat(e.vet)}`;
           if (e.brk) t += ' · broken'; else if ((e.sup || 0) >= Rules.PIN) t += ' · pinned';
           if (e.b && e.d.power) t += ` · ${e.d.power > 0 ? '+' : ''}${e.d.power} pw`;
+          if (e.held && e.team === team()) t += ' · general inside';
           if (st.textContent !== t) st.textContent = t;
         }
         const busy = e.up && box.querySelector('.ups .busy');
@@ -2380,14 +2403,16 @@ const Hud = (() => {
       for (const q of s.towns) { const d = Math.hypot(g.x - q.x, g.y - q.y); if (d < td) { td = d; t = q; } }
       if (!t || !s.P[me].seen[Rules.cellOf(t.x, t.y)]) return false;
       const pay = Rules.townPay(s, t.id, me), ore = Math.round(pay.ore * 60), oil = Math.round(pay.oil * 60), ruins = pay.houses - pay.standing;
-      const key = `town${t.id}:${t.owner}:${ore}:${oil}:${ruins}`;
+      const civic = !!s.P[me].counts.capitol, key = `town${t.id}:${t.owner}:${ore}:${oil}:${ruins}:${civic}:${pay.levied}`;
       if (key !== tipKey) {
         tipKey = key;
         const holder = t.owner < 0 ? 'held by no one' : t.owner === me ? 'yours' : `held by ${String((game.names && game.names[t.owner]) || `Side ${t.owner + 1}`)}`;
         const size = pay.houses ? `a ${pay.kind} of ${pay.houses} house${pay.houses === 1 ? '' : 's'}${ruins ? `, ${ruins} in ruins` : ''}` : 'no houses';
         const bold = text => { const b = document.createElement('b'); b.textContent = text; return b; };
         const dot = ' · ';
-        oreTip.replaceChildren(bold(Rules.townName(s, t.id)), dot + holder + dot + size + dot + (t.owner === me ? 'pays ' : 'would pay you '), bold(`$${ore}`), ' and ', bold(`${oil} oil`), ' a minute');
+        // What raises or lowers the pay: the side's capitol, and a levy the town is still paying off.
+        const why = [civic && 'a quarter more for your capitol', pay.levied && 'half while levied'].filter(Boolean).join(', ');
+        oreTip.replaceChildren(bold(Rules.townName(s, t.id)), dot + holder + dot + size + dot + (t.owner === me ? 'pays ' : 'would pay you '), bold(`$${ore}`), ' and ', bold(`${oil} oil`), ' a minute' + (why ? ` (${why})` : ''));
       }
       oreTip.style.left = (px + 12) + 'px'; oreTip.style.top = (py + 14) + 'px';
       oreTip.hidden = false;

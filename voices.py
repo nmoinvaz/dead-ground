@@ -17,10 +17,10 @@ RADIO = ['Construction complete', 'Unit ready', 'Low power', 'Our base is under 
          'Insufficient supply', 'Insufficient oil', 'New technology available', 'Town captured', 'Town lost',
          'Building captured', 'Building lost', 'Missile ready', 'Warning, missile launch detected',
          'Upgrade complete', 'Power restored', 'Recon aircraft lost',
-         'Enemy recon aircraft overhead']
+         'Enemy recon aircraft overhead', 'General sheltered', 'Funds raised']
 HERALD = ['The work is done', 'At your command', 'To arms, we are attacked', 'Our carts are attacked',
           'We lack the supplies', 'New learning is ours', 'The town is ours', 'The town is lost', 'It is ours now',
-          'A building has fallen', 'Our craft is bettered']
+          'A building has fallen', 'Our craft is bettered', 'Our general is within the walls', 'The tribute is gathered']
 BOTH = ['The Ancient Age', 'The Medieval Age', 'The Gunpowder Age', 'The Industrial Age', 'The Modern Age',
         'The Future Age', 'Rain', 'Storm. Aircraft grounded', 'Fog', 'Snow', 'Storm warning',
         'Dust storm. Aircraft grounded', 'Dust storm warning', 'Storm passing', 'Dust storm passing', 'Bridge destroyed']

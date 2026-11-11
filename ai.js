@@ -78,6 +78,10 @@ const AI = (() => {
     if (opened(P, BUILDINGS.silo) && !has(P, 'silo') && D_silo(me)) pref.push('silo');
     // An AI Data Center once the side is rich, with the power for it built first.
     if (opened(P, BUILDINGS.datacenter) && !has(P, 'datacenter') && has(P, 'radar') && P.supply > 3000) pref.push(margin >= 110 ? 'datacenter' : 'power');
+    // A capitol once the side holds towns and has money to spare, and sooner in Regicide, where it shelters the
+    // general.
+    const held = S.towns.filter(t => t.owner === me.team).length;
+    if (!has(P, 'capitol') && has(P, 'factory') && (S.regicide ? P.supply > 2300 : held >= 2 && P.supply > 2600)) pref.push('capitol');
     if (has(P, 'factory') < 2 && P.supply > 3000) pref.push('factory');
     if (has(P, 'refinery') < 3 && P.supply > 2500) pref.push('refinery');
     if ((S.map.fish || []).length && S.map.seaCells > 300 && !has(P, 'dock') && has(P, 'factory') && P.supply > 800 && dockSpot(S, me)) pref.push('dock');
@@ -334,6 +338,8 @@ const AI = (() => {
         R.push(S, me.team, { c: 'power', name: 'flare', x: cx + (t[0] - cx) / d * 8, y: cy + (t[1] - cy) / d * 8 });
       }
     }
+    // A levy whenever one is ready and two towns or more are held. It brings their pay forward and costs nothing.
+    if (has(P, 'capitol') && !(P.cooldown.levy > 0) && S.towns.filter(t => t.owner === me.team).length >= 2) R.push(S, me.team, { c: 'power', name: 'levy' });
     if (!me.D.power || !has(P, 'radar') || S.tick - me.lastPower < me.D.gap * HZ) return;
     // An easier commander calls no powers before it can call a barrage.
     if (me.level !== 'veteran' && !opened(P, POWERS.barrage)) return;
@@ -409,6 +415,15 @@ const AI = (() => {
     }
   }
 
+  // In Regicide the general goes into the capitol once there is one, and stays.
+  function shelter(S, me) {
+    if (!S.regicide) return;
+    const cap = S.ents.find(e => e.b && e.team === me.team && e.hp > 0 && e.d.civic);
+    if (!cap || cap.held) return;
+    const gen = S.ents.find(e => !e.b && e.team === me.team && e.hp > 0 && e.d.general);
+    if (gen && !(gen.ord && gen.ord.t === 'shelter')) R.push(S, me.team, { c: 'shelter', ids: [gen.id], id: cap.id });
+  }
+
   function think(S, me) {
     const P = S.P[me.team], team = me.team;
     // Its clock runs from when it took the slot, so a base that starts late builds up like a new one.
@@ -423,6 +438,7 @@ const AI = (() => {
     repairs(S, me);
     bridges(S, me, P);
     powers(S, me, P);
+    shelter(S, me);
 
     let army = S.ents.filter(e => e.team === team && !e.b && !e.d.cargo && !e.d.repair && !e.d.engineer && !e.d.trade && !e.d.fish && !e.d.general && e.drop <= 0);
     army = garrison(S, me, army);

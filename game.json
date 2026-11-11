@@ -123,7 +123,11 @@
     "v_h_bridge_destroyed": "sfx/voice/v_h_bridge_destroyed.mp3",
     "v_r_power_restored": "sfx/voice/v_r_power_restored.mp3",
     "v_r_recon_aircraft_lost": "sfx/voice/v_r_recon_aircraft_lost.mp3",
-    "v_r_enemy_recon_aircraft_overhead": "sfx/voice/v_r_enemy_recon_aircraft_overhead.mp3"
+    "v_r_enemy_recon_aircraft_overhead": "sfx/voice/v_r_enemy_recon_aircraft_overhead.mp3",
+    "v_r_general_sheltered": "sfx/voice/v_r_general_sheltered.mp3",
+    "v_r_funds_raised": "sfx/voice/v_r_funds_raised.mp3",
+    "v_h_our_general_is_within_the_walls": "sfx/voice/v_h_our_general_is_within_the_walls.mp3",
+    "v_h_the_tribute_is_gathered": "sfx/voice/v_h_the_tribute_is_gathered.mp3"
   },
   "out": "dist/index.html"
 }

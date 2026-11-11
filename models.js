@@ -2731,6 +2731,251 @@ const Models = (() => {
       bset('atgun', 4, [part('body', b), part('turret', t, { pivot: [0, 0.1, 0], aim: true }), part('gun', gn, { parent: 'turret', pivot: [0.05, 0.3, 0], recoil: 0.16 })]);
     }
 
+    // Seats of government ---------------------------------------------------------------------------------------
+    // Each stands on a 5 by 5 square that turns to face the middle of the map, so each reads from either front.
+    {
+      // Marble a shade under white, so the sun's highlight on a dome stays under what the glow pass takes for fire.
+      const MB = 0xcfc9bc, MB2 = 0xbdb6a8, HEDGE = 0x4f5e36, POOL = 0x7d97a3;
+      // n columns r round and h tall from y, in a row from (x0, z0) to (x1, z1).
+      const colonnade = (g, x0, z0, x1, z1, n, y, h, r, c = MB) => {
+        for (let i = 0; i < n; i++) { const k = n === 1 ? 0.5 : i / (n - 1); g.cyl(r * 0.85, r, h, x0 + (x1 - x0) * k, y + h / 2, z0 + (z1 - z0) * k, c, { seg: 8 }); }
+      };
+      // n columns round a ring of radius r.
+      const ring = (g, x, z, r, n, y, h, cr, c = MB) => { for (let i = 0; i < n; i++) { const a = i / n * 6.283; g.cyl(cr * 0.85, cr, h, x + Math.cos(a) * r, y + h / 2, z + Math.sin(a) * r, c, { seg: 5 }); } };
+      // n treads d deep from a floor at y0 down to the ground, going out toward +x (s = 1) or -x (s = -1) from x.
+      const steps = (g, x, z, w, y0, n, d, s, c = MB2) => { for (let i = 0; i < n; i++) g.box(d, (y0 - 0.08) * (n - i) / n, w, x + s * (i + 0.5) * d, 0.08, z, c); };
+      // A dome r round and h high from y, its profile a quarter ellipse, faceted into seg ribs.
+      const dome = (g, x, y, z, r, h, c, seg = 16, o = {}) => {
+        const pts = [];
+        for (let i = 0; i <= 8; i++) { const a = i / 8 * R90; pts.push(new THREE.Vector2(Math.max(0.002, r * Math.cos(a)), h * Math.sin(a))); }
+        return g.add(new THREE.LatheGeometry(pts, seg), x, y, z, c, o);
+      };
+      // n ribs down a dome of the same profile, as struts.
+      const domeRibs = (g, x, y, z, r, h, n, c, t = 0.022) => {
+        for (let k = 0; k < n; k++) {
+          const b2 = k / n * 6.283, p = i => { const a = i / 4 * R90, q = r * Math.cos(a) + t * 0.4; return [x + Math.cos(b2) * q, y + h * Math.sin(a) + t * 0.4, z + Math.sin(b2) * q]; };
+          for (let i = 0; i < 4; i++) strut(g, p(i), p(i + 1), t, c);
+        }
+      };
+
+      // Senate House, a temple-fronted curia on a podium in its forum, after the Roman senate's: columns all round
+      // under a tiled roof with a pediment at each end and a deep porch up steps at its front, a colonnade round the
+      // forum, two honorific columns, and the side's standards at the steps.
+      {
+        const b = G();
+        yard(b, 5, 5, B.earth);
+        b.box(4.8, 0.012, 4.8, 0, 0.08, 0, B.gravel);
+        b.box(2.8, 0.26, 1.72, -0.2, 0.08, 0, B.stone);
+        steps(b, 1.2, 0, 1.3, 0.34, 4, 0.1, 1, B.stone);
+        b.box(1.75, 0.62, 1.04, -0.42, 0.34, 0, B.plaster);
+        b.box(0.03, 0.42, 0.3, 0.465, 0.34, 0, A.woodDk);
+        hang(b, 0.47, 0.92, -0.34, 0.16, 0.36); hang(b, 0.47, 0.92, 0.34, 0.16, 0.36);
+        for (const x of [1.1, 0.78]) colonnade(b, x, -0.72, x, 0.72, 6, 0.34, 0.62, 0.05);
+        for (const s of [-1, 1]) colonnade(b, -1.44, s * 0.72, 0.46, s * 0.72, 6, 0.34, 0.62, 0.045);
+        colonnade(b, -1.44, -0.4, -1.44, 0.4, 3, 0.34, 0.62, 0.045);
+        b.box(2.72, 0.11, 1.66, -0.18, 0.96, 0, MB2);
+        gable(b, 2.72, 1.7, 0.36, -0.18, 1.07, 0, B.tile);
+        for (const x of [1.17, -1.53]) gable(b, 0.04, 1.56, 0.32, x, 1.08, 0, MB);
+        b.sph(0.045, 1.17, 1.45, 0, A.bronze, { seg: 6, rings: 4 });
+        for (const z of [-0.8, 0.8]) b.sph(0.04, 1.17, 1.1, z, A.bronze, { seg: 6, rings: 4 });
+        // The forum's colonnade on its back and sides, a wall behind under a lean-to of tiles.
+        b.box(0.06, 0.5, 4.8, -2.37, 0.08, 0, B.plaster);
+        colonnade(b, -2.0, -2.0, -2.0, 2.0, 9, 0.08, 0.44, 0.032);
+        gable(b, 4.8, 0.6, 0.12, -2.2, 0.55, 0, B.tile, { alongZ: true });
+        for (const s of [-1, 1]) {
+          b.box(3.9, 0.5, 0.06, -0.43, 0.08, s * 2.37, B.plaster);
+          colonnade(b, -1.6, s * 2.0, 1.4, s * 2.0, 7, 0.08, 0.44, 0.032);
+          gable(b, 3.9, 0.6, 0.12, -0.43, 0.55, s * 2.2, B.tile);
+          // An honorific column with its statue, and a standard at the steps.
+          b.box(0.22, 0.12, 0.22, 2.05, 0.08, s * 1.45, B.stone);
+          b.cyl(0.055, 0.065, 1.15, 2.05, 0.2 + 0.575, s * 1.45, MB, { seg: 10 });
+          b.box(0.16, 0.05, 0.16, 2.05, 1.35, s * 1.45, MB2);
+          b.cyl(0.03, 0.035, 0.14, 2.05, 1.47, s * 1.45, A.bronze, { seg: 6 }); b.sph(0.03, 2.05, 1.57, s * 1.45, A.bronze, { seg: 6, rings: 4 });
+          flagpole(b, 1.75, 0.08, s * 0.82, 0.95, 0.22, 0.26);
+        }
+        bset('capitol', 1, [part('body', b)]);
+      }
+
+      // Great Hall, a town's hall of state as the guild and cloth halls were: a long stone hall under a steep slate
+      // roof with dormers, buttresses and pointed windows, a belfry tower before its front with corner turrets, a
+      // clock, the side's banners and a spire, the great door at its foot, and a cobbled square with a well and
+      // market stalls.
+      {
+        const b = G();
+        yard(b, 5, 5, B.earthDk);
+        b.box(4.8, 0.012, 4.8, 0, 0.08, 0, B.gravel);
+        const hx = -0.35, hw = 1.5, hl = 3.6, hh = 0.95;
+        b.box(hw, hh, hl, hx, 0.08, 0, B.stone);
+        gable(b, hl, hw + 0.12, 1.0, hx, 0.08 + hh, 0, B.slate, { alongZ: true });
+        for (const s of [-1, 1]) gable(b, 0.06, hw, 0.92, hx, 0.08 + hh, s * (hl / 2 + 0.01), B.stone, { alongZ: true });
+        for (const s of [-1, 1]) {
+          const fx = hx + s * hw / 2;
+          for (const z of [-1.55, -0.9, 0.9, 1.55]) b.box(0.12, 0.72, 0.1, fx + s * 0.05, 0.08, z, B.stoneDk);
+          for (const zc of [-1.23, 1.23]) slots(b, fx + s * 0.011, 0.36, zc, 0.6, 0.44, 1, true, 0.12);
+          if (s < 0) slots(b, fx - 0.011, 0.36, 0, 1.2, 0.44, 2, true, 0.12);
+          // Dormers on each slope, clear of the tower.
+          for (const z of [-1.2, 1.2]) {
+            const dx = hx + s * 0.5;
+            b.box(0.28, 0.22, 0.22, dx, 0.08 + hh + 0.12, z, B.stone);
+            gable(b, 0.3, 0.26, 0.13, dx, 0.08 + hh + 0.34, z, B.slate);
+            slots(b, dx + s * 0.141, 0.08 + hh + 0.16, z, 0.1, 0.12, 1, true, 0.08);
+          }
+        }
+        b.box(0.03, 0.44, 0.3, hx - hw / 2 - 0.015, 0.08, 0, A.woodDk);
+        // The belfry, and the great door at its foot.
+        const tx = 0.82, ts = 0.8, th = 1.9;
+        b.box(ts, th, ts, tx, 0.08, 0, B.stoneLt);
+        b.box(ts + 0.06, 0.06, ts + 0.06, tx, 0.08 + th - 0.04, 0, B.stoneDk);
+        crenRect(b, tx, 0, ts, ts, 0.1 + th, B.stoneLt, 0.12);
+        b.box(0.6, 0.48, 0.6, tx, 0.08 + th, 0, B.stoneLt);
+        slots(b, tx + 0.301, 0.08 + th + 0.12, 0, 0.36, 0.26, 2, true, 0.1); slots(b, tx, 0.08 + th + 0.12, 0.301, 0.36, 0.26, 2, false, 0.1);
+        for (const [dx, dz] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) {
+          const x = tx + dx * ts / 2, z = dz * ts / 2;
+          b.cyl(0.08, 0.08, 0.44, x, 0.08 + th + 0.22, z, B.stoneLt, { seg: 8 });
+          b.cyl(0, 0.1, 0.32, x, 0.08 + th + 0.6, z, B.slate, { seg: 8 });
+        }
+        b.cyl(0, 0.36, 0.95, tx, 0.08 + th + 0.48 + 0.475, 0, B.slate, { seg: 8 });
+        pennant(b, tx, 0.08 + th + 1.4, 0, 0.42, 0.32);
+        b.cyl(0.15, 0.15, 0.025, tx + ts / 2 + 0.012, 1.6, 0, A.ivory, { axis: 'x', seg: 14 });
+        b.box(0.012, 0.11, 0.015, tx + ts / 2 + 0.026, 1.6, 0, B.coal); b.box(0.012, 0.015, 0.09, tx + ts / 2 + 0.026, 1.6, 0.04, B.coal);
+        for (const z of [-0.27, 0.27]) hang(b, tx + ts / 2 + 0.01, 1.42, z, 0.15, 0.56);
+        b.box(0.02, 0.6, 0.5, tx + ts / 2 + 0.005, 0.08, 0, B.stoneDk);
+        b.cyl(0.25, 0.25, 0.02, tx + ts / 2 + 0.005, 0.68, 0, B.stoneDk, { axis: 'x', seg: 12 });
+        b.box(0.03, 0.54, 0.38, tx + ts / 2 + 0.015, 0.08, 0, A.woodDk);
+        b.cyl(0.19, 0.19, 0.03, tx + ts / 2 + 0.015, 0.62, 0, A.woodDk, { axis: 'x', seg: 12 });
+        // The well and two stalls in the square.
+        b.cyl(0.16, 0.17, 0.18, 1.85, 0.17, 1.55, B.stone, { seg: 10 });
+        for (const s of [-1, 1]) b.box(0.03, 0.4, 0.03, 1.85, 0.08, 1.55 + s * 0.15, A.woodDk);
+        gable(b, 0.2, 0.42, 0.12, 1.85, 0.48, 1.55, B.thatchDk, { alongZ: true });
+        for (const z of [-1.05, -1.65]) { b.box(0.36, 0.22, 0.32, 1.95, 0.08, z, A.wood); gable(b, 0.42, 0.4, 0.12, 1.95, 0.3, z, A.canvas, Object.assign({ alongZ: true }, T)); }
+        bset('capitol', 2, [part('body', b)]);
+      }
+
+      // Palace, a baroque seat of state: a long corps de logis of two storeys under mansard roofs with wings
+      // forward round a court of honour, a pedimented portico on each front, a ribbed lead dome on a drum over the
+      // centre with gilded ribs, a lantern and the side's flag, a fountain in the court and parterres behind.
+      {
+        const b = G();
+        yard(b, 5, 5, B.turf);
+        b.box(2.1, 0.012, 2.6, 1.3, 0.08, 0, B.gravel);
+        const cx = -0.55, cw = 1.1, cl = 3.8;
+        b.box(cw, 0.72, cl, cx, 0.08, 0, B.plaster);
+        b.box(cw + 0.04, 0.03, cl + 0.04, cx, 0.42, 0, MB2);
+        b.box(cw + 0.06, 0.05, cl + 0.06, cx, 0.78, 0, MB2);
+        hipRoof(b, cl, cw, 0.32, cx, 0.83, 0, B.slate, { ry: R90 });
+        for (const s of [-1, 1]) {
+          const fx = cx + s * cw / 2 + s * 0.005;
+          for (const y of [0.17, 0.5]) windows(b, fx, y, 0, 3.2, 0.18, 12, 'z');
+          // A portico on each front, its columns two storeys high under a pediment.
+          b.box(0.26, 0.86, 1.1, cx + s * (cw / 2 + 0.13), 0.08, 0, MB2);
+          colonnade(b, cx + s * (cw / 2 + 0.32), -0.45, cx + s * (cw / 2 + 0.32), 0.45, 6, 0.08, 0.72, 0.035);
+          b.box(0.4, 0.07, 1.14, cx + s * (cw / 2 + 0.2), 0.8, 0, MB2);
+          gable(b, 0.4, 1.14, 0.22, cx + s * (cw / 2 + 0.2), 0.87, 0, MB);
+          steps(b, cx + s * (cw / 2 + 0.38), 0, 0.8, 0.16, 2, 0.08, s);
+          // A wing forward along each side of the court.
+          const wz = s * 1.62;
+          b.box(1.5, 0.66, 0.55, 0.75, 0.08, wz, B.plaster);
+          b.box(1.54, 0.05, 0.59, 0.75, 0.74, wz, MB2);
+          hipRoof(b, 1.5, 0.55, 0.26, 0.75, 0.79, wz, B.slate);
+          for (const y of [0.17, 0.48]) { windows(b, 0.75, y, wz - s * 0.28, 1.3, 0.16, 6, 'x'); windows(b, 1.505, y, wz, 0.4, 0.16, 2, 'z'); }
+        }
+        // The dome over the centre.
+        const dy = 1.0;
+        b.cyl(0.44, 0.46, 0.4, cx, dy + 0.2, 0, MB2, { seg: 20 });
+        ring(b, cx, 0, 0.47, 12, dy, 0.38, 0.022, MB);
+        b.cyl(0.49, 0.49, 0.04, cx, dy + 0.42, 0, MB2, { seg: 20 });
+        dome(b, cx, dy + 0.44, 0, 0.42, 0.56, B.slate, 16);
+        domeRibs(b, cx, dy + 0.44, 0, 0.42, 0.56, 8, A.brass, 0.02);
+        b.cyl(0.08, 0.09, 0.18, cx, dy + 1.09, 0, MB2, { seg: 8 });
+        b.cyl(0, 0.08, 0.3, cx, dy + 1.33, 0, A.brass, { seg: 8 });
+        flagpole(b, cx, dy + 1.45, 0, 0.42, 0.28, 0.17);
+        // A fountain in the court, and the parterres and their fountain behind.
+        b.cyl(0.26, 0.27, 0.06, 1.5, 0.11, 0, MB2, { seg: 14 }); b.cyl(0.23, 0.23, 0.062, 1.5, 0.111, 0, POOL, { seg: 14 });
+        b.cyl(0.03, 0.04, 0.24, 1.5, 0.2, 0, MB2, { seg: 6 });
+        for (const z of [-1.3, 1.3]) for (const k of [-0.35, 0.35]) b.box(0.08, 0.06, 0.9, -1.95 + k, 0.08, z, HEDGE);
+        for (const z of [-1.3, 1.3]) for (const k of [-0.42, 0.42]) b.box(0.7, 0.06, 0.08, -1.95, 0.08, z + k, HEDGE);
+        b.cyl(0.2, 0.21, 0.05, -2.0, 0.105, 0, MB2, { seg: 12 }); b.cyl(0.17, 0.17, 0.052, -2.0, 0.106, 0, POOL, { seg: 12 });
+        bset('capitol', 3, [part('body', b)]);
+      }
+
+      // The Capitol, after Washington's: a central block under a high dome on a colonnaded drum, with a lantern,
+      // linked to a wing to each side, a pedimented portico on both fronts with steps down to the lawn, porticoes
+      // on the wings and flags over them. The Modern Age adds a reflecting pool and drives, and the Future clads it
+      // in pale panels under a glass dome, as the Reichstag's, with lit pylons at its corners.
+      const capitol = age => {
+        const b = G(), fut = age === 6, W1 = fut ? 0xd2d6da : MB, W2 = fut ? 0xb8bec4 : MB2, ROOF = fut ? A.exo : 0x7d8a80;
+        yard(b, 5, 5, B.turf);
+        for (const s of [-1, 1]) {
+          if (age >= 5 && s > 0) { b.box(0.86, 0.02, 1.5, 2.02, 0.08, 0, W2); b.box(0.78, 0.024, 1.42, 2.02, 0.08, 0, POOL); }
+          else b.box(0.95, 0.012, 0.5, s * 1.98, 0.08, 0, age >= 5 ? P.asphalt : B.gravel);
+        }
+        // The ground storey, the main storey and the cornice of the centre, the links and the wings.
+        const blocks = [[1.5, 2.0, 0, 0.78], [1.0, 0.4, 1.2, 0.72], [1.2, 1.0, 1.85, 0.78]];
+        for (const [w, d, z, top] of blocks) for (const s of z ? [-1, 1] : [1]) {
+          const link = z === 1.2;
+          b.box(w, 0.22, d, 0, 0.08, s * z, W2);
+          b.box(w - 0.06, top - 0.3, d - (link ? 0 : 0.06), 0, 0.3, s * z, W1);
+          b.box(w + 0.02, 0.05, d + (link ? 0 : 0.02), 0, top, s * z, W2);
+        }
+        b.box(1.4, 0.06, 1.9, 0, 0.83, 0, W1);
+        // Flat roofs are leaded, as the Capitol's, and catch no glare.
+        b.box(1.36, 0.012, 1.86, 0, 0.89, 0, ROOF);
+        for (const s of [-1, 1]) b.box(0.98, 0.012, 0.36, 0, 0.77, s * 1.2, ROOF);
+        const wh = fut ? 0.34 : 0.16, wy = fut ? 0.34 : 0.42;
+        for (const s of [-1, 1]) {
+          hipRoof(b, 1.1, 0.9, 0.12, 0, 0.83, s * 1.85, ROOF);
+          for (const k of [-1, 1]) {
+            windows(b, k * 0.721, 0.4, s * 0.86, 0.2, 0.16, 1, 'z');
+            windows(b, k * 0.571, wy, s * 1.85, 0.8, wh, 4, 'z');
+            windows(b, k * 0.751, 0.13, 0, 1.8, 0.1, 7, 'z');
+            windows(b, k * 0.471, 0.42, s * 1.2, 0.3, 0.14, 1, 'z');
+          }
+          windows(b, 0, wy, s * 2.321, 0.9, wh, 4, 'x');
+          // The central portico on each front, under its pediment, with steps down to the walk.
+          b.box(0.45, 0.22, 1.5, s * 0.95, 0.08, 0, W2);
+          colonnade(b, s * 1.12, -0.66, s * 1.12, 0.66, 8, 0.3, 0.48, 0.04, W1);
+          b.box(0.5, 0.07, 1.54, s * 0.95, 0.78, 0, W2);
+          gable(b, 0.5, 1.54, 0.2, s * 0.95, 0.85, 0, W1);
+          steps(b, s * 1.175, 0, 1.0, 0.3, 4, 0.1, s, W2);
+          for (const k of [-1, 1]) {
+            // The wings' porticoes, and a flag over each wing.
+            const zc = k * 1.85;
+            b.box(0.16, 0.22, 0.72, s * 0.68, 0.08, zc, W2);
+            colonnade(b, s * 0.7, zc - 0.3, s * 0.7, zc + 0.3, 4, 0.3, 0.48, 0.03, W1);
+            b.box(0.18, 0.06, 0.72, s * 0.68, 0.78, zc, W2);
+            gable(b, 0.18, 0.72, 0.12, s * 0.68, 0.84, zc, W1);
+            steps(b, s * 0.76, zc, 0.5, 0.3, 3, 0.08, s, W2);
+            if (s > 0) flagpole(b, 0, 0.95, zc, 0.55, 0.28, 0.17, fut ? A.exoDk : A.woodDk);
+          }
+        }
+        // The dome on its drum, ringed with columns, and its lantern.
+        const y0 = 0.89;
+        b.cyl(0.66, 0.68, 0.1, 0, y0 + 0.05, 0, W2, { seg: 24 });
+        b.cyl(0.55, 0.55, 0.36, 0, y0 + 0.28, 0, W1, { seg: 24 });
+        ring(b, 0, 0, 0.63, 20, y0 + 0.1, 0.34, 0.024, W1);
+        b.cyl(0.66, 0.66, 0.05, 0, y0 + 0.485, 0, W2, { seg: 24 });
+        b.cyl(0.51, 0.53, 0.16, 0, y0 + 0.59, 0, W1, { seg: 24 });
+        if (fut) {
+          dome(b, 0, y0 + 0.67, 0, 0.5, 0.58, 0x1d4660, 12, { g: 0.35 });
+          domeRibs(b, 0, y0 + 0.67, 0, 0.5, 0.58, 12, A.exoDk, 0.018);
+          b.cyl(0.015, 0.06, 0.7, 0, y0 + 1.6, 0, A.exo, { seg: 8 });
+          for (const [r, y] of [[0.16, 1.4], [0.11, 1.6]]) b.add(new THREE.TorusGeometry(r, 0.014, 4, 16), 0, y0 + y, 0, A.glow, { rx: R90, g: 0.5 });
+          for (const [sx, sz] of [[-1, -1], [1, -1], [1, 1], [-1, 1]]) { const x = sx * 2.3, z = sz * 2.3; b.box(0.07, 0.62, 0.07, x, 0.08, z, A.exoDk); b.box(0.09, 0.05, 0.09, x, 0.7, z, A.glow, { g: 0.8 }); }
+        } else {
+          // The dome rises higher than it is wide, as the Capitol's does.
+          dome(b, 0, y0 + 0.67, 0, 0.48, 0.8, W1, 16);
+          b.cyl(0.09, 0.09, 0.16, 0, y0 + 1.55, 0, W1, { seg: 8 });
+          ring(b, 0, 0, 0.1, 8, y0 + 1.47, 0.16, 0.012, W2);
+          b.sph(0.095, 0, y0 + 1.63, 0, W1, { top: true, seg: 8, rings: 4 });
+          b.cyl(0.012, 0.022, 0.15, 0, y0 + 1.79, 0, B.ironDk, { seg: 5 });
+        }
+        return [part('body', b)];
+      };
+      bset('capitol', 4, capitol(4));
+      buildings.capitol = capitol(5);
+      bset('capitol', 6, capitol(6));
+    }
+
     // The future's buildings are the modern models refitted in pale composite and gunmetal, with blue glass, hazard
     // bands lit softly in the future's blue, and the side's markings, lamps and ore kept. The larger ones gain slim
     // light pylons at their corners, the command post a ringed spire, the sensors a ringed mast and the fabricator

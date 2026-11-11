@@ -255,6 +255,7 @@ const Rules = (() => {
     fob: { name: 'Forward Base', sym: 'fob', w: 3, h: 3, hp: 900, cost: 1000, time: 10, power: -10, terr: 18, sight: 10, armor: 'bld', cat: 'bld', tech: 2, need: 'barracks', note: 'Pushes your border far out and lets you build there.' },
     derrick: { name: 'Oil Derrick', sym: 'oil', w: 2, h: 2, hp: 500, cost: 400, time: 4, power: 0, terr: 5, sight: 6, armor: 'bld', cat: 'bld', tech: 1, well: true, yield: 1.2, note: 'Goes on an oil well in your territory. Pumps oil, which pays for armour.' },
     datacenter: { name: 'AI Data Center', sym: 'dat', w: 4, h: 3, hp: 1000, cost: 2500, time: 20, power: -100, terr: 5, sight: 6, armor: 'bld', cat: 'bld', tech: 1, need: 'radar', note: 'Research a quarter faster, the enemy\'s main army found each minute, and the weather forecast. Needs a lot of power.' },
+    capitol: { name: 'Capitol', sym: 'cap', w: 5, h: 5, hp: 2000, cost: 2000, time: 24, power: -20, terr: 10, sight: 10, armor: 'bld', cat: 'bld', tech: 1, need: 'refinery', limit: 1, civic: true, note: 'The seat of government, one to a side. Your towns pay a quarter more and your borders reach a fifth farther. Opens the Levy and shelters your general.' },
     silo: { name: 'Missile Silo', sym: 'sil', w: 3, h: 3, hp: 1200, cost: 3000, time: 24, power: -100, terr: 7, sight: 6, armor: 'bld', cat: 'bld', tech: 3, need: 'radar', charge: 240, note: 'A thermobaric missile every four minutes. The enemy is warned.' },
     bunker: { name: 'MG Bunker', sym: 'bnk', w: 2, h: 2, hp: 600, cost: 350, time: 4, power: -5, terr: 5, sight: 11, armor: 'bld', cat: 'def', tech: 1, need: 'barracks', weapons: ['mg'], note: 'Holds off infantry.' },
     atgun: { name: 'AT Gun', sym: 'atg', w: 2, h: 2, hp: 550, cost: 600, time: 6, power: -10, terr: 5, sight: 13, armor: 'bld', cat: 'def', tech: 1, need: 'barracks', weapons: ['atgun'], turret: 2, note: 'Long-barrelled gun against vehicles.' },
@@ -289,6 +290,7 @@ const Rules = (() => {
     derrick: { age: 4 },
     silo: { age: 5, names: [0, 0, 0, 0, 'Missile Silo', 'Orbital Lance'] },
     datacenter: { age: 5, names: [0, 0, 0, 0, 'AI Data Center', 'AI Core'] },
+    capitol: { names: ['Senate House', 'Great Hall', 'Palace', 'Capitol', 'Capitol', 'Assembly'] },
     bunker: { names: ['Archer Tower', 'Archer Tower', 'Musket Redoubt', 'MG Nest', 'MG Bunker', 'Pulse Turret'], arms: ['towerbow', 'towerbow', 'musketv', 'mg', 'mg', 'pulse'] },
     atgun: { names: ['Ballista', 'Springald', 'Cannon Battery', 'Field Gun', 'AT Gun', 'Coil Gun'], arms: ['ballista', 'ballista', 'ball', 'atgun', 'atgun', 'coil'] },
     sam: { age: 4, names: [0, 0, 0, 'AA Battery', 'SAM Site', 'Laser AA'], arms: [0, 0, 0, 'flak', 'sam', 'laser'] },
@@ -344,7 +346,12 @@ const Rules = (() => {
     barrage: { name: 'Artillery Barrage', sym: 'art', cost: 500, cd: 120, tech: 3, r: 6, names: [0, 0, 'Cannon Barrage', 'Artillery Barrage', 'Artillery Barrage', 'Orbital Barrage'], note: 'Twelve heavy shells on one spot.' },
     para: { name: 'Paradrop', sym: 'par', cost: 600, cd: 150, tech: 5, r: 4, note: 'Three squads of infantry, anywhere you can see.' },
     sat: { name: 'Satellite Constellation', sym: 'sat', cost: 2000, cd: 420, tech: 6, r: 10, life: 240, note: 'A rocket puts a constellation in orbit for four minutes. Its passes light up strips of the map, the first across where you point, and night and weather no longer shorten your units\' sight.' },
+    // The levy is called from the capitol, at once, with no spot to pick.
+    levy: { name: 'Levy', sym: 'levy', cost: 0, cd: 300, tech: 1, need: 'capitol', now: true, names: ['Tribute', 'Levy', 'Levy', 'War Bonds', 'War Bonds', 'Levy'], note: 'Every town you hold pays two minutes of its dues at once, then half its dues for four minutes.' },
   };
+  // The building a call needs standing, and whether the side may make it now for want of that building or of power.
+  const callNeed = d => d.free ? null : d.need || 'radar';
+  const callOff = (P, d) => { const n = callNeed(d); return !!n && (!P.counts[n] || (n === 'radar' && !!P.low)); };
 
   // Upgrades, researched at a building and kept by the side. Each has three tiers, which the Ancient, Gunpowder and
   // Modern ages open, and each tier adds k again. at names the building, or 'def' for every defence. s scales the
@@ -417,12 +424,21 @@ const Rules = (() => {
     for (const i of z.list[ti]) { const h = S.map.houses[i]; now += houseFloor(h) * clamp(S.hh[i] / houseHp(h), 0, 1); }
     return TOWN_FLOOR + (1 - TOWN_FLOOR) * now / z.mean;
   }
+  // A side with a capitol standing has its towns pay CIVIC_PAY times as much and its borders reach CIVIC_REACH
+  // times as far. A levy takes LEVY_NOW seconds of a town's dues at once, and the town pays LEVY_AFTER of them for
+  // LEVY_FOR seconds after.
+  const CIVIC_PAY = 1.25, CIVIC_REACH = 1.2, LEVY_NOW = 120, LEVY_AFTER = 0.5, LEVY_FOR = 240;
+  // A town's pay a second to a side, before its houses are counted.
+  function townRate(S, ti, team) {
+    const P = team >= 0 ? S.P[team] : null;
+    return (P ? P.income : 1) * (P && P.counts.capitol ? CIVIC_PAY : 1) * (S.towns[ti] && S.towns[ti].lv > S.tick ? LEVY_AFTER : 1);
+  }
   // What a town pays a side a second, its houses standing and in all, and what it is by its size when whole: a
   // hamlet, a village or a town.
   function townPay(S, ti, team) {
-    const z = townSizes(S.map), k = townShare(S, ti), inc = team >= 0 && S.P[team] ? S.P[team].income : 1;
+    const z = townSizes(S.map), k = townShare(S, ti), inc = townRate(S, ti, team);
     const whole = z.mean ? TOWN_FLOOR + (1 - TOWN_FLOOR) * z.full[ti] / z.mean : 1;
-    return { ore: TOWN_PAY * inc * k, oil: TOWN_OIL * inc * k, share: k, houses: z.list[ti].length, standing: z.list[ti].filter(i => S.hh[i] > 0).length, kind: whole < 0.75 ? 'hamlet' : whole < 1.25 ? 'village' : 'town' };
+    return { ore: TOWN_PAY * inc * k, oil: TOWN_OIL * inc * k, share: k, houses: z.list[ti].length, standing: z.list[ti].filter(i => S.hh[i] > 0).length, kind: whole < 0.75 ? 'hamlet' : whole < 1.25 ? 'village' : 'town', levied: !!(S.towns[ti] && S.towns[ti].lv > S.tick) };
   }
 
   const DIFFICULTY = {
@@ -2211,6 +2227,8 @@ const Rules = (() => {
       const P = S.P[e.team];
       P.counts[e.kind] = (P.counts[e.kind] || 0) + 1;
       if (e.b) { if (e.d.power > 0) P.prod += e.d.power; else P.use -= e.d.power; }
+      // A unit sheltering in a building still serves.
+      if (e.held) P.counts[e.held.kind] = (P.counts[e.held.kind] || 0) + 1;
     }
     S.ev.length = 0;
     return S;
@@ -2364,6 +2382,8 @@ const Rules = (() => {
       const P = S.P[e.team];
       P.counts[e.kind] = (P.counts[e.kind] || 0) + 1;
       if (e.b) { if (e.d.power > 0) P.prod += e.d.power; else P.use -= e.d.power; }
+      // A unit sheltering in a building still serves.
+      if (e.held) P.counts[e.held.kind] = (P.counts[e.held.kind] || 0) + 1;
     }
     for (const P of S.P) {
       const was = P.low;
@@ -2383,8 +2403,11 @@ const Rules = (() => {
         if (v > A[c]) A[c] = v;
       }
     };
-    for (const e of S.ents) if (e.b && e.hp > 0) stamp(S.infl[e.team], e.x, e.y, e.kind === 'hq' || e.kind === 'fob' ? e.d.terr * upK(S, e.team, 'border') : e.d.terr);
-    for (const t of S.towns) if (t.owner >= 0) stamp(S.infl[t.owner], t.x, t.y, t.r);
+    const gov = new Set();
+    for (const e of S.ents) if (e.b && e.hp > 0 && e.d.civic) gov.add(e.team);
+    const civ = t => gov.has(t) ? CIVIC_REACH : 1;
+    for (const e of S.ents) if (e.b && e.hp > 0) stamp(S.infl[e.team], e.x, e.y, (e.kind === 'hq' || e.kind === 'fob' ? e.d.terr * upK(S, e.team, 'border') : e.d.terr) * civ(e.team));
+    for (const t of S.towns) if (t.owner >= 0) stamp(S.infl[t.owner], t.x, t.y, t.r * civ(t.owner));
     // A cell is a side's where its reach is greatest. A tie between the greatest is nobody's.
     const n = S.infl.length, I = S.infl;
     for (let c = 0; c < N; c++) {
@@ -3109,8 +3132,31 @@ const Rules = (() => {
     });
   }
 
+  // Sheltering. The general walks into his side's capitol and is kept on it, out of the world, until let out. A
+  // capitol that falls or is taken throws him out at its door.
+  function shelterGo(S, u, o) {
+    const b = S.byId.get(o.id);
+    if (!b || b.hp <= 0 || b.team !== u.team || !b.d.civic || b.held) { u.ord = null; u.v = 0; return; }
+    if (drive(S, u, b.x, b.y, 0.1) || gap(u.x, u.y, b) < 1.1) {
+      b.held = plain(u);
+      b.held.ord = null; b.held.tgt = 0; b.held.oq = null; b.held.v = 0;
+      u.hp = 0;
+      S.ev.push({ t: 'enter', id: u.id, into: b.id, team: u.team, x: b.x, y: b.y });
+      ownEvent(S, u.team, 'sheltered');
+    }
+  }
+  function release(S, b) {
+    const u = Object.assign(b.held, { d: UNITS[b.held.kind] }), [x, y] = exitOf(S, b);
+    b.held = null;
+    Object.assign(u, { x, y, px: x, py: y, lx: x, ly: y, wx: x, wy: y, ord: null, tgt: 0, v: 0, home: null, stuck: 0 });
+    S.ents.push(u); S.byId.set(u.id, u);
+    S.ev.push({ t: 'leave', id: u.id, from: b.id, team: u.team, x, y });
+    return u;
+  }
+
   function kill(S, t, team) {
     t.hp = 0;
+    if (t.held) release(S, t);
     if (t.d.recon) ownEvent(S, t.team, 'reconlost');
     S.ev.push({ t: 'die', id: t.id, kind: t.kind, team: t.team, x: t.x, y: t.y, b: t.b, z: isAir(t) ? t.z : 0, a: t.a, w: t.w, h: t.h, vet: t.vet });
     if (t.b) {
@@ -3738,6 +3784,7 @@ const Rules = (() => {
     if (d.fish && (!u.ord || u.ord.t === 'fish')) { fishTick(S, u); return; }
     if (u.ord && u.ord.t === 'bridge') return bridgeGo(S, u, u.ord);
     if (u.ord && u.ord.t === 'mend') return mendGo(S, u, u.ord);
+    if (u.ord && u.ord.t === 'shelter') return shelterGo(S, u, u.ord);
 
     let o = u.ord;
 
@@ -3895,6 +3942,7 @@ const Rules = (() => {
         t.tgt = 0;
         // It stands as its new side's hardening has it, and what it was working on is lost.
         t.hp *= m / t.max; t.max = m; t.up = null;
+        if (t.held) release(S, t);
         S.ev.push({ t: 'captured', id: t.id, x: t.x, y: t.y, team: u.team, from: was });
         ownEvent(S, u.team, 'captured'); ownEvent(S, was, 'lostbuilding');
         territory(S); recount(S);
@@ -4230,7 +4278,7 @@ const Rules = (() => {
       for (const P of S.P) if (P.low && (P.lowFor = (P.lowFor || 0) + 1) % 60 === 0) ownEvent(S, P.team, 'lowpower');
       const z = townSizes(S.map);
       for (const t of S.towns) if (t.owner >= 0) {
-        const P = S.P[t.owner], k = townShare(S, t.id), ore = TOWN_PAY * P.income * k, oil = TOWN_OIL * P.income * k;
+        const P = S.P[t.owner], k = townShare(S, t.id) * townRate(S, t.id, t.owner), ore = TOWN_PAY * k, oil = TOWN_OIL * k;
         P.supply += ore; P.oil += oil; P.stats.townIn += ore; P.stats.oilIn += oil;
         for (const i of z.list[t.id]) {
           const full = houseHp(S.map.houses[i]);
@@ -4518,7 +4566,7 @@ const Rules = (() => {
     if (BUILDINGS[kind] && !(P.counts.hq || P.counts.fob)) return 'Needs Headquarters';
     if (d.limit) {
       const made = (P.counts[kind] || 0) + P.q[d.cat].filter(i => i.kind === kind).length;
-      if (made >= d.limit) return 'Already serving';
+      if (made >= d.limit) return BUILDINGS[kind] ? 'One to a side' : 'Already serving';
     }
     return null;
   }
@@ -4526,7 +4574,7 @@ const Rules = (() => {
   // Orders queued with Shift. A unit busy with an order takes a queued one after it; one with nothing to do takes
   // it at once. Any other order to units drops what was queued for them. A queued move keeps the units' spread
   // about where they stood when it was given.
-  const QUEUE_MAX = 8, QUEUE_DROP = new Set(['move', 'attack', 'strike', 'guard', 'stop', 'capture', 'bridge', 'mend', 'harvest']);
+  const QUEUE_MAX = 8, QUEUE_DROP = new Set(['move', 'attack', 'strike', 'guard', 'shelter', 'stop', 'capture', 'bridge', 'mend', 'harvest']);
   function queueOrder(S, team, c) {
     const us = unitsOf(S, team, c.ids);
     const busy = us.filter(u => (u.ord && u.ord.t !== 'harvest' && !u.ord.ans) || (u.oq && u.oq.length)), idle = us.filter(u => !busy.includes(u));
@@ -4628,6 +4676,14 @@ const Rules = (() => {
         if (u === g || isAir(u) || u.d.cargo || u.d.trade || u.d.fish) continue;
         u.ord = { t: 'guard', id: g.id }; u.tgt = 0; u.home = null; u.wpT = 0; u.stuck = 0; u.mend = null; u.exp = false;
       }
+    } else if (c.c === 'shelter') {
+      // The general goes into the side's capitol.
+      const g = S.byId.get(c.id);
+      if (!g || !g.b || g.hp <= 0 || g.team !== team || !g.d.civic || g.held) return;
+      for (const u of unitsOf(S, team, c.ids)) if (u.d.general) { u.ord = { t: 'shelter', id: g.id }; u.tgt = 0; u.home = null; u.stuck = 0; u.mend = null; }
+    } else if (c.c === 'release') {
+      const g = S.byId.get(c.id);
+      if (g && g.b && g.hp > 0 && g.team === team && g.held) release(S, g);
     } else if (c.c === 'explore') {
       // Scouts set to explore, or stopped from it, where they stand.
       for (const u of unitsOf(S, team, c.ids)) { if (!canExplore(u)) continue; u.exp = !!c.on; if (u.ord && u.ord.exp) { u.ord = null; u.v = 0; } u.expWait = 0; }
@@ -4747,7 +4803,9 @@ const Rules = (() => {
 
   function callPower(S, team, name, x, y) {
     const P = S.P[team], d = POWERS[name];
-    if (!d || P.cooldown[name] > 0 || P.tech < d.tech || (!d.free && (!P.counts.radar || P.low)) || P.supply < d.cost) return;
+    if (!d || P.cooldown[name] > 0 || P.tech < d.tech || callOff(P, d) || P.supply < d.cost) return;
+    // A levy with no town held would be wasted.
+    if (name === 'levy' && !S.towns.some(t => t.owner === team)) return;
     P.supply -= d.cost; P.stats.spent += d.cost;
     P.cooldown[name] = d.cd;
     if (name === 'uav') {
@@ -4759,6 +4817,17 @@ const Rules = (() => {
       S.ev.push({ t: 'uav', team, x, y, dur: d.life });
       // The sides whose own ground it passes over are told it is overhead.
       for (const Q of S.P) if (Q.team !== team && !Q.out && !atPeace(S, team, Q.team) && S.ents.some(e => e.b && e.team === Q.team && e.hp > 0 && mhypot(e.x - x, e.y - y) < RECON_R + 12)) ownEvent(S, Q.team, 'reconover');
+    } else if (name === 'levy') {
+      // Each town held pays LEVY_NOW seconds of its dues at once, and is marked to pay less for LEVY_FOR seconds.
+      let ore = 0, oil = 0, n = 0;
+      for (const t of S.towns) if (t.owner === team) {
+        const p = townPay(S, t.id, team);
+        ore += p.ore * LEVY_NOW; oil += p.oil * LEVY_NOW; n++;
+        t.lv = S.tick + LEVY_FOR * HZ;
+      }
+      P.supply += ore; P.oil += oil; P.stats.townIn += ore; P.stats.oilIn += oil;
+      const cap = S.ents.find(e => e.b && e.team === team && e.hp > 0 && e.d.civic);
+      S.ev.push({ t: 'levy', team, ore, oil, towns: n, x: cap ? cap.x : x, y: cap ? cap.y : y });
     } else if (name === 'flare') {
       S.sweeps.push({ team, x, y, r: d.r, until: S.tick + d.life * HZ, flare: S.tick });
       S.ev.push({ t: 'flare', team, x, y, dur: d.life });
@@ -4915,7 +4984,7 @@ const Rules = (() => {
     // A side whose last building falls is out, and what it had left goes with it. The last side standing wins.
     if (!S.over && S.tick % HZ === 0) {
       for (const P of S.P) if (P.alive) {
-        const noBase = !S.ents.some(e => e.b && e.team === P.team && e.hp > 0), noGen = S.regicide && !S.ents.some(e => !e.b && e.team === P.team && e.hp > 0 && e.d.general);
+        const noBase = !S.ents.some(e => e.b && e.team === P.team && e.hp > 0), noGen = S.regicide && !S.ents.some(e => e.team === P.team && e.hp > 0 && (e.b ? !!e.held && !!UNITS[e.held.kind].general : e.d.general));
         if (!noBase && !noGen) continue;
         P.alive = false;
         razeSlot(S, P.team);
@@ -4976,7 +5045,7 @@ const Rules = (() => {
     HZ, DT, RES, UNITS, BUILDINGS, WEAPONS, TECH, POWERS, DIFFICULTY, LAYOUT, SIZES, MAPS, spread, use,
     AGES, MAX_AGE, POWER_AGE, LINES, LINE_ORDER, formOf, lineCount, nameOf, armOf,
     get W() { return W; }, get H() { return H; }, get VW() { return VW; }, get VH() { return VH; },
-    ORE_KINDS, fishWater, dustWall, dustAt, groundedAt, dataOn, satUp, satPass, newGame, step, push, spawn, addBuilding, scoreOf, worth, SERIES, pickFrom, fits, spotFor, roomy, blockedReason, near, rehash, seenBy, terrainAt, heightAt, waterLevel, townPay, townShare, placeCheck, trainersOf, TRAINER_OF, los, isAir, armed, cellOf, summary, exitOf,
+    ORE_KINDS, fishWater, dustWall, dustAt, groundedAt, dataOn, satUp, satPass, newGame, step, push, spawn, addBuilding, scoreOf, worth, SERIES, pickFrom, fits, spotFor, roomy, blockedReason, near, rehash, seenBy, terrainAt, heightAt, waterLevel, townPay, townShare, callNeed, callOff, CIVIC_PAY, CIVIC_REACH, LEVY_NOW, LEVY_FOR, placeCheck, trainersOf, TRAINER_OF, los, isAir, armed, cellOf, summary, exitOf,
     mulberry, noiser, clamp, lerp, smooth, angleTo, toXY, toUV, gap, setSize, save, load, hashOf, restartSlot, razeSlot, makeMap, mapFor, layoutFor,
     msin, mcos, matan2, mhypot,
     BRIDGE_HP, SPELL, SKIES, WEATHERS, nightAt, skyOf, offGoing, route, weatherAt, sky, dayAt, spellOf, bridgeAt, clsOf, houseHp, hurtBridge, ignite, shielded,
