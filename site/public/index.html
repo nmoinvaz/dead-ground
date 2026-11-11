@@ -659,7 +659,7 @@ body[data-look="ink"] .sheet { box-shadow: 4px 4px 0 var(--ink); }
       <div class="choice"><h2>Shadows</h2><div id="s-shade" class="two"><button data-v="hatch">Hatched</button><button data-v="wash">Wash</button></div></div>
       <div class="choice"><h2>Shadow strength</h2><div id="s-shadow"><button data-v="full">Full</button><button data-v="light">Light</button><button data-v="off">Off</button></div></div>
       <div class="choice"><h2>Music</h2><div id="s-music" class="two"><button data-v="on">On</button><button data-v="off">Off</button></div></div>
-      <p id="build">Build c38897b 2026-11-11 10:23</p>
+      <p id="build">Build b8be074 2026-11-11 12:41</p>
       <p id="source"><a href="https://github.com/nmoinvaz/mapmakers-war" target="_blank" rel="noopener">Source on GitHub</a></p>
     </div>
     <div id="banner" hidden></div>
@@ -9520,6 +9520,8 @@ const Looks = (() => {
             float h = fract(sin(dot(c, vec2(127.1, 311.7))) * 43758.5453), size = smoothstep(0.0, 0.15, cov - h * 0.95);
             if (size <= 0.0) continue;
             vec2 m = c + 0.5 + (vec2(fract(h * 17.31), fract(h * 41.17)) - 0.5) * 0.12;
+            // No lobe reaches farther than 0.425 from its cloud's middle: 0.212 out, 0.2125 across at most.
+            if (length(q - m) > 0.425) continue;
             for (int k = 0; k < 4; k++) {
               float hk = fract(h * (13.7 + float(k) * 7.31)), r = (0.1 + 0.07 * hk) * (0.75 + 0.5 * cov) * size;
               vec2 o = (vec2(fract(hk * 23.1), fract(hk * 57.7)) - 0.5) * 0.3;
@@ -10288,10 +10290,12 @@ if (typeof module !== 'undefined') module.exports = Looks;
                   float td = length(Wl - a), tee = 1.0 - smoothstep(0.32 - gAA, 0.32 + gAA, td);
                   base = mix(base, dk ? vec3(0.36, 0.42, 0.32) : vec3(0.9, 0.92, 0.84), tee * isG * 0.6);
                 }
+                // The bunkers' ragged edge, the same for every bunker, so worked out once.
+                float gbN = (noise(Wl * 3.0) - 0.5) * 0.12;
                 for (int gbi = 0; gbi < 24; gbi++) {
                   vec3 bk = uGolfB[gbi];
                   if (bk.z == 0.0) break;
-                  float bd = length(Wl - bk.xy), br = abs(bk.z), bin = 1.0 - smoothstep(br - gAA, br + gAA, bd + (noise(Wl * 3.0) - 0.5) * 0.12);
+                  float bd = length(Wl - bk.xy), br = abs(bk.z), bin = 1.0 - smoothstep(br - gAA, br + gAA, bd + gbN);
                   if (bin <= 0.0 && bd > br + 0.3) continue;
                   if (bk.z > 0.0) {
                     // A bunker: pale sand stippled fine, its lip ruled.
