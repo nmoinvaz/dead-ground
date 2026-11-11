@@ -19,13 +19,13 @@
       // 45 and 135 degrees, then flat and upright lines for the darkest, each line a little uneven with small gaps.
       // The ground's hatching is pinned to the map so it pans with it, the units' redraws a few times a second.
       const ink = new THREE.ShaderMaterial({ uniforms: { t: { value: null }, tSubj: { value: null }, tHeat: { value: null }, tPaper: { value: null }, res: { value: new THREE.Vector2(1, 1) }, uTime: { value: 0 }, uK: { value: 1 }, uOff: { value: new THREE.Vector2() }, uStyle: { value: 8 }, tNorm: { value: null }, tFogS: { value: null }, tLand: { value: null }, uSun2: { value: new THREE.Vector2(-1, 0) }, uUpV: { value: new THREE.Vector3(0, 1, 0) }, uRoad: { value: 0 }, uOre: { value: 0 }, uMarks: { value: 1 }, uRoadAge: { value: 4 }, uShadeH: { value: 1 }, tShade: { value: null },
-        uWindS: { value: new THREE.Vector2() }, uView: { value: new THREE.Vector2(1, 0) }, tFx: { value: null }, tAnc: { value: null }, uDark: { value: 0 }, uTone: { value: 0 }, uInks: { value: 0 }, uFxs: { value: 0 }, uFire: { value: 0 }, uUnits: { value: 0 }, tH: SH.tH, uHSize: { value: new THREE.Vector2(1, 1) }, uHScale: { value: 1 }, uSnowF: { value: 0 }, uSnowC: SH.uSnowC, uSnowLine: SH.uSnowLine, tFlow: SH.tFlow, tBrook: SH.tBrook, uFlora: SH.uFlora, uShow: SH.uShow, uShowS: SH.uShowS, uGolfC: SH.uGolfC, uCastK: SH.uCastK, uGolf: SH.uGolf, uGolfB: SH.uGolfB, tCover: SH.tCover, uFieldK: SH.uFieldK, uFieldK2: SH.uFieldK2, uPark: SH.uPark, uBridgeKind: SH.uBridgeKind, uFog: { value: 0 }, uMist: { value: 0 }, uNight: { value: 0 },
+        uWindS: { value: new THREE.Vector2() }, uView: { value: new THREE.Vector2(1, 0) }, tFx: { value: null }, tAnc: { value: null }, uDark: { value: 0 }, uTone: { value: 0 }, uInks: { value: 0 }, uFxs: { value: 0 }, uFire: { value: 0 }, uUnits: { value: 0 }, tH: SH.tH, uHSize: { value: new THREE.Vector2(1, 1) }, uHScale: { value: 1 }, uSnowF: { value: 0 }, uSnowC: SH.uSnowC, uSnowLine: SH.uSnowLine, tFlow: SH.tFlow, tBrook: SH.tBrook, uFlora: SH.uFlora, uShow: SH.uShow, uShowS: SH.uShowS, uGolfC: SH.uGolfC, uCastK: SH.uCastK, uDustT: SH.uDustT, uGolf: SH.uGolf, uGolfB: SH.uGolfB, tCover: SH.tCover, uFieldK: SH.uFieldK, uFieldK2: SH.uFieldK2, uPark: SH.uPark, uBridgeKind: SH.uBridgeKind, uFog: { value: 0 }, uMist: { value: 0 }, uNight: { value: 0 },
         uDayMul: { value: new THREE.Vector3(1, 1, 1) }, uDayAdd: { value: new THREE.Vector3() }, uWaterL: { value: -0.15 }, uCloudK: SH.uCloudK, tMarks: SH.tMarks, uMap: SH.uMap,
         uCloud: SH.uCloud, uCloudT: SH.uCloudT, uSunW: SH.uSunDir, uCloudA: { value: 0 }, uCloudG: { value: 0 }, uRayK: { value: 0 }, uDust: { value: new THREE.Vector4() },
         uInvVP: { value: new THREE.Matrix4() }, uW2S: { value: new THREE.Vector4(1, 0, 0, 1) }, uLev: { value: 1 }, tTerr: SH.tTerr, uBorder: SH.uBorder, uMe: { value: 0 },
         // Each side's colour as the anchor pass keeps it, its hue and how coloured it is, and its inks on either paper.
         uSideKey: { value: [...Array(8)].map(() => new THREE.Vector2()) }, uSideL: { value: [...Array(8)].map(() => new THREE.Vector3()) }, uSideD: { value: [...Array(8)].map(() => new THREE.Vector3()) }, uSideB: { value: [...Array(8)].map(() => new THREE.Vector3()) } }, vertexShader: vs, depthTest: false, depthWrite: false, fragmentShader: `
-        varying vec2 vUv; uniform sampler2D t, tSubj, tHeat, tPaper, tNorm, tFogS, tLand, tMarks; uniform float uMap; uniform vec2 res, uOff, uSun2, uWindS, uView, uHSize; uniform float uHScale, uFxs, uFire; uniform int uUnits, uInks; uniform float uDark, uTone; uniform sampler2D tH, tFx, tAnc, tFlow, tBrook, tCover, tShade; uniform vec4 uFieldK, uFieldK2; uniform vec4 uShow[8]; uniform vec2 uShowS[8]; uniform vec3 uGolfC[4]; uniform float uCastK; uniform vec4 uGolf[16]; uniform vec3 uGolfB[24]; uniform vec4 uPark[16]; uniform vec3 uUpV, uDayMul, uDayAdd; uniform float uTime, uK, uSnowF, uSnowC, uSnowLine, uFlora, uBridgeKind, uFog, uMist, uNight, uWaterL, uCloudK, uMarks, uRoadAge, uShadeH; uniform int uStyle, uRoad, uOre;
+        varying vec2 vUv; uniform sampler2D t, tSubj, tHeat, tPaper, tNorm, tFogS, tLand, tMarks; uniform float uMap; uniform vec2 res, uOff, uSun2, uWindS, uView, uHSize; uniform float uHScale, uFxs, uFire; uniform int uUnits, uInks; uniform float uDark, uTone; uniform sampler2D tH, tFx, tAnc, tFlow, tBrook, tCover, tShade; uniform vec4 uFieldK, uFieldK2; uniform vec4 uShow[8]; uniform vec2 uShowS[8]; uniform vec3 uGolfC[4]; uniform float uCastK; uniform vec2 uDustT; uniform vec4 uGolf[16]; uniform vec3 uGolfB[24]; uniform vec4 uPark[16]; uniform vec3 uUpV, uDayMul, uDayAdd; uniform float uTime, uK, uSnowF, uSnowC, uSnowLine, uFlora, uBridgeKind, uFog, uMist, uNight, uWaterL, uCloudK, uMarks, uRoadAge, uShadeH; uniform int uStyle, uRoad, uOre;
         uniform vec2 uSideKey[8]; uniform vec3 uSideL[8], uSideD[8], uSideB[8];
         uniform sampler2D tTerr; uniform float uBorder, uMe;
         uniform vec2 uCloud; uniform vec3 uSunW; uniform float uCloudT, uCloudA, uCloudG, uRayK; uniform vec4 uDust;
@@ -177,6 +177,9 @@
           float edgeN = 0.0;
           if (F.g < 0.87 || F.r < 0.825) edgeN = (mix(noise(pL * 0.03 / uK), noise(pL2 * 0.03 / uK + 7.0), gLf) - 0.5) * 0.5;
           float seenE = smoothstep(0.38, 0.62, F.g + edgeN), visE = smoothstep(0.3, 0.7, F.r + edgeN * 0.5);
+          // A dust storm's heads are weather, seen wherever they stand, as the clouds are.
+          float isDst = 1.0 - smoothstep(0.006, 0.012, abs(s0 - 0.4784));
+          seenE = max(seenE, isDst); visE = max(visE, isDst);
           // Ground never seen is drawn as the sketch alone, so the drawing under it is skipped. A quad of pixels skips
           // it only when all four lie there, as the drawing takes derivatives across the quad. Two rounds of
           // derivatives carry each pixel's need to the other three.
@@ -307,7 +310,9 @@
               float isO = 1.0 - smoothstep(0.02, 0.035, abs(a - 0.55)), isBr = 1.0 - smoothstep(0.02, 0.035, abs(a - 0.42));
               // Trees too, between the bridges' value and the rest of the scenery's, and life on the land above ore.
               float isT = 1.0 - smoothstep(0.01, 0.02, abs(a - 0.459)), isL = 1.0 - smoothstep(0.02, 0.035, abs(a - 0.6));
-              isS = max(0.0, isS - isO - isBr - isT - isL);
+              // A dust storm's heads, on their own value between the trees' and the rest of the scenery's.
+              float isD = isDst;
+              isS = max(0.0, isS - isO - isBr - isT - isL - isD);
               // Water is where the river bed lies under the water line. The water mesh's own edge zigzags along its
               // triangles, so it only says that something lower than scenery is here.
               float lh = F.b - 20.0, wl = uWaterL - lh, dep = max(wl, 0.0);
@@ -479,7 +484,9 @@
               // shape. On dark paper it is a tint of the side's ink. On light paper it is the ink laid solid, as a pen
               // fills a small shape, since a pale tint of red is pink.
               else uC = max(mix(hatch(p, 45.0, 3.2, 1.0, seedU, 0.04) * smoothstep(0.42, 0.46, dens), dk ? smoothstep(0.4, 0.72, dens) * 0.4 : smoothstep(0.5, 0.56, dens), zU), smoothstep(0.8, 0.84, dens));
-              cover =isG * gC + isW * wC + isS * sC + isT * tC + isB * bC + isU * uC + isBr * brC + isO * oC + isL * smoothstep(0.88, 0.92, dens);
+              // Dust heads: hatched on the side away from the light, crossed in the deepest shade.
+              float dC = isD > 0.0 ? max(hatch(p, 50.0, 3.6, 0.85, 23.0, 0.12) * step(0.16, dens), max(hatch(p, 110.0, 3.2, 0.8, 29.0, 0.14) * step(0.4, dens), smoothstep(0.8, 0.88, dens))) : 0.0;
+              cover =isG * gC + isW * wC + isS * sC + isT * tC + isB * bC + isU * uC + isBr * brC + isO * oC + isL * smoothstep(0.88, 0.92, dens) + isD * dC;
               // The bank drawn once, heavy, on whichever side of it the pixel lies.
               float bankL = 1.0 - smoothstep(0.7 * uK, 1.6 * uK, abs(dep - 0.03) / max(fwidth(dep), 1e-4));
               cover = max(cover, bankL * step(0.001, dep + 0.05) * (isG + isW) * 0.9);
@@ -819,6 +826,10 @@
               float lSh = clamp(dot(lCol, vec3(0.3, 0.59, 0.11)) * 1.6 + 0.3, 0.55, 1.05);
               vec3 lWash = mix(min(lCol * (dk ? 1.15 : 1.3), vec3(1.0)), lMat * lSh, 0.75);
               base = mix(base, mix(lWash, dk ? paperC : vec3(1.0), 0.12), isL);
+              // Dust heads in a flat wash of their own colour, deep at the foot and pale at the crown, their form left to
+              // the hatching.
+              vec3 dMat = clamp(subj.rgb * 2.0 / 0.62, 0.0, 1.0);
+              base = mix(base, dk ? mix(paperC, dMat * 0.62, 0.7) : mix(paperC, dMat, 0.75), isD);
               // Ore in the chosen style: 1 a soft ochre wash, 2 a stippled deposit, 3 engraved, 4 faceted, 5 gold leaf.
               vec3 OCH = vec3(0.92, 0.78, 0.45), GOLD_P = vec3(0.97, 0.9, 0.66), BRN = vec3(0.45, 0.32, 0.14);
               float up = dot(nV, uUpV);
@@ -1033,7 +1044,7 @@
               col = mix(col, colour, mark * mix(0.55, 0.95, ch));
             }
             // Scars on the ground: crater rings with hatching inside, ink splatter solid.
-            float sc = F.a, gnd = 1.0 - step(0.5, s0);
+            float sc = F.a, gnd = (1.0 - step(0.5, s0)) * (1.0 - isDst);
             float scw = max(fwidth(sc), 1e-4);
             float ringS = (1.0 - smoothstep(0.7 * uK, 1.8 * uK, abs(sc - 0.28) / scw)) * step(0.05, sc);
             // The scars as rings and solid splatter (uFxs 0), as a grey smudge lightly hatched (1), or as hatched
@@ -1159,24 +1170,23 @@
           float fband = veil > 0.2 ? hatch(px + vec2(uTime * 5.0 * uK, 0.0), 0.0, 10.0, 0.8, 97.0, 0.6) * smoothstep(0.2, 0.55, veil) : 0.0;
           col = mix(col, dk ? vec3(0.42, 0.44, 0.5) : vec3(0.6, 0.62, 0.67), fband * 0.2);
           // A dust storm's wall where it stands, uDust its way, the reach of its front and its strength: thick for a
-          // stretch behind a billowing front, thinning behind that, and clear air ahead.
+          // stretch behind the front, where the world stands its heads, thinning behind that, and clear air ahead. The
+          // front sways along its line as the world's heads do, by the storm's clock and phase in uDustT.
           float dust = 0.0, dustE = -1e3;
           if (uDust.w > 0.0) {
-            dustE = uDust.z - dot(Wl - uMap * 0.5, uDust.xy) + (noise(Wl * 0.07 + vec2(uTime * 0.04, 0.0)) - 0.5) * 9.0;
+            float dS = dot(Wl - uMap * 0.5, vec2(-uDust.y, uDust.x));
+            float dW = 2.0 * sin(dS * 0.08 + uDustT.x * 0.1 + uDustT.y) + 1.2 * sin(dS * 0.19 - uDustT.x * 0.15 + uDustT.y * 2.0);
+            dustE = uDust.z + dW - dot(Wl - uMap * 0.5, uDust.xy);
             dust = uDust.w * smoothstep(-2.0, 3.0, dustE) * (1.0 - smoothstep(0.3 * uMap, 0.6 * uMap, dustE));
           }
           // Blown sand as an ochre veil, billowing as it is carried on the wind, deepest at the wall's front.
           if (dust > 0.0) {
             vec2 blw = landAt(vUv, max(hg, 0.0) + 1.5) * 0.03 + uCloud * 5.0;
             float billow = noise(blw) * 0.6 + noise(blw * 2.3 + 5.0) * 0.4, keepU = 1.0 - 0.4 * step(0.85, s0);
-            float wallF = 1.0 - smoothstep(0.0, 16.0, dustE);
-            float dustV = clamp(dust * (0.46 + 0.34 * billow + 0.3 * wallF) * onMap, 0.0, 0.88) * keepU;
-            col = mix(col, dk ? mix(vec3(0.36, 0.3, 0.22), vec3(0.44, 0.34, 0.22), wallF) : mix(vec3(0.85, 0.74, 0.56), vec3(0.68, 0.53, 0.36), wallF), dustV);
-          }
-          // The wall's front drawn as a ragged line in a deeper ochre, as a cloud's edge is.
-          if (uDust.w > 0.0) {
-            float fw = max(fwidth(dustE), 1e-4), fl = (1.0 - smoothstep(0.9 * uK, 2.4 * uK, abs(dustE) / fw)) * uDust.w * onMap;
-            col = mix(col, dk ? vec3(0.62, 0.5, 0.34) : vec3(0.52, 0.38, 0.22), fl * 0.7);
+            // Deepest just behind the heads, which stand over the first few cells of it, and fading over thirty more.
+            float wallF = 1.0 - smoothstep(4.0, 34.0, dustE);
+            float dustV = clamp(dust * (0.46 + 0.34 * billow + 0.3 * wallF) * onMap, 0.0, 0.88) * keepU * (1.0 - isDst);
+            col = mix(col, dk ? mix(vec3(0.36, 0.3, 0.22), vec3(0.44, 0.34, 0.22), wallF) : mix(vec3(0.8, 0.68, 0.5), vec3(0.66, 0.51, 0.34), wallF), dustV);
           }
           // Grit driven low across the page in long fine strokes.
           if (dust > 0.01) {

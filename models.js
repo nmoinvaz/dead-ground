@@ -837,6 +837,10 @@ const Models = (() => {
       a.cyl(0.06, 0.11, 0.8, 0, 0.4, 0, 0x4a3a2c, { seg: 6 });
       for (const [x, y, z, r] of [[0, 1.05, 0, 0.56], [0.34, 0.9, 0.1, 0.36], [-0.26, 0.92, -0.2, 0.4], [0.06, 0.94, 0.34, 0.34], [-0.1, 1.3, 0.04, 0.34]]) a.add(new THREE.IcosahedronGeometry(r, 1), x, y, z, 0xffffff, { sy: 0.74 });
       scenery.broad = a.finish();
+      // One billow of a dust storm's wall, a smooth ball the wall's heads are heaped from.
+      const pf = G();
+      pf.add(new THREE.IcosahedronGeometry(1, 2), 0, 0, 0, 0xffffff);
+      scenery.puff = pf.finish();
       const k = G();
       k.cyl(0.05, 0.08, 0.8, 0, 0.4, 0, 0x5b4632, { seg: 5 });
       for (let i = 0; i < 4; i++) { const an = i * 1.57 + 0.4; k.cyl(0.015, 0.04, 0.6, Math.cos(an) * 0.18, 0.95, Math.sin(an) * 0.18, 0x5b4632, { seg: 4, rz: -Math.cos(an) * 0.7, rx: Math.sin(an) * 0.7 }); }

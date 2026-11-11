@@ -70,7 +70,7 @@ const World = (() => {
     const SH = {
       tFog: { value: white }, tDetail: { value: null }, tTerr: { value: white }, tH: { value: white }, tMarks: { value: white }, uTime: { value: 0 },
       uTeam0: { value: new THREE.Color(0x3f8cff) }, uTeams: { value: SLOT_COLORS.map(c => new THREE.Color(c).offsetHSL(0, 0, 0.06)) }, uFogOn: { value: 1 }, uBorder: { value: 1 }, uMap: { value: 128 },
-      uHaze: { value: new THREE.Color(0xf29a5e) }, uHazeK: { value: 0.012 }, uHazeFrom: { value: 80 }, uShroud: { value: new THREE.Color(0x120907) }, uSunDir: { value: new THREE.Vector3(1, 0.3, 0) }, uCastK: { value: 1 },
+      uHaze: { value: new THREE.Color(0xf29a5e) }, uHazeK: { value: 0.012 }, uHazeFrom: { value: 80 }, uShroud: { value: new THREE.Color(0x120907) }, uSunDir: { value: new THREE.Vector3(1, 0.3, 0) }, uCastK: { value: 1 }, uDustT: { value: new THREE.Vector2() },
       // The wind on the ground, how far it has carried the clouds, how overcast it is, and lying snow.
       uWind: { value: new THREE.Vector2(0.3, 0.1) }, uCloud: { value: new THREE.Vector2() }, uCloudK: { value: 0.2 }, uCloudT: { value: 0.3 }, uSnowC: { value: 0 },
       // The height above which snow lies on the heights in any weather.
@@ -312,8 +312,9 @@ const World = (() => {
           vT = aTeam;
           gl_Position = projectionMatrix * modelViewMatrix * p;
         }`, fragmentShader: `uniform float uCat; varying vec3 vC; varying vec3 vM; varying float vT; void main() { vec3 c = uCat > 0.6 ? vC * (vT > 0.9 ? 1.0 : uCat > 0.9 ? 0.45 : 0.0) : uCat > 0.52 && uCat < 0.58 ? vec3(0.5, 0.4, 0.1) : vec3(0.0);
-          // Life, beasts, cars and people, gives its own colours at half strength, for the ink to wash it by.
-          if (uCat > 0.58 && uCat < 0.62) c = vC * vM * 0.5;
+          // Life, beasts, cars and people, gives its own colours at half strength, for the ink to wash it by, as
+          // a dust storm's heads do theirs.
+          if ((uCat > 0.58 && uCat < 0.62) || (uCat > 0.47 && uCat < 0.49)) c = vC * vM * 0.5;
           if (uCat > 0.7 && uCat < 0.8 && vT <= 0.9) c = vM * 0.5;
           gl_FragColor = vec4(c, uCat); }` });
       // Surface direction and distance of everything drawn in line, for the lines inside a shape.
@@ -392,7 +393,7 @@ const World = (() => {
         void main() {
           // The mask, as markMat writes it.
           vec3 c = uCat > 0.6 ? vC * (vT > 0.9 ? 1.0 : uCat > 0.9 ? 0.45 : 0.0) : uCat > 0.52 && uCat < 0.58 ? vec3(0.5, 0.4, 0.1) : vec3(0.0);
-          if (uCat > 0.58 && uCat < 0.62) c = vC * vM * 0.5;
+          if ((uCat > 0.58 && uCat < 0.62) || (uCat > 0.47 && uCat < 0.49)) c = vC * vM * 0.5;
           if (uCat > 0.7 && uCat < 0.8 && vT <= 0.9) c = vM * 0.5;
           oMask = vec4(c, uCat);
           // The surface's direction and distance, as normMat writes them.
@@ -1989,6 +1990,66 @@ const World = (() => {
       }
       return null;
     }
+    // A dust storm's wall, a haboob, as a front of rounded heads heaped from billows along the line where its dust
+    // begins. Each stretch of the front has a dark billow at its foot, a face above and behind it and a crown above
+    // that, the crown sometimes towering. Two billows churn up the face from the foot to the crown, swelling as
+    // they rise and sinking into it, and a wisp now and then runs out low ahead. The heads rise with the storm's
+    // strength and fall as it dies. Everything comes of the seed and the clock, so every player sees one storm.
+    const DUST_SP = 3.2, DUST_CAP = 1400, wallC = [];
+    let dustMesh = null;
+    const dHash = (i, k, sd) => { const v = Math.sin(i * 12.9898 + k * 78.233 + sd * 0.1372) * 43758.5453; return v - Math.floor(v); };
+    // The front's sway along its line, shared with the ink look so its haze begins where the heads stand.
+    const dustWob = (s, t, ph) => 2.0 * Math.sin(s * 0.08 + t * 0.1 + ph) + 1.2 * Math.sin(s * 0.19 - t * 0.15 + ph * 2.0);
+    function buildDust() {
+      dustMesh = add(lineCat(new THREE.InstancedMesh(MODELS.scenery.puff, plainTint, DUST_CAP), 0.4784));
+      dustMesh.instanceMatrix.setUsage(THREE.DynamicDrawUsage); dustMesh.frustumCulled = false; dustMesh.castShadow = true; dustMesh.receiveShadow = true; dustMesh.count = 0;
+      dustMesh.setColorAt(0, neutral); dustMesh.instanceColor.setUsage(THREE.DynamicDrawUsage);
+      // The theatre's own dust, a little greyed, deep at the foot and pale at the crown.
+      const dc = new THREE.Color(...theme.dust), g = (dc.r + dc.g + dc.b) / 3;
+      dc.lerp(new THREE.Color(g, g, g), 0.25);
+      const lo = dc.clone().multiplyScalar(0.72), hi = dc.clone().lerp(new THREE.Color(1, 1, 1), 0.3);
+      // Lit at 0.62 of their colour, so a sunlit crown stays under the glow the looks take for fire; the ink washes
+      // them at full strength from the mask.
+      for (let i = 0; i <= 16; i++) wallC[i] = lo.clone().lerp(hi, i / 16).multiplyScalar(0.62);
+    }
+    function updateDust(alpha) {
+      const w = sky.dust;
+      if (!dustMesh) return;
+      if (!w) { dustMesh.count = 0; return; }
+      const w1 = Rules.dustWall(S, S.tick + 1), front = w1 ? lerp(w.front, w1.front, alpha) : w.front, t = (S.tick + alpha) / HZ;
+      const sd = S.seed % 9973, ph = sd * 0.01, kk = smooth(0, 0.6, w.k), cx = W / 2, cy = H / 2, px = -w.dy, py = w.dx;
+      SH.uDustT.value.set(t, ph);
+      let n = 0;
+      const put = (bx, by, f, y, r, hs) => {
+        if (r < 0.05 || n >= DUST_CAP) return;
+        const x = bx + w.dx * f, z = by + w.dy * f, g = Math.max(terrainAt(M, x, z), M.water);
+        setInst(dustMesh, n++, { x, y: g + y, z, sx: r, sy: r * 0.86, sz: r, c: wallC[clamp(Math.round(y / (7.5 * hs) * 16), 0, 16)] });
+      };
+      const L = Math.ceil(Math.hypot(W, H) * 0.6 / DUST_SP);
+      for (let i = -L; i <= L; i++) {
+        const s = i * DUST_SP, f0 = front + dustWob(s, t, ph);
+        const bx = cx + w.dx * f0 + px * s, by = cy + w.dy * f0 + py * s;
+        if (bx < -4 || by < -4 || bx > W + 4 || by > H + 4) continue;
+        const h = k => dHash(i, k, sd), hs = (0.75 + 0.6 * h(1)) * kk, br = k => 1 + 0.1 * Math.sin(t * 0.45 + h(k) * 6.28);
+        // Each billow sits a little off its stretch's middle along the front.
+        const at = k => [bx + px * (h(k) - 0.5) * 1.6, by + py * (h(k) - 0.5) * 1.6];
+        let q;
+        q = at(2); put(q[0], q[1], 0.3, 1.3 * hs, 1.7 * hs * br(2), hs);
+        q = at(3); put(q[0], q[1], -1.6, 3.3 * hs, 2.4 * hs * br(3), hs);
+        q = at(4); put(q[0], q[1], -3.6, 5.6 * hs, 2.7 * hs * br(4), hs);
+        if (h(5) > 0.45) { q = at(6); put(q[0] + px * DUST_SP * 0.5, q[1] + py * DUST_SP * 0.5, -5.4, 7.2 * hs, 2.6 * hs * br(6), hs); }
+        for (let k = 0; k < 2; k++) {
+          const f = (t * 0.06 + h(7 + k) + k * 0.5) % 1, sw = Math.sin(Math.PI * f);
+          q = at(9 + k); put(q[0], q[1], 0.6 - 4.6 * f, (0.8 + 5.4 * f) * hs, (0.5 + 1.5 * sw) * sw * hs, hs);
+        }
+        if (h(11) < 0.5) {
+          const f = (t * 0.09 + h(12)) % 1, sw = Math.sin(Math.PI * f);
+          q = at(13); put(q[0], q[1], 1.0 + 5.0 * f, 0.35 + 0.4 * f, (0.35 + 0.5 * h(14)) * sw * hs, hs);
+        }
+      }
+      dustMesh.count = n;
+      dirty(dustMesh);
+    }
     const newFlock = p => ({ cx: p[0], cy: p[1], x: p[0], y: p[1], r: 4 + Math.random() * 6, alt: 7 + Math.random() * 4, w: (Math.random() < 0.5 ? -1 : 1) * (0.25 + Math.random() * 0.2), t: Math.random() * 9, fly: 0, go: false, vx: 0, vy: 0, n: 5 + (Math.random() * 5 | 0), off: Array.from({ length: 10 }, () => [Math.random() * 6.28, Math.random() * 1.6, Math.random() * 6.28]) });
     function buildLife() {
       const sc = MODELS.scenery, R = Math.random, scale = W / 128;
@@ -2700,7 +2761,7 @@ const World = (() => {
       marks.ctx.globalCompositeOperation = 'source-over';
       marks.ctx.fillStyle = '#000'; marks.ctx.fillRect(0, 0, mk, mk); marksTex.needsUpdate = true;
 
-      buildTerrain(); buildWater(); buildFlow(); buildNames(); buildScenery(); buildSets(); buildLife(); applyLight();
+      buildTerrain(); buildWater(); buildFlow(); buildNames(); buildScenery(); buildSets(); buildLife(); buildDust(); applyLight();
       // The land's heights as a texture, for passes that draw the ground's form.
       if (hTex) hTex.dispose();
       const hd = new Uint16Array(M.h.length);
@@ -3890,6 +3951,7 @@ const World = (() => {
     function frame(alpha, dt, now) {
       SH.uTime.value += dt;
       updateSky(dt);
+      updateDust(alpha);
       cam.x = clamp(cam.x, 2, W - 2); cam.y = clamp(cam.y, 2, H - 2);
       cam.shake *= Math.exp(-dt * 7); if (cam.shake < 0.01) cam.shake = 0;
       placeCamera();
