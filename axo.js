@@ -893,7 +893,8 @@ const Axo = (() => {
       for (const { f, d } of faces) {
         const mat = treat === 'wash' ? f.mat || P.mat : 'sheet';
         svg += `<path class="f-${mat}${f.smooth ? ' sm' : ''}" d="${d}"/>`;
-        const t = treat === 'line' ? '' : f.mat === 'dark' ? 'M' : tone(f.n);
+        // A sidebar's card is hatched a step lighter, so a big vehicle's faces read as drawn and not as a solid.
+        const t0 = treat === 'line' ? '' : f.mat === 'dark' ? 'M' : tone(f.n), t = o.soft ? (t0 === 'D' ? 'M' : t0 === 'M' ? 'L' : t0) : t0;
         if (t) {
           // Hatching runs along the solid on its sides and along the longest edge on its ends.
           let dir;
@@ -950,7 +951,7 @@ const Axo = (() => {
     const pal = Object.assign({}, PALETTES[scheme] || PALETTES.light);
     pal.mark = wash(side, pal);
     const style = css(pal, 1.7, 0.5), defs = patterns(0.85), out = {};
-    for (const key of Object.keys(UNITS)) out[key] = 'data:image/svg+xml,' + encodeURIComponent(draw(key, { W, H, ruler: false, style, defs, pad: 6, top: 4, foot: 22 })).replace(/[()']/g, c => '%' + c.charCodeAt(0).toString(16).toUpperCase());
+    for (const key of Object.keys(UNITS)) out[key] = 'data:image/svg+xml,' + encodeURIComponent(draw(key, { W, H, ruler: false, style, defs, pad: 6, top: 4, foot: 22, soft: true })).replace(/[()']/g, c => '%' + c.charCodeAt(0).toString(16).toUpperCase());
     drawn.set(id, out);
     return out;
   }

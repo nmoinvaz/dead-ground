@@ -216,7 +216,8 @@ const Hud = (() => {
       return d && d.names ? Object.assign({}, d, { name: Rules.nameOf(k, P() ? P().tech : 1) }) : d;
     }
 
-    const axoImg = k => (state.cameos[k] || '').startsWith('data:image/svg') ? ' class="axo"' : '';
+    // Every picture is a drawing in the look's own inks, the units' line drawings and the models inked alike.
+    const axoImg = k => state.cameos[k] ? ' class="axo"' : '';
     // A building's picture in its owner's age, anything else's by its kind.
     const picKey = e => { const P = e.b && game.S.P[e.team], k = P ? world.ageKey(e.kind, P.tech) : e.kind; return state.cameos[k] ? k : e.kind; };
     function buildCams() {
@@ -236,8 +237,8 @@ const Hud = (() => {
         const c = b.querySelector('canvas');
         if (img) b.style.setProperty('--img', `url(${img})`);
         else { c.width = 132; c.height = 88; symbol(c.getContext('2d'), 66, 44, 26, info.sym, false, '#e8d9a8'); b.style.setProperty('--img', `url(${c.toDataURL()})`); }
-        // A unit's line drawing is already in the look's inks, so it is laid on as it is.
-        if (img && img.startsWith('data:image/svg')) b.classList.add('axo');
+        // Every picture is already in the look's inks, so it is laid on as it is.
+        if (img) b.classList.add('axo');
         c.remove();
         // Alt-click, Option on a Mac, sets a unit to be trained over and over without end, or stops it.
         b.addEventListener('click', e => { e.preventDefault(); if (e.altKey && UNITS[k]) camRepeat(k); else camClick(k, e.shiftKey ? 5 : 1); });

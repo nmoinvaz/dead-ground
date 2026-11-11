@@ -4175,19 +4175,102 @@ const World = (() => {
       return [(p1.x + 1) / 2 * world.vw, (1 - p1.y) / 2 * world.vh];
     }
 
-    // The sidebar's pictures are the models themselves, rendered once on a plain ground.
-    const GAMMA = new Uint8Array(256);
-    for (let i = 0; i < 256; i++) GAMMA[i] = Math.round(255 * Math.pow(i / 255, 1 / 2.2));
+    // The sidebar's pictures are the models themselves, drawn once as the units' line drawings are: each model
+    // rendered in its flat colours and in its surfaces' direction and depth, then inked by a pass into light and dark
+    // paper's versions: pale washes, a heavy outline round it, fine lines where its surface turns or steps back, and
+    // its faces turned from the light hatched, lightly, closer, or crossed.
+    const CAMEO_PAPER = {
+      light: { ink: [0.122, 0.102, 0.086], paper: [0.98, 0.957, 0.894], dim: 1, wash: 0.55 },
+      dark: { ink: [0.91, 0.878, 0.812], paper: [0.137, 0.125, 0.106], dim: 0.62, wash: 0.55 },
+    };
+    // Four times the card's size, so the lines are drawn fine and then shrunk.
+    const CAMEO_SS = 4;
+    let cameoKit = null;
+    function cameoTools() {
+      if (cameoKit) return cameoKit;
+      // The model's flat colours, the side's on its markings, or its surfaces' direction in view and their depth.
+      const flat = new THREE.ShaderMaterial({
+        vertexColors: true,
+        uniforms: { uMode: { value: 0 }, uNear: { value: 0 }, uFar: { value: 1 } },
+        vertexShader: `attribute float aTeam; varying vec3 vC; varying vec3 vN; varying float vD;
+          void main() {
+            vec3 c = vec3(1.0);
+            #ifdef USE_COLOR
+              c = color;
+            #endif
+            #ifdef USE_INSTANCING_COLOR
+              c = mix(c, c * instanceColor, aTeam);
+            #endif
+            mat4 m = modelMatrix;
+            #ifdef USE_INSTANCING
+              m = m * instanceMatrix;
+            #endif
+            vec4 mv = viewMatrix * (m * vec4(position, 1.0));
+            vN = normalize(mat3(viewMatrix) * mat3(m) * normal); vD = -mv.z; vC = c;
+            gl_Position = projectionMatrix * mv;
+          }`,
+        fragmentShader: `uniform float uMode, uNear, uFar; varying vec3 vC; varying vec3 vN; varying float vD;
+          void main() {
+            if (uMode < 0.5) gl_FragColor = vec4(pow(clamp(vC, 0.0, 1.0), vec3(1.0 / 2.2)), 1.0);
+            else gl_FragColor = vec4(normalize(vN) * 0.5 + 0.5, clamp((vD - uNear) / (uFar - uNear), 0.0, 1.0));
+          }`,
+      });
+      const ink = new THREE.ShaderMaterial({
+        uniforms: { tC: { value: null }, tN: { value: null }, px: { value: new THREE.Vector2() }, uL: { value: new THREE.Vector3() }, uInk: { value: new THREE.Vector3() }, uPaper: { value: new THREE.Vector3() }, uDim: { value: 1 }, uWash: { value: 0.5 } },
+        vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = vec4(position.xy, 0.0, 1.0); }',
+        depthTest: false, depthWrite: false,
+        fragmentShader: `varying vec2 vUv; uniform sampler2D tC, tN; uniform vec2 px; uniform vec3 uL, uInk, uPaper; uniform float uDim, uWash;
+          // Parallel strokes sp pixels apart and w wide, at angle an.
+          float hat(vec2 p, float an, float sp, float w) { float t = abs(fract(dot(p, vec2(cos(an), sin(an))) / sp) - 0.5) * sp; return 1.0 - smoothstep(w * 0.5 - 0.6, w * 0.5 + 0.6, t); }
+          void main() {
+            vec2 p = vUv / px;
+            vec4 C = texture2D(tC, vUv), N4 = texture2D(tN, vUv);
+            float a = step(0.5, C.a);
+            // The outline: wherever the shape's edge passes within a few pixels, inside and out.
+            float amax = C.a, amin = C.a;
+            for (int i = 0; i < 12; i++) { float an = float(i) * 0.5236; float s = texture2D(tC, vUv + vec2(cos(an), sin(an)) * px * 3.2).a; amax = max(amax, s); amin = min(amin, s); }
+            float sil = step(0.5, amax) * (1.0 - step(0.5, amin));
+            // Fine lines inside, where the surface turns or steps back.
+            vec3 n = N4.xyz * 2.0 - 1.0;
+            float cr = 0.0;
+            for (int i = 0; i < 4; i++) {
+              vec2 o = (i == 0 ? vec2(1.0, 0.0) : i == 1 ? vec2(-1.0, 0.0) : i == 2 ? vec2(0.0, 1.0) : vec2(0.0, -1.0)) * px * 1.3;
+              vec4 M = texture2D(tN, vUv + o);
+              if (texture2D(tC, vUv + o).a < 0.5) continue;
+              cr = max(cr, max(1.0 - smoothstep(0.8, 0.92, dot(n, M.xyz * 2.0 - 1.0)), smoothstep(0.004, 0.01, abs(M.a - N4.a))));
+            }
+            cr *= a;
+            // The shade by the light, in three hatchings, along a wall's face and across a roof.
+            float d = dot(n, uL), an = n.y > 0.7 ? 0.26 : n.x >= 0.0 ? 1.05 : 2.09;
+            float hL = hat(p, an, 14.4, 2.0), hM = hat(p, an, 10.0, 2.4), hD = hat(p, an, 7.2, 2.8);
+            float sh = d < -0.25 ? hD : d < 0.1 ? hM : d < 0.4 ? hL : 0.0;
+            // The model's colours let down toward the paper and a third of the way to grey, as the survey's washes.
+            vec3 c0 = mix(C.rgb, vec3(dot(C.rgb, vec3(0.299, 0.587, 0.114))), 0.35);
+            vec3 col = mix(c0 * uDim, uPaper, uWash);
+            col = mix(col, uInk, sh * 0.5 * a);
+            col = mix(col, uInk, cr * 0.85);
+            col = mix(col, uInk, sil);
+            gl_FragColor = vec4(col, max(a, sil));
+          }`,
+      });
+      const qs = new THREE.Scene(), qc = new THREE.OrthographicCamera(-1, 1, 1, -1, 0, 1);
+      qs.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), ink));
+      cameoKit = { flat, ink, qs, qc };
+      return cameoKit;
+    }
     function cameos(list, team, w = 132, h = 88) {
-      const rt = new THREE.WebGLRenderTarget(w * 2, h * 2, { samples: 4, type: THREE.UnsignedByteType, colorSpace: THREE.SRGBColorSpace });
+      const K = cameoTools(), W = w * CAMEO_SS, H = h * CAMEO_SS;
+      const opts = { type: THREE.UnsignedByteType, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter };
+      const cRT = new THREE.WebGLRenderTarget(W, H, opts), nRT = new THREE.WebGLRenderTarget(W, H, opts), iRT = new THREE.WebGLRenderTarget(W, H, Object.assign({ depthBuffer: false }, opts));
       const sc = new THREE.Scene(), cm = new THREE.PerspectiveCamera(24, w / h, 0.1, 100);
-      const lamp = new THREE.DirectionalLight(0xfff0dc, 3.6); lamp.position.set(-3, 5, 4); sc.add(lamp);
-      sc.add(new THREE.HemisphereLight(0xb8c8d8, 0x4a4436, 1.6));
-      sc.environment = scene.environment;
-      const out = {}, was = SH.uFogOn.value, oldEnv = renderer.getRenderTarget(), pix = new Uint8Array(w * h * 16);
+      // The light the hatching follows, from the upper left as the card is seen.
+      const lampDir = new THREE.Vector3(-3, 5, 4).normalize();
+      const out = {}, was = SH.uFogOn.value, oldTarget = renderer.getRenderTarget(), pix = new Uint8Array(W * H * 4);
       SH.uFogOn.value = 0;
+      const big = document.createElement('canvas'); big.width = W; big.height = H;
+      const bg = big.getContext('2d');
       const oc = document.createElement('canvas'); oc.width = w * 2; oc.height = h * 2;
-      const og = oc.getContext('2d');
+      const og = oc.getContext('2d'); og.imageSmoothingQuality = 'high';
       for (const it of list) {
         const group = new THREE.Group(), meshes = [];
         const parts = it.man ? MODELS.man[it.kind] : it.b ? MODELS.buildings[it.kind] : MODELS.units[it.kind];
@@ -4212,20 +4295,33 @@ const World = (() => {
         for (const mesh of meshes) { const g = mesh.geometry; g.computeBoundingBox(); const b = g.boundingBox.clone().applyMatrix4(mesh.instanceMatrix ? new THREE.Matrix4().fromArray(mesh.instanceMatrix.array) : new THREE.Matrix4()); box.union(b); }
         const c = box.getCenter(new THREE.Vector3()).add(group.position), R = box.getSize(new THREE.Vector3()).length() / 2;
         const D = R / Math.sin(cm.fov * Math.PI / 360) * (it.man ? 1.04 : 0.92);
-        cm.position.set(c.x + D * 0.62, c.y + D * 0.5, c.z + D * 0.62); cm.lookAt(c);
-        renderer.setRenderTarget(rt); renderer.setClearColor(0x000000, 0); renderer.clear(); renderer.render(sc, cm);
-        renderer.readRenderTargetPixels(rt, 0, 0, w * 2, h * 2, pix);
-        const im = og.createImageData(w * 2, h * 2);
-        for (let y = 0; y < h * 2; y++) im.data.set(pix.subarray((h * 2 - 1 - y) * w * 8, (h * 2 - y) * w * 8), y * w * 8);
-        // The target holds linear light, so the picture is encoded here.
-        for (let i = 0; i < im.data.length; i += 4) for (let c = 0; c < 3; c++) im.data[i + c] = GAMMA[im.data[i + c]];
-        og.putImageData(im, 0, 0);
-        out[it.kind] = oc.toDataURL('image/png');
+        cm.position.set(c.x + D * 0.62, c.y + D * 0.5, c.z + D * 0.62); cm.lookAt(c); cm.updateMatrixWorld();
+        // The flat colours, then the surfaces' direction and depth across the model's own depth.
+        sc.overrideMaterial = K.flat;
+        K.flat.uniforms.uNear.value = D - R; K.flat.uniforms.uFar.value = D + R;
+        for (const [mode, rt] of [[0, cRT], [1, nRT]]) {
+          K.flat.uniforms.uMode.value = mode;
+          renderer.setRenderTarget(rt); renderer.setClearColor(0x000000, 0); renderer.clear(); renderer.render(sc, cm);
+        }
+        sc.overrideMaterial = null;
+        const L = lampDir.clone().transformDirection(cm.matrixWorldInverse);
+        Object.assign(K.ink.uniforms.tC, { value: cRT.texture }); K.ink.uniforms.tN.value = nRT.texture;
+        K.ink.uniforms.px.value.set(1 / W, 1 / H); K.ink.uniforms.uL.value.copy(L);
+        for (const [scheme, pal] of Object.entries(CAMEO_PAPER)) {
+          K.ink.uniforms.uInk.value.set(...pal.ink); K.ink.uniforms.uPaper.value.set(...pal.paper); K.ink.uniforms.uDim.value = pal.dim; K.ink.uniforms.uWash.value = pal.wash;
+          renderer.setRenderTarget(iRT); renderer.setClearColor(0x000000, 0); renderer.clear(); renderer.render(K.qs, K.qc);
+          renderer.readRenderTargetPixels(iRT, 0, 0, W, H, pix);
+          const im = bg.createImageData(W, H);
+          for (let y = 0; y < H; y++) im.data.set(pix.subarray((H - 1 - y) * W * 4, (H - y) * W * 4), y * W * 4);
+          bg.putImageData(im, 0, 0);
+          og.clearRect(0, 0, oc.width, oc.height); og.drawImage(big, 0, 0, oc.width, oc.height);
+          out[scheme === 'light' ? it.kind : it.kind + '|dark'] = oc.toDataURL('image/png');
+        }
         sc.remove(group);
         for (const m of meshes) m.dispose();
       }
-      renderer.setClearColor(0x000000, 1); renderer.setRenderTarget(oldEnv);
-      SH.uFogOn.value = was; rt.dispose();
+      renderer.setClearColor(0x000000, 1); renderer.setRenderTarget(oldTarget);
+      SH.uFogOn.value = was; cRT.dispose(); nRT.dispose(); iRT.dispose();
       return out;
     }
 

@@ -578,7 +578,7 @@ const Game = (() => {
         }
       }
       attractAhead();
-      if (cameoDue && !renders) cameos(8);
+      if (cameoDue && !renders) cameos(3);
       if (S) world.frame(Math.min(1, acc / Rules.DT), G.paused ? 0 : dt, now / 1000);
       // The sound is held exactly while a game stands paused, however it came to be paused or let go.
       audio.hold(G.playing && G.paused);
@@ -622,10 +622,13 @@ const Game = (() => {
     function pictures() {
       if (!renders) return;
       const scheme = world.look !== 'ink' ? 'daylight' : document.body.dataset.scheme === 'dark' ? 'dark' : 'light';
-      const P = G.S && G.S.P[Math.max(0, G.team || 0)], age = P ? P.tech : 5, own = {};
-      for (const k in Rules.BUILDINGS) own[k] = renders[world.ageKey(k, age)] || renders[k];
+      const P = G.S && G.S.P[Math.max(0, G.team || 0)], age = P ? P.tech : 5, own = {}, base = {};
+      // Each drawing on the paper it was inked for: the dark paper's where one was made, else the light's.
+      const pic = k => (scheme === 'dark' && renders[k + '|dark']) || renders[k];
+      for (const k in renders) if (!k.endsWith('|dark')) base[k] = pic(k);
+      for (const k in Rules.BUILDINGS) own[k] = pic(world.ageKey(k, age)) || pic(k);
       G.picAge = age;
-      hud.setCameos(Object.assign({}, renders, own, Axo.pictures(scheme, SLOT_CSS[Math.max(0, G.team || 0)])));
+      hud.setCameos(Object.assign({}, base, own, Axo.pictures(scheme, SLOT_CSS[Math.max(0, G.team || 0)])));
     }
     // Night blue and graphite are themes of the dark paper.
     const TONES = { night: 1, graphite: 2 };
@@ -1324,8 +1327,9 @@ const Game = (() => {
       cameoList = [
         ...Object.keys(Rules.BUILDINGS).filter(k => k !== 'hq').map(k => ({ kind: k, b: true })), { kind: 'hq', b: true },
         ...world.buildingKeys.filter(k => k.includes('@')).map(k => ({ kind: k, b: true })),
-        ...Object.keys(Rules.UNITS).filter(k => !Rules.UNITS[k].men).map(k => ({ kind: k })),
-        ...Object.keys(Rules.UNITS).filter(k => Rules.UNITS[k].men).map(k => ({ kind: k, man: true })),
+        // A unit with a line drawing of its own takes that, so only the rest are inked from their models.
+        ...Object.keys(Rules.UNITS).filter(k => !Rules.UNITS[k].men && !Axo.UNITS[k]).map(k => ({ kind: k })),
+        ...Object.keys(Rules.UNITS).filter(k => Rules.UNITS[k].men && !Axo.UNITS[k]).map(k => ({ kind: k, man: true })),
       ];
       G.pictures = pictures;
       if (!restore()) { $('view').classList.add('dawn'); attract(); screen('main'); }
