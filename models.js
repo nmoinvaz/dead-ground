@@ -1416,7 +1416,7 @@ const Models = (() => {
       else for (const [dx, dz] of [[0.17, 0.07], [0.17, -0.07], [-0.17, 0.07], [-0.17, -0.07]]) g.cyl(0.03, 0.025, 0.26, x + dx, 0.13, z + dz, A.ox, { seg: 5 });
     }
     // A load of ore that shows while it is carried.
-    const oreLoad = (pts, y) => { const l = G(); for (const r of pts) l.add(new THREE.DodecahedronGeometry(r[2], 0), r[0], y, r[1], P.ore, { ry: r[0] * 7, g: 0.12 }); return l; };
+    const oreLoad = (pts, y) => { const l = G(); for (const r of pts) l.add(new THREE.DodecahedronGeometry(r[2], 0), r[0], y, r[1], P.ore, { ry: r[0] * 7 }); return l; };
 
     // Ox cart: an ox before a two-wheeled cart.
     {
@@ -1941,8 +1941,12 @@ const Models = (() => {
       earth: 0xa48c68, earthDk: 0x988468, mud: 0xc2a27c, mudDk: 0x9a7c5c, thatch: 0xc9a85e, thatchDk: 0x8f7442,
       tile: 0xa65b3d, stone: 0xbcb5a7, stoneDk: 0x8a8478, stoneLt: 0xd8d1c3, plaster: 0xe6dcc6, slate: 0x50555c,
       brick: 0x9c5940, brickDk: 0x6e3c2c, turf: 0x8c8a5a, gravel: 0x9c9586, iron: 0x868b8f, ironDk: 0x55595d,
-      cinder: 0x67635c, coal: 0x2a2826, fire: 0xffa040,
+      cinder: 0x67635c, coal: 0x2a2826,
+      // A furnace's or forge's dull embers and a beacon's flame, both dim enough that the glow pass never takes
+      // them for a blast's fire. Their smoke rises from the vents listed for each form.
+      ember: 0x9a3c1c, flame: 0xb05420,
     };
+    const vents = {};
     const R90 = Math.PI / 2, RT = Math.SQRT1_2;
     const bset = (kind, age, parts) => { buildings[kind + '@' + age] = parts; };
     // The ground a building stands on, its top at the pads' height.
@@ -2066,7 +2070,9 @@ const Models = (() => {
     }
     // A horse standing at (x, y, z) facing ry, in the side's saddle-cloth unless o.cloth is false.
     function horseInto(g, x, y, z, ry, coat, o = {}) { const h = G(); horse(h, 0, 0, coat, o); g.merge(h, x, y, z, ry, 1.25); }
-    const ore = (g, list) => { for (const [x, z, r] of list) g.add(new THREE.DodecahedronGeometry(r, 0), x, 0.08 + r * 0.6, z, P.ore, { ry: x * 7 + z * 3, g: 0.12 }); };
+    // Ore piled in a yard, a shade under the ore's own gold and with no glow, so the sun's glint on a nugget stays
+    // under what the glow pass takes for fire.
+    const ore = (g, list) => { for (const [x, z, r] of list) g.add(new THREE.DodecahedronGeometry(r, 0), x, 0.08 + r * 0.6, z, 0xb48a32, { ry: x * 7 + z * 3 }); };
     const bolt = () => { const g = G(); g.cyl(0.012, 0.012, 0.7, 0.1, 0, 0, A.woodDk, { axis: 'x', seg: 5 }); g.cyl(0, 0.026, 0.09, 0.49, 0, 0, A.iron, { rz: -R90, seg: 5 }); g.box(0.1, 0.05, 0.005, -0.22, 0, 0, A.linen); return g; };
 
     // Headquarters ----------------------------------------------------------------------------------------------
@@ -2196,8 +2202,8 @@ const Models = (() => {
       yard(b, 4, 4, B.earth);
       for (const [x, z, s] of [[-1.2, -1.15, 1], [-0.35, -1.25, 0.8]]) {
         b.cyl(0.18 * s, 0.34 * s, 0.95 * s, x, 0.08 + 0.475 * s, z, B.mud, { seg: 10 });
-        b.cyl(0.15 * s, 0.15 * s, 0.03, x, 0.08 + 0.95 * s, z, B.fire, { seg: 8, g: 1.6 });
-        b.box(0.06, 0.16 * s, 0.16 * s, x + 0.33 * s, 0.08, z, B.fire, { g: 2 });
+        b.cyl(0.15 * s, 0.15 * s, 0.03, x, 0.08 + 0.95 * s, z, B.ember, { seg: 8, g: 0.4 });
+        b.box(0.06, 0.16 * s, 0.16 * s, x + 0.33 * s, 0.08, z, B.ember, { g: 0.4 });
       }
       for (const x of [-1.7, -0.75, 0.2]) for (const z of [0.15, 1.45]) b.cyl(0.04, 0.05, 0.9, x, 0.53, z, A.wood, { seg: 6 });
       gable(b, 2.3, 1.7, 0.62, -0.75, 0.98, 0.8, B.thatch);
@@ -2209,6 +2215,7 @@ const Models = (() => {
       flagpole(b, 0.5, 0.08, -1.7, 1.3, 0.44, 0.28);
       pennant(b, -1.85, 1.6, 0.8, 0.5, 0.3);
       bset('refinery', 1, [part('body', b)]);
+      vents['refinery@1'] = [[-1.2, 1.06, -1.15, 1], [-0.35, 0.87, -1.25, 0.8]];
     }
     // Medieval smelter, a stone furnace house under tiles with its stack, a water wheel that works the bellows, a
     // timber-framed workshop under thatch, and the ore yard.
@@ -2218,7 +2225,7 @@ const Models = (() => {
       b.box(1.7, 0.9, 1.3, -0.95, 0.08, -0.75, B.stone);
       gable(b, 1.85, 1.5, 0.55, -0.95, 0.98, -0.75, B.tile);
       stack(b, 0.62, 0.4, 1.95, -1.45, 0.08, -1.05, B.stoneDk);
-      b.box(0.04, 0.24, 0.28, -0.09, 0.08, -1.05, B.fire, { g: 2 });
+      b.box(0.04, 0.24, 0.28, -0.09, 0.08, -1.05, B.ember, { g: 0.4 });
       b.box(0.04, 0.5, 0.34, -0.09, 0.08, -0.45, A.woodDk);
       b.box(1.0, 0.1, 0.2, -1.5, 1.0, 0.08, A.wood);
       b.box(0.08, 0.92, 0.08, -1.95, 0.08, 0.08, A.woodDk);
@@ -2231,6 +2238,7 @@ const Models = (() => {
       pennant(b, -0.95, 1.53, -0.15, 0.55, 0.32);
       flagpole(b, 0.6, 0.08, 1.6, 1.3, 0.44, 0.28);
       bset('refinery', 2, [part('body', b), part('wheel', waterWheel(0.48, 0.16), { pivot: [-1.0, 0.56, 0.08], spin: 'z', rate: 1.1 })]);
+      vents['refinery@2'] = [[-1.45, 2.06, -1.05, 1]];
     }
     // Gunpowder smelter, a tapering stone blast furnace glowing at its throat, the charging bridge, a casting shed
     // under tiles, a water wheel for the bellows, a charcoal barn and pigs of iron in the yard.
@@ -2239,8 +2247,8 @@ const Models = (() => {
       yard(b, 4, 4, B.gravel);
       stack(b, 1.3, 0.8, 1.6, -1.0, 0.08, -0.75, B.stone);
       b.box(0.86, 0.34, 0.86, -1.0, 1.68, -0.75, B.brick);
-      b.cyl(0.22, 0.22, 0.04, -1.0, 2.04, -0.75, B.fire, { seg: 8, g: 1.4 });
-      b.box(0.04, 0.32, 0.3, -0.33, 0.08, -0.75, B.fire, { g: 2 });
+      b.cyl(0.22, 0.22, 0.04, -1.0, 2.04, -0.75, B.ember, { seg: 8, g: 0.4 });
+      b.box(0.04, 0.32, 0.3, -0.33, 0.08, -0.75, B.ember, { g: 0.4 });
       b.box(0.36, 0.08, 0.95, -1.0, 1.68, -1.6, A.wood);
       for (const z of [-1.4, -1.85]) b.box(0.08, 1.6, 0.08, -1.0, 0.08, z, A.woodDk);
       for (const [x, z] of [[-0.4, -1.4], [0.6, -1.4], [-0.4, -0.1], [0.6, -0.1]]) b.box(0.07, 0.72, 0.07, x, 0.08, z, A.woodDk);
@@ -2252,6 +2260,7 @@ const Models = (() => {
       ore(b, [[1.15, -1.0, 0.22], [1.4, -0.75, 0.2], [1.3, -1.3, 0.17], [0.9, -1.35, 0.15]]);
       flagpole(b, 1.6, 0.08, 1.6, 1.35, 0.46, 0.3);
       bset('refinery', 3, [part('body', b), part('wheel', waterWheel(0.46, 0.16), { pivot: [-1.0, 0.54, 0.12], spin: 'z', rate: 1.2 })]);
+      vents['refinery@3'] = [[-1.0, 2.1, -0.75, 1.2]];
     }
     // Industrial refinery, a brick crusher hall under corrugated iron with its name board, two tall chimneys, a
     // riveted ore bin on legs, an incline down to the cobbled dock, and a water tower.
@@ -2379,12 +2388,13 @@ const Models = (() => {
       b.box(1.7, 0.7, 0.9, 0.35, 0.08, -1.45, B.stone);
       gable(b, 1.85, 1.1, 0.55, 0.35, 0.78, -1.45, B.tile);
       stack(b, 0.34, 0.28, 1.6, 1.0, 0.08, -1.55, B.stoneDk);
-      b.box(0.26, 0.22, 0.03, 0.85, 0.12, -0.99, B.fire, { g: 2 });
+      b.box(0.26, 0.22, 0.03, 0.85, 0.12, -0.99, B.ember, { g: 0.4 });
       fence(b, -0.7, 1.85, 1.85, 1.85); fence(b, 1.85, 1.85, 1.85, 0.55); fence(b, 1.85, -0.55, 1.85, -0.95);
       horseInto(b, 0.4, 0.08, 0.9, 0.3, 0x5a4a3a, { armour: true }); horseInto(b, 0.95, 0.08, -0.25, -2.6, 0x8a6a4a, { armour: true });
       pennant(b, -1.35, 1.66, 1.75, 0.5, 0.34);
       flagpole(b, 1.75, 0.08, 1.75, 1.3, 0.44, 0.28);
       bset('factory', 2, [part('body', b)]);
+      vents['factory@2'] = [[1.0, 1.7, -1.55, 0.6]];
     }
     // Foundry, a brick casting hall under tiles with a louvred ridge and doors in the side's paint, a tall stack,
     // cast barrels on skids, a pile of shot and the flag.
@@ -2448,11 +2458,12 @@ const Models = (() => {
       pennant(b, tx, H + 1.46, tz, 0.45, 0.3);
       strut(b, [tx + 0.4, H + 0.3, tz + 0.4], [tx + 0.62, H + 0.55, tz + 0.62], 0.04, A.woodDk);
       b.cyl(0.11, 0.07, 0.14, tx + 0.64, H + 0.62, tz + 0.64, B.ironDk, { seg: 8, open: true });
-      b.sph(0.09, tx + 0.64, H + 0.68, tz + 0.64, B.fire, { seg: 8, rings: 5, g: 2 });
+      b.sph(0.09, tx + 0.64, H + 0.68, tz + 0.64, B.flame, { seg: 8, rings: 5, g: 0.25 });
       b.box(0.9, 0.5, 0.8, 0.6, 0.08, 0.65, B.mud);
       b.box(0.96, 0.05, 0.86, 0.6, 0.58, 0.65, B.mudDk);
       b.box(0.03, 0.38, 0.26, 1.06, 0.08, 0.65, A.woodDk);
       bset('radar', 1, [part('body', b)]);
+      vents['radar@1'] = [[tx + 0.64, H + 0.8, tz + 0.64, 0.45]];
     }
     // Medieval watchtower, a tall round tower of stone with slits, a corbelled crenellated top and a beacon
     // burning on it, a pennant, and a guardhouse under slate.
@@ -2464,7 +2475,7 @@ const Models = (() => {
       b.cyl(0.6, 0.5, 0.2, tx, 2.48, tz, B.stoneDk, { seg: 12 });
       crenRing(b, tx, tz, 0.54, 2.58, B.stone, 10, 0.15);
       b.cyl(0.14, 0.08, 0.16, tx, 2.66, tz, B.ironDk, { seg: 8 });
-      b.sph(0.11, tx, 2.78, tz, B.fire, { seg: 8, rings: 5, g: 2 });
+      b.sph(0.11, tx, 2.78, tz, B.flame, { seg: 8, rings: 5, g: 0.25 });
       pennant(b, tx + 0.3, 2.58, tz + 0.3, 0.75, 0.36);
       for (const [a, y] of [[0, 0.8], [0, 1.7], [-R90, 1.25], [-0.8, 2.0]]) b.box(0.05, 0.28, 0.06, tx + Math.cos(a) * 0.52, y, tz - Math.sin(a) * 0.52, B.coal, { ry: a });
       b.box(0.05, 0.5, 0.3, tx + 0.55, 0.08, tz, A.woodDk);
@@ -2473,6 +2484,7 @@ const Models = (() => {
       b.box(0.03, 0.42, 0.26, 1.16, 0.08, 0.7, A.woodDk);
       hang(b, 0.6, 0.62, 1.11, 0.3, 0.36, true);
       bset('radar', 2, [part('body', b)]);
+      vents['radar@2'] = [[tx, 2.92, tz, 0.5]];
     }
     // Signal tower, a plastered tower under a low roof carrying a semaphore mast whose regulator and arms rock as
     // it signals, the keeper's house, and the flag.
@@ -3043,7 +3055,7 @@ const Models = (() => {
     // shape at half its size.
     units.recon = units.biplane;
     units.uavp = units.plane.map(p => Object.assign({}, p, { geo: p.geo.clone().scale(0.42, 0.42, 0.42) }));
-    return { units, buildings, man, chute, scenery, fx, ageKey };
+    return { units, buildings, man, chute, scenery, fx, ageKey, vents };
   }
 
   return { make, P };

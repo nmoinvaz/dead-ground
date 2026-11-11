@@ -1133,6 +1133,27 @@ const Hud = (() => {
       og.drawImage(c, 0, 0, S2, S2, -S2 / 2, -S2 / 2, S2, S2);
       og.restore(); og.globalAlpha = 1;
     }
+    // One cloud of a furnace's, forge's or beacon's plume: small and grey, ringed in ink, rising and leaning with the
+    // wind as it swells and thins. In the light paper's colours, as the dark scheme turns the overlay over.
+    function drawFume(f) {
+      const k = f.t / f.life, t = f.t, fx = f.x + f.wx * t * 0.5, fy = f.y + t * 0.45, fz = f.z + f.wz * t * 0.5;
+      const [x, y] = world.project(fx, fy, fz);
+      if (x < -40 || y < -40 || x > world.vw + 40 || y > world.vh + 40) return;
+      const R = Math.min(40, f.s * world.ppu(fx, fy, fz) * (0.1 + 0.32 * Math.sqrt(k)));
+      if (!(R > 0.8)) return;
+      const n = 3 + (f.seed * 7 % 2 | 0), S2 = Math.ceil(R * 2.8), c = puffSheet(S2), g = c.getContext('2d'), lobes = [[0, 0, R * 0.6]];
+      for (let i = 0; i < n; i++) { const a = i / n * 6.283 + rnd(f.seed, i) * 0.9; lobes.push([Math.cos(a) * R * 0.42, Math.sin(a) * R * 0.3, R * (0.38 + 0.18 * rnd(f.seed, i + 3))]); }
+      // Drawn whole on the scratch sheet first, so the lobes' inner outlines never show through the fade.
+      g.clearRect(0, 0, S2, S2); g.save(); g.translate(S2 / 2, S2 / 2);
+      g.strokeStyle = '#3a322a'; g.lineWidth = Math.max(0.8, R * 0.07);
+      for (const [cx, cy, r] of lobes) { g.beginPath(); g.arc(cx, cy, r, 0, 6.283); g.stroke(); }
+      g.fillStyle = '#d6cfc2';
+      for (const [cx, cy, r] of lobes) { g.beginPath(); g.arc(cx, cy, r, 0, 6.283); g.fill(); }
+      g.restore();
+      og.save(); og.globalAlpha = (k < 0.1 ? k / 0.1 : k < 0.5 ? 1 : 1 - (k - 0.5) / 0.5) * 0.85;
+      og.drawImage(c, 0, 0, S2, S2, x - S2 / 2, y - S2 / 2, S2, S2);
+      og.restore();
+    }
     function drawInk(s, t) {
       // The blasts, in the manner the look asks for: 0 the comic burst, 1 an engraver's rays and scribbled smoke, 2 an
       // ink blot with flung drops, 3 a plan's dashed circle of the blast, 4 nothing drawn over the scene.
@@ -1141,6 +1162,7 @@ const Hud = (() => {
       const INKC = '#1a1512', PAPERC = PAPER_C;
       for (const f of world.inkFx) {
         if (f.k === 'puff') { drawPuff(f); continue; }
+        if (f.k === 'fume') { drawFume(f); continue; }
         // A whale's spout: a plume of spray rising and spreading from the blowhole, drawn as small white clouds ringed
         // in fine blue, in the light paper's colours, as the dark scheme turns the overlay over.
         if (f.k === 'spout') {

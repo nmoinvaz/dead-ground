@@ -3211,6 +3211,18 @@ const World = (() => {
             }
           }
           if (e.kind === 'power' && VIS(e.x, e.y)) { r.dust -= dt; if (r.dust <= 0) { r.dust = 0.5; const a = r.yaw, cx = Math.cos(-a), sx = Math.sin(-a), ox = cx * -0.55 + sx * 0.5, oz = sx * -0.55 - cx * 0.5; steam(e.x + ox, r.y0 + 1.9, e.y + oz); } }
+          // Smoke from the vents of a form that has them, a furnace, forge or beacon, thicker for twenty seconds
+          // after an ore cart docks.
+          const vents = MODELS.vents[bkey(e.kind, e.team)];
+          if (vents && VIS(e.x, e.y) && Math.abs(e.x - cam.x) < cam.dist * 0.8 && Math.abs(e.y - cam.y) < cam.dist * 0.8) {
+            if (e.dockedBy) r.busy = now + 20;
+            r.fume = (r.fume || 0) - dt;
+            if (r.fume <= 0) {
+              const busy = r.busy > now, c = Math.cos(r.yaw), sn = Math.sin(r.yaw);
+              r.fume = busy ? 0.3 : 0.7;
+              for (const [vx, vy, vz, k] of vents) fume(e.x + vx * c + vz * sn, r.y0 + vy, e.y - vx * sn + vz * c, busy ? k * 1.4 : k);
+            }
+          }
           pushScreen(onScreen, e, e.x, r.y0 + 0.6, e.y, Math.max(e.w, e.h) * 0.5);
           continue;
         }
@@ -3410,6 +3422,13 @@ const World = (() => {
       for (let i = 0; i < 7; i++) smoke.add(x, y, z, (Math.random() - 0.5) * 0.25, 2.2 + Math.random() * 0.8, (Math.random() - 0.5) * 0.25, 0.9 + Math.random() * 0.4, 0.08, 0.42, [0.95, 0.97, 1, 0.75], [1, 1, 1, 0], Math.random() * 4 | 0, { drag: 1.6 });
     }
     function steam(x, y, z) { smoke.add(x, y, z, 0.25, 0.9, 0.1, 4, 0.8, 3.2, [0.92, 0.92, 0.92, 0.3], [1, 1, 1, 0], Math.random() * 4 | 0, { drag: 0.2 }); }
+    // A furnace's, forge's or beacon's smoke: a thin plume, k its size, that rises slowly and leans with the wind.
+    function fume(x, y, z, k) {
+      const s = theme.smoke, w = SH.uWind.value;
+      // The pen-and-ink look draws the plume itself, as small clouds that rise, swell and thin.
+      if (style.name === 'ink') { inkAdd({ k: 'fume', x, y, z, life: 4 + Math.random(), s: k, wx: w.x, wz: w.y }); return; }
+      smoke.add(x, y, z, w.x * 0.6 + (Math.random() - 0.5) * 0.1, 0.55 + Math.random() * 0.2, w.y * 0.6 + (Math.random() - 0.5) * 0.1, 4 + Math.random(), 0.2 * k, 1.5 * k, [s[0], s[1], s[2], 0.45], [s[0], s[1], s[2], 0], Math.random() * 4 | 0, { drag: 0.25 });
+    }
     function muzzle(x, y, z, size) {
       glow.add(x, y, z, 0, 0, 0, 0.07, size, size * 0.6, [7, 5, 2.6, 1], [4, 1.8, 0.3, 0], 12);
       glow.add(x, y, z, 0, 0, 0, 0.1, size * 1.8, size * 2.4, [2.2, 1.1, 0.4, 0.6], [0.8, 0.2, 0, 0], 8);
