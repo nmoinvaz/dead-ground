@@ -155,7 +155,7 @@ const Hud = (() => {
     const mini = $('map'), mg = mini.getContext('2d');
     const state = {
       tab: 'bld', sel: [], groups: {}, mode: null, drag: null, hover: null, hoverTown: -1, alerts: [], marks: [], lastAlert: null, attackMove: false, tipKind: null, seenTabs: {},
-      keys: new Set(), mouse: { x: 0, y: 0, in: false }, touches: new Map(), pinch: null, lastTap: 0, cams: {}, cameos: {}, hintShown: 0, side: 0, touchUsed: false, ping: 0,
+      keys: new Set(), mouse: { x: 0, y: 0, in: false }, touches: new Map(), pinch: null, lastTap: 0, cams: {}, camAt: {}, cameos: {}, hintShown: 0, side: 0, touchUsed: false, ping: 0,
     };
     const S = () => game.S, team = () => Math.max(0, game.team), P = () => game.S.P[team()];
 
@@ -307,6 +307,7 @@ const Hud = (() => {
         const b = state.cams[k], st = b.querySelector('.state'), qty = b.querySelector('.qty'), ct = b.querySelector('.ct');
         const info = camInfo(k);
         let off = false, ready = false, prog = 0, label = '', count = 0;
+        const inHand = [];
         if (k === 'tech') {
           const q = p.q.tech[0];
           off = !TECH[p.tech + 1];
@@ -323,6 +324,13 @@ const Hud = (() => {
           off = !!Rules.blockedReason(s, t, k);
           const q = queueOf(k);
           for (const it of q) if (sameLine(it.kind, k)) count++;
+          // The units of this line in hand at once: the rules give each building that trains them the next item in
+          // the queue not held, its chosen building first.
+          if (UNITS[k]) {
+            const halls = Rules.trainersOf(s, t, Rules.TRAINER_OF[UNITS[k].cat]);
+            let slot = 0;
+            for (const it of q) { if (slot >= halls.length) break; if (it.hold) continue; const by = halls[slot++]; if (sameLine(it.kind, k)) inHand.push([it.prog, by]); }
+          }
           // Units are trained at several buildings at once, so a unit's card shows the one of its kind furthest on.
           let head = q[0];
           if (UNITS[k]) for (const it of q) if (sameLine(it.kind, k) && (!sameLine(head.kind, k) || it.prog > head.prog)) head = it;
@@ -342,9 +350,21 @@ const Hud = (() => {
         b.style.setProperty('--p', (prog * 360).toFixed(1) + 'deg');
         b.classList.toggle('busy', prog > 0);
         if (st.textContent !== label) st.textContent = label;
-        // A line set to repeat is marked with a looping arrow beside its count.
-        const show = (count > 1 && UNITS[k] ? count : '') + (UNITS[k] && repeating(k) ? ' ↻' : '');
+        // A line set to repeat is marked with a looping arrow beside its count. Several in hand at once read as ×n,
+        // with those still waiting after, a thin bar for each along the card's foot, and the buildings at work named
+        // in its note.
+        const many = inHand.length > 1;
+        const show = (many ? `×${inHand.length}` + (count > inHand.length ? ` +${count - inHand.length}` : '') : count > 1 && UNITS[k] ? count : '') + (UNITS[k] && repeating(k) ? ' ↻' : '');
         if (qty.textContent !== String(show)) qty.textContent = show;
+        let ln = b.querySelector('.lanes');
+        if (many || ln) {
+          if (!ln) { ln = document.createElement('span'); ln.className = 'lanes'; b.append(ln); }
+          const n = many ? inHand.length : 0;
+          while (ln.children.length < n) ln.append(document.createElement('i'));
+          while (ln.children.length > n) ln.lastChild.remove();
+          inHand.slice(0, n).forEach(([pg], i) => { const w = (pg * 100).toFixed(1) + '%'; if (ln.children[i].style.width !== w) ln.children[i].style.width = w; });
+        }
+        state.camAt[k] = many ? 'In training at ' + inHand.map(([, by]) => Rules.nameOf(by.kind, p.tech) + (by.primary ? ' (chosen)' : '')).join(', ') : '';
         const price = info.cost ? '$' + info.cost + (info.oil ? ' · ' + info.oil + ' oil' : '') : '';
         if (ct.textContent !== price) ct.textContent = price;
       }
@@ -359,7 +379,8 @@ const Hud = (() => {
       const tip = $('tip'), k = state.tipKind;
       if (!k) { if (tip.dataset.k) { tip.dataset.k = ''; tip.innerHTML = '<p class="idle">Hover a picture for what it does.</p>'; } return; }
       const info = camInfo(k), why = UNITS[k] || BUILDINGS[k] ? Rules.blockedReason(S(), team(), k) : null;
-      const html = `<h3>${info.name}</h3><p class="price">${info.cost ? '$' + info.cost : ''}${info.oil ? ' &middot; ' + info.oil + ' oil' : ''}${info.power ? ' &middot; ' + (info.power > 0 ? '+' : '') + info.power + ' power' : ''}</p><p>${info.note || ''}</p>${why ? `<p class="why">${why}</p>` : ''}`;
+      const at = state.camAt[k];
+      const html = `<h3>${info.name}</h3><p class="price">${info.cost ? '$' + info.cost : ''}${info.oil ? ' &middot; ' + info.oil + ' oil' : ''}${info.power ? ' &middot; ' + (info.power > 0 ? '+' : '') + info.power + ' power' : ''}</p><p>${info.note || ''}</p>${at ? `<p class="at">${at}</p>` : ''}${why ? `<p class="why">${why}</p>` : ''}`;
       if (tip.innerHTML !== html) tip.innerHTML = html;
       tip.dataset.k = k;
     }

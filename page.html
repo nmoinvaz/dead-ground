@@ -195,6 +195,10 @@ body[data-look="ink"][data-scheme="dark"] #end, body[data-look="ink"][data-schem
 .cam .ct { position: absolute; left: 4px; bottom: 2px; font: normal 11px/1 var(--mono); color: var(--amber); text-shadow: 0 1px 2px #000; }
 .cam .key { position: absolute; top: 2px; left: 3px; font: 10px var(--mono); color: var(--dim); text-decoration: none; }
 .cam .qty { position: absolute; top: 2px; right: 4px; font: 15px var(--mono); color: var(--amber); text-decoration: none; text-shadow: 0 1px 2px #000; }
+/* Several of a kind in hand at once: a thin bar for each along the card's foot. */
+.cam .lanes { position: absolute; left: 3px; right: 3px; bottom: 2px; display: flex; flex-direction: column; gap: 1px; pointer-events: none; }
+.cam .lanes i { display: block; height: 2px; background: var(--amber); box-shadow: 0 0 2px #000; }
+#tip .at { font-style: italic; }
 .cam .state { position: absolute; left: 0; right: 0; top: 34%; text-align: center; font: 700 14px var(--ui); letter-spacing: .1em; color: #fff; text-shadow: 0 1px 3px #000; }
 .cam.busy::after { content: ""; position: absolute; inset: 0; background: conic-gradient(rgba(0,0,0,0) var(--p), rgba(0,0,0,.66) var(--p)); pointer-events: none; }
 .cam.off { filter: grayscale(.9) brightness(.46); }
@@ -448,6 +452,7 @@ body[data-look="ink"] .cam:hover { box-shadow: inset 0 0 0 1.5px var(--redink); 
 body[data-look="ink"] .cam .nm { color: var(--ink); text-shadow: 0 0 3px var(--paper-hi), 0 0 2px var(--paper-hi), 0 0 1px var(--paper-hi); font-family: var(--display); font-weight: 400; font-size: 14px; }
 body[data-look="ink"] .cam .ct, body[data-look="ink"] .cam .qty { color: var(--redink); text-shadow: 0 0 2px var(--paper-hi), 0 0 2px var(--paper-hi); }
 body[data-look="ink"] .cam .key { color: var(--ink-dim); }
+body[data-look="ink"] .cam .lanes i { background: var(--redink); box-shadow: 0 0 0 1px var(--paper-hi); }
 body[data-look="ink"] .cam .state { color: var(--ink); text-shadow: 0 0 3px var(--paper-hi), 0 0 3px var(--paper-hi); }
 body[data-look="ink"] .cam.busy::after { background: conic-gradient(rgba(0,0,0,0) var(--p), rgba(242,232,210,.72) var(--p)); }
 /* A card that cannot be had is hatched across in ink, its picture and name still readable under it. */
