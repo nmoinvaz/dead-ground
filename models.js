@@ -453,6 +453,8 @@ const Models = (() => {
       g.box(0.078, 0.028, 0.036, 0.014, -L - 0.02, 0, P.boots);
       return g;
     };
+    // The same, by a name the scenery's own legs do not hide.
+    const manLegs = legs;
     // A man's trunk from the hip to the neck, chest over waist over hips, its depth front to back about three fifths
     // of its breadth. y0 is the hip.
     const TRUNK = [[0.001, -0.012], [0.05, -0.012], [0.056, 0.03], [0.049, 0.075], [0.055, 0.12], [0.066, 0.168], [0.069, 0.186], [0.05, 0.203], [0.021, 0.214]].map(([r, y]) => new THREE.Vector2(r, y));
@@ -1234,12 +1236,29 @@ const Models = (() => {
       for (const z of [0.21, -0.21]) cart.cyl(0.13, 0.13, 0.03, -0.2, 0.13, z, 0x4e3a26, { axis: 'z', seg: 10 });
       cart.box(0.4, 0.02, 0.02, 0.08, 0.22, 0.08, 0x4e3a26); cart.box(0.4, 0.02, 0.02, 0.08, 0.22, -0.08, 0x4e3a26);
       scenery.cart = cart.finish();
-      // Someone in a town: legs, a shirt the instance colours, a head.
-      const folk = G();
-      folk.cyl(0.05, 0.06, 0.32, 0, 0.16, 0, 0x5a5650, { seg: 6 });
-      folk.cyl(0.07, 0.08, 0.3, 0, 0.47, 0, 0xffffff, { seg: 6 });
-      folk.sph(0.06, 0, 0.69, 0, 0xf0d8c0, { seg: 6, rings: 4 });
-      scenery.folk = folk.finish();
+      // Someone in a town, built as the soldiers are: a man in shirt and trousers and a woman in a dress, their
+      // arms at their sides. The shirt or dress takes the instance's colour; skin, hair and trousers keep their own.
+      const civilian = dress => {
+        const g = G(), hip = MAN_H * 0.5, shoulder = hip + MAN_H * 0.3, hy = shoulder + 0.03 + head * 0.5, TB1 = { t: 1 };
+        trunk(g, 0xffffff, hip, dress ? 0.94 : 1, TB1);
+        const leg = manLegs(dress ? 0x8a7a6a : 0x4a4640);
+        for (const z of [-0.042, 0.042]) g.merge(leg, 0, hip, z);
+        // A skirt from the waist to below the knee.
+        if (dress) g.add(new THREE.LatheGeometry([[0.001, -0.17], [0.088, -0.17], [0.082, -0.1], [0.06, 0.02], [0.05, 0.075]].map(([r, y]) => new THREE.Vector2(r, y)), 8), 0, hip, 0, 0xffffff, { sx: 0.8, t: 1 });
+        const ps = POSES.none;
+        for (const [sh, el, hd] of [[SHO[0], ps.RE, ps.R], [SHO[1], ps.LE, ps.L]]) {
+          limb(g, sh, el, 0.02, 0.016, 0xffffff, TB1); limb(g, el, hd, 0.016, 0.012, dress ? 0xf0d8c0 : 0xffffff, dress ? {} : TB1);
+          g.sph(0.014, hd[0], hd[1], hd[2], 0xf0d8c0, { seg: 5, rings: 4 });
+        }
+        g.cyl(0.016, 0.019, 0.04, 0.003, shoulder + 0.028, 0, 0xf0d8c0, { seg: 5 });
+        g.sph(head * 0.46, 0.005, hy, 0, 0xf0d8c0, { seg: 8, rings: 6, sy: 1.18 });
+        g.sph(head * 0.5, -0.006, hy + 0.012, 0, dress ? 0x6a4a30 : 0x3a2e24, { seg: 8, rings: 4, top: true, sy: 0.85 });
+        if (dress) g.sph(0.022, -0.035, hy - 0.004, 0, 0x6a4a30, { seg: 6, rings: 4 });
+        // Built at the soldiers' height and drawn a fifth larger, as the town's own scale has them.
+        return G().merge(g, 0, 0, 0, 0, 1.2).finish();
+      };
+      scenery.folk = civilian(false);
+      scenery.folk2 = civilian(true);
       // A fishing boat, along x: a pointed hull, a wheelhouse, a short mast.
       const boat = G();
       boat.prism([[-0.75, 0], [0.6, 0], [0.85, 0.26], [-0.8, 0.26]], 0.5, 0, -0.06, 0, 0xffffff);

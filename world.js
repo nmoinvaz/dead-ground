@@ -219,6 +219,8 @@ const World = (() => {
 
     const paint = patch(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.58, metalness: 0.22, envMapIntensity: 1 }));
     const plainTint = patch(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.92, metalness: 0, envMapIntensity: 0.6 }), { tint: true });
+    // Townsfolk: only their marked clothes take the instance's colour, so skin, hair and trousers keep their own.
+    const folkMat = patch(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.92, metalness: 0, envMapIntensity: 0.6 }));
     const treeTint = patch(new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.92, metalness: 0, envMapIntensity: 0.6 }), { tint: true, sway: true });
 
     // A tiling noise texture, height in red, grain in green, and its slope in blue and alpha.
@@ -2102,13 +2104,13 @@ const World = (() => {
     const newFlock = p => ({ cx: p[0], cy: p[1], x: p[0], y: p[1], r: 4 + Math.random() * 6, alt: 7 + Math.random() * 4, w: (Math.random() < 0.5 ? -1 : 1) * (0.25 + Math.random() * 0.2), t: Math.random() * 9, fly: 0, go: false, vx: 0, vy: 0, n: 5 + (Math.random() * 5 | 0), off: Array.from({ length: 10 }, () => [Math.random() * 6.28, Math.random() * 1.6, Math.random() * 6.28]) });
     function buildLife() {
       const sc = MODELS.scenery, R = Math.random, scale = W / 128;
-      const mk = (geo, cap) => {
-        const m = lineCat(new THREE.InstancedMesh(geo, plainTint, cap), 0.6);
+      const mk = (geo, cap, mat = plainTint) => {
+        const m = lineCat(new THREE.InstancedMesh(geo, mat, cap), 0.6);
         m.instanceMatrix.setUsage(THREE.DynamicDrawUsage); m.frustumCulled = false; m.castShadow = true; m.receiveShadow = true; m.count = 0;
         m.setColorAt(0, neutral); m.instanceColor.setUsage(THREE.DynamicDrawUsage);
         return add(m);
       };
-      life = { herds: [], rafts: [], cars: [], folk: [], boats: [], flocks: [], birds: [], alarm: [], danger: [], rise: [], scanT: 0, beastM: {}, carM: mk(sc.car, 32), cartM: mk(sc.cart, 32), folkM: mk(sc.folk, 400), stallM: mk(sc.stall, 24), fairs: [], boatM: mk(sc.boat, 12), whales: [], whaleM: mk(sc.whale, 16), armM: mk(new THREE.BoxGeometry(0.62, 0.035, 0.035), 60) };
+      life = { herds: [], rafts: [], cars: [], folk: [], boats: [], flocks: [], birds: [], alarm: [], danger: [], rise: [], scanT: 0, beastM: {}, carM: mk(sc.car, 32), cartM: mk(sc.cart, 32), folkM: mk(sc.folk, 400, folkMat), folkM2: mk(sc.folk2, 400, folkMat), stallM: mk(sc.stall, 24), fairs: [], boatM: mk(sc.boat, 12), whales: [], whaleM: mk(sc.whale, 16), armM: mk(new THREE.BoxGeometry(0.62, 0.035, 0.035), 60) };
       // The theatre's herds by their shares, its wolf packs, and its ducks.
       // The kinds dealt out in proportion to their shares, in a shuffled order, so each comes.
       const deal = (theme.fauna || [['deer', 1]]).flatMap(([k, w]) => Array(w).fill(k)).sort(() => Math.random() - 0.5);
@@ -2594,9 +2596,9 @@ const World = (() => {
       CM.count = n; dirty(CM);
       (motor ? L.cartM : L.carM).count = 0;
       n = 0;
-      let na = 0;
+      let na = 0, n2 = 0;
       for (const f of L.folk) {
-        if (n >= 400 || !VIS(f.x, f.y)) continue;
+        if (n >= 400 || n2 >= 400 || !VIS(f.x, f.y)) continue;
         if (!f.fight && !(f.dead > 0) && (f.hide > 0 || L.danger[f.town])) continue;
         let px = f.x, py = f.y, lean = 0, roll = 0, hop = f.v > 0 ? Math.abs(Math.sin(f.ph)) * 0.03 : 0;
         // Arms carried at the port, run with, and swung or levelled at the foe.
@@ -2616,9 +2618,12 @@ const World = (() => {
         // Down on the ground, and getting up in the last half second.
         if (f.down > 0) roll = 1.45 * Math.min(1, f.down / 0.5);
         compose(m1, px, heightAt(M, px, py) + hop, py, -f.a, lean, roll, 1);
-        L.folkM.setMatrixAt(n, m1); L.folkM.setColorAt(n, colA.set(f.col)); n++;
+        // Each keeps the figure it was first drawn with, a man's or a woman's.
+        if (f.w === undefined) f.w = Math.random() < 0.5;
+        if (f.w) { L.folkM2.setMatrixAt(n2, m1); L.folkM2.setColorAt(n2, colA.set(f.col)); n2++; }
+        else { L.folkM.setMatrixAt(n, m1); L.folkM.setColorAt(n, colA.set(f.col)); n++; }
       }
-      L.folkM.count = n; dirty(L.folkM);
+      L.folkM.count = n; dirty(L.folkM); L.folkM2.count = n2; dirty(L.folkM2);
       // The stalls of a market day, round the park's fountain.
       let ns = 0;
       for (const q of L.fairs) for (const s of q.stalls) {
