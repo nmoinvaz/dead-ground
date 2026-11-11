@@ -3845,13 +3845,8 @@ const World = (() => {
         // A rocket putting a constellation in orbit rises from the base on a column of smoke.
         case 'satlaunch': flyers.push({ w: 'nuke', x0: e.x, y0: heightAt(M, e.x, e.y) + 1, z0: e.y, x1: e.x + 4, y1: heightAt(M, e.x, e.y) + 120, z1: e.y - 4, t: 0, dur: 9, arc: 0, trail: 0 }); break;
         case 'intel': if (e.team === viewTeam) rings.add(e.x, heightAt(M, e.x, e.y), e.y, 9, 1.6, 0xd85a3a); break;
-        case 'uav': {
-          if (VIS(e.x, e.y)) rings.add(e.x, heightAt(M, e.x, e.y), e.y, 14, 1.2, 0x8fd0ff);
-          // The call's aircraft over the ground it lights up: a biplane on a recon flight, a drone on a UAV sweep.
-          const late = S.P[e.team] && S.P[e.team].tech >= 5;
-          planes.push({ orbit: { x: e.x, z: e.y, r: 9, dur: e.dur }, t: 0, kind: late ? 'plane' : 'biplane', scale: late ? 0.75 : 1.1, alt: 10, col: teamCol[e.team] });
-          break;
-        }
+        // The call's own aircraft is a unit in the rules, drawn as the others are, so only the caller's ring is here.
+        case 'uav': if (e.team === viewTeam && VIS(e.x, e.y)) rings.add(e.x, heightAt(M, e.x, e.y), e.y, 14, 1.2, 0x8fd0ff); break;
         case 'incoming': if (VIS(e.x, e.y)) rings.add(e.x, heightAt(M, e.x, e.y), e.y, 1.4, 1.2, 0xff8050); break;
       }
     }

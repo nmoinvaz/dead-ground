@@ -365,9 +365,21 @@ const AI = (() => {
     if (opened(P, POWERS.uav) && P.cooldown.uav <= 0 && P.supply > 1200) {
       const foe = foeOf(S, me);
       if (foe < 0) return;
-      const t = S.bases[foe], a = me.rand() * 6.28, r = 6 + me.rand() * 18;
-      R.push(S, me.team, { c: 'power', name: 'uav', x: t[0] + Math.cos(a) * r, y: t[1] + Math.sin(a) * r });
+      // The recon aircraft can be shot down, so of a few places about the enemy's base it takes the one with the
+      // least anti-air fire it knows of, and none if every one is ringed.
+      const t = S.bases[foe];
+      let best = null, low = Infinity;
+      for (let k = 0; k < 4; k++) {
+        const a = me.rand() * 6.28, r = 6 + me.rand() * 18, x = t[0] + Math.cos(a) * r, y = t[1] + Math.sin(a) * r;
+        let fire = 0;
+        for (const e of S.ents) {
+          if (e.team !== foe || e.hp <= 0 || !e.d.weapons || Math.hypot(e.x - x, e.y - y) > 20 || (!e.b && !R.seenBy(S, me.team, e))) continue;
+          for (const wn of e.d.weapons) { const w = R.WEAPONS[wn]; if (w && w.air) fire += w.dmg * (w.vs.air ?? 1) / w.cd; }
+        }
+        if (fire < low) { low = fire; best = [x, y]; }
+      }
       me.lastPower = S.tick;
+      if (best && low < 45) R.push(S, me.team, { c: 'power', name: 'uav', x: best[0], y: best[1] });
     }
   }
 

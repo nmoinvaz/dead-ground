@@ -16,7 +16,8 @@ from kokoro_onnx import Kokoro
 RADIO = ['Construction complete', 'Unit ready', 'Low power', 'Our base is under attack', 'Ore truck under attack',
          'Insufficient supply', 'Insufficient oil', 'New technology available', 'Town captured', 'Town lost',
          'Building captured', 'Building lost', 'Missile ready', 'Warning, missile launch detected',
-         'Upgrade complete', 'Power restored']
+         'Upgrade complete', 'Power restored', 'Recon aircraft lost',
+         'Enemy recon aircraft overhead']
 HERALD = ['The work is done', 'At your command', 'To arms, we are attacked', 'Our carts are attacked',
           'We lack the supplies', 'New learning is ours', 'The town is ours', 'The town is lost', 'It is ours now',
           'A building has fallen', 'Our craft is bettered']

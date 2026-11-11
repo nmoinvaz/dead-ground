@@ -2794,6 +2794,10 @@ const Models = (() => {
       fx.tstroke = G().box(1, 1, 1, 0.5, -0.5, 0, 0xffffff, { t: 1 }).finish();
     }
 
+    // The recon calls' aircraft: the biplane for the Recon Flight, and for the UAV Sweep a small plane, the jet's
+    // shape at half its size.
+    units.recon = units.biplane;
+    units.uavp = units.plane.map(p => Object.assign({}, p, { geo: p.geo.clone().scale(0.42, 0.42, 0.42) }));
     return { units, buildings, man, chute, scenery, fx, ageKey };
   }
 

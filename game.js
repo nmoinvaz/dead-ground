@@ -4,7 +4,7 @@ const Game = (() => {
   const $ = id => document.getElementById(id);
   // Each call: what is written in the log, its tone, and what is spoken when that differs, as a recorded line.
   const VOICE = {
-    buildready: ['Construction complete', ''], unitready: ['Unit ready', ''], lowpower: ['Low power, build a power plant', 'bad', 'Low power'], powerok: ['Power restored', 'good'], baseattack: ['Our base is under attack', 'bad'],
+    buildready: ['Construction complete', ''], unitready: ['Unit ready', ''], lowpower: ['Low power, build a power plant', 'bad', 'Low power'], powerok: ['Power restored', 'good'], reconlost: ['Recon aircraft lost', 'bad'], reconover: ['Enemy recon aircraft overhead', 'bad'], baseattack: ['Our base is under attack', 'bad'],
     truckattack: ['Ore truck under attack', 'bad'], nosupply: ['Insufficient supply', 'bad'], nooil: ['Insufficient oil', 'bad'], newtech: ['New technology available', ''],
     towntaken: ['Town captured', 'good'], townlost: ['Town lost', 'bad'], captured: ['Building captured', 'good'], lostbuilding: ['Building lost', 'bad'],
     siloready: ['Missile ready', 'good'], missile: ['Warning, missile launch detected', 'bad'], upgraded: ['Upgrade complete', 'good'],

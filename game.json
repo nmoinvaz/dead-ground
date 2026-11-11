@@ -121,7 +121,9 @@
     "v_h_storm_passing": "sfx/voice/v_h_storm_passing.mp3",
     "v_h_dust_storm_passing": "sfx/voice/v_h_dust_storm_passing.mp3",
     "v_h_bridge_destroyed": "sfx/voice/v_h_bridge_destroyed.mp3",
-    "v_r_power_restored": "sfx/voice/v_r_power_restored.mp3"
+    "v_r_power_restored": "sfx/voice/v_r_power_restored.mp3",
+    "v_r_recon_aircraft_lost": "sfx/voice/v_r_recon_aircraft_lost.mp3",
+    "v_r_enemy_recon_aircraft_overhead": "sfx/voice/v_r_enemy_recon_aircraft_overhead.mp3"
   },
   "out": "dist/index.html"
 }
