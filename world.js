@@ -3352,6 +3352,8 @@ const World = (() => {
       for (let i = 0; i < parts.length; i++) {
         const p = parts[i], d = p.def;
         if (d.id === 'hull' || d.id === 'body') { emit(p, base, color); continue; }
+        // A gun's crew stands where it is while the gun runs back under it.
+        if (d.still) { if (P.kick) { m2.makeRotationZ(-P.kick * 0.5); m3.makeTranslation(P.kick, 0, 0); m2.multiply(m3); mOut.multiplyMatrices(base, m2); emit(p, mOut, color); } else emit(p, base, color); continue; }
         if (d.rig) {
           if (d.rig === 'leg') {
             // Each hip in turn: swing at the hip, lean out by its splay, then the lower leg from the knee, which the
@@ -3476,7 +3478,13 @@ const World = (() => {
       const bob = moving ? Math.abs(Math.sin(phase)) * 0.018 * (1 - 0.5 * c) : 0;
       if (arms && P && !fallen) heldPose(arms.def.blow, P, i * 0.04, hp2); else { hp2[0] = 0; hp2[1] = 0; }
       const lean = arms && arms.def.blow === 'thrust' ? Math.max(0, -hp2[0]) * 1.1 : 0;
-      compose(m1, x, y + bob + (-0.06 * c - 0.14 * k + 0.04 * q) * US, z, yaw, -fallen * 1.5 - lean - 0.22 * c - 0.1 * k - 1.47 * q, 0, US);
+      // A man who falls crumples: his knees buckle and his hip drops till he kneels on both, and he topples forward
+      // about his knees as his shins come straight, to lie face down on the ground.
+      const fb = fallen ? smooth(0, 0.45, fallen) : 0, ft = fallen ? smooth(0.3, 1, fallen) : 0;
+      if (fallen) {
+        compose(m1, x, y + (-0.172 * fb + 0.03 * ft) * US, z, yaw, 0, 0, US);
+        m3.makeTranslation(0.01, 0.172, 0); m1.multiply(m3); m3.makeRotationZ(-1.53 * ft); m1.multiply(m3); m3.makeTranslation(-0.01, -0.172, 0); m1.multiply(m3);
+      } else compose(m1, x, y + bob + (-0.06 * c - 0.14 * k + 0.04 * q) * US, z, yaw, -lean - 0.22 * c - 0.1 * k - 1.47 * q, 0, US);
       const hK = 1 + (manVar(seed * 3.1 + i * 7.7 + 1.3) - 0.5) * 0.1, bK = 1 + (manVar(seed * 5.3 + i * 3.9 + 2.9) - 0.5) * 0.12;
       m3.makeScale(bK, hK, bK); m1.multiply(m3);
       put(body, m1, color);
@@ -3486,13 +3494,14 @@ const World = (() => {
       const sw = moving ? Math.sin(phase) * 0.62 * (1 - k - q) : 0, hipH = 0.31 - 0.14 * k - 0.06 * c;
       for (const s of [-1, 1]) {
         let tt = s * sw + 0.35 * c, ts = (moving ? -(0.12 + 0.6 * Math.max(0, Math.cos(phase) * s)) * (1 - k - q) : 0) - 0.6 * c;
+        if (fallen) { tt = -0.15 * fb * (1 - ft); ts = -Math.min(1.3 * fb, 1.53 - 1.5 * ft); }
         if (shinP && k > 0) {
           const kt = s > 0 ? 1.3 : -0.15, ks = s > 0 ? Math.acos(clamp((hipH - 0.138 * Math.cos(kt)) / 0.173, -1, 1)) - kt : -1.45 - kt;
           tt += (kt - tt) * k; ts += (ks - ts) * k;
         }
         m2.makeTranslation(0, 0.31, s * 0.042);
         m3.makeRotationZ(tt); m2.multiply(m3);
-        if (!shinP) { m3.makeScale(1, 1 - 0.18 * c - k * (s > 0 ? 0.22 : 0.51), 1); m2.multiply(m3); }
+        if (!shinP) { m3.makeScale(1, 1 - 0.18 * c - k * (s > 0 ? 0.22 : 0.51) - 0.5 * fb * (1 - ft), 1); m2.multiply(m3); }
         mOut.multiplyMatrices(m1, m2);
         put(leg, mOut, color);
         if (shinP) {
@@ -3505,7 +3514,8 @@ const World = (() => {
       if (arms) {
         const pv = arms.def.pivot;
         m2.makeTranslation(pv[0] + hp2[1], pv[1], pv[2]);
-        m3.makeRotationZ(hp2[0] + 1.47 * q); m2.multiply(m3);
+        // Lying down, prone or fallen, his arms come forward along the ground.
+        m3.makeRotationZ(hp2[0] + 1.47 * q + 1.4 * ft); m2.multiply(m3);
         m3.makeTranslation(-pv[0], -pv[1], -pv[2]); m2.multiply(m3);
         mOut.multiplyMatrices(m1, m2);
         put(arms, mOut, color);
@@ -3698,8 +3708,8 @@ const World = (() => {
         const c = corpses[i];
         c.t += dt;
         if (c.t > 9) { corpses.splice(i, 1); continue; }
-        const k = Math.min(1, c.t / 0.45), sink = c.t > 7.5 ? (c.t - 7.5) * 0.3 : 0;
-        drawMan(sets['man' + c.kind], c.x, c.y - sink, c.z, c.yaw, 0, false, c.color, k * k);
+        const k = Math.min(1, c.t / 0.8), sink = c.t > 7.5 ? (c.t - 7.5) * 0.3 : 0;
+        drawMan(sets['man' + c.kind], c.x, c.y - sink, c.z, c.yaw, 0, false, c.color, k);
       }
       for (let i = wrecks.length - 1; i >= 0; i--) {
         const w = wrecks[i];
