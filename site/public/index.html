@@ -632,7 +632,7 @@ body[data-look="ink"] .sheet { box-shadow: 4px 4px 0 var(--ink); }
       <div class="choice"><h2>Map sheet frame</h2><div id="s-sheet" class="two"><button data-v="on">On</button><button data-v="off">Off</button></div></div>
       <div class="choice"><h2>Shadows</h2><div id="s-shade" class="two"><button data-v="hatch">Hatched</button><button data-v="wash">Wash</button></div></div>
       <div class="choice"><h2>Music</h2><div id="s-music" class="two"><button data-v="on">On</button><button data-v="off">Off</button></div></div>
-      <p id="build">Build ee7406c 2026-11-10 17:31</p>
+      <p id="build">Build 288d83e 2026-11-10 17:56</p>
     </div>
     <div id="banner" hidden></div>
     <button id="update" hidden>A new version of Mapmaker’s War is out. <b>Reload</b></button>
@@ -7264,16 +7264,23 @@ const Models = (() => {
     const hoof = (l, L2) => l.box(0.044, 0.022, 0.04, 0.008, -L2 - 0.022, 0, 0x2a2018);
     // A horse along x, standing on the ground at (x, z). A lean saddle-cloth carries the side's colour. With o.rig its
     // legs are left out and its hips are added to that list, for legs that move.
+    // A horse in the round: a barrel of a body between a deep chest and a rounded haunch, a neck that tapers up to a
+    // long head with its ears pricked, a mane, a tail that hangs, and a saddle cloth draped over its back.
     function horse(g, x, z, coat, o = {}) {
-      g.box(0.44, 0.16, 0.15, x, 0.3, z, coat);
-      g.sph(0.09, x + 0.19, 0.39, z, coat, { seg: 8, rings: 6 }); g.sph(0.09, x - 0.19, 0.39, z, coat, { seg: 8, rings: 6 });
-      g.box(0.08, 0.22, 0.08, x + 0.27, 0.38, z, coat, { rz: -0.55 });
-      g.box(0.16, 0.07, 0.07, x + 0.38, 0.55, z, coat, { rz: -0.45 });
+      g.sph(0.1, x, 0.38, z, coat, { seg: 12, rings: 8, sx: 2.2, sy: 0.85, sz: 0.78 });
+      g.sph(0.095, x + 0.16, 0.39, z, coat, { seg: 10, rings: 7, sy: 1.05, sz: 0.85 }); g.sph(0.1, x - 0.17, 0.4, z, coat, { seg: 10, rings: 7, sz: 0.88 });
+      g.cyl(0.042, 0.066, 0.26, x + 0.27, 0.5, z, coat, { rz: -0.62, seg: 8, sz: 0.8 });
+      g.sph(0.05, x + 0.38, 0.6, z, coat, { seg: 9, rings: 6, sx: 1.9, sy: 0.85, sz: 0.75, rz: -0.75 });
+      for (const s of [-1, 1]) g.cyl(0.004, 0.014, 0.05, x + 0.34, 0.68, z + s * 0.022, coat, { seg: 4, rz: 0.2 });
       if (o.rig) o.rig.push(...quad(x, z, 0.17, 0.05, 0.34, o.off || 0));
       else for (const [dx, dz] of [[0.17, 0.05], [0.17, -0.05], [-0.17, 0.05], [-0.17, -0.05]]) g.cyl(0.022, 0.018, 0.32, x + dx, 0.16, z + dz, coat, { seg: 5 });
-      g.box(0.03, 0.18, 0.03, x - 0.26, 0.26, z, 0x2a2018, { rz: 0.45 });
-      g.box(0.05, 0.12, 0.02, x + 0.24, 0.47, z, 0x2a2018, { rz: -0.55 });
-      if (o.cloth !== false) g.box(0.24, 0.12, 0.17, x - 0.02, 0.36, z, o.cloth || A.coatR, o.armour ? { t: 0.6 } : TB);
+      g.cyl(0.012, 0.03, 0.2, x - 0.3, 0.33, z, 0x2a2018, { rz: 0.5, seg: 6 });
+      g.box(0.05, 0.16, 0.022, x + 0.25, 0.5, z, 0x2a2018, { rz: -0.62 });
+      if (o.cloth !== false) {
+        const cl = o.cloth || A.coatR, ct = o.armour ? { t: 0.6 } : TB;
+        g.sph(0.1, x - 0.02, 0.42, z, cl, Object.assign({ seg: 12, rings: 6, top: true, sx: 1.25, sy: 0.45, sz: 0.98 }, ct));
+        for (const s of [-1, 1]) g.box(0.2, 0.12, 0.014, x - 0.02, 0.3, z + s * 0.09, cl, Object.assign({ rx: s * 0.18 }, ct));
+      }
     }
     // The legs of horses of one coat, from the hips gathered for them.
     const horseLegs = (coat, hips) => legRig('horse' + coat.toString(16), hips, GAIT.horse, 0.17, 0.15, 0.024, 0.019, coat, hoof);
@@ -7337,9 +7344,14 @@ const Models = (() => {
     })();
     const wheelPart = list => part('wheels', wheelGeo, { rig: 'wheel', share: 'wheel', wheels: list });
     // An ox, stockier than a horse, with horns. With o.rig its legs are left out and its hips added to that list.
+    // An ox in the round: a heavy body with a hump over the shoulders, the head held low on a short neck, a broad
+    // muzzle and horns.
     function ox(g, x, z, o = {}) {
-      g.box(0.46, 0.2, 0.2, x, 0.24, z, A.ox); g.sph(0.11, x + 0.2, 0.36, z, A.ox, { seg: 8, rings: 6 });
-      g.box(0.14, 0.1, 0.1, x + 0.32, 0.32, z, A.ox, { rz: -0.3 });
+      g.sph(0.12, x - 0.02, 0.34, z, A.ox, { seg: 12, rings: 8, sx: 2.0, sy: 0.9, sz: 0.88 });
+      g.sph(0.09, x + 0.12, 0.42, z, A.ox, { seg: 10, rings: 6, sy: 0.8 });
+      g.sph(0.09, x + 0.25, 0.35, z, A.ox, { seg: 10, rings: 7, sx: 1.2, sy: 0.95, sz: 0.85 });
+      g.sph(0.055, x + 0.33, 0.3, z, A.ox, { seg: 8, rings: 6, sx: 1.25, sy: 0.85, sz: 1.1 });
+      g.cyl(0.012, 0.025, 0.12, x - 0.25, 0.3, z, A.ox, { rz: 0.4, seg: 5 });
       for (const s of [-1, 1]) g.cyl(0.008, 0.012, 0.1, x + 0.3, 0.42, z + s * 0.07, A.ivory, { rx: s * 1.1, seg: 4 });
       if (o.rig) o.rig.push(...quad(x, z, 0.17, 0.07, 0.3));
       else for (const [dx, dz] of [[0.17, 0.07], [0.17, -0.07], [-0.17, 0.07], [-0.17, -0.07]]) g.cyl(0.03, 0.025, 0.26, x + dx, 0.13, z + dz, A.ox, { seg: 5 });
@@ -7398,21 +7410,35 @@ const Models = (() => {
     // and its head, with trunk and tusks, swings down and up to gore.
     {
       const b = G(), hips = [];
-      b.sph(0.42, 0, 0.72, 0, A.hide, { seg: 12, rings: 8, sx: 1.35, sz: 0.8 });
+      // The body, highest over the shoulders and sloping to the rump, as an elephant's back does.
+      b.sph(0.42, 0, 0.72, 0, A.hide, { seg: 16, rings: 10, sx: 1.35, sz: 0.8 });
+      b.sph(0.3, 0.2, 0.86, 0, A.hide, { seg: 14, rings: 8, sx: 1.05, sz: 0.95 });
+      b.sph(0.26, -0.34, 0.72, 0, A.hide, { seg: 12, rings: 8, sz: 1.05 });
       hips.push(...quad(0, 0, 0.32, 0.18, 0.56));
-      b.box(0.7, 0.3, 0.7, -0.05, 0.92, 0, A.coatR, TB);
-      b.box(0.5, 0.2, 0.5, -0.05, 1.1, 0, A.wood, T);
-      for (const [dx, dz] of [[0.2, 0.2], [0.2, -0.2], [-0.25, 0.2], [-0.25, -0.2]]) b.box(0.025, 0.24, 0.025, dx, 1.3, dz, A.woodDk);
-      b.box(0.56, 0.03, 0.56, -0.05, 1.54, 0, A.canvas, T);
+      // A cloth in the side's colour draped over the back and hanging down both flanks.
+      b.sph(0.36, -0.05, 1.0, 0, A.coatR, Object.assign({ seg: 16, rings: 6, top: true, sx: 1.05, sy: 0.42, sz: 1.0 }, TB));
+      for (const s of [-1, 1]) b.box(0.5, 0.3, 0.016, -0.05, 0.74, s * 0.355, A.coatR, Object.assign({ rx: s * 0.12 }, TB));
+      // A round wicker howdah with its riders, under a peaked canopy on four poles.
+      b.cyl(0.21, 0.18, 0.2, -0.05, 1.22, 0, A.wood, Object.assign({ seg: 12 }, T));
+      b.cyl(0.22, 0.22, 0.03, -0.05, 1.33, 0, A.woodDk, { seg: 12 });
+      for (const [dx, dz] of [[0.1, 0.13], [0.1, -0.13], [-0.2, 0.13], [-0.2, -0.13]]) b.box(0.02, 0.24, 0.02, dx, 1.32, dz, A.woodDk);
+      b.cyl(0.02, 0.28, 0.1, -0.05, 1.6, 0, A.canvas, Object.assign({ seg: 12 }, T));
       b.cyl(0.04, 0.035, 0.14, -0.05, 1.37, 0.08, A.tunic, { seg: 6 }); b.sph(0.035, -0.05, 1.47, 0.08, P.skin, { seg: 6, rings: 4 });
       b.cyl(0.04, 0.035, 0.14, -0.05, 1.37, -0.1, A.linen, { seg: 6 }); b.sph(0.035, -0.05, 1.47, -0.1, P.skin, { seg: 6, rings: 4 });
-      b.box(0.03, 0.18, 0.03, -0.54, 0.62, 0, 0x3a3634, { rz: 0.4 });
+      b.cyl(0.01, 0.025, 0.26, -0.58, 0.62, 0, 0x3a3634, { rz: 0.35, seg: 5 });
       // The head about its neck at (0.42, 0.84).
+      // The head: a high domed brow, great ears swept back flat against it, a trunk hanging in two lengths that curve
+      // forward at the tip, and tusks curving out and up.
       const h = G(), hx = -0.42, hy0 = -0.84;
-      h.sph(0.22, 0.58 + hx, 0.86 + hy0, 0, A.hide, { seg: 10, rings: 8 });
-      for (const s of [-1, 1]) h.cyl(0.16, 0.16, 0.02, 0.5 + hx, 0.88 + hy0, s * 0.2, A.hide, { axis: 'z', seg: 10, sx: 0.8 });
-      h.cyl(0.05, 0.03, 0.5, 0.78 + hx, 0.62 + hy0, 0, A.hide, { seg: 7, rz: 0.25 });
-      for (const s of [-1, 1]) h.cyl(0.012, 0.02, 0.3, 0.76 + hx, 0.66 + hy0, s * 0.08, A.ivory, { seg: 5, rz: -1.1 });
+      h.sph(0.26, 0.74 + hx, 0.92 + hy0, 0, A.hide, { seg: 14, rings: 10, sx: 0.9, sy: 1.1 });
+      for (const s of [-1, 1]) h.sph(0.3, 0.6 + hx, 0.88 + hy0, s * 0.28, A.hide, { seg: 12, rings: 8, sx: 0.7, sy: 1.0, sz: 0.1, ry: s * 0.4 });
+      h.cyl(0.06, 0.085, 0.34, 0.94 + hx, 0.66 + hy0, 0, A.hide, { seg: 9, rz: 0.12 });
+      h.cyl(0.035, 0.06, 0.3, 0.99 + hx, 0.38 + hy0, 0, A.hide, { seg: 8, rz: -0.25 });
+      h.sph(0.038, 1.04 + hx, 0.24 + hy0, 0, A.hide, { seg: 7, rings: 5 });
+      for (const s of [-1, 1]) {
+        h.cyl(0.016, 0.03, 0.24, 0.96 + hx, 0.68 + hy0, s * 0.11, A.ivory, { seg: 6, rz: -1.2, rx: s * 0.2 });
+        h.cyl(0.007, 0.016, 0.14, 1.1 + hx, 0.76 + hy0, s * 0.13, A.ivory, { seg: 5, rz: -0.45, rx: s * 0.25 });
+      }
       units.elephant = [part('hull', b), ...legRig('elephant', hips, GAIT.elephant, 0.28, 0.26, 0.09, 0.085, A.hide, (l, L2) => l.cyl(0.1, 0.1, 0.03, 0, -L2 - 0.015, 0, 0x5a5652, { seg: 8 })), part('head', h, { rig: 'head', pivot: [0.42, 0.84, 0] })];
       units.elephant.gait = GAIT.elephant;
     }
@@ -7717,7 +7743,18 @@ const Models = (() => {
       g.plate(plan(1, 0), h, 0, -0.08, 0, c);
       g.plate(plan(1, 0.05), 0.02, 0, h - 0.08, 0, deck);
     };
-    const mast = (g, x, hgt, w, y0) => { g.cyl(0.025, 0.035, hgt, x, y0 + hgt / 2, 0, A.woodDk, { seg: 6 }); g.box(0.03, hgt * 0.55, w, x + 0.03, y0 + hgt * 0.3, 0, A.canvas, T); };
+    // A mast and its square sail, filled by the wind: three panels bowed forward from the mast, the middle one
+    // furthest, hung from a yard across the top, and the whole braced round a third of a right angle to the wind,
+    // so that from above the sail shows its face rather than its edge.
+    const mast = (g, x, hgt, w, y0, brace = 0.55) => {
+      g.cyl(0.025, 0.035, hgt, x, y0 + hgt / 2, 0, A.woodDk, { seg: 6 });
+      const sh = hgt * 0.55, sy = y0 + hgt * 0.3, d = w * 0.14, m = w * 0.36, sw = w * 0.34, k = 0.5, cb = Math.cos(brace), sb = Math.sin(brace);
+      // A panel at (dx, dz) from the mast, turned ry, then braced with the whole sail.
+      const panel = (dx, dz, wid, ry) => g.box(0.022, sh, wid, x + dx * cb + dz * sb, sy, -dx * sb + dz * cb, A.canvas, Object.assign({ ry: ry + brace }, T));
+      panel(0.03 + d, 0, m, 0);
+      for (const s of [-1, 1]) panel(0.03 + d - (sw / 2) * Math.sin(k), s * (m / 2 + (sw / 2) * Math.cos(k)), sw, -s * k);
+      g.cyl(0.012, 0.012, w * 1.08, x + 0.04 * cb, sy + sh + 0.01, -0.04 * sb, A.woodDk, { axis: 'z', seg: 5, ry: brace });
+    };
     {
       // War galley: a long low hull, a bronze ram, a bank of oars a side and one square sail.
       const b = G();
