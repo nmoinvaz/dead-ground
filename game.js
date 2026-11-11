@@ -443,6 +443,13 @@ const Game = (() => {
             break;
           }
           case 'weather': if (G.playing) { const v = e.passed ? SKY_PASS[e.was] : SKY_SAY[e.kind]; if (v && !(e.kind === 'cloud' && e.was === 'clear')) { hud.say(v[0], v[1]); if (v[2]) audio.voice('sky', v[2], oldAge()); } } break;
+          // The AI Data Center's word of the enemy's main army, and its warning when that army is near the base.
+          case 'intel': if (G.playing && e.team === G.team) {
+            let near = null, nd = 1e9; for (const tw of S.towns) { const d = Math.hypot(tw.x - e.x, tw.y - e.y); if (d < nd) { nd = d; near = tw; } }
+            const where = near && nd < 30 ? ` near ${Rules.townName(S, near.id)}` : '';
+            if (e.near) { hud.say(`Intelligence: a large enemy force is close to your base${where}.`, 'bad'); hud.alert(e.x, e.y); }
+            else hud.say(`Intelligence: the enemy's main army is${where || ' marked on the map'}.`);
+          } break;
           // One of the player's fishing boats on water with no fishing ground, said once a minute at most.
           case 'nofish': if (G.playing && e.team === G.team && S.tick - (G.lastNoFish ?? -1e9) > 60 * Rules.HZ) { G.lastNoFish = S.tick; hud.say('A fishing boat has no fishing grounds in its water. Build its dock on other water.', 'bad'); } break;
           // One of the player's squads breaking, said now and then, not for every squad.

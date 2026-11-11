@@ -3590,6 +3590,7 @@ const World = (() => {
           planes.push({ x: e.x, z: e.y, dx: dx / d * 26, dz: dy / d * 26, t: 0 });
           break;
         }
+        case 'intel': if (e.team === viewTeam) rings.add(e.x, heightAt(M, e.x, e.y), e.y, 9, 1.6, 0xd85a3a); break;
         case 'uav': {
           if (VIS(e.x, e.y)) rings.add(e.x, heightAt(M, e.x, e.y), e.y, 14, 1.2, 0x8fd0ff);
           // The call's aircraft over the ground it lights up: a biplane on a recon flight, a drone on a UAV sweep.

@@ -705,6 +705,31 @@ const Models = (() => {
       buildings.derrick = [part('body', b), part('beam', d, { pivot: [0, 0.96, 0], nod: true })];
     }
 
+    // AI Data Center: a long low hall of server racks with a row of chillers on its roof, a pair of cooling
+    // towers at one end, a generator yard with its stacks and a fenced edge. The hall's long sides are banded with
+    // narrow vents, and a lit strip of glass marks the door.
+    {
+      const b = G();
+      pad(b, 4, 3, P.concDk);
+      b.box(3.1, 0.62, 1.7, -0.3, 0.08, -0.25, P.bld);
+      b.box(3.14, 0.05, 1.74, -0.3, 0.7, -0.25, P.bld2);
+      for (const z of [-1.11, 0.61]) for (let i = 0; i < 14; i++) b.box(0.13, 0.36, 0.02, -1.72 + i * 0.205, 0.2, z, P.steelDk);
+      b.box(0.5, 0.36, 0.02, -0.3, 0.12, 0.61, P.glass, { g: 0.9 });
+      for (let i = 0; i < 6; i++) {
+        const x = -1.55 + i * 0.5;
+        b.box(0.36, 0.16, 0.36, x, 0.75, -0.25, P.bld2);
+        b.cyl(0.13, 0.13, 0.03, x, 0.92, -0.25, P.steelDk, { seg: 12 });
+      }
+      for (const z of [-0.75, 0.25]) b.cyl(0.24, 0.32, 0.9, 1.55, 0.53, z, P.concLt, { seg: 16 });
+      for (const z of [-0.75, 0.25]) b.cyl(0.25, 0.25, 0.03, 1.55, 0.99, z, P.steelDk, { seg: 16 });
+      b.box(0.9, 0.34, 0.5, -1.3, 0.08, 1.0, P.olive);
+      for (const x of [-1.55, -1.05]) b.cyl(0.05, 0.05, 0.42, x, 0.42, 1.0, P.steelDk, { seg: 8 });
+      for (let i = 0; i < 18; i++) b.box(0.025, 0.24, 0.025, -1.9 + i * 0.22, 0.08, 1.38, P.steel);
+      b.box(3.96, 0.02, 0.02, 0, 0.28, 1.38, P.steel);
+      lights(b, [[-1.85, 0.74, -1.1], [1.25, 0.74, -1.1], [1.55, 1.02, -0.75]]);
+      buildings.datacenter = [part('body', b)];
+    }
+
     // Missile silo, a heavy lid over a shaft. The doors open as it charges.
     {
       const b = G();
@@ -2657,7 +2682,7 @@ const Models = (() => {
     {
       const lin = hex => new THREE.Color(hex), near = (v, k) => Math.abs(v[0] - k.r) + Math.abs(v[1] - k.g) + Math.abs(v[2] - k.b) < 0.02;
       const GLASS = lin(P.glass), YEL = lin(P.yellow), KEEP = [lin(P.ore), lin(P.red)], GL = lin(A.glow), BLUE = lin(0x1d4660), LT = lin(0xd6dadf), DK = lin(0x343a42);
-      const FOOT = { hq: 5, power: 3, refinery: 4, barracks: 3, factory: 4, radar: 3, airfield: [6, 4], fob: 3, silo: 3 }, LIT = { g: 0.8 };
+      const FOOT = { hq: 5, power: 3, refinery: 4, barracks: 3, factory: 4, radar: 3, airfield: [6, 4], fob: 3, silo: 3, datacenter: [4, 3] }, LIT = { g: 0.8 };
       const rings = (g, x, y0, z, h, rs) => rs.forEach((r, i) => g.add(new THREE.TorusGeometry(r, 0.018, 4, 18), x, y0 + h * (i + 1) / (rs.length + 1), z, A.glow, { rx: R90, g: 0.4 }));
       const SIGN = {
         hq: g => { g.cyl(0.02, 0.13, 1.6, -0.5, 2.72, 0.1, A.exo, { seg: 8 }); rings(g, -0.5, 1.92, 0.1, 1.4, [0.34, 0.24, 0.15]); },
@@ -2670,7 +2695,7 @@ const Models = (() => {
         for (const n of NAMES) { const x = a.attributes[n].array, y = b.attributes[n].array, arr = new Float32Array(x.length + y.length); arr.set(x); arr.set(y, x.length); g.setAttribute(n, new THREE.Float32BufferAttribute(arr, a.attributes[n].itemSize)); }
         return g;
       };
-      for (const k of ['hq', 'power', 'refinery', 'barracks', 'factory', 'radar', 'airfield', 'fob', 'derrick', 'silo', 'bunker', 'atgun', 'sam']) {
+      for (const k of ['hq', 'power', 'refinery', 'barracks', 'factory', 'radar', 'airfield', 'fob', 'derrick', 'silo', 'datacenter', 'bunker', 'atgun', 'sam']) {
         buildings[k + '@6'] = buildings[k].map(p => {
           let g = p.geo.clone();
           const c = g.attributes.color, gl = g.attributes.aGlow, tm = g.attributes.aTeam, v = [0, 0, 0];

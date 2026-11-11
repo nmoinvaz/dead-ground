@@ -46,6 +46,7 @@ const Hud = (() => {
       case 'hel': g.moveTo(-a, -b); g.lineTo(a, b); g.lineTo(a, -b); g.lineTo(-a, b); g.closePath(); break;
       case 'jet': g.moveTo(0, -b); g.lineTo(a, b * 0.6); g.lineTo(0, b * 0.1); g.lineTo(-a, b * 0.6); g.closePath(); break;
       case 'uav': g.moveTo(-a, -b * 0.6); g.lineTo(0, b * 0.6); g.lineTo(a, -b * 0.6); break;
+      case 'dat': for (let i = -1; i <= 1; i++) { g.moveTo(-a * 0.6, i * b * 0.45); g.lineTo(a * 0.6, i * b * 0.45); } break;
       case 'flare': for (let i = 0; i < 8; i++) { const an = i * 0.785; g.moveTo(Math.cos(an) * a * 0.3, Math.sin(an) * b * 0.3); g.lineTo(Math.cos(an) * a, Math.sin(an) * b); } break;
       case 'par': g.arc(0, 0, a * 0.7, Math.PI, 0); g.moveTo(-a * 0.7, 0); g.lineTo(0, b); g.lineTo(a * 0.7, 0); break;
       default: g.rect(-a * 0.5, -b * 0.5, a, b);
@@ -163,7 +164,7 @@ const Hud = (() => {
     ];
     // Everything a side may come to build; the sidebar shows what its age has opened.
     const ALL = {
-      bld: ['power', 'refinery', 'barracks', 'factory', 'radar', 'derrick', 'fob', 'airfield', 'dock', 'silo'],
+      bld: ['power', 'refinery', 'barracks', 'factory', 'radar', 'derrick', 'fob', 'airfield', 'dock', 'silo', 'datacenter'],
       def: ['bunker', 'atgun', 'sam', 'rail'],
       pow: ['tech', 'flare', 'uav', 'barrage', 'para', 'launch'],
     };
@@ -1366,6 +1367,34 @@ const Hud = (() => {
       }
       og.restore();
     }
+    // The AI Data Center's forecast: where the rain clouds and a dust storm's front will be a minute from now, as
+    // dashed outlines on the land lettered with what is coming.
+    const FORECAST = 60 * Rules.HZ;
+    function drawForecast(s) {
+      const M = s.map, at = (x, y) => world.project(x, Rules.terrainAt(M, Math.max(0, Math.min(M.W - 1, x)), Math.max(0, Math.min(M.H - 1, y))), y), t1 = s.tick + FORECAST;
+      og.save(); og.setLineDash([7, 5]); og.lineWidth = 1.6; og.font = `italic 600 12px ${labelFont()}`; og.textAlign = 'center'; og.textBaseline = 'middle';
+      const word = (text, x, y, col) => { og.lineWidth = 3; og.strokeStyle = 'rgba(246,240,226,0.9)'; og.strokeText(text, x, y); og.fillStyle = col; og.fillText(text, x, y); og.lineWidth = 1.6; };
+      for (const c of Rules.showersAt(s, t1)) {
+        if (c.k < 0.3) continue;
+        const col = c.kind === 'snow' ? 'rgba(90,110,150,0.85)' : c.storm > 0.3 ? 'rgba(60,64,96,0.9)' : 'rgba(64,92,140,0.85)';
+        og.strokeStyle = col; og.beginPath();
+        for (let i = 0; i <= 32; i++) { const a = i / 32 * 6.283, [x, y] = at(c.x + Math.cos(a) * c.r * 0.8, c.y + Math.sin(a) * c.r * 0.8); i ? og.lineTo(x, y) : og.moveTo(x, y); }
+        og.stroke();
+        const [lx, ly] = at(c.x, c.y);
+        if (lx > 0 && ly > 0 && lx < world.vw && ly < world.vh) word(c.kind === 'snow' ? 'Snow in a minute' : c.storm > 0.3 ? 'Storm in a minute' : 'Rain in a minute', lx, ly, col);
+      }
+      const dw = Rules.dustWall(s, t1);
+      if (dw && dw.k > 0.3) {
+        // The front, a line across the map at right angles to the wind, from edge to edge.
+        const cx = M.W / 2 + dw.dx * dw.front, cy = M.H / 2 + dw.dy * dw.front, col = 'rgba(150,104,52,0.9)';
+        og.strokeStyle = col; og.beginPath();
+        for (let i = 0; i <= 40; i++) { const k = (i / 40 - 0.5) * M.W * 1.5, [x, y] = at(cx - dw.dy * k, cy + dw.dx * k); i ? og.lineTo(x, y) : og.moveTo(x, y); }
+        og.stroke();
+        const [lx, ly] = at(cx, cy);
+        if (lx > 0 && ly > 0 && lx < world.vw && ly < world.vh) word('Dust storm front in a minute', lx, ly, col);
+      }
+      og.restore();
+    }
     // Lightning, a jagged bolt for a moment, with thunder after, later the farther off it falls. A strike the rules
     // make comes down where it lands; in a storm, now and then, one falls under a storm cloud in the view.
     let bolt = null, boltT = 8;
@@ -1596,6 +1625,7 @@ const Hud = (() => {
       if (!s) return;
       const selected = new Set(state.sel);
       const P0 = t >= 0 ? s.P[t] : null;
+      if (t >= 0 && Rules.dataOn(s, t)) drawForecast(s);
       // With a building that trains units selected, the one its kind comes out of is lettered, where there is a
       // choice of them.
       const trainAt = new Set();
