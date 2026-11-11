@@ -452,7 +452,7 @@ const Rules = (() => {
   };
   const SIZES = {
     duel: 128, quad: 192, world: 256, gulf: 128, pass: 128, lakes: 192,
-    greenwood: 128, oldforest: 192, twinlakes: 128, ponds: 192, seas: 128, isles: 192, peaks: 128, highlands: 192, rivers3: 128, crater: 192, mesa: 128, nile: 128, atlantis: 192,
+    greenwood: 128, oldforest: 192, twinlakes: 128, ponds: 192, seas: 128, isles: 192, peaks: 128, highlands: 192, rivers3: 128, crater: 192, mesa: 128, nile: 128, atlantis: 192, falls: 128,
   };
   // The maps a game may be set on, each a layout and the most sides it seats.
   const MAPS = {
@@ -475,6 +475,7 @@ const Rules = (() => {
     // A map may fix its theatre, and draw its woods as other plants.
     nile: { name: 'The Nile', layout: 'nile', seats: 2, theatre: 'desert', flora: 'palm', names: { river: ['The Nile'] }, about: 'The great river runs between the two sides through the desert, a green strip of fields and palms along its banks, crossed by three long bridges. Pyramids, a temple and its obelisks stand on the sand.' },
     atlantis: { name: 'Atlantis', layout: 'atlantis', seats: 4, ruins: true, about: 'A great island of rings of land and water round a central citadel, joined by bridges, with canals cut in from the sea. Ships can sail the rings.' },
+    falls: { name: 'The Falls', layout: 'falls', seats: 2, about: 'A broad river drops over a great horseshoe fall, as at Niagara, into a deep gorge between the two sides. Bridges and a ford cross above the falls, an island town stands between them, and only a high bridge spans the gorge. Docks hold each reach.' },
     mesa: { name: 'Mesa Country', layout: 'mesa', seats: 2, theatre: 'desert', flora: 'cactus', about: 'Open desert of dunes and sheer-sided mesas, with stands of cactus. The mesas wall off the lines of march.' },
   };
   // The theatre a game on a map is fought in: the map's own, if it fixes one, or the one chosen.
@@ -498,6 +499,11 @@ const Rules = (() => {
   // How many brooks each map's part has. Every part of a map gets the same, so the map stays fair. A brook runs at
   // most BROOK_REACH cells.
   const BROOK_REACH = 90;
+  // A brook's bed lies BED_D under the land. A step down of more than FALL_STEP from one point of its course to the
+  // next (0.8 apart) is steep, and a run of them falling FALL_MIN or more is a waterfall.
+  // The Falls' gorge water lies FALLS_DROP under the river's.
+  const FALLS_DROP = 3.6;
+  const BED_D = 0.35, FALL_STEP = 0.4, FALL_MIN = 0.8, FALL_MAPS = new Set(['pass', 'peaks', 'highlands']);
   const BROOKS = { duel: 2, quad: 1, world: 1, gulf: 2, pass: 2, lakes: 1, greenwood: 2, oldforest: 1, twinlakes: 2, seas: 2, peaks: 2, highlands: 1, crater: 1 };
   // The treeline: woods thin out over TREE_BAND of height round TREE_LINE and stand no higher.
   const TREE_LINE = 8.6, TREE_BAND = 1.2;
@@ -660,7 +666,7 @@ const Rules = (() => {
   }
 
   // ---- The second set of maps: woods, lakes, seas, islands, mountains and rivers ----
-  const MORE = new Set(['greenwood', 'oldforest', 'twinlakes', 'ponds', 'seas', 'isles', 'peaks', 'highlands', 'rivers3', 'crater', 'mesa', 'nile', 'atlantis']);
+  const MORE = new Set(['greenwood', 'oldforest', 'twinlakes', 'ponds', 'seas', 'isles', 'peaks', 'highlands', 'rivers3', 'crater', 'mesa', 'nile', 'atlantis', 'falls']);
   function moreLayout(kind, L, all, fordAt, R) {
     const dry = () => [99, 0];
     // Two sides on the River Duel's frame, mirrored through the middle.
@@ -928,6 +934,63 @@ const Rules = (() => {
         const c = 0.5 + 0.5 * mcos(f), dune = 1.1 * c * c * smooth(18, 32, Math.abs(v));
         return Math.max(top, dune) * k;
       };
+    } else if (kind === 'falls') {
+      // The Falls: a broad river down the middle that drops over a horseshoe fall on either side of a wooded island
+      // into a deep gorge. Above the falls the calm upper river is crossed by a bridge and a ford, and the island
+      // by a bridge from each bank; below them the gorge's sheer walls are crossed only by a high bridge, and a ramp
+      // cut down each wall reaches a landing on the gorge's water. The two banks are each other's reflection across
+      // the river, so the falls stand the same to both sides. The gorge's water lies FALLS_DROP under the river's.
+      // Laid square to the map, the river running down it and the banks mirrored across it, so a building's footprint
+      // is the same on either bank. u is across the river, v along it, upstream positive.
+      const fp = (u, v) => [CX + u, CY - v], fuv = (x, y) => [x - CX, CY - y], reflect = ([x, y]) => [W - x, y];
+      L.syms = [p => [p[0], p[1]], reflect];
+      L.domain = (x, y) => x + 0.5 < CX;
+      const vF = 6, UW = 12, IW = 5, IC = 15, IL = 9, low = water0 => water0 - FALLS_DROP;
+      // The lip of each fall bows upstream in the middle of its channel, as a horseshoe; the island's tip is a cliff.
+      const sq = q => q * q, lipV = au => au >= IW && au <= UW + 0.5 ? vF + 2.5 * Math.max(0, 1 - sq((au - 8.5) / 3.5)) : vF;
+      const gW = v => lerp(12.5, 4.5, smooth(vF - 6, vF - 26, v));
+      const isleW = v => Math.abs(v - IC) < IL ? IW * Math.sqrt(1 - sq((v - IC) / IL)) : 0;
+      L.river = (x, y) => { const [u, v] = fuv(x, y), au = Math.abs(u); return v >= lipV(au) - 0.5 ? [au, UW] : [au, gW(v)]; };
+      L.low = (x, y) => { const [u, v] = fuv(x, y), au = Math.abs(u); return v < lipV(au) && au < gW(v) + 14 ? 1 : 0; };
+      L.carve = (x, y, z, z0, water0) => {
+        const [u, v] = fuv(x, y), au = Math.abs(u), lip = lipV(au);
+        if (v >= lip) {
+          // The island, and the sill at each fall's lip, just clear of the water, which nothing crosses.
+          const iw = isleW(v);
+          if (iw > 0 && au < iw + 2) z = Math.max(z, lerp(1.6, -1.3, smooth(iw - 1.5, iw + 1, au)));
+          if (au <= UW + 0.5 && au >= iw && v < lip + 1.1) z = water0 + 0.02;
+          return z;
+        }
+        const g = gW(v), top = Math.max(z0, 2.6);
+        // A ramp down each wall to a landing just over the gorge's water.
+        if (v < -38 && v > -64 && au > g - 1 && au < g + 6.5) {
+          const shelf = low(water0) + 0.45, rz = lerp(top, shelf, clamp((-40 - v) / 14, 0, 1)), end = smooth(-62, -59, v);
+          if (au < g + 0.3) return lerp(-6, lerp(top, rz, end), smooth(g - 0.8, g + 0.3, au));
+          if (au < g + 4.3) return lerp(top, rz, end);
+          return lerp(lerp(top, rz, end), top, smooth(g + 4.3, g + 5.5, au));
+        }
+        if (au < g + 1.4) return lerp(-6, top, smooth(g - 0.8, g + 1.4, au));
+        if (au < g + 8) return Math.max(z, lerp(top, z0, smooth(g + 1.4, g + 8, au)));
+        return z;
+      };
+      // Each fall's lip, as a line across its channel, and the way downstream, for the picture.
+      const down = [0, 1];
+      L.cascades = [-1, 1].map(sd => ({ pts: Array.from({ length: 15 }, (_, k) => { const au = IW + (UW + 0.5 - IW) * k / 14; return fp(sd * au, lipV(au)); }), dx: down[0], dy: down[1] }));
+      L.bases.push(fp(-50, 0), reflect(fp(-50, 0)));
+      const tU = fp(-30, 36), tG = fp(-30, -34), tI = fp(0, IC), hub = fp(-42, 0);
+      all(L.towns, tU); all(L.towns, tG); L.towns.push(tI);
+      all(L.ore, fp(-44, 18), [7]); all(L.ore, fp(-43, -19), [6.5]); all(L.wells, fp(-55, -16)); all(L.wells, fp(-55, 16));
+      all(L.ore, fp(-26, 18), [5.5]); all(L.ore, fp(-27, -18), [5.5]);
+      all(L.wells, fp(-20, 26)); all(L.wells, fp(-20, -24));
+      // The bridges: one to the island from each bank, one over the upper river, and the high one over the gorge.
+      const iA = fp(-17, IC), iB = fp(-3.5, IC), uA = fp(-17, 40), uB = fp(17, 40), gA = fp(-10, -36), gB = fp(10, -36);
+      L.bridges.push([iA, iB], [reflect(iA), reflect(iB)], [uA, uB], [gA, gB, 3.0]);
+      R(iA, iB, 0); R(iB, tI, 0); R(uA, uB, 0, false); R(gA, gB, 0, false);
+      fordAt(fp(0, 56), fp(0, 57));
+      R(hub, tU, 2.5); R(hub, tG, 2.5); R(tU, iA, 1.5); R(tU, uA, 1.5); R(tU, fp(-15, 56), 2); R(tG, gA, 1.5);
+      R(tG, fp(-6.8, -40), 1); R(fp(-6.8, -40), fp(-6.8, -56), 0);
+      // Shoals above the falls and in the gorge, so each reach has its fishing.
+      L.fish = []; all(L.fish, fp(-6, 30)); L.fish.push(fp(0, -52));
     } else if (kind === 'nile') {
       // The Nile between two bases: a broad river crossed by three long bridges, a green strip of fields and palm
       // groves along its banks, and on the sand beyond, pyramids, a temple and its obelisks.
@@ -1111,6 +1174,7 @@ const Rules = (() => {
       vals.sort((a, b) => a - b);
       cliffAt = vals.length ? vals[Math.floor(vals.length * 0.66)] : 0;
     }
+    const hLand = L.carve ? h.slice() : null;
     for (let j = 0; j < VH; j++) for (let i = 0; i < VW; i++) {
       const x = i / RES, y = j / RES, c = j * VW + i, [d, width] = L.river(x, y);
       // Stretches of a sea coast stand as cliffs: the land rises to a low tableland that drops sheer into deep water.
@@ -1123,12 +1187,20 @@ const Rules = (() => {
         if (cliff > 0) h[c] = lerp(h[c], lerp(-1.3, Math.max(top, 2.7), smooth(width + 0.4, width + 1.4, d)), cliff);
       } else if (cliff > 0) h[c] = lerp(h[c], Math.max(h[c], 2.7), cliff * (1 - smooth(width + 8, width + 16, d)));
     }
+    // A layout's own shaping after the rivers, from the land as it was before them, as The Falls cuts its gorge.
+    if (L.carve) for (let j = 0; j < VH; j++) for (let i = 0; i < VW; i++) { const c = j * VW + i; h[c] = L.carve(i / RES, j / RES, h[c], hLand[c], water); }
+    // The water's level at each point of the heights' grid where a layout has water lower than the rest, as The
+    // Falls' gorge, or none, when all of it stands at the one level.
+    const wl = L.low ? new Float32Array(VW * VH) : null;
+    if (wl) for (let j = 0; j < VH; j++) for (let i = 0; i < VW; i++) wl[j * VW + i] = water - FALLS_DROP * L.low(i / RES, j / RES);
+    const wlv = c => wl ? wl[c] : water, wlAt = (x, y) => wl ? wl[clamp(Math.round(y * RES), 0, VH - 1) * VW + clamp(Math.round(x * RES), 0, VW - 1)] : water;
 
     // Brooks. Each rises on middling ground in one part of the map and winds down to the river, a lake or the
     // map's edge, or sinks into a pool, and is copied by the map's turns. It keeps clear of the bases, towns, ore and
     // wells. A brook is shallow: men wade it, slowly, and wheels and tracks cross only at its fords, or where a road
     // carries it in a culvert. Its dice are its own, so the rest of the map draws the same numbers as before.
-    const brooks = [], brookFords = [], bD = new Float32Array(VW * VH).fill(99), bF = new Uint8Array(VW * VH);
+    const brooks = [], brookFords = [], bD = new Float32Array(VW * VH).fill(99), bF = new Uint8Array(VW * VH), bZ = new Float32Array(VW * VH);
+    const falls = [], fallAt = new Uint8Array(VW * VH);
     if (BROOKS[kind]) {
       const br = mulberry((seed * 2654435761 + 0x9e37) % 4294967296);
       const hv = (x, y) => h[clamp(Math.round(y * RES), 0, VH - 1) * VW + clamp(Math.round(x * RES), 0, VW - 1)];
@@ -1152,7 +1224,7 @@ const Rules = (() => {
           const [v, c] = pop();
           if (v > cost[c]) continue;
           const x = c % W, y = c / W | 0, z = hv(x + 0.5, y + 0.5);
-          if (c !== c0 && (z < water + 0.05 || x === 0 || y === 0 || x === W - 1 || y === H - 1)) { end = c; kind = z < water + 0.05 ? 'water' : 'edge'; break; }
+          if (c !== c0 && (z < wlAt(x + 0.5, y + 0.5) + 0.05 || x === 0 || y === 0 || x === W - 1 || y === H - 1)) { end = c; kind = z < wlAt(x + 0.5, y + 0.5) + 0.05 ? 'water' : 'edge'; break; }
           if (v > 12 && z < hv(low % W + 0.5, (low / W | 0) + 0.5)) low = c;
           if (v > BROOK_REACH) continue;
           for (const [dx, dy, len] of [[1, 0, 1], [-1, 0, 1], [0, 1, 1], [0, -1, 1], [1, 1, 1.414], [-1, 1, 1.414], [1, -1, 1.414], [-1, -1, 1.414]]) {
@@ -1179,15 +1251,32 @@ const Rules = (() => {
         for (let i = 1; i < pts.length; i++) { acc += mhypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]); if (acc >= 0.8) { out.push(pts[i]); acc = 0; } }
         return { pts: out, end: kind };
       };
+      // The deepest single fall a course would take, its bed laid as below.
+      const fallDrop = pts => {
+        let low = 1e9, best = 0, run = 0;
+        const bed = pts.map(p => (low = Math.max(wlAt(p[0], p[1]) + 0.1, Math.min(low, hv(p[0], p[1]) - BED_D))));
+        for (let i = 0; i + 1 < bed.length; i++) { const d = bed[i] - bed[i + 1]; run = d > FALL_STEP ? run + d : 0; best = Math.max(best, run); }
+        return best;
+      };
+      // On the maps of cliffs and high ground a spring may rise higher, and of a few courses the one with the
+      // greatest fall is taken, so their brooks come down the cliffs.
+      const high = FALL_MAPS.has(kind), zTop = high ? 12 : 8;
       for (let k = 0; k < BROOKS[kind]; k++) {
-        for (let tries = 0; tries < 500; tries++) {
+        let pick = null;
+        for (let tries = 0, seen = 0; tries < 500 && seen < (high ? 10 : 1); tries++) {
           // A spring well in from the map's edge and back from the water, so its brook has some way to run.
           const x = 18 + br() * (W - 36), y = 18 + br() * (H - 36), z = hv(x, y);
-          if (!L.domain(x | 0, y | 0) || z < 1.2 || z > 8 || !clear(x, y) || rdv(x, y) < 6 || L.river(x, y)[0] < L.river(x, y)[1] + 14) continue;
+          if (!L.domain(x | 0, y | 0) || z < 1.2 || z > zTop || !clear(x, y) || rdv(x, y) < 6 || L.river(x, y)[0] < L.river(x, y)[1] + 14) continue;
           // Not along a brook already laid.
           if (bD[clamp(Math.round(y * RES), 0, VH - 1) * VW + clamp(Math.round(x * RES), 0, VW - 1)] < 12 || brooks.some(b => b.pts.some(p => mhypot(p[0] - x, p[1] - y) < 12))) continue;
           const t = route(x, y);
           if (t.pts.length < 22) continue;
+          seen++;
+          t.drop = high ? fallDrop(t.pts) : 0;
+          if (!pick || t.drop > pick.drop) pick = t;
+        }
+        if (pick) {
+          const t = pick;
           // A ford part way down, and a second on a long brook, each the nearest place to its mark that is clear of a
           // road, which has its culvert.
           const n = t.pts.length, offRoad = i => roadDist[clamp(Math.round(t.pts[i][1] * RES), 0, VH - 1) * VW + clamp(Math.round(t.pts[i][0] * RES), 0, VW - 1)] > 5;
@@ -1198,10 +1287,27 @@ const Rules = (() => {
             brooks.push({ pts, end: t.end });
             for (const i of fords) { const a = pts[Math.max(0, i - 1)], b = pts[Math.min(pts.length - 1, i + 1)], d = mhypot(b[0] - a[0], b[1] - a[1]) || 1; brookFords.push([pts[i][0], pts[i][1], (b[0] - a[0]) / d, (b[1] - a[1]) / d]); }
           }
-          break;
         }
       }
-      // The distance from each point of the land to the nearest brook, and whether that stretch is a ford.
+      // Each brook's bed follows the land down, a little under it, and never climbs: where the land rises across
+      // its way it cuts through, and where the land drops steeply the bed drops with it in a waterfall. A fall is
+      // a run of steep steps down that falls FALL_MIN at least, away from fords and roads.
+      for (const b of brooks) {
+        let low = 1e9;
+        b.bed = b.pts.map(p => (low = Math.max(wlAt(p[0], p[1]) + 0.1, Math.min(low, hv(p[0], p[1]) - BED_D))));
+        const steep = k => b.bed[k] - b.bed[k + 1] > FALL_STEP;
+        for (let k = 0; k + 1 < b.pts.length; k++) {
+          if (!steep(k)) continue;
+          let j = k;
+          while (j + 2 < b.pts.length && steep(j + 1)) j++;
+          const [x0, y0] = b.pts[k], [x1, y1] = b.pts[j + 1], z0 = b.bed[k], z1 = b.bed[j + 1];
+          const nearFord = brookFords.some(f => mhypot(f[0] - x0, f[1] - y0) < 3 || mhypot(f[0] - x1, f[1] - y1) < 3);
+          if (z0 - z1 >= FALL_MIN && !nearFord && rdv(x0, y0) > 3 && rdv(x1, y1) > 3) falls.push({ x0, y0, z0, x1, y1, z1 });
+          k = j;
+        }
+      }
+      // The distance from each point of the land to the nearest brook, the bed there, and whether that stretch is a
+      // ford.
       for (const b of brooks) for (let k = 0; k + 1 < b.pts.length; k++) {
         const [ax, ay] = b.pts[k], [bx, by] = b.pts[k + 1], dx = bx - ax, dy = by - ay, L2 = dx * dx + dy * dy || 1e-6, Rr = 3;
         const i0 = Math.max(0, Math.floor((Math.min(ax, bx) - Rr) * RES)), i1 = Math.min(VW - 1, Math.ceil((Math.max(ax, bx) + Rr) * RES));
@@ -1209,7 +1315,7 @@ const Rules = (() => {
         for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
           const qx = i / RES - ax, qy = j / RES - ay, t = clamp((qx * dx + qy * dy) / L2, 0, 1), d = mhypot(qx - dx * t, qy - dy * t), c = j * VW + i;
           if (d >= bD[c]) continue;
-          bD[c] = d;
+          bD[c] = d; bZ[c] = lerp(b.bed[k], b.bed[k + 1], t);
           const px = ax + dx * t, py = ay + dy * t;
           bF[c] = brookFords.some(f => mhypot(px - f[0], py - f[1]) < 1.6) ? 1 : 0;
         }
@@ -1219,17 +1325,29 @@ const Rules = (() => {
       for (const b of brooks) if (b.end === 'pool') {
         const [ex, ey] = b.pts[b.pts.length - 1];
         for (let j = Math.max(0, Math.floor((ey - 3) * RES)); j <= Math.min(VH - 1, Math.ceil((ey + 3) * RES)); j++) for (let i = Math.max(0, Math.floor((ex - 3) * RES)); i <= Math.min(VW - 1, Math.ceil((ex + 3) * RES)); i++) {
-          const c = j * VW + i; bD[c] = Math.min(bD[c], Math.max(0, mhypot(i / RES - ex, j / RES - ey) - 1.2));
+          const c = j * VW + i, d = Math.max(0, mhypot(i / RES - ex, j / RES - ey) - 1.2);
+          if (d < bD[c]) { bD[c] = d; bZ[c] = b.bed[b.bed.length - 1]; }
         }
       }
-      for (let c = 0; c < h.length; c++) if (bD[c] < 3.2) h[c] = Math.min(h[c], lerp(water + 0.1, h[c], smooth(0.3, 3.2, bD[c])));
+      for (let c = 0; c < h.length; c++) if (bD[c] < 3.2) h[c] = Math.min(h[c], lerp(bZ[c], h[c], smooth(0.3, 3.2, bD[c])));
+      // The falls' own ground, which nothing crosses: the brook's width down each fall and a little past either end.
+      for (const f of falls) {
+        const dx = f.x1 - f.x0, dy = f.y1 - f.y0, L2 = dx * dx + dy * dy || 1e-6;
+        for (let j = Math.max(0, Math.floor((Math.min(f.y0, f.y1) - 2) * RES)); j <= Math.min(VH - 1, Math.ceil((Math.max(f.y0, f.y1) + 2) * RES)); j++) for (let i = Math.max(0, Math.floor((Math.min(f.x0, f.x1) - 2) * RES)); i <= Math.min(VW - 1, Math.ceil((Math.max(f.x0, f.x1) + 2) * RES)); i++) {
+          const qx = i / RES - f.x0, qy = j / RES - f.y0, t = (qx * dx + qy * dy) / L2, L = Math.sqrt(L2);
+          if (t * L < -0.5 || t * L > L + 0.5) continue;
+          const tc = clamp(t, 0, 1);
+          if (mhypot(qx - dx * tc, qy - dy * tc) < 1.0) fallAt[j * VW + i] = 1;
+        }
+      }
     }
 
     // Decks over the water. Units walk at deck height, the terrain below stays as it was.
     const deck = new Float32Array(VW * VH), bridges = [];
-    const addBridge = (a, b) => {
+    // A bridge's deck stands 0.8 over the water, or as high as its layout gives, as a high bridge over a gorge.
+    const addBridge = (a, b, z = 0.8) => {
       const dx = b[0] - a[0], dy = b[1] - a[1], len = mhypot(dx, dy), ux = dx / len, uy = dy / len, wide = 3;
-      const z = 0.8, br = { x0: a[0], y0: a[1], x1: b[0], y1: b[1], w: wide * 2, z, len, ux, uy, verts: [], cells: [], under: [] };
+      const br = { x0: a[0], y0: a[1], x1: b[0], y1: b[1], w: wide * 2, z, len, ux, uy, verts: [], cells: [], under: [] };
       bridges.push(br);
       const i0 = Math.max(0, Math.floor((Math.min(a[0], b[0]) - 5) * RES)), i1 = Math.min(VW - 1, Math.ceil((Math.max(a[0], b[0]) + 5) * RES));
       const j0 = Math.max(0, Math.floor((Math.min(a[1], b[1]) - 5) * RES)), j1 = Math.min(VH - 1, Math.ceil((Math.max(a[1], b[1]) + 5) * RES));
@@ -1244,17 +1362,17 @@ const Rules = (() => {
     };
     // A duel lists its outer bridges twice, once as each other's mirror image. Each is kept once.
     const keyB = new Set();
-    for (const [a, b] of L.bridges) {
+    for (const [a, b, z] of L.bridges) {
       const k = Math.round(a[0] + b[0]) + ',' + Math.round(a[1] + b[1]);
       if (keyB.has(k)) continue;
-      keyB.add(k); addBridge(a, b);
+      keyB.add(k); addBridge(a, b, z);
     }
     // A road is never under water away from a bridge or a ford. Where its carriageway dips into the water, as a
     // shore road round a lake can, it is carried on a low causeway.
     for (let c = 0; c < h.length; c++) {
-      if (roadDist[c] > 2.1 || deck[c] > 0 || h[c] >= water + 0.25) continue;
+      if (roadDist[c] > 2.1 || deck[c] > 0 || h[c] >= wlv(c) + 0.25) continue;
       if (fordK((c % VW) / RES, (c / VW | 0) / RES) > 0) continue;
-      h[c] = water + 0.25;
+      h[c] = wlv(c) + 0.25;
     }
 
     // Towns, ore and wells.
@@ -1292,8 +1410,9 @@ const Rules = (() => {
       // A brook, by its cells' distance from its course: wading slows men and stops wheels, but for at its fords and
       // where a road carries it in a culvert.
       const bc = (y * RES + 1) * VW + x * RES + 1;
+      if (fallAt[bc]) return 7;
       if (bD[bc] < 0.75 && roadDist[bc] > 1.6) return bF[bc] ? 4 | 16 : 1 | 4 | 16;
-      if (lo < water + 0.1) return fordK(x + 0.5, y + 0.5) > 0.85 ? 4 | 16 : 7;
+      if (lo < wlv(bc) + 0.1) return fordK(x + 0.5, y + 0.5) > 0.85 ? 4 | 16 : 7;
       const slope = hi - lo;
       // A road's carriageway is never too steep to use, however hard it climbs. It is only kept free of building.
       if (roadDist[clamp(Math.round((y + 0.5) * RES), 0, VH - 1) * VW + clamp(Math.round((x + 0.5) * RES), 0, VW - 1)] <= 1.2) return slope > 0.5 ? 4 : 0;
@@ -1395,7 +1514,7 @@ const Rules = (() => {
           for (let cy = py - 1; cy <= py + ph && ok; cy++) for (let cx = px - 1; cx <= px + pw; cx++) {
             if (cx < 1 || cy < 1 || cx >= W - 1 || cy >= H - 1) { ok = false; break; }
             const c = cy * W + cx, v = (cy * RES) * VW + cx * RES;
-            if (taken(c) || oreCells[c] || roadDist[v] < 4.5 || hAt(cx + 0.5, cy + 0.5) < water + 0.4) { ok = false; break; }
+            if (taken(c) || oreCells[c] || roadDist[v] < 4.5 || hAt(cx + 0.5, cy + 0.5) < wlAt(cx + 0.5, cy + 0.5) + 0.4) { ok = false; break; }
           }
         });
         if (!ok) continue;
@@ -1419,13 +1538,13 @@ const Rules = (() => {
     const sea = new Uint8Array(N);
     for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
       let hi = -99;
-      for (let b = 0; b <= 2; b++) for (let a = 0; a <= 2; a++) hi = Math.max(hi, hAt(x + a / 2, y + b / 2));
-      if (hi < water - 0.3) sea[y * W + x] = 1;
+      for (let b = 0; b <= 2; b++) for (let a = 0; a <= 2; a++) hi = Math.max(hi, hAt(x + a / 2, y + b / 2) - wlAt(x + a / 2, y + b / 2));
+      if (hi < -0.3) sea[y * W + x] = 1;
     }
     const fish = (L.fish || []).map(p => ({ x: p[0], y: p[1] }));
     let seaCells = 0;
     for (let c = 0; c < N; c++) seaCells += sea[c];
-    return { W, H, seed, kind, h, deck, water, ground, ore: oreCells, oreKind, oreFields, wells, towns, roads, roadDist, bridges, scatter, houses, oreRich, bases: L.bases, faces, fords: L.fords, fordCells, wadeCells, brooks, brookFords, brookDist: bD, brookFord: bF, sea, fish, seaCells, monuments: (L.monuments || []).map(([k, x, y, r, a]) => ({ k, x, y, r, a })) };
+    return { W, H, seed, kind, h, deck, water, ground, ore: oreCells, oreKind, oreFields, wells, towns, roads, roadDist, bridges, scatter, houses, oreRich, bases: L.bases, faces, fords: L.fords, fordCells, wadeCells, brooks, brookFords, brookDist: bD, brookFord: bF, falls, wl, cascades: L.cascades || [], sea, fish, seaCells, monuments: (L.monuments || []).map(([k, x, y, r, a]) => ({ k, x, y, r, a })) };
   }
 
   // A map is kept only if vehicles can get from the first base to every other base, town and well.
@@ -1472,6 +1591,13 @@ const Rules = (() => {
     const fx = clamp(x * RES, 0, VW - 1.001), fy = clamp(y * RES, 0, VH - 1.001), ix = fx | 0, iy = fy | 0, u = fx - ix, v = fy - iy, c = iy * VW + ix;
     const h = M.h;
     return lerp(lerp(h[c], h[c + 1], u), lerp(h[c + VW], h[c + VW + 1], u), v);
+  }
+  // The water's level at a point: the map's one level, or where a layout has water lower than the rest, as The
+  // Falls' gorge, the level there.
+  function waterLevel(M, x, y) {
+    if (!M.wl) return M.water;
+    const fx = clamp(x * RES, 0, VW - 1.001), fy = clamp(y * RES, 0, VH - 1.001), ix = fx | 0, iy = fy | 0, u = fx - ix, v = fy - iy, c = iy * VW + ix, w = M.wl;
+    return lerp(lerp(w[c], w[c + 1], u), lerp(w[c + VW], w[c + VW + 1], u), v);
   }
   // Height a ground unit stands at, which is the deck on a bridge.
   function heightAt(M, x, y) {
@@ -2120,8 +2246,9 @@ const Rules = (() => {
       const c = y * W + x, v = (y * RES + 1) * VW + x * RES + 1;
       if (S.occ[c] || S.ore[c] || M.deck[v] > 0 || (S.gnd[c] & 16)) return false;
       if (!ignoreTerr && S.terr[c] >= 0 && S.terr[c] !== team) return false;
-      if (h[v] < M.water) wet++;
-      else if (h[v] > M.water + 0.05) {
+      const wv = M.wl ? M.wl[v] : M.water;
+      if (h[v] < wv) wet++;
+      else if (h[v] > wv + 0.05) {
         let hi = -99, lo = 99;
         for (let b = 0; b <= RES; b++) for (let a = 0; a <= RES; a++) { const z = h[(y * RES + b) * VW + x * RES + a]; hi = Math.max(hi, z); lo = Math.min(lo, z); }
         if (hi - lo > 1.4) return false;
@@ -4714,7 +4841,7 @@ const Rules = (() => {
     HZ, DT, RES, UNITS, BUILDINGS, WEAPONS, TECH, POWERS, DIFFICULTY, LAYOUT, SIZES, MAPS, spread, use,
     AGES, MAX_AGE, POWER_AGE, LINES, LINE_ORDER, formOf, lineCount, nameOf, armOf,
     get W() { return W; }, get H() { return H; }, get VW() { return VW; }, get VH() { return VH; },
-    ORE_KINDS, fishWater, dustWall, dustAt, groundedAt, dataOn, satUp, satPass, newGame, step, push, spawn, addBuilding, scoreOf, worth, SERIES, pickFrom, fits, spotFor, roomy, blockedReason, near, rehash, seenBy, terrainAt, heightAt, los, isAir, armed, cellOf, summary, exitOf,
+    ORE_KINDS, fishWater, dustWall, dustAt, groundedAt, dataOn, satUp, satPass, newGame, step, push, spawn, addBuilding, scoreOf, worth, SERIES, pickFrom, fits, spotFor, roomy, blockedReason, near, rehash, seenBy, terrainAt, heightAt, waterLevel, los, isAir, armed, cellOf, summary, exitOf,
     mulberry, noiser, clamp, lerp, smooth, angleTo, toXY, toUV, gap, setSize, save, load, hashOf, restartSlot, razeSlot, makeMap, mapFor, layoutFor,
     msin, mcos, matan2, mhypot,
     BRIDGE_HP, SPELL, SKIES, WEATHERS, nightAt, skyOf, offGoing, route, weatherAt, sky, dayAt, spellOf, bridgeAt, clsOf, houseHp, hurtBridge, ignite, shielded,
