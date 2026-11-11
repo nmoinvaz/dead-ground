@@ -455,6 +455,18 @@ const Models = (() => {
     };
     // The same, by a name the scenery's own legs do not hide.
     const manLegs = legs;
+    // The leg in two for the field, so the knee bends: the thigh from the hip, and the shin and boot from the knee,
+    // its origin at the knee.
+    const KNEE = [0.01, -0.138, 0];
+    const thigh = (cloth = P.olive) => { const g = G(); limb(g, [0, 0.02, 0], KNEE, 0.034, 0.023, cloth); g.sph(0.022, KNEE[0], KNEE[1], 0, cloth, { seg: 5, rings: 3 }); return g; };
+    const shin = (cloth = P.olive) => {
+      const g = G(), L = MAN_H * 0.47, o = q => [q[0] - KNEE[0], q[1] - KNEE[1], q[2]];
+      limb(g, [0, 0, 0], o([0.004, -0.2, 0]), 0.023, 0.021, cloth);
+      limb(g, o([0.004, -0.2, 0]), o([-0.002, -0.262, 0]), 0.021, 0.016, cloth);
+      limb(g, o([-0.002, -0.262, 0]), o([0, -L - 0.004, 0]), 0.017, 0.019, P.boots);
+      g.box(0.078, 0.028, 0.036, 0.014 - KNEE[0], -L - 0.02 - KNEE[1], 0, P.boots);
+      return g;
+    };
     // A man's trunk from the hip to the neck, chest over waist over hips, its depth front to back about three fifths
     // of its breadth. y0 is the hip.
     const TRUNK = [[0.001, -0.012], [0.05, -0.012], [0.056, 0.03], [0.049, 0.075], [0.055, 0.12], [0.066, 0.168], [0.069, 0.186], [0.05, 0.203], [0.021, 0.214]].map(([r, y]) => new THREE.Vector2(r, y));
@@ -549,7 +561,7 @@ const Models = (() => {
     // shoulders, so a stance can bring them round and a shot kick them.
     const figure = (o, cloth) => {
       const a = G(); armsInto(a, o);
-      return [part('body', body(Object.assign({}, o, { noArms: true }))), part('leg', legs(cloth ?? o.cloth)), part('arms', a, { pivot: [0, MAN_H * 0.8, 0], blow: 'shot' })];
+      return [part('body', body(Object.assign({}, o, { noArms: true }))), part('leg', thigh(cloth ?? o.cloth)), part('arms', a, { pivot: [0, MAN_H * 0.8, 0], blow: 'shot' }), part('shin', shin(cloth ?? o.cloth))];
     };
     const man = {
       rifle: figure({ rifle: 0.22, pack: P.gear }),
@@ -1320,7 +1332,7 @@ const Models = (() => {
       // A sash from the right shoulder to the left hip, across the coat's front.
       if (o.sash) limb(b, [0.044, 0.49, 0.058], [0.05, 0.33, -0.05], 0.012, 0.012, o.sash, { seg: 4, sz: 0.5 });
       const a = G(); armsInto(a, Object.assign({ rifle: 0 }, o));
-      return [part('body', b), part('leg', legs(o.legs ?? o.cloth)), part('arms', a, { pivot: [0, MAN_H * 0.8, 0], blow: BLOWS[o.arms] || 'shot' })];
+      return [part('body', b), part('leg', thigh(o.legs ?? o.cloth)), part('arms', a, { pivot: [0, MAN_H * 0.8, 0], blow: BLOWS[o.arms] || 'shot' }), part('shin', shin(o.legs ?? o.cloth))];
     };
     Object.assign(man, {
       spear: soldier({ cloth: A.tunic, vest: A.bronze, vestT: 0.4, hat: 'crest', arms: 'spear', shield: A.coatR }),

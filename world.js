@@ -2749,7 +2749,7 @@ const World = (() => {
       };
       for (const k in MODELS.units) put(k, MODELS.units[k], k === 'plane' ? 4 : 72);
       for (const k in MODELS.buildings) put(k, MODELS.buildings[k], 24);
-      for (const k in MODELS.man) put('man' + k, MODELS.man[k].map(p => Object.assign({}, p, { mult: p.id === 'leg' ? 2 : 1 })), UNITS[k] && UNITS[k].line === 'inf' ? 300 : k === 'hero' ? 8 : 120);
+      for (const k in MODELS.man) put('man' + k, MODELS.man[k].map(p => Object.assign({}, p, { mult: p.id === 'leg' || p.id === 'shin' ? 2 : 1 })), UNITS[k] && UNITS[k].line === 'inf' ? 300 : k === 'hero' ? 8 : 120);
       put('chute', [{ id: 'c', geo: MODELS.chute }], 24);
       put('rubble', [{ id: 'r', geo: MODELS.scenery.rubble }], 700);
       // Arrows, thrown stones and strokes of the pen, drawn in line as units are. Strokes cast no shadow.
@@ -3148,23 +3148,42 @@ const World = (() => {
     const US = 1.25;
     // A man: body, two legs that swing as he walks, and for the soldiers of the older ages and the future, arms that
     // swing from the shoulders as he fights, by P, his squad's pose, and i, his place in it. A thrust leans him into it.
-    function drawMan(set, x, y, z, yaw, phase, moving, color, fallen = 0, P = null, i = 0) {
-      const body = set[0], leg = set[1], arms = set[2];
+    // A man's own height and build, from his squad and his place in it: a twentieth taller or shorter, a sixteenth
+    // broader or slighter, so no two in a squad stand alike.
+    const manVar = n => { const v = Math.sin(n * 12.9898) * 43758.5453; return v - Math.floor(v); };
+    function drawMan(set, x, y, z, yaw, phase, moving, color, fallen = 0, P = null, i = 0, seed = 0) {
+      const body = set[0], leg = set[1], arms = set[2], shinP = set[3];
       // The stance, from the squad's pose: crouched on the move, kneeling with the hip at half height, the front foot
       // well forward and the back knee on the ground, or flat on the ground face down with the arms brought round to aim along it.
       const c = P && !fallen ? P.crouch || 0 : 0, k = P && !fallen ? P.kneel || 0 : 0, q = P && !fallen ? P.prone || 0 : 0;
       const bob = moving ? Math.abs(Math.sin(phase)) * 0.018 * (1 - 0.5 * c) : 0;
       if (arms && P && !fallen) heldPose(arms.def.blow, P, i * 0.04, hp2); else { hp2[0] = 0; hp2[1] = 0; }
       const lean = arms && arms.def.blow === 'thrust' ? Math.max(0, -hp2[0]) * 1.1 : 0;
-      compose(m1, x, y + bob + (-0.06 * c - 0.16 * k + 0.04 * q) * US, z, yaw, -fallen * 1.5 - lean - 0.22 * c - 0.1 * k - 1.47 * q, 0, US);
+      compose(m1, x, y + bob + (-0.06 * c - 0.14 * k + 0.04 * q) * US, z, yaw, -fallen * 1.5 - lean - 0.22 * c - 0.1 * k - 1.47 * q, 0, US);
+      const hK = 1 + (manVar(seed * 3.1 + i * 7.7 + 1.3) - 0.5) * 0.1, bK = 1 + (manVar(seed * 5.3 + i * 3.9 + 2.9) - 0.5) * 0.12;
+      m3.makeScale(bK, hK, bK); m1.multiply(m3);
       put(body, m1, color);
-      const sw = moving ? Math.sin(phase) * 0.62 * (1 - k - q) : 0;
+      // The thigh swings from the hip and the shin from the knee: the knee bends as the foot comes through in a
+      // stride, a little in a crouch, and when kneeling the front thigh comes up level with its shin down to the
+      // ground, and the back knee rests on the ground with its shin laid back.
+      const sw = moving ? Math.sin(phase) * 0.62 * (1 - k - q) : 0, hipH = 0.31 - 0.14 * k - 0.06 * c;
       for (const s of [-1, 1]) {
+        let tt = s * sw + 0.35 * c, ts = (moving ? -(0.12 + 0.6 * Math.max(0, Math.cos(phase) * s)) * (1 - k - q) : 0) - 0.6 * c;
+        if (shinP && k > 0) {
+          const kt = s > 0 ? 1.3 : -0.15, ks = s > 0 ? Math.acos(clamp((hipH - 0.138 * Math.cos(kt)) / 0.173, -1, 1)) - kt : -1.45 - kt;
+          tt += (kt - tt) * k; ts += (ks - ts) * k;
+        }
         m2.makeTranslation(0, 0.31, s * 0.042);
-        m3.makeRotationZ(s * sw + k * (s > 0 ? 0.9 : -0.2)); m2.multiply(m3);
-        m3.makeScale(1, 1 - 0.18 * c - k * (s > 0 ? 0.22 : 0.51), 1); m2.multiply(m3);
+        m3.makeRotationZ(tt); m2.multiply(m3);
+        if (!shinP) { m3.makeScale(1, 1 - 0.18 * c - k * (s > 0 ? 0.22 : 0.51), 1); m2.multiply(m3); }
         mOut.multiplyMatrices(m1, m2);
         put(leg, mOut, color);
+        if (shinP) {
+          m3.makeTranslation(0.01, -0.138, 0); m2.multiply(m3);
+          m3.makeRotationZ(ts); m2.multiply(m3);
+          mOut.multiplyMatrices(m1, m2);
+          put(shinP, mOut, color);
+        }
       }
       if (arms) {
         const pv = arms.def.pivot;
@@ -3273,7 +3292,7 @@ const World = (() => {
           for (let i = 0; i < r.alive; i++) {
             let [px, pz] = manAt(e.d.men, i, x, y, yaw, scrum ? 1.05 : 1.2);
             if (scrum) { const j = Math.sin(now * 5.3 + i * 2.1) * 0.05, f = 0.12 + Math.sin(now * 3.7 + i * 1.3) * 0.04; px += fx * f - fz * j; pz += fz * f + fx * j; }
-            drawMan(set, px, heightAt(M, px, pz), pz, yaw, ph + i * 1.9, moving, color, 0, Pz, i);
+            drawMan(set, px, heightAt(M, px, pz), pz, yaw, ph + i * 1.9, moving, color, 0, Pz, i, e.id);
           }
           // A squad on the move leaves a faint trodden line.
           if (moving) trackMark(r, x, y, yaw, 0.08, 0.16);
@@ -4284,6 +4303,7 @@ const World = (() => {
           addMesh(parts[0].geo, new THREE.Matrix4());
           for (const s of [-1, 1]) addMesh(parts[1].geo, new THREE.Matrix4().makeTranslation(0, 0.31, s * 0.042));
           if (parts[2]) addMesh(parts[2].geo, new THREE.Matrix4());
+          if (parts[3]) for (const s of [-1, 1]) addMesh(parts[3].geo, new THREE.Matrix4().makeTranslation(0.01, 0.31 - 0.138, s * 0.042));
         } else if (parts.some(p => p.rig)) {
           // A model with moving parts is drawn at rest, as the field draws it standing.
           const ps = parts.map(def => ({ def })); ps.gait = parts.gait;
