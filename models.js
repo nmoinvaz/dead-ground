@@ -1271,6 +1271,38 @@ const Models = (() => {
       };
       scenery.folk = civilian(false);
       scenery.folk2 = civilian(true);
+      // Bathers on a beach, bare-armed and bare-legged, the costume the instance's colour: a man in trunks, and a
+      // one-piece, which the Industrial Age's bathers of both kinds wear. Built as the townsfolk are.
+      const SKIN = 0xe0c0a0;
+      const bareLeg = () => { const g = G(); limb(g, [0, 0.02, 0], [0.01, -0.137, 0], 0.032, 0.022, SKIN); limb(g, [0.01, -0.137, 0], [0, -0.27, 0], 0.022, 0.015, SKIN); g.box(0.06, 0.02, 0.03, 0.012, -MAN_H * 0.47 - 0.02, 0, SKIN); return g; };
+      const bather = onePiece => {
+        const g = G(), hip = MAN_H * 0.5, shoulder = hip + MAN_H * 0.3, hy = shoulder + 0.03 + head * 0.5, TB1 = { t: 1 };
+        trunk(g, onePiece ? 0xffffff : SKIN, hip, onePiece ? 0.95 : 1, onePiece ? TB1 : {});
+        if (!onePiece) g.add(new THREE.LatheGeometry(TRUNK.slice(0, 3).map(v => new THREE.Vector2(v.x * 1.06, v.y)), 8), 0, hip, 0, 0xffffff, { sx: 0.64, t: 1 });
+        const leg = bareLeg();
+        for (const z of [-0.042, 0.042]) g.merge(leg, 0, hip, z);
+        const ps = POSES.none;
+        for (const [sh, el, hd] of [[SHO[0], ps.RE, ps.R], [SHO[1], ps.LE, ps.L]]) { limb(g, sh, el, 0.019, 0.015, SKIN); limb(g, el, hd, 0.015, 0.012, SKIN); g.sph(0.013, hd[0], hd[1], hd[2], SKIN, { seg: 5, rings: 4 }); }
+        g.cyl(0.016, 0.019, 0.04, 0.003, shoulder + 0.028, 0, SKIN, { seg: 5 });
+        g.sph(head * 0.46, 0.005, hy, 0, SKIN, { seg: 8, rings: 6, sy: 1.18 });
+        g.sph(head * 0.5, -0.006, hy + 0.012, 0, onePiece ? 0x6a4a30 : 0x3a2e24, { seg: 8, rings: 4, top: true, sy: 0.85 });
+        return G().merge(g, 0, 0, 0, 0, 1.2).finish();
+      };
+      scenery.bather = bather(false);
+      scenery.bather2 = bather(true);
+      // A towel on the sand, a beach umbrella, and a bathing machine, a hut on wheels pulled to the water's edge;
+      // the cloth in the instance's colour.
+      scenery.towel = G().box(0.66, 0.012, 0.3, 0, 0, 0, 0xffffff, { t: 1 }).finish();
+      const umb = G();
+      umb.cyl(0.008, 0.009, 0.6, 0, 0.3, 0, 0x6a6058, { seg: 4 });
+      umb.cyl(0.012, 0.3, 0.11, 0, 0.6, 0, 0xffffff, { seg: 8, t: 1 });
+      scenery.umbrella = umb.finish();
+      const mach = G();
+      mach.box(0.32, 0.34, 0.26, 0, 0.1, 0, 0xffffff, { t: 1 });
+      mach.prism([[-0.15, 0], [0, 0.1], [0.15, 0]], 0.36, 0, 0.44, 0, 0x6a6058, { ry: Math.PI / 2 });
+      for (const [x, z] of [[0.1, 0.14], [-0.1, 0.14], [0.1, -0.14], [-0.1, -0.14]]) mach.cyl(0.06, 0.06, 0.02, x, 0.06, z, 0x4e3a26, { axis: 'z', seg: 8 });
+      mach.box(0.03, 0.16, 0.12, 0.17, 0.14, 0, 0x4e3a26);
+      scenery.bmachine = mach.finish();
       // A fishing boat, along x: a pointed hull, a wheelhouse, a short mast.
       const boat = G();
       boat.prism([[-0.75, 0], [0.6, 0], [0.85, 0.26], [-0.8, 0.26]], 0.5, 0, -0.06, 0, 0xffffff);
