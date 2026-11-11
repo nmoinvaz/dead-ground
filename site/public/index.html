@@ -660,7 +660,7 @@ body[data-look="ink"] .sheet { box-shadow: 4px 4px 0 var(--ink); }
       <div class="choice"><h2>Shadow strength</h2><div id="s-shadow"><button data-v="full">Full</button><button data-v="light">Light</button><button data-v="off">Off</button></div></div>
       <div class="choice"><h2>Edge lines</h2><div id="s-edges" class="two"><button data-v="quick">Quick</button><button data-v="exact">Exact</button></div></div>
       <div class="choice"><h2>Music</h2><div id="s-music" class="two"><button data-v="on">On</button><button data-v="off">Off</button></div></div>
-      <p id="build">Build be77b8b 2026-11-11 13:43</p>
+      <p id="build">Build 6bcdbc1 2026-11-11 13:55</p>
       <p id="source"><a href="https://github.com/nmoinvaz/mapmakers-war" target="_blank" rel="noopener">Source on GitHub</a></p>
     </div>
     <div id="banner" hidden></div>
@@ -6808,50 +6808,116 @@ const Models = (() => {
     // Figures, true to the body at one and a half times the vehicles' scale. A man is a body that holds
     // his arms and weapon, and two legs that swing from the hip.
     const MAN_H = 0.62, head = MAN_H / 7.5;
+    // A limb or a rod: a tapered round from point a to point b, ra across at a and rb at b.
+    const LQ = new THREE.Quaternion(), LE = new THREE.Euler(), LUP = new THREE.Vector3(0, 1, 0), LD = new THREE.Vector3();
+    function limb(g, a, b, ra, rb, c, o = {}) {
+      LD.set(b[0] - a[0], b[1] - a[1], b[2] - a[2]);
+      const L = LD.length();
+      LQ.setFromUnitVectors(LUP, LD.normalize()); LE.setFromQuaternion(LQ, 'XYZ');
+      return g.cyl(rb, ra, L, (a[0] + b[0]) / 2, (a[1] + b[1]) / 2, (a[2] + b[2]) / 2, c, Object.assign({ seg: 5 }, o, { rx: LE.x, ry: LE.y, rz: LE.z }));
+    }
+    const v3 = { add: (a, b) => [a[0] + b[0], a[1] + b[1], a[2] + b[2]], mul: (a, k) => [a[0] * k, a[1] * k, a[2] * k], norm: a => { const l = Math.hypot(a[0], a[1], a[2]) || 1; return [a[0] / l, a[1] / l, a[2] / l]; } };
+    // A leg from the hip down, as a man's: a thigh tapering to the knee, a shin with its calf, and a boot with the toe
+    // forward. Its top is at the hip.
     const legs = (cloth = P.olive) => {
       const g = G(), L = MAN_H * 0.47;
-      g.cyl(0.042, 0.03, L * 0.52, 0, -L * 0.26, 0, cloth, { seg: 7 });
-      g.cyl(0.03, 0.022, L * 0.5, 0, -L * 0.74, 0, cloth, { seg: 7 });
-      g.box(0.09, 0.03, 0.05, 0.016, -L - 0.02, 0, P.boots);
+      limb(g, [0, 0.02, 0], [0.01, -0.137, 0], 0.034, 0.023, cloth);
+      g.sph(0.022, 0.01, -0.138, 0, cloth, { seg: 5, rings: 3 });
+      limb(g, [0.01, -0.138, 0], [0.004, -0.2, 0], 0.023, 0.021, cloth);
+      limb(g, [0.004, -0.2, 0], [-0.002, -0.262, 0], 0.021, 0.016, cloth);
+      limb(g, [-0.002, -0.262, 0], [0, -L - 0.004, 0], 0.017, 0.019, P.boots);
+      g.box(0.078, 0.028, 0.036, 0.014, -L - 0.02, 0, P.boots);
       return g;
     };
+    // A man's trunk from the hip to the neck, chest over waist over hips, its depth front to back about three fifths
+    // of its breadth. y0 is the hip.
+    const TRUNK = [[0.001, -0.012], [0.05, -0.012], [0.056, 0.03], [0.049, 0.075], [0.055, 0.12], [0.066, 0.168], [0.069, 0.186], [0.05, 0.203], [0.021, 0.214]].map(([r, y]) => new THREE.Vector2(r, y));
+    function trunk(g, c, y0, k = 1, o = {}) { g.add(new THREE.LatheGeometry(TRUNK.map(v => new THREE.Vector2(v.x * k, v.y)), 8), 0, y0, 0, c, Object.assign({ sx: 0.62 }, o)); }
     function body(o) {
       const g = G(), hip = MAN_H * 0.5, c = o.cloth || P.olive, v = o.vest ?? P.gear, shoulder = hip + MAN_H * 0.3;
-      g.cyl(0.058, 0.05, 0.05, 0, hip + 0.02, 0, c, { seg: 7, sz: 1.3 });
-      g.cyl(0.068, 0.058, MAN_H * 0.26, 0, hip + MAN_H * 0.16, 0, c, { seg: 8, sz: 1.3 });
-      if (v) { g.cyl(0.074, 0.066, MAN_H * 0.2, 0.002, hip + MAN_H * 0.17, 0, v, { seg: 8, sz: 1.32, t: o.vestT ?? 0.55 }); }
-      if (o.pack) g.box(0.07, 0.13, 0.11, -0.085, hip + 0.09, 0, o.pack);
-      g.cyl(0.018, 0.022, 0.03, 0, shoulder + 0.02, 0, P.skin, { seg: 6 });
+      trunk(g, c, hip);
+      // Webbing or a coat's front over the chest, a little proud of it.
+      if (v) g.add(new THREE.LatheGeometry(TRUNK.slice(2, 7).map(p => new THREE.Vector2(p.x * 1.07, p.y)), 8), 0, hip, 0, v, { sx: 0.64, t: o.vestT ?? 0.55 });
+      for (const s of [-1, 1]) g.sph(0.024, 0, shoulder - 0.012, s * 0.064, o.sleeve ?? c, { seg: 5, rings: 3 });
+      if (o.pack) g.box(0.05, 0.12, 0.1, -0.06, hip + 0.075, 0, o.pack);
+      g.cyl(0.016, 0.019, 0.04, 0.003, shoulder + 0.028, 0, P.skin, { seg: 5 });
       const hy = shoulder + 0.03 + head * 0.5;
-      g.sph(head * 0.5, 0.006, hy, 0, P.skin, { seg: 8, rings: 6, sy: 1.12 });
-      if (o.hair) { g.sph(head * 0.53, -0.004, hy + 0.012, 0, o.hair, { seg: 8, rings: 5, top: true, sy: 0.82 }); }
-      else if (o.helmet !== false) g.sph(head * 0.62, -0.002, hy + 0.008, 0, o.helmetC ?? c, { seg: 8, rings: 5, top: true, sy: 0.95, t: 0.15 });
+      g.sph(head * 0.46, 0.005, hy, 0, P.skin, { seg: 8, rings: 6, sy: 1.18 });
+      if (o.hair) { g.sph(head * 0.5, -0.004, hy + 0.012, 0, o.hair, { seg: 8, rings: 4, top: true, sy: 0.85 }); }
+      else if (o.helmet !== false) g.sph(head * 0.6, -0.002, hy + 0.008, 0, o.helmetC ?? c, { seg: 8, rings: 4, top: true, sy: 0.95, t: 0.15 });
       if (o.cap) { g.box(0.05, 0.008, 0.07, 0.04, hy + 0.024, 0, o.cap); }
-      if (o.glasses) { g.box(0.006, 0.012, 0.062, head * 0.5 + 0.004, hy + 0.004, 0, 0x101010); }
+      if (o.glasses) { g.box(0.006, 0.012, 0.062, head * 0.46 + 0.006, hy + 0.004, 0, 0x101010); }
       if (!o.noArms) armsInto(g, o);
-      if (o.tool) { g.box(0.05, 0.1, 0.09, 0.02, hip - 0.02, 0.095, P.yellow); }
       return g;
     }
-    // Upper arms hang from the shoulders, forearms come forward to the weapon. A soldier of the older ages and the
-    // future carries these as a part of their own, which swings from the shoulders as he fights.
+    // How a man holds what he carries: his right and left hands and elbows. He faces +x, his right side toward +z.
+    const SHO = [[0, 0.488, 0.068], [0, 0.488, -0.068]];
+    // A long gun at the ready: its butt at the right shoulder, the right hand at the grip and the left under the fore
+    // end, the muzzle ahead and a little down.
+    const GUN_B = [0.028, 0.468, 0.046], GUN_D = v3.norm([1, -0.12, -0.07]);
+    const POSES = {
+      gun: { R: v3.add(v3.add(GUN_B, v3.mul(GUN_D, 0.075)), [0, -0.016, 0]), L: v3.add(v3.add(GUN_B, v3.mul(GUN_D, 0.17)), [0, -0.014, 0]), RE: [0.012, 0.395, 0.108], LE: [0.1, 0.39, -0.052] },
+      tube: { R: [0.075, 0.478, 0.066], L: [0.17, 0.492, 0.062], RE: [0.012, 0.405, 0.112], LE: [0.1, 0.42, -0.02] },
+      spear: { R: [0.1, 0.42, 0.064], L: [0.07, 0.392, -0.08], RE: [0.03, 0.4, 0.11], LE: [0.02, 0.4, -0.104] },
+      pike: { R: [0.03, 0.392, 0.05], L: [0.15, 0.418, 0.024], RE: [-0.01, 0.392, 0.11], LE: [0.09, 0.39, -0.05] },
+      bow: { R: [0.055, 0.478, 0.026], L: [0.215, 0.47, -0.034], RE: [-0.035, 0.47, 0.105], LE: [0.11, 0.476, -0.062] },
+      throw: { R: [-0.03, 0.585, 0.088], L: [0.085, 0.385, -0.08], RE: [-0.035, 0.505, 0.118], LE: [0.04, 0.415, -0.098] },
+      sword: { R: [0.12, 0.43, 0.062], L: [0.006, 0.33, -0.094], RE: [0.05, 0.398, 0.11], LE: [-0.008, 0.405, -0.094] },
+      tool: { R: [0.012, 0.318, 0.1], L: [0.01, 0.322, -0.098], RE: [-0.004, 0.4, 0.104], LE: [-0.004, 0.4, -0.102] },
+      none: { R: [0.012, 0.322, 0.096], L: [0.012, 0.322, -0.096], RE: [-0.006, 0.402, 0.1], LE: [-0.006, 0.402, -0.1] },
+    };
+    // Which pose a man takes for what he carries.
+    const POSE_OF = { spear: 'spear', pike: 'pike', bow: 'bow', longbow: 'bow', grenade: 'throw', sword: 'sword' };
+    // His arms from the shoulders: upper arm to the elbow, forearm to the hand, and the hand, in his sleeve's
+    // colour, then what he carries in them.
     function armsInto(g, o) {
-      const c = o.cloth || P.olive, shoulder = MAN_H * 0.8;
-      for (const s of [-1, 1]) {
-        const z = s * 0.08;
-        g.cyl(0.021, 0.018, 0.1, 0.01, shoulder - 0.055, z, o.sleeve ?? c, { seg: 6, rx: s * 0.1, rz: 0.25 });
+      const c = o.sleeve ?? (o.cloth || P.olive), k = o.arms || (o.tube ? 'tube' : o.rifle ? 'rifle' : o.tool ? 'tool' : 'none');
+      const ps = POSES[POSE_OF[k] || (k === 'tube' || k === 'tool' || k === 'none' ? k : 'gun')];
+      for (const [sh, el, hd] of [[SHO[0], ps.RE, ps.R], [SHO[1], ps.LE, ps.L]]) {
+        limb(g, sh, el, 0.021, 0.017, c);
+        g.sph(0.0165, el[0], el[1], el[2], c, { seg: 5, rings: 3 });
+        limb(g, el, hd, 0.017, 0.013, c);
+        g.sph(0.0145, hd[0], hd[1], hd[2], P.skin, { seg: 5, rings: 4 });
       }
-      g.cyl(0.018, 0.014, 0.1, 0.075, shoulder - 0.095, 0.07, o.sleeve ?? c, { seg: 6, rz: 1.3, rx: 0.3 });
-      g.cyl(0.018, 0.014, 0.12, 0.09, shoulder - 0.095, -0.07, o.sleeve ?? c, { seg: 6, rz: 1.35, rx: -0.5 });
-      g.sph(0.017, 0.13, shoulder - 0.085, 0.02, P.skin, { seg: 6, rings: 4 });
-      g.sph(0.017, 0.15, shoulder - 0.09, -0.03, P.skin, { seg: 6, rings: 4 });
-      if (o.tube) g.cyl(0.03, 0.03, 0.46, 0.02, shoulder + 0.03, 0.08, P.olive, { axis: 'x', seg: 8 });
-      if (o.rifle) {
-        const ry = shoulder - 0.075, n = o.rifle;
-        g.box(n, 0.02, 0.014, 0.1 + n / 2 - 0.1, ry, -0.01, P.steelDk);
-        g.box(0.03, 0.04, 0.012, 0.11, ry - 0.03, -0.01, P.steelDk);
-        g.box(0.06, 0.03, 0.014, 0.0, ry - 0.015, -0.01, P.steelDk);
-      }
+      carry(g, k, ps, o);
       return g;
+    }
+    // What a man carries, laid in his hands as his pose has them.
+    function carry(g, k, ps, o) {
+      const W = 0x6a5238, WD = 0x4e3a26, FE = 0x6a6c6e, ST = P.steelDk;
+      const gun = (n, wood, metal, o2 = {}) => {
+        const butt = GUN_B, mid = v3.add(GUN_B, v3.mul(GUN_D, n * 0.36)), muz = v3.add(GUN_B, v3.mul(GUN_D, n));
+        limb(g, butt, mid, o2.stock ?? 0.012, 0.009, wood, { seg: 4 });
+        limb(g, mid, muz, o2.barrel ?? 0.0065, 0.0055, metal, { seg: 5 });
+        return muz;
+      };
+      if (k === 'rifle') { gun(o.rifle, ST, ST); g.box(0.022, 0.03, 0.012, GUN_B[0] + 0.1, GUN_B[1] - 0.04, GUN_B[2] - 0.006, ST); }
+      else if (k === 'musket' || k === 'jaeger' || k === 'carbine') { const m = gun(k === 'jaeger' ? 0.34 : 0.4, W, FE); if (k === 'musket') limb(g, m, v3.add(m, v3.mul(GUN_D, 0.08)), 0.003, 0.002, FE, { seg: 4 }); }
+      else if (k === 'xbow') { gun(0.24, W, W, { stock: 0.011 }); const fr = v3.add(GUN_B, v3.mul(GUN_D, 0.21)); limb(g, v3.add(fr, [0, 0, 0.1]), v3.add(fr, [0, 0, -0.1]), 0.006, 0.006, FE, { seg: 4 }); }
+      else if (k === 'atr') gun(0.46, W, FE, { stock: 0.014, barrel: 0.008 });
+      else if (k === 'pulse' || k === 'plasma' || k === 'rail') {
+        const n = k === 'rail' ? 0.4 : 0.27, m = gun(n, A.exoDk, A.exoDk, { stock: 0.016, barrel: k === 'plasma' ? 0.013 : 0.01 });
+        limb(g, v3.add(GUN_B, v3.mul(GUN_D, n * 0.4)), v3.add(m, v3.mul(GUN_D, -0.02)), 0.005, 0.005, k === 'plasma' ? A.plasma : A.glow, { seg: 4, g: 1.6 });
+      }
+      else if (k === 'tube') { limb(g, [-0.12, 0.52, 0.07], [0.32, 0.52, 0.07], 0.028, 0.028, P.olive, { seg: 8 }); g.box(0.03, 0.05, 0.02, 0.07, 0.46, 0.07, P.olive); }
+      else if (k === 'tool') g.box(0.09, 0.05, 0.035, ps.R[0], ps.R[1] - 0.06, ps.R[2], P.yellow);
+      else if (k === 'spear' || k === 'pike') {
+        // A shaft through the right hand, an upright spear leaning forward or a pike lowered nearly level.
+        const L = k === 'pike' ? 1.3 : 0.86, d = k === 'pike' ? v3.norm([1, 0.14, -0.022]) : v3.norm([0.3, 1, -0.02]);
+        const back = k === 'pike' ? 0.45 : 0.3, a = v3.add(ps.R, v3.mul(d, -back)), b = v3.add(ps.R, v3.mul(d, L - back));
+        limb(g, a, b, 0.008, 0.007, W, { seg: 5 });
+        limb(g, b, v3.add(b, v3.mul(d, 0.08)), 0.016, 0.001, FE, { seg: 5 });
+      } else if (k === 'bow' || k === 'longbow') {
+        // The bow upright in the left hand, its string drawn to the right hand at the chest.
+        const L = k === 'longbow' ? 0.5 : 0.36, top = v3.add(ps.L, [-0.03, L / 2, 0]), bot = v3.add(ps.L, [-0.03, -L / 2, 0]);
+        limb(g, top, v3.add(ps.L, [0.012, L * 0.18, 0]), 0.006, 0.008, WD, { seg: 4 }); limb(g, v3.add(ps.L, [0.012, L * 0.18, 0]), v3.add(ps.L, [0.012, -L * 0.18, 0]), 0.009, 0.009, WD, { seg: 4 }); limb(g, v3.add(ps.L, [0.012, -L * 0.18, 0]), bot, 0.008, 0.006, WD, { seg: 4 });
+        limb(g, top, ps.R, 0.0025, 0.0025, 0xd8ccb0, { seg: 3 }); limb(g, ps.R, bot, 0.0025, 0.0025, 0xd8ccb0, { seg: 3 });
+        g.box(0.045, 0.12, 0.045, -0.075, 0.38, 0.05, 0x8c6e4c, { rx: 0.3 });
+      } else if (k === 'grenade') {
+        g.sph(0.022, ps.R[0], ps.R[1] + 0.01, ps.R[2], 0x2a2826, { seg: 6, rings: 4 }); g.box(0.06, 0.07, 0.04, 0.02, 0.27, 0.08, 0x8c6e4c);
+      } else if (k === 'sword') limb(g, ps.R, v3.add(ps.R, [0.1, 0.19, -0.02]), 0.011, 0.004, 0x8a8c8e, { seg: 4 });
+      // A shield on the left forearm, its face turned out and a little forward.
+      if (o.shield) { const n = v3.norm([0.35, 0, -1]), c0 = v3.add(ps.L, v3.mul(n, 0.012)); limb(g, c0, v3.add(c0, v3.mul(n, 0.014)), 0.075, 0.075, o.shield, { seg: 12, t: 0.45 }); g.sph(0.017, ...v3.add(c0, v3.mul(n, 0.016)), 0xb07e3c, { seg: 6, rings: 4 }); }
     }
     // A figure for the field: body and legs, and his arms with what he carries as a third part pivoted at the
     // shoulders, so a stance can bring them round and a shot kick them.
@@ -7595,44 +7661,11 @@ const Models = (() => {
       else if (k === 'visor') { g.sph(head * 0.66, -0.002, hy + 0.008, 0, A.exoDk, { seg: 8, rings: 5, top: true, sy: 1.1 }); g.box(0.012, 0.022, 0.07, head * 0.5 + 0.008, hy - 0.004, 0, A.glow, GLOW); }
       else if (k === 'hood') { g.sph(head * 0.66, -0.006, hy + 0.004, 0, 0x2e3236, { seg: 8, rings: 5, top: true, sy: 1.2 }); g.box(0.012, 0.016, 0.06, head * 0.5 + 0.006, hy - 0.002, 0, A.glow, GLOW); }
     }
-    // What a soldier carries in his hands, held forward at the right hand.
-    function arms(g, k) {
-      const hx = 0.14, hyy = shoulder - 0.09;
-      if (k === 'spear' || k === 'pike') {
-        // A rod through the hand, two thirds of it ahead, leaning forward; a pike is lowered nearly level.
-        const L = k === 'pike' ? 1.3 : 0.86, a = k === 'pike' ? -1.15 : -0.3, dx = -Math.sin(a), dy = Math.cos(a);
-        const cx = hx + dx * L / 6, cy = hyy + dy * L / 6;
-        g.cyl(0.007, 0.008, L, cx, cy, -0.03, A.wood, { seg: 5, rz: a });
-        g.cyl(0, 0.016, 0.08, cx + dx * (L / 2 + 0.03), cy + dy * (L / 2 + 0.03), -0.03, A.iron, { seg: 5, rz: a });
-      } else if (k === 'bow' || k === 'longbow') {
-        const L = k === 'longbow' ? 0.5 : 0.36;
-        for (let i = -2; i <= 2; i++) g.box(0.01, L / 5, 0.01, hx + 0.02 - Math.abs(i) * 0.012, hyy - 0.02 + i * L / 5 - L / 10, -0.03, A.woodDk, { rz: i * 0.25 });
-        g.box(0.004, L * 0.95, 0.004, hx - 0.03, hyy - L * 0.5, -0.03, A.linen);
-        g.box(0.05, 0.12, 0.05, -0.08, shoulder - 0.12, 0.05, A.tunic2);
-      } else if (k === 'xbow') {
-        g.box(0.26, 0.02, 0.02, hx + 0.02, hyy, -0.01, A.wood); g.box(0.02, 0.012, 0.2, hx + 0.13, hyy + 0.01, -0.01, A.iron);
-      } else if (k === 'musket' || k === 'jaeger') {
-        const n = k === 'jaeger' ? 0.34 : 0.4;
-        g.box(n, 0.018, 0.014, n / 2, hyy, -0.01, A.wood); g.box(n * 0.7, 0.012, 0.01, n * 0.65, hyy + 0.012, -0.01, A.iron);
-        if (k === 'musket') g.box(0.08, 0.006, 0.006, n + 0.04, hyy + 0.012, -0.01, A.iron);
-      } else if (k === 'grenade') {
-        g.sph(0.024, hx + 0.01, hyy + 0.02, 0.02, 0x2a2826, { seg: 6, rings: 4 }); g.box(0.07, 0.07, 0.04, 0.02, MAN_H * 0.45, 0.07, A.tunic2);
-      } else if (k === 'atr') {
-        g.box(0.46, 0.022, 0.016, 0.21, hyy, -0.01, A.iron); g.box(0.12, 0.04, 0.018, 0.02, hyy - 0.015, -0.01, A.wood);
-      } else if (k === 'pulse' || k === 'plasma' || k === 'rail') {
-        const n = k === 'rail' ? 0.4 : 0.26, t = k === 'plasma' ? 0.04 : 0.028;
-        g.box(n, t, 0.03, n / 2 + 0.02, hyy, -0.01, A.exoDk); g.box(n * 0.5, 0.01, 0.032, n / 2 + 0.05, hyy + t * 0.6, -0.01, k === 'plasma' ? A.plasma : A.glow, GLOW);
-      } else if (k === 'sword') {
-        g.box(0.012, 0.22, 0.03, hx + 0.02, hyy, -0.03, A.mail, { rz: -0.4 });
-      }
-    }
-    const SHIELD = (g, c) => { g.cyl(0.075, 0.075, 0.014, 0.06, MAN_H * 0.62, 0.1, c, { axis: 'z', seg: 12, t: 0.45 }); g.sph(0.018, 0.06, MAN_H * 0.62, 0.11, A.bronze, { seg: 6, rings: 4 }); };
     const soldierGeo = (o) => {
       const b = body(Object.assign({ helmet: false, rifle: 0 }, o));
       hat(b, o.hat, o.crest);
-      arms(b, o.arms);
-      if (o.shield) SHIELD(b, o.shield);
-      if (o.sash) b.box(0.02, 0.2, 0.16, 0.06, MAN_H * 0.5, 0, o.sash, { rx: 0.6 });
+      // A sash from the right shoulder to the left hip, across the coat's front.
+      if (o.sash) limb(b, [0.044, 0.49, 0.058], [0.05, 0.33, -0.05], 0.012, 0.012, o.sash, { seg: 4, sz: 0.5 });
       return [b, legs(o.legs ?? o.cloth)];
     };
     // A soldier for the field: body and legs, and his arms with what he carries as a third part, its pivot at the
@@ -7641,9 +7674,9 @@ const Models = (() => {
     const soldier = (o) => {
       const b = body(Object.assign({ helmet: false, rifle: 0, noArms: true }, o));
       hat(b, o.hat, o.crest);
-      if (o.shield) SHIELD(b, o.shield);
-      if (o.sash) b.box(0.02, 0.2, 0.16, 0.06, MAN_H * 0.5, 0, o.sash, { rx: 0.6 });
-      const a = G(); armsInto(a, Object.assign({ rifle: 0 }, o)); arms(a, o.arms);
+      // A sash from the right shoulder to the left hip, across the coat's front.
+      if (o.sash) limb(b, [0.044, 0.49, 0.058], [0.05, 0.33, -0.05], 0.012, 0.012, o.sash, { seg: 4, sz: 0.5 });
+      const a = G(); armsInto(a, Object.assign({ rifle: 0 }, o));
       return [part('body', b), part('leg', legs(o.legs ?? o.cloth)), part('arms', a, { pivot: [0, MAN_H * 0.8, 0], blow: BLOWS[o.arms] || 'shot' })];
     };
     Object.assign(man, {
