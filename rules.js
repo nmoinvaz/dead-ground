@@ -498,6 +498,9 @@ const Rules = (() => {
   // How many brooks each map's part has. Every part of a map gets the same, so the map stays fair. A brook runs at
   // most BROOK_REACH cells.
   const BROOK_REACH = 90;
+  // A brook's bed lies BED_D under the land. A step down of more than FALL_STEP from one point of its course to the
+  // next (0.8 apart) is steep, and a run of them falling FALL_MIN or more is a waterfall.
+  const BED_D = 0.35, FALL_STEP = 0.4, FALL_MIN = 0.8, FALL_MAPS = new Set(['pass', 'peaks', 'highlands']);
   const BROOKS = { duel: 2, quad: 1, world: 1, gulf: 2, pass: 2, lakes: 1, greenwood: 2, oldforest: 1, twinlakes: 2, seas: 2, peaks: 2, highlands: 1, crater: 1 };
   // The treeline: woods thin out over TREE_BAND of height round TREE_LINE and stand no higher.
   const TREE_LINE = 8.6, TREE_BAND = 1.2;
@@ -1128,7 +1131,8 @@ const Rules = (() => {
     // map's edge, or sinks into a pool, and is copied by the map's turns. It keeps clear of the bases, towns, ore and
     // wells. A brook is shallow: men wade it, slowly, and wheels and tracks cross only at its fords, or where a road
     // carries it in a culvert. Its dice are its own, so the rest of the map draws the same numbers as before.
-    const brooks = [], brookFords = [], bD = new Float32Array(VW * VH).fill(99), bF = new Uint8Array(VW * VH);
+    const brooks = [], brookFords = [], bD = new Float32Array(VW * VH).fill(99), bF = new Uint8Array(VW * VH), bZ = new Float32Array(VW * VH);
+    const falls = [], fallAt = new Uint8Array(VW * VH);
     if (BROOKS[kind]) {
       const br = mulberry((seed * 2654435761 + 0x9e37) % 4294967296);
       const hv = (x, y) => h[clamp(Math.round(y * RES), 0, VH - 1) * VW + clamp(Math.round(x * RES), 0, VW - 1)];
@@ -1179,15 +1183,32 @@ const Rules = (() => {
         for (let i = 1; i < pts.length; i++) { acc += mhypot(pts[i][0] - pts[i - 1][0], pts[i][1] - pts[i - 1][1]); if (acc >= 0.8) { out.push(pts[i]); acc = 0; } }
         return { pts: out, end: kind };
       };
+      // The deepest single fall a course would take, its bed laid as below.
+      const fallDrop = pts => {
+        let low = 1e9, best = 0, run = 0;
+        const bed = pts.map(p => (low = Math.max(water + 0.1, Math.min(low, hv(p[0], p[1]) - BED_D))));
+        for (let i = 0; i + 1 < bed.length; i++) { const d = bed[i] - bed[i + 1]; run = d > FALL_STEP ? run + d : 0; best = Math.max(best, run); }
+        return best;
+      };
+      // On the maps of cliffs and high ground a spring may rise higher, and of a few courses the one with the
+      // greatest fall is taken, so their brooks come down the cliffs.
+      const high = FALL_MAPS.has(kind), zTop = high ? 12 : 8;
       for (let k = 0; k < BROOKS[kind]; k++) {
-        for (let tries = 0; tries < 500; tries++) {
+        let pick = null;
+        for (let tries = 0, seen = 0; tries < 500 && seen < (high ? 10 : 1); tries++) {
           // A spring well in from the map's edge and back from the water, so its brook has some way to run.
           const x = 18 + br() * (W - 36), y = 18 + br() * (H - 36), z = hv(x, y);
-          if (!L.domain(x | 0, y | 0) || z < 1.2 || z > 8 || !clear(x, y) || rdv(x, y) < 6 || L.river(x, y)[0] < L.river(x, y)[1] + 14) continue;
+          if (!L.domain(x | 0, y | 0) || z < 1.2 || z > zTop || !clear(x, y) || rdv(x, y) < 6 || L.river(x, y)[0] < L.river(x, y)[1] + 14) continue;
           // Not along a brook already laid.
           if (bD[clamp(Math.round(y * RES), 0, VH - 1) * VW + clamp(Math.round(x * RES), 0, VW - 1)] < 12 || brooks.some(b => b.pts.some(p => mhypot(p[0] - x, p[1] - y) < 12))) continue;
           const t = route(x, y);
           if (t.pts.length < 22) continue;
+          seen++;
+          t.drop = high ? fallDrop(t.pts) : 0;
+          if (!pick || t.drop > pick.drop) pick = t;
+        }
+        if (pick) {
+          const t = pick;
           // A ford part way down, and a second on a long brook, each the nearest place to its mark that is clear of a
           // road, which has its culvert.
           const n = t.pts.length, offRoad = i => roadDist[clamp(Math.round(t.pts[i][1] * RES), 0, VH - 1) * VW + clamp(Math.round(t.pts[i][0] * RES), 0, VW - 1)] > 5;
@@ -1198,10 +1219,27 @@ const Rules = (() => {
             brooks.push({ pts, end: t.end });
             for (const i of fords) { const a = pts[Math.max(0, i - 1)], b = pts[Math.min(pts.length - 1, i + 1)], d = mhypot(b[0] - a[0], b[1] - a[1]) || 1; brookFords.push([pts[i][0], pts[i][1], (b[0] - a[0]) / d, (b[1] - a[1]) / d]); }
           }
-          break;
         }
       }
-      // The distance from each point of the land to the nearest brook, and whether that stretch is a ford.
+      // Each brook's bed follows the land down, a little under it, and never climbs: where the land rises across
+      // its way it cuts through, and where the land drops steeply the bed drops with it in a waterfall. A fall is
+      // a run of steep steps down that falls FALL_MIN at least, away from fords and roads.
+      for (const b of brooks) {
+        let low = 1e9;
+        b.bed = b.pts.map(p => (low = Math.max(water + 0.1, Math.min(low, hv(p[0], p[1]) - BED_D))));
+        const steep = k => b.bed[k] - b.bed[k + 1] > FALL_STEP;
+        for (let k = 0; k + 1 < b.pts.length; k++) {
+          if (!steep(k)) continue;
+          let j = k;
+          while (j + 2 < b.pts.length && steep(j + 1)) j++;
+          const [x0, y0] = b.pts[k], [x1, y1] = b.pts[j + 1], z0 = b.bed[k], z1 = b.bed[j + 1];
+          const nearFord = brookFords.some(f => mhypot(f[0] - x0, f[1] - y0) < 3 || mhypot(f[0] - x1, f[1] - y1) < 3);
+          if (z0 - z1 >= FALL_MIN && !nearFord && rdv(x0, y0) > 3 && rdv(x1, y1) > 3) falls.push({ x0, y0, z0, x1, y1, z1 });
+          k = j;
+        }
+      }
+      // The distance from each point of the land to the nearest brook, the bed there, and whether that stretch is a
+      // ford.
       for (const b of brooks) for (let k = 0; k + 1 < b.pts.length; k++) {
         const [ax, ay] = b.pts[k], [bx, by] = b.pts[k + 1], dx = bx - ax, dy = by - ay, L2 = dx * dx + dy * dy || 1e-6, Rr = 3;
         const i0 = Math.max(0, Math.floor((Math.min(ax, bx) - Rr) * RES)), i1 = Math.min(VW - 1, Math.ceil((Math.max(ax, bx) + Rr) * RES));
@@ -1209,7 +1247,7 @@ const Rules = (() => {
         for (let j = j0; j <= j1; j++) for (let i = i0; i <= i1; i++) {
           const qx = i / RES - ax, qy = j / RES - ay, t = clamp((qx * dx + qy * dy) / L2, 0, 1), d = mhypot(qx - dx * t, qy - dy * t), c = j * VW + i;
           if (d >= bD[c]) continue;
-          bD[c] = d;
+          bD[c] = d; bZ[c] = lerp(b.bed[k], b.bed[k + 1], t);
           const px = ax + dx * t, py = ay + dy * t;
           bF[c] = brookFords.some(f => mhypot(px - f[0], py - f[1]) < 1.6) ? 1 : 0;
         }
@@ -1219,10 +1257,21 @@ const Rules = (() => {
       for (const b of brooks) if (b.end === 'pool') {
         const [ex, ey] = b.pts[b.pts.length - 1];
         for (let j = Math.max(0, Math.floor((ey - 3) * RES)); j <= Math.min(VH - 1, Math.ceil((ey + 3) * RES)); j++) for (let i = Math.max(0, Math.floor((ex - 3) * RES)); i <= Math.min(VW - 1, Math.ceil((ex + 3) * RES)); i++) {
-          const c = j * VW + i; bD[c] = Math.min(bD[c], Math.max(0, mhypot(i / RES - ex, j / RES - ey) - 1.2));
+          const c = j * VW + i, d = Math.max(0, mhypot(i / RES - ex, j / RES - ey) - 1.2);
+          if (d < bD[c]) { bD[c] = d; bZ[c] = b.bed[b.bed.length - 1]; }
         }
       }
-      for (let c = 0; c < h.length; c++) if (bD[c] < 3.2) h[c] = Math.min(h[c], lerp(water + 0.1, h[c], smooth(0.3, 3.2, bD[c])));
+      for (let c = 0; c < h.length; c++) if (bD[c] < 3.2) h[c] = Math.min(h[c], lerp(bZ[c], h[c], smooth(0.3, 3.2, bD[c])));
+      // The falls' own ground, which nothing crosses: the brook's width down each fall and a little past either end.
+      for (const f of falls) {
+        const dx = f.x1 - f.x0, dy = f.y1 - f.y0, L2 = dx * dx + dy * dy || 1e-6;
+        for (let j = Math.max(0, Math.floor((Math.min(f.y0, f.y1) - 2) * RES)); j <= Math.min(VH - 1, Math.ceil((Math.max(f.y0, f.y1) + 2) * RES)); j++) for (let i = Math.max(0, Math.floor((Math.min(f.x0, f.x1) - 2) * RES)); i <= Math.min(VW - 1, Math.ceil((Math.max(f.x0, f.x1) + 2) * RES)); i++) {
+          const qx = i / RES - f.x0, qy = j / RES - f.y0, t = (qx * dx + qy * dy) / L2, L = Math.sqrt(L2);
+          if (t * L < -0.5 || t * L > L + 0.5) continue;
+          const tc = clamp(t, 0, 1);
+          if (mhypot(qx - dx * tc, qy - dy * tc) < 1.0) fallAt[j * VW + i] = 1;
+        }
+      }
     }
 
     // Decks over the water. Units walk at deck height, the terrain below stays as it was.
@@ -1292,6 +1341,7 @@ const Rules = (() => {
       // A brook, by its cells' distance from its course: wading slows men and stops wheels, but for at its fords and
       // where a road carries it in a culvert.
       const bc = (y * RES + 1) * VW + x * RES + 1;
+      if (fallAt[bc]) return 7;
       if (bD[bc] < 0.75 && roadDist[bc] > 1.6) return bF[bc] ? 4 | 16 : 1 | 4 | 16;
       if (lo < water + 0.1) return fordK(x + 0.5, y + 0.5) > 0.85 ? 4 | 16 : 7;
       const slope = hi - lo;
@@ -1425,7 +1475,7 @@ const Rules = (() => {
     const fish = (L.fish || []).map(p => ({ x: p[0], y: p[1] }));
     let seaCells = 0;
     for (let c = 0; c < N; c++) seaCells += sea[c];
-    return { W, H, seed, kind, h, deck, water, ground, ore: oreCells, oreKind, oreFields, wells, towns, roads, roadDist, bridges, scatter, houses, oreRich, bases: L.bases, faces, fords: L.fords, fordCells, wadeCells, brooks, brookFords, brookDist: bD, brookFord: bF, sea, fish, seaCells, monuments: (L.monuments || []).map(([k, x, y, r, a]) => ({ k, x, y, r, a })) };
+    return { W, H, seed, kind, h, deck, water, ground, ore: oreCells, oreKind, oreFields, wells, towns, roads, roadDist, bridges, scatter, houses, oreRich, bases: L.bases, faces, fords: L.fords, fordCells, wadeCells, brooks, brookFords, brookDist: bD, brookFord: bF, falls, sea, fish, seaCells, monuments: (L.monuments || []).map(([k, x, y, r, a]) => ({ k, x, y, r, a })) };
   }
 
   // A map is kept only if vehicles can get from the first base to every other base, town and well.

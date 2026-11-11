@@ -2773,6 +2773,17 @@ const World = (() => {
       if (brookTex) brookTex.dispose();
       const bk = new Uint8Array(M.h.length * 4);
       for (let i = 0; i < M.h.length; i++) { bk[i * 4] = M.brookDist ? Math.round(Math.min(M.brookDist[i], 4) / 4 * 255) : 255; bk[i * 4 + 1] = M.brookFord && M.brookFord[i] ? 255 : 0; bk[i * 4 + 3] = 255; }
+      // The waterfalls: in blue the sheet of water down each fall's face, the brook's width from its lip to its foot,
+      // and in alpha the distance from the foot, three cells at most, for the foam and spray where it lands.
+      for (const f of M.falls || []) {
+        const dx = f.x1 - f.x0, dy = f.y1 - f.y0, L2 = dx * dx + dy * dy || 1e-6, Lf = Math.sqrt(L2);
+        for (let j = Math.max(0, Math.floor((Math.min(f.y0, f.y1) - 3) * RES)); j <= Math.min(VH - 1, Math.ceil((Math.max(f.y0, f.y1) + 3) * RES)); j++) for (let i = Math.max(0, Math.floor((Math.min(f.x0, f.x1) - 3) * RES)); i <= Math.min(VW - 1, Math.ceil((Math.max(f.x0, f.x1) + 3) * RES)); i++) {
+          const qx = i / RES - f.x0, qy = j / RES - f.y0, t = (qx * dx + qy * dy) / L2, d = Math.hypot(qx - dx * clamp(t, 0, 1), qy - dy * clamp(t, 0, 1)), c = j * VW + i;
+          const sheet = t * Lf > -0.3 && t * Lf < Lf + 0.2 ? 1 - smooth(0.42, 0.62, d) : 0;
+          bk[c * 4 + 2] = Math.max(bk[c * 4 + 2], Math.round(sheet * 255));
+          bk[c * 4 + 3] = Math.min(bk[c * 4 + 3], Math.round(Math.min(Math.hypot(i / RES - f.x1, j / RES - f.y1), 3) / 3 * 255));
+        }
+      }
       brookTex = new THREE.DataTexture(bk, VW, VH, THREE.RGBAFormat);
       brookTex.magFilter = brookTex.minFilter = THREE.LinearFilter; brookTex.wrapS = brookTex.wrapT = THREE.ClampToEdgeWrapping; brookTex.needsUpdate = true;
       SH.tBrook.value = brookTex;

@@ -180,6 +180,8 @@
           // A dust storm's heads are weather, seen wherever they stand, as the clouds are.
           float isDst = 1.0 - smoothstep(0.006, 0.012, abs(s0 - 0.4784));
           seenE = max(seenE, isDst); visE = max(visE, isDst);
+          // A waterfall's sheet on the land under the pixel, and the distance from its foot, set by the mixture.
+          float fallK = 0.0, foamD = 9.0;
           // Ground never seen is drawn as the sketch alone, so the drawing under it is skipped. A quad of pixels skips
           // it only when all four lie there, as the drawing takes derivatives across the quad. Two rounds of
           // derivatives carry each pixel's need to the other three.
@@ -319,7 +321,9 @@
               // A brook is drawn from its distance map, not from the land's water, so it keeps a clean narrow line. Its
               // depth rises from its banks to its middle, and its banks, water lines and wash follow from that as a
               // river's do. A road carries it in a culvert, so none is drawn across a road.
-              vec2 bkS = texture2D(tBrook, (Wl * uHScale + 0.5) / uHSize).rg;
+              vec4 bk4 = texture2D(tBrook, (Wl * uHScale + 0.5) / uHSize);
+              vec2 bkS = bk4.rg;
+              fallK = bk4.b * (1.0 - step(0.15, s0)); foamD = bk4.a * 3.0;
               float bkD = bkS.r * 4.0, bkHW = 0.48;
               dep = max(dep, max(bkHW - bkD, 0.0) / bkHW * 0.25 * smoothstep(1.2, 1.6, LND.r) * (1.0 - smoothstep(0.3, 0.37, s0)));
               // How far the view is drawn back, 0 at the usual view and 1 at a wide one, and for units from closer
@@ -947,6 +951,29 @@
             else { cover *= 1.0 - lit; cover = max(cover, rim); }
             if (uFxs > 0.5 && uFxs < 1.5) cover *= 1.0 - fxSmk * 0.9;
             col = mix(uStyle == 8 ? baseC : paperC, inkC, clamp(cover, 0.0, 1.0));
+            // A waterfall as a pen draws one: a sheet of white water down the face in fine strokes, broken into
+            // strands, running down as the rivers run, with a ruled edge, and where it lands a ring of foam and spray.
+            if (fallK > 0.01) {
+              // Fine lines a pen's width at uneven places across the sheet, each broken into dashes of uneven length
+              // that run down; sparse in the sheet's middle, where it is brightest, and close at its edges. Now and
+              // then a strand parts and the dark rock shows through.
+              float sp = 3.2 * uK, ci = floor(px.x / sp), hs = hash(vec2(ci, 3.0)), hl = hash(vec2(ci, 5.0));
+              float lx = abs(px.x - ci * sp - (0.2 + 0.6 * hs) * sp), line = 1.0 - smoothstep(0.3 * uK, 0.85 * uK, lx);
+              float run = px.y + uTime * (120.0 + 70.0 * hl) * uK, dl = (18.0 + 42.0 * hl) * uK;
+              float on = step(mix(0.72, 0.3, 1.0 - smoothstep(0.35, 0.95, fallK)), fract(run / dl + hs));
+              float part = step(0.88, hash(vec2(ci, 11.0 + floor(run / (70.0 * uK))))) * smoothstep(0.6, 0.9, fallK);
+              float sheetK = smoothstep(0.1, 0.45, fallK) * (1.0 - part * 0.75);
+              col = mix(col, dk ? vec3(0.7, 0.76, 0.86) : vec3(0.95, 0.965, 0.985), sheetK);
+              col = mix(col, dk ? vec3(0.32, 0.4, 0.56) : vec3(0.42, 0.48, 0.66), line * on * sheetK * 0.8);
+              float fEw = max(fwidth(fallK), 1e-4);
+              col = mix(col, dk ? vec3(0.5, 0.6, 0.78) : vec3(0.36, 0.42, 0.58), (1.0 - smoothstep(0.4 * uK, 1.1 * uK, abs(fallK - 0.3) / fEw)) * 0.55);
+            }
+            if (foamD < 1.8 && s0 < 0.15) {
+              float fdw = max(fwidth(foamD), 1e-4), fa = noise(Wl * 5.0 + vec2(uTime * 0.7, 0.0));
+              float fring = (1.0 - smoothstep(0.5 * uK, 1.4 * uK, abs(foamD - 0.95) / fdw)) * step(0.35, fa);
+              float spray = smoothstep(0.45, 0.7, noise(Wl * 2.6 - vec2(0.0, uTime * 0.9)) + 0.35 * (1.0 - foamD)) * (1.0 - smoothstep(0.8, 1.8, foamD));
+              col = mix(col, dk ? vec3(0.86, 0.9, 0.96) : vec3(1.0), clamp(fring * 0.85 + spray * 0.7, 0.0, 1.0));
+            }
             col = dk ? mix(col, col + brdWC * 0.14, brdW) : col * mix(vec3(1.0), brdWC, brdW);
             col = mix(col, brdLC, brdL);
             // A flash is bare paper on light paper, and a warm glow on dark as it heats, never a white-out.
