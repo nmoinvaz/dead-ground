@@ -39,5 +39,3 @@ cd site && npx wrangler deploy
 node check.js --games 6            # computers play each other headless and report how the games went
 node lobbycheck.js URL [outdir]    # two players through a game room against a running server
 ```
-
-Opus 5.5
