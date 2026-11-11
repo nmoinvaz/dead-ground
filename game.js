@@ -1109,7 +1109,7 @@ const Game = (() => {
     function rejoining(on) {
       clearTimeout(rejoinT);
       document.body.classList.toggle('rejoining', on);
-      $('loading').textContent = on ? 'REJOINING' : 'DEPLOYING';
+      $('loading-word').textContent = on ? 'REJOINING' : 'DEPLOYING';
       if (on) rejoinT = setTimeout(() => { rejoining(false); if (net.inRoom && !net.inGame && net.view) { screen('setup'); renderSetup(); } }, 15000);
     }
     function toast(s) { if (!$('title').hidden) $('go-why').textContent = s; else hud.say(s, 'bad'); const n = $('rooms-none'); if (n && !$('t-rooms').hidden) n.textContent = s; }
@@ -1250,10 +1250,23 @@ const Game = (() => {
       fit();
     }
 
-    function boot() {
+    // The loading bar's share, never going back from where its own creeping has brought it.
+    function loaded(k) {
+      const bar = document.querySelector('#loading .lbar'), i = bar && bar.firstElementChild;
+      if (!i) return;
+      const m = getComputedStyle(i).transform.match(/matrix\(([^,]+)/), now = m ? +m[1] : 0;
+      // Set at once, with no easing, as a transition begun before a long step would start again from where it began.
+      bar.classList.add('known'); i.style.transform = `scaleX(${Math.max(now, k)})`;
+    }
+    // A moment for the page to draw the bar between the heavy steps of setting up.
+    const breathe = () => new Promise(r => requestAnimationFrame(() => setTimeout(r, 0)));
+    async function boot() {
+      loaded(0.62); await breathe();
       fit();
       applyScheme();
+      loaded(0.7); await breathe();
       if (!restore()) { attract(); screen('main'); }
+      loaded(0.84); await breathe();
       if (store.get(ROOM, '') && !G.playing && /^https?:$/.test(location.protocol)) rejoining(true);
       $('callsign').value = G.name;
       probe();
@@ -1266,6 +1279,7 @@ const Game = (() => {
       renders = world.cameos(list, 0);
       G.pictures = pictures;
       pictures();
+      loaded(1); await breathe();
       document.body.classList.add('ready');
       G.save = saveGame;
       window.__game = G; window.__hud = hud; window.__net = net; window.__voice = vc;
