@@ -236,7 +236,8 @@ const Hud = (() => {
         // A unit's line drawing is already in the look's inks, so it is laid on as it is.
         if (img && img.startsWith('data:image/svg')) b.classList.add('axo');
         c.remove();
-        b.addEventListener('click', e => { e.preventDefault(); camClick(k, e.shiftKey ? 5 : 1); });
+        // Alt-click, Option on a Mac, sets a unit to be trained over and over without end, or stops it.
+        b.addEventListener('click', e => { e.preventDefault(); if (e.altKey && UNITS[k]) camRepeat(k); else camClick(k, e.shiftKey ? 5 : 1); });
         b.addEventListener('contextmenu', e => { e.preventDefault(); camCancel(k); });
         b.addEventListener('pointerenter', () => { state.tipKind = k; drawTip(); });
         b.addEventListener('pointerleave', () => { if (state.tipKind === k) { state.tipKind = null; drawTip(); } });
@@ -279,6 +280,14 @@ const Hud = (() => {
       }
       if (why) { say(why + '.'); game.audio.ui('deny'); return; }
       for (let i = 0; i < n; i++) game.order(s, t, { c: 'train', kind: k });
+      game.audio.ui('click');
+    }
+    const repeating = k => { const p = P(), d = UNITS[k]; return !!(p && d && p.repeat && p.repeat[d.line]); };
+    function camRepeat(k) {
+      const s = S(), on = !repeating(k), why = Rules.blockedReason(s, team(), k);
+      if (on && why) { say(why + '.'); game.audio.ui('deny'); return; }
+      game.order(s, team(), { c: 'repeat', kind: k, on });
+      say(on ? `${UNITS[k].name}: trained over and over. Alt-click the card again to stop.` : `${UNITS[k].name}: no longer repeated.`);
       game.audio.ui('click');
     }
     function camCancel(k) {
@@ -326,7 +335,8 @@ const Hud = (() => {
         b.style.setProperty('--p', (prog * 360).toFixed(1) + 'deg');
         b.classList.toggle('busy', prog > 0);
         if (st.textContent !== label) st.textContent = label;
-        const show = count > 1 && UNITS[k] ? count : '';
+        // A line set to repeat is marked with a looping arrow beside its count.
+        const show = (count > 1 && UNITS[k] ? count : '') + (UNITS[k] && repeating(k) ? ' ↻' : '');
         if (qty.textContent !== String(show)) qty.textContent = show;
         const price = info.cost ? '$' + info.cost + (info.oil ? ' · ' + info.oil + ' oil' : '') : '';
         if (ct.textContent !== price) ct.textContent = price;

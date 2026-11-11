@@ -4020,9 +4020,9 @@ const Rules = (() => {
       const relay = upK(S, P.team, 'relay');
       for (const k in P.cooldown) if (P.cooldown[k] > 0) P.cooldown[k] -= DT * relay;
       for (const cat of ['bld', 'def', 'inf', 'veh', 'air', 'sea', 'tech']) {
-        const q = P.q[cat];
-        if (!q.length) continue;
-        if (cat !== 'bld' && cat !== 'def' && cat !== 'tech') { trainTick(S, P, cat, q); continue; }
+        const q = P.q[cat], units = cat !== 'bld' && cat !== 'def' && cat !== 'tech';
+        if (!q.length && !(units && P.repeat)) continue;
+        if (units) { trainTick(S, P, cat, q); continue; }
         const item = q[0];
         if (item.prog >= 1) { if (cat === 'bld' || cat === 'def') continue; finish(S, P, cat, item); q.shift(); continue; }
         if (item.hold) continue;
@@ -4046,6 +4046,14 @@ const Rules = (() => {
   // gives its place to the next. Each takes its own time and is paid for as it goes, as one at a time would be.
   function trainTick(S, P, cat, q) {
     const halls = trainersOf(S, P.team, TRAINER_OF[cat]);
+    // A line set to repeat keeps one of its units queued for each building that trains it, so each stays busy.
+    if (P.repeat && halls.length) for (const line in P.repeat) {
+      const kind = formOf(line, P.tech);
+      if (!kind || UNITS[kind].cat !== cat || q.length >= 9) continue;
+      if (q.filter(i => UNITS[i.kind] && UNITS[i.kind].line === line).length >= halls.length) continue;
+      if (blockedReason(S, P.team, kind)) continue;
+      q.push({ kind, cost: UNITS[kind], prog: 0, paid: 0, paidOil: 0, hold: false });
+    }
     let slot = 0;
     for (let i = 0; i < q.length && slot < halls.length; i++) {
       const item = q[i];
@@ -4398,6 +4406,12 @@ const Rules = (() => {
       if (c.c === 'build' && q.length) return;
       if (q.length >= 9) return;
       q.push({ kind, cost: d, prog: 0, paid: 0, paidOil: 0, hold: false });
+    } else if (c.c === 'repeat') {
+      // A unit's line trained over and over without end, or no longer.
+      const d = UNITS[c.kind];
+      if (!d) return;
+      P.repeat = P.repeat || {};
+      if (c.on) P.repeat[d.line] = true; else delete P.repeat[d.line];
     } else if (c.c === 'research') {
       const lv = P.tech + 1, d = TECH[lv];
       if (!d || P.q.tech.length || !P.counts.hq) return;
