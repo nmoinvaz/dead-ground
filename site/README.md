@@ -1,6 +1,6 @@
 # Mapmaker's War, the site
 
-A real-time strategy game in three.js after Red Alert and Rise of Nations. Play a skirmish against computers, or
+A real-time strategy game in three.js. Play a skirmish against computers, or
 open a game room that others join from the list. The host picks the map, the terrain and how many computers play
 and how hard, and the room plays out once everyone is ready.
 

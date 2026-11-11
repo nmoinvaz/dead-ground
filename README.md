@@ -16,7 +16,7 @@ models.js      every unit and building built from primitives
 world.js       the 3D picture: terrain, units, effects, weather, scenery
 looks.js       the registry of looks, with looks/ink.js (pen and ink), the game's one look
 hud.js         the sidebar, minimap, overlay, and every way of giving an order
-report.js      the end-of-game report, after Age of Empires
+report.js      the end-of-game report
 axo.js         the sidebar's unit pictures as axonometric line drawings
 game.js        the menus, skirmish and game rooms, saving, sound
 page.html      the page the game is built into
