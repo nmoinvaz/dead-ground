@@ -40,4 +40,4 @@ node check.js --games 6            # computers play each other headless and repo
 node lobbycheck.js URL [outdir]    # two players through a game room against a running server
 ```
 
-x.com/nmnvzr · Opus 5.5
+Opus 5.5
