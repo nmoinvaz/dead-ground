@@ -10,3 +10,4 @@ node_modules/
 # The score's takes and render logs; the kept pieces are encoded into sfx/m_*.mp3.
 music/takes/
 music/*.log
+.site-game.json

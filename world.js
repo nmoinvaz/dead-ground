@@ -818,8 +818,10 @@ const World = (() => {
       return mesh;
     }
 
+    // The ink look draws the ground itself, so this picture only tints the scene's light under it and starts the
+    // minimap, and a small one serves as well as a large one.
     function terrainTexture() {
-      const size = low ? 1024 : 2048, data = new Uint8Array(size * size * 4), th = theme, t0 = performance.now();
+      const size = 512, data = new Uint8Array(size * size * 4), th = theme, t0 = performance.now();
       const rgb = hex => { const c = new THREE.Color(hex); c.convertLinearToSRGB(); return [c.r, c.g, c.b]; };
       const fbm = noiser(mulberry(M.seed + 5));
       const g0 = rgb(th.ground[0]), g1 = rgb(th.ground[1]), pat = rgb(th.patch), rock = rgb(th.rock), bank = rgb(th.bank), road = rgb(th.road), stain = rgb(th.stain);

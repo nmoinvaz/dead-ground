@@ -23,6 +23,10 @@ kbd { font: 11px var(--mono); color: var(--dim); }
 
 #app { position: fixed; inset: 0; display: flex; padding-top: 0; }
 #view { position: relative; flex: 1 1 auto; min-width: 0; overflow: hidden; background: #000; touch-action: none; }
+/* Before the battle behind the title has caught up, plain paper, and the battle fades in over it. */
+#view canvas { transition: opacity 1.2s ease; }
+#view.dawn { background: var(--paper, #ece4d2); }
+#view.dawn canvas { opacity: 0; transition: none; }
 #gl, #ov { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
 #ov { pointer-events: none; }
 #settings { position: absolute; top: calc(52px + env(safe-area-inset-top, 0px)); right: 10px; z-index: 6; width: min(300px, calc(100% - 20px)); display: flex; flex-direction: column; gap: 10px; padding: 12px; background: rgba(20,22,15,.94); border: 1px solid var(--edge); box-shadow: 0 6px 18px rgba(0,0,0,.45); }
@@ -751,6 +755,8 @@ body[data-look="ink"] .sheet { box-shadow: 4px 4px 0 var(--ink); }
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/three@0.158.0/build/three.min.js"></script>
-<script>const SOUNDS = /*@SOUNDS@*/;</script>
+<script>const SOUNDS = /*@SOUNDS@*/;
+// The sounds kept out of the page as files of their own, by name, which the site's build fills in.
+const SOUND_FILES = {/*@SOUND_FILES@*/};</script>
 <!--@SCRIPTS@-->
 <script>requestAnimationFrame(() => setTimeout(() => window.__FILM__.create().boot(), 20));</script>

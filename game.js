@@ -58,10 +58,14 @@ const Game = (() => {
   function makeAudio(data, world) {
     let ctx = null, master = null, bank = {}, ambient = null, voiceT = 0, rainSrc = null, rainGain = null, held = false;
     const robot = !!navigator.webdriver;
+    // A sound is in the page, or on the site as a file of its own, fetched when it is first wanted.
+    const files = typeof SOUND_FILES === 'object' && SOUND_FILES ? SOUND_FILES : {}, has = k => !!(data[k] || files[k]);
     const decode = (k, then, fail) => {
+      const no = fail || (() => {});
+      if (!data[k]) { if (files[k]) fetch(files[k]).then(r => r.ok ? r.arrayBuffer() : Promise.reject(r.status)).then(b => ctx.decodeAudioData(b, then, no)).catch(no); else no(); return; }
       const bin = atob(data[k]), buf = new Uint8Array(bin.length);
       for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
-      ctx.decodeAudioData(buf.buffer, then, fail || (() => {}));
+      ctx.decodeAudioData(buf.buffer, then, no);
     };
     // The score: pieces that take turns, each played through once and faded into a quiet spell of wind. A quiet
     // field gets a calm piece and fighting in view a battle piece, which cuts in on a calm one. Iron, heavy metal,
@@ -70,7 +74,7 @@ const Game = (() => {
     const PIECES = [
       { k: 'm_dust' }, { k: 'm_vigil' }, { k: 'm_steppe' },
       { k: 'm_siege', war: true }, { k: 'm_charge', war: true }, { k: 'm_assault', war: true }, { k: 'm_iron', war: true, age: 4 },
-    ].filter(p => data[p.k]);
+    ].filter(p => has(p.k));
     const lazy = k => PIECES.some(p => p.k === k);
     const MUSIC_GAIN = 0.36, sc = { cur: null, last: '', next: 1, heat: 0, loading: false };
     function fadeOut(c, d, gap) {
@@ -112,7 +116,7 @@ const Game = (() => {
           const C = window.AudioContext || window.webkitAudioContext;
           if (!C) return;
           ctx = new C(); master = ctx.createGain(); master.gain.value = a.muted ? 0 : 0.8; master.connect(ctx.destination);
-          for (const k in data) if (!lazy(k)) decode(k, b => { bank[k] = b; if (k === 'wind') a.wind(); });
+          for (const k of new Set([...Object.keys(data), ...Object.keys(files)])) if (!lazy(k)) decode(k, b => { bank[k] = b; if (k === 'wind') a.wind(); });
           setInterval(scoreTick, 1000);
         }
         if (ctx.state === 'suspended' && !held) ctx.resume();
@@ -265,19 +269,35 @@ const Game = (() => {
     }
 
     // The battle behind the title is two commanders fighting from the fourth minute on.
+    // It is played forward in slices of a frame's time, so the title is up at once and stays answering; the battle
+    // shows when it has caught up, fading in over the paper the first time.
+    const AHEAD = 20 * 60 * 4.5;
+    let ahead = null;
     function attract() {
       const S = Rules.newGame({ seed: 40 + (Date.now() / 86400000 | 0) % 40 });
       S.ais.push(AI.create(0, 'veteran'), AI.create(1, 'veteran'));
-      for (let i = 0; i < 20 * 60 * 4.5; i++) { Rules.step(S); S.ev.length = 0; }
+      ahead = { S, n: 0 };
+    }
+    function attractAhead() {
+      if (!ahead) return;
+      if (G.playing) { ahead = null; return; }
+      const S = ahead.S, t0 = performance.now();
+      while (ahead.n < AHEAD && performance.now() - t0 < 14) { Rules.step(S); S.ev.length = 0; ahead.n++; }
+      if (ahead.n < AHEAD) return;
+      ahead = null;
+      const first = !G.S;
       begin(S, 'desert', -1);
       S.ev.length = 0;
       world.focus(Rules.W / 2, Rules.H / 2, 110);
+      if (first) { requestAnimationFrame(() => $('view').classList.remove('dawn')); setTimeout(() => { cameoDue = true; }, 1200); }
     }
 
     // Into a game, local or online: the title goes and the view goes to the player's base.
     function enterPlay(S, theme, team) {
       $('title').hidden = true; $('end').hidden = true; $('veil').hidden = true;
+      $('view').classList.remove('dawn');
       begin(S, theme, team);
+      cameos();
       pictures();
       hud.reset();
       G.playing = true; G.paused = false; G.outcome = null; G.falls = {}; G.plate = null;
@@ -543,9 +563,11 @@ const Game = (() => {
         if (n === 8) acc = 0;
         if (!G.playing && !$('title').hidden) {
           attractCam(dt);
-          if (S.over) attract();
+          if (S.over && !ahead) attract();
         }
       }
+      attractAhead();
+      if (cameoDue && !renders) cameos(8);
       if (S) world.frame(Math.min(1, acc / Rules.DT), G.paused ? 0 : dt, now / 1000);
       // The sound is held exactly while a game stands paused, however it came to be paused or let go.
       audio.hold(G.playing && G.paused);
@@ -575,7 +597,17 @@ const Game = (() => {
     // The sidebar's pictures: the buildings as the engine renders them, the units as axonometric line drawings in
     // the look's own inks, with the player's side on their markings.
     // A building's card shows it in the player's age, and G.picAge says which age that was.
-    let renders = null;
+    let renders = null, cameoList = null, cameoPart = null, cameoN = 0, cameoDue = false;
+    // The engine's pictures are drawn once a world is loaded: a few a frame after the title is up, and any left all
+    // at once as a game begins.
+    function cameos(n = Infinity) {
+      if (renders || !G.S || !cameoList) return;
+      cameoPart = cameoPart || {};
+      const end = Math.min(cameoList.length, cameoN + n);
+      Object.assign(cameoPart, world.cameos(cameoList.slice(cameoN, end), 0));
+      cameoN = end;
+      if (cameoN >= cameoList.length) { renders = cameoPart; cameoPart = null; pictures(); }
+    }
     function pictures() {
       if (!renders) return;
       const scheme = world.look !== 'ink' ? 'daylight' : document.body.dataset.scheme === 'dark' ? 'dark' : 'light';
@@ -1265,20 +1297,18 @@ const Game = (() => {
       fit();
       applyScheme();
       loaded(0.7); await breathe();
-      if (!restore()) { attract(); screen('main'); }
-      loaded(0.84); await breathe();
-      if (store.get(ROOM, '') && !G.playing && /^https?:$/.test(location.protocol)) rejoining(true);
-      $('callsign').value = G.name;
-      probe();
-      const list = [
+      cameoList = [
         ...Object.keys(Rules.BUILDINGS).filter(k => k !== 'hq').map(k => ({ kind: k, b: true })), { kind: 'hq', b: true },
         ...world.buildingKeys.filter(k => k.includes('@')).map(k => ({ kind: k, b: true })),
         ...Object.keys(Rules.UNITS).filter(k => !Rules.UNITS[k].men).map(k => ({ kind: k })),
         ...Object.keys(Rules.UNITS).filter(k => Rules.UNITS[k].men).map(k => ({ kind: k, man: true })),
       ];
-      renders = world.cameos(list, 0);
       G.pictures = pictures;
-      pictures();
+      if (!restore()) { $('view').classList.add('dawn'); attract(); screen('main'); }
+      loaded(0.84); await breathe();
+      if (store.get(ROOM, '') && !G.playing && /^https?:$/.test(location.protocol)) rejoining(true);
+      $('callsign').value = G.name;
+      probe();
       loaded(1); await breathe();
       document.body.classList.add('ready');
       G.save = saveGame;

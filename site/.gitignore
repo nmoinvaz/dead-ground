@@ -1,3 +1,5 @@
 .wrangler/
 node_modules/
 .DS_Store
+# Built by site.sh from sfx/.
+public/audio/
