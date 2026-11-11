@@ -201,6 +201,11 @@ const Rules = (() => {
     stealth: { name: 'Stealth Bomber', cat: 'air', sym: 'jet', cost: 1800, oil: 80, time: 20, hp: 420, armor: 'air', speed: 18, sight: 10, r: 1, weapons: [], move: 'jet', alt: 7, need: 'airfield', bombs: { n: 6, dmg: 360, splash: 2.8 }, note: 'A long bombing run, then home to rearm.' },
     gunship: { name: 'Gunship', cat: 'air', sym: 'hel', cost: 1300, oil: 50, time: 16, hp: 520, armor: 'air', speed: 6.5, sight: 13, r: 1, weapons: ['plasma', 'pulse'], move: 'air', alt: 3.6, need: 'airfield', turret: 3, note: 'Hunts armour. Fears laser AA.' },
     swarm: { name: 'Swarm Drone', cat: 'air', sym: 'uav', cost: 200, oil: 6, time: 3.5, hp: 16, armor: 'air', speed: 11, sight: 8, r: 0.3, weapons: [], move: 'air', alt: 1.5, need: 'airfield', kamikaze: { dmg: 420, splash: 2.2 }, life: 45, note: 'One-way attack drone. Fast, and dies to anything.' },
+    // The aircraft of a UAV Sweep or Recon Flight call, flown by the call and never trained: it flies in from its
+    // side's base, circles over the target while it watches, and flies off home. It is a real aircraft, and anti-air
+    // fire can bring it down.
+    recon: { name: 'Recon Biplane', cat: 'air', sym: 'uav', cost: 0, time: 1, hp: 400, armor: 'air', speed: 11, sight: 14, r: 0.9, weapons: [], move: 'air', alt: 9, recon: true, tech: 4, note: 'Flies the Recon Flight call.' },
+    uavp: { name: 'Recon Drone', cat: 'air', sym: 'uav', cost: 0, time: 1, hp: 400, armor: 'air', speed: 12, sight: 14, r: 0.8, weapons: [], move: 'air', alt: 10, recon: true, tech: 5, note: 'Flies the UAV Sweep call.' },
   });
 
   // Each line's form in each age, Ancient to Future. A line with no form of its own in an age keeps its last one.
@@ -3106,6 +3111,7 @@ const Rules = (() => {
 
   function kill(S, t, team) {
     t.hp = 0;
+    if (t.d.recon) ownEvent(S, t.team, 'reconlost');
     S.ev.push({ t: 'die', id: t.id, kind: t.kind, team: t.team, x: t.x, y: t.y, b: t.b, z: isAir(t) ? t.z : 0, a: t.a, w: t.w, h: t.h, vet: t.vet });
     if (t.b) {
       const cells = [], prev = [];
@@ -3587,8 +3593,28 @@ const Rules = (() => {
     } else u.z = Math.min(6, u.z + 4 * DT);
   }
 
+  // A recon aircraft: in to its circle, round it while its time lasts, then away home and gone past the edge of
+  // what it can see, without a fall, as it was never shot down.
+  const RECON_R = 9, RECON_IN = 30;
+  function reconTick(S, u) {
+    const d = u.d;
+    u.z = d.alt + msin(S.tick * 0.05 + u.id) * 0.15;
+    if (u.life > 0) {
+      u.life -= DT;
+      const dx = u.x - u.ox, dy = u.y - u.oy, r = mhypot(dx, dy);
+      // Along the circle, leaning in when outside it and out when inside.
+      if (r > RECON_R + 3) flyTo(S, u, u.ox + dx / r * RECON_R, u.oy + dy / r * RECON_R, 0.5);
+      else { const h = matan2(dy, dx) + PI / 2 + clamp((r - RECON_R) * 0.2, -0.9, 0.9); flyTo(S, u, u.x + mcos(h) * 5, u.y + msin(h) * 5, 0.1); }
+      return;
+    }
+    const b = S.bases[u.team];
+    u.away = (u.away || 0) + DT;
+    flyTo(S, u, b[0], b[1], 1);
+    if (u.away > 6 || mhypot(u.x - b[0], u.y - b[1]) < 3) u.hp = 0;
+  }
   function airTick(S, u) {
     const d = u.d, o = u.ord;
+    if (d.recon) return reconTick(S, u);
     // In a storm, or under a dust storm's dust, helicopters and drones go home and set down, and a drone's flying
     // time stands still.
     if (groundedAt(S, u.x, u.y)) {
@@ -4725,8 +4751,14 @@ const Rules = (() => {
     P.supply -= d.cost; P.stats.spent += d.cost;
     P.cooldown[name] = d.cd;
     if (name === 'uav') {
-      S.sweeps.push({ team, x, y, r: d.r, until: S.tick + d.life * HZ });
+      // The aircraft sets off a little short of the target on the line from its base, and watches for the call's time.
+      const b = S.bases[team], dd = mhypot(x - b[0], y - b[1]) || 1, k = Math.min(1, RECON_IN / dd);
+      const sx = clamp(x + (b[0] - x) * k, 1, W - 1), sy = clamp(y + (b[1] - y) * k, 1, H - 1);
+      const u = spawn(S, S.P[team].tech >= 5 ? 'uavp' : 'recon', team, sx, sy, { ox: x, oy: y, life: d.life, a: matan2(y - sy, x - sx) });
+      u.pa = u.a;
       S.ev.push({ t: 'uav', team, x, y, dur: d.life });
+      // The sides whose own ground it passes over are told it is overhead.
+      for (const Q of S.P) if (Q.team !== team && !Q.out && !atPeace(S, team, Q.team) && S.ents.some(e => e.b && e.team === Q.team && e.hp > 0 && mhypot(e.x - x, e.y - y) < RECON_R + 12)) ownEvent(S, Q.team, 'reconover');
     } else if (name === 'flare') {
       S.sweeps.push({ team, x, y, r: d.r, until: S.tick + d.life * HZ, flare: S.tick });
       S.ev.push({ t: 'flare', team, x, y, dur: d.life });
