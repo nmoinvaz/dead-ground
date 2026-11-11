@@ -2044,7 +2044,7 @@ const Rules = (() => {
     const P = S.P.map(p => p.out ? null : Object.fromEntries(SERIES.map(k => [k, []])));
     return { every: HIST_EVERY, t: [], P, war: [], acc: {}, marks: [] };
   }
-  // A side's score in four parts, after Age of Empires. Military is a tenth of the worth it destroyed, economy a
+  // A side's score in four parts. Military is a tenth of the worth it destroyed, economy a
   // twentieth of what it earned, technology the worth of its tech levels, and territory its towns and land.
   function scoreOf(S, team, land) {
     const P = S.P[team], s = P.stats;

@@ -653,8 +653,9 @@ body[data-look="ink"] .sheet { box-shadow: 4px 4px 0 var(--ink); }
       <div class="choice"><h2>Ore, oil and power</h2><div id="s-gauges" class="two"><button data-v="top">In the top bar</button><button data-v="side">In the sidebar</button></div></div>
       <div class="choice"><h2>Map sheet frame</h2><div id="s-sheet" class="two"><button data-v="on">On</button><button data-v="off">Off</button></div></div>
       <div class="choice"><h2>Shadows</h2><div id="s-shade" class="two"><button data-v="hatch">Hatched</button><button data-v="wash">Wash</button></div></div>
+      <div class="choice"><h2>Shadow strength</h2><div id="s-shadow"><button data-v="full">Full</button><button data-v="light">Light</button><button data-v="off">Off</button></div></div>
       <div class="choice"><h2>Music</h2><div id="s-music" class="two"><button data-v="on">On</button><button data-v="off">Off</button></div></div>
-      <p id="build">Build b1c5179 2026-11-11 08:38</p>
+      <p id="build">Build 286c267 2026-11-11 09:58</p>
     </div>
     <div id="banner" hidden></div>
     <button id="update" hidden>A new version of Mapmaker’s War is out. <b>Reload</b></button>
@@ -2823,7 +2824,7 @@ const Rules = (() => {
     const P = S.P.map(p => p.out ? null : Object.fromEntries(SERIES.map(k => [k, []])));
     return { every: HIST_EVERY, t: [], P, war: [], acc: {}, marks: [] };
   }
-  // A side's score in four parts, after Age of Empires. Military is a tenth of the worth it destroyed, economy a
+  // A side's score in four parts. Military is a tenth of the worth it destroyed, economy a
   // twentieth of what it earned, technology the worth of its tech levels, and territory its towns and land.
   function scoreOf(S, team, land) {
     const P = S.P[team], s = P.stats;
@@ -10878,7 +10879,7 @@ if (typeof module !== 'undefined') module.exports = Looks;
           // Distance to the nearest road, per pixel of the land.
           C.tLand.value = K.land();
           // The shadows cast on the land, when they are to be hatched.
-          if (K.opts.hatch) C.tShade.value = K.shadows(K.target('shade'));
+          if (K.opts.hatch && K.shadowK() > 0) C.tShade.value = K.shadows(K.target('shade'));
           const q = new THREE.Vector3(CX, 1, CY).project(camera); C.uOff.value.set((q.x + 1) / 2 * w, (q.y + 1) / 2 * h);
           C.uStyle.value = K.opts.ink;
           K.landUniforms(C);
@@ -11058,7 +11059,7 @@ const World = (() => {
     const SH = {
       tFog: { value: white }, tDetail: { value: null }, tTerr: { value: white }, tH: { value: white }, tMarks: { value: white }, uTime: { value: 0 },
       uTeam0: { value: new THREE.Color(0x3f8cff) }, uTeams: { value: SLOT_COLORS.map(c => new THREE.Color(c).offsetHSL(0, 0, 0.06)) }, uFogOn: { value: 1 }, uBorder: { value: 1 }, uMap: { value: 128 },
-      uHaze: { value: new THREE.Color(0xf29a5e) }, uHazeK: { value: 0.012 }, uHazeFrom: { value: 80 }, uShroud: { value: new THREE.Color(0x120907) }, uSunDir: { value: new THREE.Vector3(1, 0.3, 0) }, uCastK: { value: 1 }, uDustT: { value: new THREE.Vector2() },
+      uHaze: { value: new THREE.Color(0xf29a5e) }, uHazeK: { value: 0.012 }, uHazeFrom: { value: 80 }, uShroud: { value: new THREE.Color(0x120907) }, uSunDir: { value: new THREE.Vector3(1, 0.3, 0) }, uCastK: { value: 1 }, uShadowK: { value: 1 }, uDustT: { value: new THREE.Vector2() },
       // The wind on the ground, how far it has carried the clouds, how overcast it is, and lying snow.
       uWind: { value: new THREE.Vector2(0.3, 0.1) }, uCloud: { value: new THREE.Vector2() }, uCloudK: { value: 0.2 }, uCloudT: { value: 0.3 }, uSnowC: { value: 0 },
       // The height above which snow lies on the heights in any weather.
@@ -11098,6 +11099,8 @@ const World = (() => {
         return uWind * s * (0.6 + 0.4 * sin(ph)) + vec2(-uWind.y, uWind.x) * s * 0.2 * sin(ph * 1.9 + 1.3);
       }`;
 
+    // The directional light's shadow lookup in three's lighting chunk, which patch scales by uShadowK.
+    const SUN_SHADOW = 'getShadow( directionalShadowMap[ i ], directionalLightShadow.shadowMapSize, directionalLightShadow.shadowBias, directionalLightShadow.shadowRadius, vDirectionalShadowCoord[ i ] )';
     function patch(mat, o = {}) {
       const key = 'dg' + (o.plain ? 'p' : '') + (o.terrain ? 't' : '') + (o.tint ? 'i' : '') + (o.sway ? 's' : '');
       mat.customProgramCacheKey = () => key;
@@ -11138,7 +11141,7 @@ const World = (() => {
           gl_Position = projectionMatrix * mvPosition;`);
         f = f.replace('#include <common>', `#include <common>
           uniform sampler2D tFog, tDetail, tTerr, tMarks, tTrail; uniform float uTreadK, uTime, uFogOn, uBorder, uHazeK, uHazeFrom, uMap, uCloudK, uSnowC; uniform vec3 uTeam0, uTeams[8], uHaze, uShroud, uSunDir; uniform vec2 uCloud;
-          varying vec3 vW; varying vec3 vL; varying float vGlow; varying vec3 vTint;`);
+          varying vec3 vW; varying vec3 vL; varying float vGlow; varying vec3 vTint; uniform float uShadowK;`);
         if (o.plain || o.tint) v = v.replace('vGlow = ', 'vTint = vec3(0.0); vGlow = ');
         if (o.terrain) {
           f = f.replace('#include <map_fragment>', `#include <map_fragment>
@@ -11178,6 +11181,8 @@ const World = (() => {
             bc += uTeam0 * 0.85 * smoothstep(w, 0.0, la) * uBorder;
             bc += other * 0.85 * smoothstep(w, 0.0, lb) * uBorder;
             gl_FragColor.rgb = bc;` : '';
+        // The sun's cast shadows at the strength the settings ask for.
+        f = f.replace('#include <lights_fragment_begin>', THREE.ShaderChunk.lights_fragment_begin.replace(SUN_SHADOW, 'mix( 1.0, $&, uShadowK )'));
         f = f.replace('#include <opaque_fragment>', `#include <opaque_fragment>
           // Cloud shadows go by on the wind, darker the more overcast it is. Snow lies on whatever faces up.
           float cl = texture2D(tDetail, vW.xz * 0.006 + uCloud).r;
@@ -11234,7 +11239,8 @@ const World = (() => {
     }
     SH.tDetail.value = makeDetail();
 
-    let style = Looks.get('ink'), inkStyle = 8, roadStyle = 3, oreStyle = 5, shadeHatch = true;
+    // shadowK is the cast shadows' strength from the settings: 1, 0.7, or 0, when the shadow map is not drawn.
+    let style = Looks.get('ink'), inkStyle = 8, roadStyle = 3, oreStyle = 5, shadeHatch = true, shadowK = 1;
     // The kind of thing being drawn into the line passes, shared with the pass's material, and whether it sways.
     const catU = { value: 1 }, catRef = { mat: null, norm: null, lines: null }, swayU = { value: 0 };
     const maskMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
@@ -11461,7 +11467,7 @@ const World = (() => {
         scene.overrideMaterial = material;
         renderer.shadowMap.autoUpdate = false;
         renderer.setRenderTarget(target); renderer.setClearColor(clear, alpha); renderer.clear(); renderer.render(scene, camera);
-        renderer.shadowMap.autoUpdate = true;
+        renderer.shadowMap.autoUpdate = shadowK > 0;
         scene.overrideMaterial = null; camera.layers.mask = was;
         renderer.setClearColor(theme ? theme.shroud : 0, 1);
         return target.texture;
@@ -11477,7 +11483,7 @@ const World = (() => {
         renderer.setRenderTarget(linesRT); renderer.setClearColor(0x808080, 0); renderer.clear();
         gl.clearBufferfv(gl.COLOR, 0, NONE); gl.clearBufferfv(gl.COLOR, 2, NONE);
         renderer.render(scene, camera);
-        renderer.shadowMap.autoUpdate = true;
+        renderer.shadowMap.autoUpdate = shadowK > 0;
         scene.overrideMaterial = null; camera.layers.mask = was;
         renderer.setClearColor(theme ? theme.shroud : 0, 1);
         const [mask, norm, anchor] = linesRT.texture;
@@ -11528,7 +11534,7 @@ const World = (() => {
         // The mask, the normals and the anchors together, in one draw where the browser allows it.
         lines: () => linesMat ? drawLines() : { mask: K.mask(), norm: K.norm(), anchor: K.anchor() },
         // The shadows cast on the land, in alpha, from the shadow map the frame has already drawn.
-        shadows: target => drawInto(target, 0x000000, 0, 3, shadowMat),
+        shadows: target => drawInto(target, 0x000000, 0, 3, shadowMat), shadowK: () => shadowK,
         landUniforms,
         paper: () => paperTex || (paperTex = Looks.paper(THREE)),
         target(name) {
@@ -14956,7 +14962,7 @@ const World = (() => {
       // Cast shadows fall from a sun no lower than SHADOW_EL, so a low sun's reach at most twice a caster's height,
       // and fade as it sinks. The land keeps the true sun's shading.
       const el = Math.asin(clamp(dir.y, -1, 1)), hz = Math.hypot(dir.x, dir.z) || 1;
-      SH.uCastK.value = smooth(0.1, 0.28, el);
+      SH.uCastK.value = smooth(0.1, 0.28, el) * shadowK;
       if (el < SHADOW_EL) dir.set(dir.x / hz * Math.cos(SHADOW_EL), Math.sin(SHADOW_EL), dir.z / hz * Math.cos(SHADOW_EL));
       const texel = half * 2 / sun.shadow.mapSize.x;
       sun.target.position.x = Math.round(sun.target.position.x / texel) * texel;
@@ -15204,7 +15210,7 @@ const World = (() => {
       renderer.setRenderTarget(rt); renderer.setClearColor(0x000000, 0); renderer.clear(); renderer.render(scene, camera);
       const px = new Uint8Array(w * h * 4);
       renderer.readRenderTargetPixels(rt, 0, 0, w, h, px);
-      renderer.setRenderTarget(null); renderer.setClearColor(theme.shroud, 1); renderer.shadowMap.autoUpdate = true;
+      renderer.setRenderTarget(null); renderer.setClearColor(theme.shroud, 1); renderer.shadowMap.autoUpdate = shadowK > 0;
       scene.overrideMaterial = null;
       for (const o of hidden) o.visible = true;
       rt.dispose();
@@ -15237,6 +15243,7 @@ const World = (() => {
       setRoad(n) { roadStyle = n; },
       // Shadows on the land drawn as pen hatching, or as a wash.
       setShadeHatch(on) { shadeHatch = !!on; },
+      setShadowK(k) { shadowK = k; SH.uShadowK.value = k; renderer.shadowMap.autoUpdate = k > 0; renderer.shadowMap.needsUpdate = k > 0; },
       setOre(n) { oreStyle = n; },
       study(o) { studySky = o; },
       // Draws a plate of the place at x, y with the next frame, and hands it to cb as a picture's data URL; raw
@@ -17741,7 +17748,7 @@ const Hud = (() => {
 
 </script>
 <script>
-// Mapmaker's War, the closing report, after Age of Empires. A summary of each side's score, a timeline of their shares
+// Mapmaker's War, the closing report. A summary of each side's score, a timeline of their shares
 // of the field with the fighting between them, graphs of their figures over the game, and their military and
 // economic totals. All of it comes from the game's own record, so every player in a room sees the same report.
 const Report = (() => {
@@ -19918,6 +19925,14 @@ const Game = (() => {
     const showShade = () => $('s-shade').querySelectorAll('button').forEach(b => b.classList.toggle('on', (b.dataset.v === 'hatch') === shadeHatch));
     $('s-shade').querySelectorAll('button').forEach(b => b.addEventListener('click', () => { shadeHatch = b.dataset.v === 'hatch'; store.set('dg-shade', shadeHatch ? null : 'wash'); world.setShadeHatch(shadeHatch); showShade(); audio.ui('click'); }));
     world.setShadeHatch(shadeHatch); showShade();
+    // How strong the cast shadows are: full, lighter, or none, when the sun's shadow map is not drawn at all. Light
+    // is 0.7, since hatching at half its ink all but vanishes on the paper.
+    const SHADOW_K = { full: 1, light: 0.7, off: 0 };
+    let shadowLvl = store.get('dg-shadow', 'full');
+    if (!(shadowLvl in SHADOW_K)) shadowLvl = 'full';
+    const showShadow = () => $('s-shadow').querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.v === shadowLvl));
+    $('s-shadow').querySelectorAll('button').forEach(b => b.addEventListener('click', () => { shadowLvl = b.dataset.v; store.set('dg-shadow', shadowLvl === 'full' ? null : shadowLvl); world.setShadowK(SHADOW_K[shadowLvl]); showShadow(); audio.ui('click'); }));
+    world.setShadowK(SHADOW_K[shadowLvl]); showShadow();
     // The score on or off, apart from the sound button, which silences everything.
     const showMusic = () => $('s-music').querySelectorAll('button').forEach(b => b.classList.toggle('on', (b.dataset.v === 'on') === audio.musicOn));
     $('s-music').querySelectorAll('button').forEach(b => b.addEventListener('click', () => { audio.wake(); audio.setMusic(b.dataset.v === 'on'); showMusic(); audio.ui('click'); }));
