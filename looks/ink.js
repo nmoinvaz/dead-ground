@@ -744,10 +744,12 @@
                   float td = length(Wl - a), tee = 1.0 - smoothstep(0.32 - gAA, 0.32 + gAA, td);
                   base = mix(base, dk ? vec3(0.36, 0.42, 0.32) : vec3(0.9, 0.92, 0.84), tee * isG * 0.6);
                 }
+                // The bunkers' ragged edge, the same for every bunker, so worked out once.
+                float gbN = (noise(Wl * 3.0) - 0.5) * 0.12;
                 for (int gbi = 0; gbi < 24; gbi++) {
                   vec3 bk = uGolfB[gbi];
                   if (bk.z == 0.0) break;
-                  float bd = length(Wl - bk.xy), br = abs(bk.z), bin = 1.0 - smoothstep(br - gAA, br + gAA, bd + (noise(Wl * 3.0) - 0.5) * 0.12);
+                  float bd = length(Wl - bk.xy), br = abs(bk.z), bin = 1.0 - smoothstep(br - gAA, br + gAA, bd + gbN);
                   if (bin <= 0.0 && bd > br + 0.3) continue;
                   if (bk.z > 0.0) {
                     // A bunker: pale sand stippled fine, its lip ruled.

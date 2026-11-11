@@ -79,6 +79,8 @@ const Looks = (() => {
             float h = fract(sin(dot(c, vec2(127.1, 311.7))) * 43758.5453), size = smoothstep(0.0, 0.15, cov - h * 0.95);
             if (size <= 0.0) continue;
             vec2 m = c + 0.5 + (vec2(fract(h * 17.31), fract(h * 41.17)) - 0.5) * 0.12;
+            // No lobe reaches farther than 0.425 from its cloud's middle: 0.212 out, 0.2125 across at most.
+            if (length(q - m) > 0.425) continue;
             for (int k = 0; k < 4; k++) {
               float hk = fract(h * (13.7 + float(k) * 7.31)), r = (0.1 + 0.07 * hk) * (0.75 + 0.5 * cov) * size;
               vec2 o = (vec2(fract(hk * 23.1), fract(hk * 57.7)) - 0.5) * 0.3;
