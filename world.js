@@ -1996,12 +1996,14 @@ const World = (() => {
       }
       return null;
     }
-    // A dust storm's wall, a haboob, as a front of rounded heads heaped from billows along the line where its dust
-    // begins. Each stretch of the front has a dark billow at its foot, a face above and behind it and a crown above
-    // that, the crown sometimes towering. Two billows churn up the face from the foot to the crown, swelling as
-    // they rise and sinking into it, and a wisp now and then runs out low ahead. The heads rise with the storm's
-    // strength and fall as it dies. Everything comes of the seed and the clock, so every player sees one storm.
-    const DUST_SP = 3.2, DUST_CAP = 1400, wallC = [];
+    // A dust storm's wall, a haboob, as a front of great rounded heads heaped from billows along the line where its
+    // dust begins, towering over the land. Each head, at an uneven spacing along the front, is a flattened billow at
+    // its foot, a face above and behind it, a crown above that and now and then a tower, each its own size. Smaller
+    // billows boil on its face and crown, rolling forward over the top and down the face as they swell and sink, and
+    // two more churn up the face from the foot; the haze ahead of it is the ink look's. The heads rise with the
+    // storm's strength and fall as it dies. Everything comes of the seed and the clock, so every player sees one
+    // storm.
+    const DUST_SP = 4.6, DUST_CAP = 1400, wallC = [];
     let dustMesh = null;
     const dHash = (i, k, sd) => { const v = Math.sin(i * 12.9898 + k * 78.233 + sd * 0.1372) * 43758.5453; return v - Math.floor(v); };
     // The front's sway along its line, shared with the ink look so its haze begins where the heads stand.
@@ -2039,7 +2041,7 @@ const World = (() => {
       // The theatre's own dust, a little greyed, deep at the foot and pale at the crown.
       const dc = new THREE.Color(...theme.dust), g = (dc.r + dc.g + dc.b) / 3;
       dc.lerp(new THREE.Color(g, g, g), 0.25);
-      const lo = dc.clone().multiplyScalar(0.72), hi = dc.clone().lerp(new THREE.Color(1, 1, 1), 0.3);
+      const lo = dc.clone().multiplyScalar(0.84), hi = dc.clone().lerp(new THREE.Color(1, 1, 1), 0.42);
       // Lit at 0.62 of their colour, so a sunlit crown stays under the glow the looks take for fire; the ink washes
       // them at full strength from the mask.
       for (let i = 0; i <= 16; i++) wallC[i] = lo.clone().lerp(hi, i / 16).multiplyScalar(0.62);
@@ -2052,31 +2054,40 @@ const World = (() => {
       const sd = S.seed % 9973, ph = sd * 0.01, kk = smooth(0, 0.6, w.k), cx = W / 2, cy = H / 2, px = -w.dy, py = w.dx;
       SH.uDustT.value.set(t, ph);
       let n = 0;
-      const put = (bx, by, f, y, r, hs) => {
+      // A billow at f along the front's way and y up from the ground, its colour from its height in its head. Near
+      // the ground it spreads flat, as dust churned along the land does.
+      const put = (bx, by, f, y, r, hs, flat = 0.86) => {
         if (r < 0.05 || n >= DUST_CAP) return;
         const x = bx + w.dx * f, z = by + w.dy * f, g = Math.max(terrainAt(M, x, z), wAt(x, z));
-        setInst(dustMesh, n++, { x, y: g + y, z, sx: r, sy: r * 0.86, sz: r, c: wallC[clamp(Math.round(y / (7.5 * hs) * 16), 0, 16)] });
+        const fl = Math.min(flat, lerp(0.4, 0.86, smooth(0.5, 3.2 * hs, y)));
+        setInst(dustMesh, n++, { x, y: g + y, z, sx: r, sy: r * fl, sz: r, c: wallC[clamp(Math.round(y / (12 * hs) * 16), 0, 16)] });
       };
       const L = Math.ceil(Math.hypot(W, H) * 0.6 / DUST_SP);
       for (let i = -L; i <= L; i++) {
-        const s = i * DUST_SP, f0 = front + dustWob(s, t, ph);
+        const h = k => dHash(i, k, sd), s = (i + (h(20) - 0.5) * 0.6) * DUST_SP, f0 = front + dustWob(s, t, ph);
         const bx = cx + w.dx * f0 + px * s, by = cy + w.dy * f0 + py * s;
-        if (bx < -4 || by < -4 || bx > W + 4 || by > H + 4) continue;
-        const h = k => dHash(i, k, sd), hs = (0.75 + 0.6 * h(1)) * kk, br = k => 1 + 0.1 * Math.sin(t * 0.45 + h(k) * 6.28);
-        // Each billow sits a little off its stretch's middle along the front.
-        const at = k => [bx + px * (h(k) - 0.5) * 1.6, by + py * (h(k) - 0.5) * 1.6];
+        if (bx < -10 || by < -10 || bx > W + 10 || by > H + 10) continue;
+        const hs = (0.85 + 0.55 * h(1)) * kk, br = k => 1 + 0.08 * Math.sin(t * 0.25 + h(k) * 6.28);
+        // Each billow sits off its head's middle along the front.
+        const at = (k, wd = 3.2) => [bx + px * (h(k) - 0.5) * wd * hs, by + py * (h(k) - 0.5) * wd * hs];
         let q;
-        q = at(2); put(q[0], q[1], 0.3, 1.3 * hs, 1.7 * hs * br(2), hs);
-        q = at(3); put(q[0], q[1], -1.6, 3.3 * hs, 2.4 * hs * br(3), hs);
-        q = at(4); put(q[0], q[1], -3.6, 5.6 * hs, 2.7 * hs * br(4), hs);
-        if (h(5) > 0.45) { q = at(6); put(q[0] + px * DUST_SP * 0.5, q[1] + py * DUST_SP * 0.5, -5.4, 7.2 * hs, 2.6 * hs * br(6), hs); }
+        // The body: foot, face, crown and sometimes a tower, each [along, f, height, radius].
+        const body = [[at(2), 0, 1.6 * hs, 2.9 * hs * br(2)], [at(3), -2.2 * hs, 4.6 * hs, 3.8 * hs * br(3)], [at(4), -4.6 * hs, 8.2 * hs, 4.4 * hs * br(4)]];
+        if (h(5) > 0.4) body.push([at(6, 4), -6.5 * hs, 12 * hs, 3.9 * hs * br(6)]);
+        body.forEach(([p, f, y, r], j) => put(p[0], p[1], f, y, r, hs, j ? 0.86 : 0.7));
+        // Billows boiling on the face, crown and tower, rolling from the back over the top and down the face.
+        body.forEach(([p, f, y, r], j) => {
+          if (!j) return;
+          for (let k = 0; k < (j === 2 ? 3 : 2); k++) {
+            const u = 30 + j * 4 + k, ph2 = (t * (0.025 + 0.015 * h(u)) + h(u + 50)) % 1, a = Math.PI * (1 - ph2) - 0.5 * ph2, sw = Math.pow(Math.sin(Math.PI * ph2), 0.6);
+            const lat = (h(u + 90) - 0.5) * 1.1 * r;
+            put(p[0] + px * lat, p[1] + py * lat, f + Math.cos(a) * r * 0.8, y + Math.sin(a) * r * 0.8, r * (0.32 + 0.22 * h(u + 70)) * sw, hs);
+          }
+        });
+        // Two billows churning up the face from the foot to the crown.
         for (let k = 0; k < 2; k++) {
-          const f = (t * 0.06 + h(7 + k) + k * 0.5) % 1, sw = Math.sin(Math.PI * f);
-          q = at(9 + k); put(q[0], q[1], 0.6 - 4.6 * f, (0.8 + 5.4 * f) * hs, (0.5 + 1.5 * sw) * sw * hs, hs);
-        }
-        if (h(11) < 0.5) {
-          const f = (t * 0.09 + h(12)) % 1, sw = Math.sin(Math.PI * f);
-          q = at(13); put(q[0], q[1], 1.0 + 5.0 * f, 0.35 + 0.4 * f, (0.35 + 0.5 * h(14)) * sw * hs, hs);
+          const f = (t * 0.035 + h(7 + k) + k * 0.5) % 1, sw = Math.sin(Math.PI * f);
+          q = at(9 + k); put(q[0], q[1], (1.0 - 5.6 * f) * hs, (1.2 + 7.0 * f) * hs, (0.8 + 2.0 * sw) * sw * hs, hs);
         }
       }
       dustMesh.count = n;

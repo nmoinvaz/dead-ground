@@ -374,6 +374,8 @@
               float detail = max(smoothstep(0.08, 0.3, nE), smoothstep(0.006, 0.02, dE)) * step(0.3, a);
               // Inner lines thin out in the light.
               detail *= mix(0.55, 1.0, max(smoothstep(0.25, 0.6, dens), isBr));
+              // A dust storm is one mass: only its outline against the land is inked, never where billow meets billow.
+              detail *= 1.0 - isD;
               // Ground: a pale green wash speckled in olive, thicker in the middle values, with black ink only for
               // crosshatch in the deepest shade.
               float gC = dens > 0.74 ? tone(p, n - 2.0, 0.0) : 0.0;
@@ -512,10 +514,14 @@
               float ox = unitNear > 0.5 ? 0.6 : 1.2;
               float heavy = smoothstep(0.1, 0.35, length(vec2(AS(uv + k * vec2(ox, 0)) - AS(uv - k * vec2(ox, 0)), AS(uv + k * vec2(0, ox)) - AS(uv - k * vec2(0, ox)))));
               heavy *= mix(1.0, 0.85, unitNear);
+              // A dust storm's outline is drawn light, as its edge is soft.
+              float dN = max(isD, max(max(1.0 - smoothstep(0.006, 0.012, abs(aR - 0.4784)), 1.0 - smoothstep(0.006, 0.012, abs(aL - 0.4784))), max(1.0 - smoothstep(0.006, 0.012, abs(aT - 0.4784)), 1.0 - smoothstep(0.006, 0.012, abs(aB - 0.4784)))));
+              heavy *= 1.0 - 0.5 * dN;
               // The outline swells on the side away from the sun: a pixel just outside a unit or building, with the
               // shape lying sunward of it, is inked.
               float swell = 0.0;
               if (a < 0.6) for (int i = 1; i <= 9; i++) { if (i > 3 && uUnits != 3) break; if (i > 2 && zU > 0.5 && uUnits != 3) break; float sa = A(uv + uSun2 * k * (float(i) * 1.15)); swell = max(swell, step(i > 3 ? 0.95 : 0.6, sa) * (i > 1 && sa > 0.9 && uUnits != 3 ? 0.0 : 1.0)); }
+              swell *= 1.0 - 0.7 * dN;
               cover = max(cover, max(heavy, swell * (1.0 -step(0.6, a))));
               // A small unit keeps its outline whole and its inner lines light, so it reads as a shape.
               cover = max(cover, detail * mix(0.75, mix(1.0, 0.5, zU), isU));
@@ -1215,14 +1221,14 @@
             float dS = dot(Wl - uMap * 0.5, vec2(-uDust.y, uDust.x));
             float dW = 2.0 * sin(dS * 0.08 + uDustT.x * 0.1 + uDustT.y) + 1.2 * sin(dS * 0.19 - uDustT.x * 0.15 + uDustT.y * 2.0);
             dustE = uDust.z + dW - dot(Wl - uMap * 0.5, uDust.xy);
-            dust = uDust.w * smoothstep(-2.0, 3.0, dustE) * (1.0 - smoothstep(0.3 * uMap, 0.6 * uMap, dustE));
+            dust = uDust.w * smoothstep(-6.0, 3.0, dustE) * (1.0 - smoothstep(0.3 * uMap, 0.6 * uMap, dustE));
           }
           // Blown sand as an ochre veil, billowing as it is carried on the wind, deepest at the wall's front.
           if (dust > 0.0) {
             vec2 blw = landAt(vUv, max(hg, 0.0) + 1.5) * 0.03 + uCloud * 5.0;
             float billow = noise(blw) * 0.6 + noise(blw * 2.3 + 5.0) * 0.4, keepU = 1.0 - 0.4 * step(0.85, s0);
             // Deepest just behind the heads, which stand over the first few cells of it, and fading over thirty more.
-            float wallF = 1.0 - smoothstep(4.0, 34.0, dustE);
+            float wallF = 1.0 - smoothstep(8.0, 40.0, dustE);
             float dustV = clamp(dust * (0.46 + 0.34 * billow + 0.3 * wallF) * onMap, 0.0, 0.88) * keepU * (1.0 - isDst);
             col = mix(col, dk ? mix(vec3(0.36, 0.3, 0.22), vec3(0.44, 0.34, 0.22), wallF) : mix(vec3(0.8, 0.68, 0.5), vec3(0.66, 0.51, 0.34), wallF), dustV);
           }
