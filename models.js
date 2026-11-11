@@ -1068,6 +1068,15 @@ const Models = (() => {
       const hip = G();
       hip.add(new THREE.ConeGeometry(0.7071, 0.42, 4), 0, 0.21, 0, 0xffffff, { ry: Math.PI / 4 });
       scenery.hip = hip.finish();
+      // For the towns of other ages: a column, from y = 0 to 1 and a unit across, for a temple's colonnade, a
+      // tank or a mast; a dome half a unit high on a unit's breadth; and a wind turbine's three blades about an axle
+      // along z.
+      scenery.col = G().cyl(0.5, 0.5, 1, 0, 0.5, 0, 0xffffff, { seg: 8 }).finish();
+      scenery.dome = G().sph(0.5, 0, 0, 0, 0xffffff, { seg: 10, rings: 5, top: true }).finish();
+      const blades = G();
+      for (let k = 0; k < 3; k++) { const a2 = k * Math.PI * 2 / 3; blades.box(0.07, 1.1, 0.02, Math.cos(a2) * 0.55, Math.sin(a2) * 0.55 - 0.55, 0, 0xf2f2ee, { rz: a2 - Math.PI / 2 }); }
+      blades.cyl(0.07, 0.07, 0.16, 0, 0, 0, 0xe2e2de, { axis: 'z', seg: 8 });
+      scenery.blades = blades.finish();
       const well = G();
       well.cyl(0.08, 0.1, 0.34, 0, 0.17, 0, P.steelDk, { seg: 8 });
       well.cyl(0.14, 0.14, 0.04, 0, 0.34, 0, P.steelDk, { seg: 8 });

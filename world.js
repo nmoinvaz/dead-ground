@@ -1256,6 +1256,274 @@ const World = (() => {
       names = { rivers, hills, woods };
     }
 
+    // How towns are built in each age: walls, roofs and windows, and on houses timber frames, hipped roofs, chimneys,
+    // rooms on the roof, plant and solar panels. The colours keep under the glow pass's threshold for fire.
+    const TOWN = [null,
+      // Ancient: mud brick under flat roofs, small windows high in the wall, a room on some roofs.
+      { wall: [0xc4a982, 0xb39870, 0xcdb48e, 0xa58a64], roof: [0xa68e6c, 0x9a8262, 0xae9676], flat: true, win: 'small', loft: true },
+      // Medieval: plaster in dark timber frames under steep thatch and tile, a stone chimney on some.
+      { wall: [0xd8ceb6, 0xccc0a6, 0xd6ccb8, 0xc0b49a], roof: [0x8e7a50, 0x7e6c46, 0x8a4a34, 0x6e4032], pitch: 2, steep: true, win: 'small', timber: true, chimney: 'stone' },
+      // Gunpowder: plaster under tile and slate, hipped roofs on some square houses, a chimney on most.
+      { wall: [0xcfc4ae, 0xb9ad96, 0xd8d0be, 0xa89a82], roof: [0x8a4a34, 0x6e4032, 0x5c5a58, 0x7a5a42], pitch: 0.9, hip: true, win: 'plain', chimney: 'brick' },
+      // Industrial: brick under slate, tall sash windows, a stack of chimney pots at each gable.
+      { wall: [0x9a5a44, 0x8a4e3c, 0xa4634c, 0x7e4a3a], roof: [0x4e5258, 0x5a5e64, 0x464a50, 0x54585e], pitch: 0.8, hip: true, win: 'sash', chimney: 'pots' },
+      // Modern: pale render under flat roofs, wide windows, plant on some roofs.
+      { wall: [0xd2d0ca, 0xc6c4be, 0xd6d2c8, 0xbcbab4], roof: [0x8a8c8e, 0x7e8082, 0x96948e], flat: true, win: 'wide', plant: true },
+      // Future: white walls with a band of glass to each floor, solar panels or a garden on every roof.
+      { wall: [0xd8dad6, 0xd0d4d2, 0xdcdad4, 0xc8ccca], roof: [0x9a9e9c, 0xa4a6a2], flat: true, win: 'band', solar: true },
+    ];
+    // Windows by style: the count on a side of length l, their width, height and rise from the floor. A single window
+    // is a band along the side.
+    const WIN = {
+      small: { n: l => Math.max(1, Math.round(l / 2)), w: () => 0.16, sy: 0.2, dy: 0.06 },
+      plain: { n: l => Math.max(1, l - 1), w: () => 0.26, sy: 0.3, dy: 0 },
+      sash: { n: l => Math.max(1, l - 1), w: () => 0.22, sy: 0.4, dy: -0.04 },
+      lancet: { n: l => Math.max(1, l - 1), w: () => 0.16, sy: 0.62, dy: -0.12 },
+      wide: { n: () => 1, w: l => l - 0.9, sy: 0.3, dy: 0 },
+      band: { n: () => 1, w: l => l - 0.32, sy: 0.34, dy: -0.02, c: 0x3a4c5a },
+    };
+    const toneOf = (a, t) => a[t * (a.length - 0.01) | 0], GLASS = 0x4e6670, TIMBER = 0x4a3a2c, DARK = 0x2a2c30;
+    // The four faces of a square tower d from its middle, a window w wide on each: [u, v, l, s].
+    const faces = (d, w) => [[d, 0, 0.03, w], [-d, 0, 0.03, w], [0, d, w, 0.03], [0, -d, w, 0.03]];
+    const townAge = () => Math.max(1, Math.min(6, worldAge()));
+
+    // One age's buildings for every town as instanced meshes, each piece tagged with its house. A list's pieces run in
+    // house order, so at[i] to at[i + 1] are house i's. Only the body keeps a ruin's low shell, unless it is gone.
+    function townSet(age) {
+      const st = TOWN[age], sc = MODELS.scenery, Hh = scen.houses, N = M.houses.length, hb = [], win = [], ex = {};
+      for (const [hi, h] of M.houses.entries()) {
+        const k = Hh.kind[hi], g = Hh.g[hi], cx = h.x + h.w / 2, cz = h.y + h.h / 2, r = (hi * 2654435761 >>> 0) / 4294967296;
+        const along = h.w >= h.h, L = along ? h.w : h.h, Sd = along ? h.h : h.w;
+        // A piece u along the building and v across it, l long, s across and sy high, standing at y.
+        const at = (u, v, y, l, s, sy, c, o) => Object.assign({ x: along ? cx + u : cx + v, y, z: along ? cz + v : cz + u, sx: along ? l : s, sy, sz: along ? s : l, c, h: hi }, o);
+        const push = (m, o) => { o.h = hi; (ex[m] || (ex[m] = [])).push(o); };
+        const put = (m, ...a) => push(m, at(...a));
+        // A pitched roof with its ridge along the building, its apex 0.42 sy over y.
+        const ridge = (y, l, s, sy, c) => push('roof', { x: cx, y, z: cz, sx: s, sy, sz: l, a: along ? Math.PI / 2 : 0, c });
+        let fl = h.floors, W0 = WIN[st.win], f0 = 0, wins = true, frame = st.timber, roof = st.flat ? 'flat' : 'ridge';
+        const tall = () => 0.62 * fl + 0.2, floors = n => { fl = n; body.sy = tall() + 0.2; };
+        const wall = toneOf(st.wall, h.tone), rc = toneOf(st.roof, h.tone), pitch = st.flat ? 0 : st.pitch * (st.steep ? Sd / 2 : 1);
+        const body = at(0, 0, g, L - 0.3, Sd - 0.3, tall() + 0.2, wall);
+        if (k === 'church') {
+          if (age === 1) {
+            // A temple: a stepped base, a ring of columns about its shrine, a beam over them and a low gable.
+            const base = 0.32, ch = tall() + 0.5, sc0 = 0xc8bfae, nu = Math.max(2, Math.round((L - 0.76) / 0.62) + 1), nv = Math.max(2, Math.round((Sd - 0.76) / 0.62) + 1);
+            put('block', 0, 0, g, L - 0.15, Sd - 0.15, base + 0.12, 0xb4aa98);
+            Object.assign(body, at(0, 0, g + base, L - 1.4, Sd - 1.3, ch, sc0));
+            for (let j = 0; j < nu; j++) for (const s of [-1, 1]) put('col', -(L / 2 - 0.38) + j * (L - 0.76) / (nu - 1), s * (Sd / 2 - 0.38), g + base, 0.2, 0.2, ch, sc0);
+            for (let j = 1; j < nv - 1; j++) for (const s of [-1, 1]) put('col', s * (L / 2 - 0.38), -(Sd / 2 - 0.38) + j * (Sd - 0.76) / (nv - 1), g + base, 0.2, 0.2, ch, sc0);
+            put('block', 0, 0, g + base + ch, L - 0.45, Sd - 0.45, 0.16, sc0);
+            ridge(g + base + ch + 0.16, L - 0.3, Sd - 0.3, 0.8, 0x9a6a50);
+            roof = null; wins = false;
+          } else if (age <= 3) {
+            // The nave with a tower at its end twice its height: of stone under a spire, or later of plaster under a
+            // dome and its lantern.
+            const th = tall() * 1.6 + 1.2, u = -(L / 2 - 0.75), tc = age === 2 ? 0xb8b0a0 : 0xd8d0be;
+            put('block', u, 0, g, 1.2, 1.2, th, tc);
+            if (age === 2) put('spire', u, 0, g + th, 1.25, 1.25, 2.4, 0x5c5a58);
+            else { put('dome', u, 0, g + th, 1.2, 1.2, 1.5, 0x6e7c72); put('col', u, 0, g + th + 0.7, 0.3, 0.3, 0.32, tc); put('spire', u, 0, g + th + 1.02, 0.32, 0.32, 0.6, 0x5c5a58); }
+            body.c = tc; frame = false; if (age === 2) W0 = WIN.lancet;
+          } else if (age === 4) {
+            // A brick chapel: tall pointed windows, a steep slate roof and a bell-cote on its gable.
+            const sy = 1.6 * Sd / 2, top = g + tall() + 0.08 + 0.42 * sy;
+            body.c = 0x8a4e3c; W0 = WIN.lancet; roof = null;
+            ridge(g + tall() + 0.08, L - 0.1, Sd - 0.1, sy, 0x4e5258);
+            put('block', -(L / 2 - 0.3), 0, top - 0.12, 0.26, 0.4, 0.5, 0x8a4e3c);
+            put('spire', -(L / 2 - 0.3), 0, top + 0.38, 0.44, 0.44, 0.55, 0x4e5258);
+          } else if (age === 5) {
+            // A church in concrete under a flat roof, its bell tower standing at a corner.
+            const bt = tall() * 2 + 1.8, u = L / 2 - 0.45, v = Sd / 2 - 0.45;
+            body.c = 0xc4c2bc;
+            put('block', u, v, g, 0.62, 0.62, bt, 0xbcbab4);
+            for (const [du, dv, l, s] of faces(0.32, 0.3)) win.push(at(u + du, v + dv, g + bt - 0.6, l, s, 0.4, DARK));
+          } else {
+            // A vertical farm: a glass tower with a garden on every floor.
+            const vt = tall() * 1.8 + 1.8;
+            Object.assign(body, at(0, 0, g, L - 0.6, Sd - 0.6, vt, GLASS));
+            for (let y = 0.45; y < vt - 0.2; y += 0.55) put('garden', 0, 0, g + y, L - 0.5, Sd - 0.5, 0.17, 0x5a8a46);
+            put('block', 0, 0, g + vt, L - 0.45, Sd - 0.45, 0.12, 0xd0d2d0);
+            roof = null; wins = false;
+          }
+        } else if (k === 'barn') {
+          wins = false; roof = null;
+          if (age === 1) {
+            // A granary: a low store under a flat roof and a row of domed bins on it.
+            const n = Math.max(2, Math.floor(L / 1.1)), d = Math.min(Sd - 0.5, 1.05);
+            body.sy = 0.75;
+            put('block', 0, 0, g + 0.75, L - 0.2, Sd - 0.2, 0.08, rc);
+            for (let j = 0; j < n; j++) put('dome', -L / 2 + (j + 0.5) * L / n, 0, g + 0.83, d, d, d * 1.6, wall);
+          } else if (age === 2) {
+            // A tithe barn: low buttressed walls of stone under a great steep roof, and its wide doors.
+            const n = Math.max(2, Math.round(L / 1.1));
+            body.sy = 0.85; body.c = 0xa89e8c;
+            ridge(g + 0.8, L + 0.05, Sd + 0.1, 2.2 * Sd / 2, toneOf([0x8e7a50, 0x7e6c46], h.tone));
+            for (let j = 0; j < n; j++) for (const s of [-1, 1]) { const u = -(L / 2 - 0.45) + j * (L - 0.9) / (n - 1); if (s < 0 || Math.abs(u) > 0.5) put('block', u, s * (Sd / 2 - 0.1), g, 0.16, 0.18, 0.6, 0x948a7a); }
+            win.push(at(0, Sd / 2 - 0.13, g, 0.7, 0.04, 0.68, 0x3a2a20));
+          } else if (age === 3) {
+            // A barn of dark boards under a broad roof, and its doors.
+            body.sy = 0.75; body.c = 0x7a4a36;
+            ridge(g + 0.63, L - 0.1, Sd - 0.1, 1.3, 0x5a5650);
+            put('block', 0, Sd / 2 - 0.13, g, 0.9, 0.04, 0.6, 0x3a2a20);
+          } else if (age === 4) {
+            // A brick mill of three floors, rows of windows, a shallow slate roof and its tall chimney.
+            floors(3); body.c = 0x8a4e3c; W0 = WIN.sash; wins = true;
+            ridge(g + tall() + 0.08, L - 0.1, Sd - 0.1, 0.55, 0x4e5258);
+            const ct = 4.4 + tall() * 0.5;
+            put('col', L / 2 - 0.3, Sd / 2 - 0.3, g, 0.44, 0.44, ct, 0x7e4636);
+            put('col', L / 2 - 0.3, Sd / 2 - 0.3, g + ct - 0.2, 0.54, 0.54, 0.2, 0x5e3a2e);
+          } else if (age === 5) {
+            // A supermarket: one high floor, its glass front, a canopy over the door, its sign and plant on the roof.
+            body.sy = 1.0; body.c = 0xd0ccc4;
+            put('block', 0, 0, g + 1.0, L - 0.2, Sd - 0.2, 0.1, 0x8a8c8e);
+            win.push(at(0, Sd / 2 - 0.14, g + 0.3, L - 0.7, 0.03, 0.5, DARK));
+            put('block', 0, Sd / 2 - 0.02, g + 0.86, 1.4, 0.36, 0.06, 0x8a8c8e);
+            put('block', 0, Sd / 2 - 0.16, g + 1.1, 1.3, 0.05, 0.32, 0x9a4a3a);
+            for (const s of [-1, 1]) put('block', s * L / 4, -0.2, g + 1.1, 0.42, 0.36, 0.24, 0x9a9c9e);
+          } else {
+            // A barn of white boards under a roof of solar panels.
+            body.sy = 0.8; body.c = 0xd0d2ce;
+            ridge(g + 0.72, L - 0.05, Sd + 0.05, 1.4, 0x34465a);
+            win.push(at(0, Sd / 2 - 0.13, g, 1.0, 0.04, 0.62, 0x3a3c40));
+          }
+        } else if (k === 'hall') {
+          if (age === 1) {
+            // A colonnade about a hall, under one flat roof.
+            const ch = tall() + 0.2, sc0 = 0xc8bfae, n = Math.max(3, Math.round((L - 0.6) / 0.62) + 1);
+            Object.assign(body, at(0, 0, g, L - 1.5, Sd - 1.5, ch, wall)); roof = null; wins = false;
+            for (let j = 0; j < n; j++) for (const s of [-1, 1]) {
+              const p = -(L / 2 - 0.3) + j * (L - 0.6) / (n - 1);
+              put('col', p, s * (Sd / 2 - 0.3), g, 0.2, 0.2, ch, sc0);
+              if (j > 0 && j < n - 1) put('col', s * (L / 2 - 0.3), p, g, 0.2, 0.2, ch, sc0);
+            }
+            put('block', 0, 0, g + ch, L - 0.25, Sd - 0.25, 0.14, 0xb8ae9c);
+          } else if (age <= 3) {
+            // An upper floor over open arches: the body lifted, a pillar at each corner and between, of timber in the
+            // Middle Ages.
+            body.y = g + 0.62; body.sy = tall() - 0.42; f0 = 1;
+            for (const [pu, pv] of [[-1, -1], [1, -1], [-1, 1], [1, 1], [0, -1], [0, 1], [-1, 0], [1, 0]]) put('block', pu * (L / 2 - 0.3), pv * (Sd / 2 - 0.3), g, 0.24, 0.24, 0.64, age === 2 ? TIMBER : body.c);
+          } else if (age === 4) {
+            // A town hall of stone under a hipped slate roof, its clock tower in the middle.
+            const tt = tall() + 1.7;
+            body.c = 0xb8ae9c; roof = 'hip';
+            put('block', 0, 0, g, 0.9, 0.9, tt, 0x9e9484);
+            put('hip', 0, 0, g + tt, 1.0, 1.0, 2.6, 0x4e5258);
+            for (const [du, dv, l, s] of faces(0.46, 0.36)) win.push(at(du, dv, g + tt - 0.55, l, s, 0.36, 0xd4ccb8));
+          } else if (age === 5) {
+            // A school of two floors, wide windows, a stair house on its flat roof and a flag on a pole.
+            floors(2); body.c = 0xd0ccc0;
+            put('block', -L / 4, 0, g + tall() + 0.3, 0.7, 0.7, 0.45, 0xc4c0b4);
+            put('col', L / 2 - 0.08, Sd / 2 - 0.08, g, 0.05, 0.05, 2.6, 0x9a9c9e);
+            put('block', L / 2 - 0.28, Sd / 2 - 0.08, g + 2.3, 0.4, 0.02, 0.24, 0x8a4a44);
+          } else {
+            // A transit stop: a platform, a glass shelter under a butterfly canopy on a row of slender posts, and a
+            // car at it.
+            Object.assign(body, at(0, 0.5, g + 0.3, L - 1.4, 0.7, 0.62, GLASS)); roof = null; wins = false;
+            put('block', 0, 0, g, L - 0.1, Sd - 0.1, 0.32, 0xb4b6b4);
+            for (const s of [-1, 1]) put('block', 0, s * (Sd - 0.5) / 4, g + 1.22, L - 0.3, (Sd - 0.5) / 2, 0.06, 0xd0d2d0, along ? { rx: -s * 0.2 } : { rz: s * 0.2 });
+            for (const su of [-1, 0, 1]) put('col', su * (L / 2 - 0.4), 0, g + 0.3, 0.08, 0.08, 0.9, 0x9a9e9c);
+            put('block', 0, -(Sd / 2 - 0.45), g + 0.34, L - 0.9, 0.5, 0.46, 0xc8ccca);
+            win.push(at(0, -(Sd / 2 - 0.45) - 0.26, g + 0.52, L - 1.2, 0.03, 0.16, 0x3a4c5a));
+          }
+        } else if (k === 'mill') {
+          Object.assign(body, { sx: 0.01, sy: 0.01, sz: 0.01, gone: true }); roof = null; wins = false;
+          // The sails' axle, turned a little off the x axis.
+          const ax = Math.cos(0.4), az = Math.sin(0.4), turn = Math.PI / 2 - 0.4;
+          if (age === 1) {
+            // A dovecote: a tapering tower of mud under a dome, rows of holes in it for the birds.
+            put('mill', 0, 0, g, 1.5, 1.5, 2.0, wall);
+            put('dome', 0, 0, g + 2.0, 1.06, 1.06, 1.3, wall);
+            for (const y of [1.15, 1.55]) for (let j = 0; j < 7; j++) { const a = j * 0.9 + y, rr = 0.825 - 0.1425 * y; win.push({ x: cx + Math.cos(a) * rr, y: g + y, z: cz + Math.sin(a) * rr, sx: 0.09, sy: 0.12, sz: 0.09, a: -a, c: DARK, h: hi }); }
+          } else if (age === 2) {
+            // A post mill: its timber body on a post and trestle, under a pitched roof, its sails at the front.
+            put('block', 0, 0, g, 0.24, 0.24, 1.0, TIMBER);
+            put('block', 0, 0, g, 1.2, 0.16, 0.16, TIMBER); put('block', 0, 0, g, 0.16, 1.2, 0.16, TIMBER);
+            push('block', { x: cx, y: g + 0.95, z: cz, sx: 1.0, sy: 0.95, sz: 0.8, a: -0.4, c: 0x8a6a4c });
+            push('roof', { x: cx, y: g + 1.9, z: cz, sx: 0.86, sy: 1.2, sz: 1.06, a: turn, c: 0x6e5a44 });
+            push('sails', { x: cx + 0.58 * ax, y: g + 1.5, z: cz + 0.58 * az, s: 1.3, a: turn, c: 0xffffff, ph: r * 6.28 });
+          } else if (age === 3) {
+            // A windmill: its tapering tower, the cap and the sails.
+            const mh = 1.9;
+            push('mill', { x: cx, y: g, z: cz, sx: 1.5, sy: mh, sz: 1.5, c: 0xd8d0be });
+            push('millcap', { x: cx, y: g + mh, z: cz, sx: 1.3, sy: 1.2, sz: 1.3, c: 0x6e4032 });
+            push('sails', { x: cx + 0.62, y: g + mh - 0.05, z: cz, s: 1.35, a: turn, c: 0xffffff, ph: r * 6.28 });
+          } else if (age === 4) {
+            // A water tower: an iron tank under a conical lid on four braced legs.
+            for (const su of [-1, 1]) for (const sv of [-1, 1]) put('block', su * 0.42, sv * 0.42, g, 0.09, 0.09, 2.3, 0x4e5052);
+            for (const s of [-1, 1]) { put('block', 0, s * 0.42, g + 1.2, 0.9, 0.05, 0.05, 0x4e5052); put('block', s * 0.42, 0, g + 1.2, 0.05, 0.9, 0.05, 0x4e5052); }
+            put('col', 0, 0, g + 2.25, 1.4, 1.4, 0.95, 0x6e6660);
+            put('millcap', 0, 0, g + 3.2, 1.6, 1.6, 0.8, 0x55585a);
+          } else if (age === 5) {
+            // A water tower of concrete: a slender stem and the wide bowl of its tank.
+            put('col', 0, 0, g, 0.5, 0.5, 2.5, 0xbcbab4);
+            put('mill', 0, 0, g + 3.2, 1.6, 1.6, 0.8, 0xc4c2bc, { rx: Math.PI });
+            put('dome', 0, 0, g + 3.2, 1.76, 1.76, 0.5, 0xb0aea8);
+          } else {
+            // A wind turbine: a white tower, the housing at its head and three blades.
+            put('mill', 0, 0, g, 0.32, 0.32, 4.4, 0xd0d2d0);
+            push('block', { x: cx + 0.08 * ax, y: g + 4.36, z: cz + 0.08 * az, sx: 0.62, sy: 0.26, sz: 0.26, a: -0.4, c: 0xc8cac8 });
+            push('blades', { x: cx + 0.42 * ax, y: g + 4.49, z: cz + 0.42 * az, s: 1.9, a: turn, c: 0xdadad6, ph: r * 6.28 });
+          }
+        } else {
+          const end = r > 0.75 ? 1 : -1;
+          if (st.hip && h.w === h.h && r < 0.5) roof = 'hip';
+          if (st.loft && r > 0.55) { put('block', end * (L / 2 - 0.6), 0, g + tall() + 0.3, 0.9, Sd - 0.6, 0.55, wall); put('block', end * (L / 2 - 0.6), 0, g + tall() + 0.85, 1.0, Sd - 0.5, 0.07, rc); }
+          if (st.chimney === 'brick' && r > 0.25) push('block', { x: cx + (along ? (r - 0.6) * h.w * 0.6 : 0.2), y: g + tall() + 0.1, z: cz + (along ? 0.2 : (r - 0.6) * h.h * 0.6), sx: 0.26, sy: 0.75, sz: 0.26, c: 0x8a6a56 });
+          if (st.chimney === 'stone' && r > 0.55) put('block', end * (L / 2 - 0.45), 0, g + tall(), 0.3, 0.3, 0.42 * pitch + 0.4, 0x8c8478);
+          if (st.chimney === 'pots' && r > 0.15) for (const s of [-1, 1]) {
+            const u = s * (L / 2 - 0.35), sy = 0.42 * pitch + 0.3;
+            put('block', u, 0, g + tall(), 0.28, 0.55, sy, 0x7a4636);
+            for (const pv of [-0.12, 0.12]) put('col', u, pv, g + tall() + sy, 0.1, 0.1, 0.16, 0x9a6a50);
+          }
+          if (st.plant && r > 0.5) put('block', (r - 0.75) * L * 0.6, -0.15, g + tall() + 0.3, 0.42, 0.36, 0.24, 0x9a9c9e);
+          if (st.solar) {
+            if (r < 0.3) put('garden', 0, 0, g + tall() + 0.3, L - 0.5, Sd - 0.5, 0.08, 0x6e8a58);
+            else {
+              const n = Math.max(1, Math.round(Sd / 1.3)), w = (Sd - 0.6) / n;
+              for (let j = 0; j < n; j++) put('block', 0, -(Sd - 0.6) / 2 + (j + 0.5) * w, g + tall() + 0.34 + 0.18 * w, L - 0.7, w - 0.12, 0.05, 0x34465a, along ? { rx: -0.35 } : { rz: 0.35 });
+            }
+          }
+        }
+        if (roof === 'ridge') ridge(g + tall() + 0.08, L - 0.1, Sd - 0.1, pitch, rc);
+        else if (roof === 'hip') push('hip', { x: cx, y: g + tall() + 0.08, z: cz, sx: h.w * 1.02, sy: 2, sz: h.h * 1.02, c: rc });
+        else if (roof === 'flat') put('block', 0, 0, g + tall() + 0.2, L - 0.2, Sd - 0.2, 0.1, rc);
+        hb.push(body);
+        if (!wins) continue;
+        // Windows on every side and floor, and in the Middle Ages the timbers about them: a post at each corner and
+        // either side of each window, a beam at each floor and a brace in each end bay of the lowest.
+        const wc = W0.c ?? DARK, top = body.y + body.sy;
+        for (const [len, a0, fx] of [[h.w, h.x, true], [h.h, h.y, false]]) {
+          const n = W0.n(len), w = W0.w(len), ps = [];
+          for (let j = 0; j < n; j++) ps.push(n === 1 ? a0 + len / 2 : a0 + 0.7 + j * (len - 1.4) / (n - 1));
+          for (const s of [-1, 1]) {
+            const d = s * ((fx ? h.h : h.w) / 2 - 0.14);
+            const piece = (p, y, l, sy, c, rot = 0, t = 0.03) => win.push(fx ? { x: p, y, z: cz + d, sx: l, sy, sz: t, rz: rot, c, h: hi } : { x: cx + d, y, z: p, sx: t, sy, sz: l, rx: -rot, c, h: hi });
+            for (let f = f0; f < fl; f++) for (const p of ps) piece(p, g + 0.42 + f * 0.62 + W0.dy, w, W0.sy, wc);
+            if (!frame) continue;
+            for (const p of [a0 + 0.18, a0 + len - 0.18, ...ps.flatMap(p => [p - w / 2 - 0.07, p + w / 2 + 0.07])]) piece(p, body.y, 0.07, top - body.y, TIMBER, 0, 0.025);
+            for (let f = f0; f <= fl; f++) piece(a0 + len / 2, f === fl ? top - 0.08 : g + 0.2 + f * 0.62 + (f > f0 ? 0.05 : 0), len - 0.3, 0.06, TIMBER, 0, 0.025);
+            for (const e of [-1, 1]) piece(a0 + len / 2 + e * (len / 2 - 0.2), g + 0.24 + f0 * 0.62, 0.05, 0.56, TIMBER, e * 0.57, 0.025);
+          }
+        }
+      }
+      const spans = list => { const o = new Int32Array(N + 1); let j = 0; for (let i = 0; i <= N; i++) { while (j < list.length && list[j].h < i) j++; o[i] = j; } return o; };
+      const hbm = instanced(sc.block, plainTint, hb), parts = [{ mesh: instanced(sc.block, plainTint, win, false), list: win, at: spans(win) }];
+      const xm = {};
+      for (const [m, list] of Object.entries(ex)) parts.push(xm[m] = { mesh: instanced(sc[m === 'garden' ? 'block' : m], plainTint, list), list, at: spans(list) });
+      // Gardens are washed green as the trees are.
+      if (xm.garden) lineCat(xm.garden.mesh, 0.459);
+      const T = { age, on: new Uint8Array(N), hb, hbm, parts, xm, meshes: [hbm, ...parts.map(X => X.mesh)] };
+      paintTown(T);
+      return T;
+    }
+    // Draws one house of a set as it stands: nothing where the set is not shown, a ruin's low shell, or whole.
+    function paintHouse(T, i) {
+      const R = scen.houses.ruined[i], b = T.hb[i], off = !T.on[i];
+      setInst(T.hbm, i, R && !b.gone ? Object.assign({}, b, { sy: b.sy * 0.42, c: 0x7a7064 }) : b, off || !!(R && b.gone));
+      for (const X of T.parts) for (let j = X.at[i]; j < X.at[i + 1]; j++) setInst(X.mesh, j, X.list[j], off || !!R);
+    }
+    function paintTown(T) { for (let i = 0; i < T.hb.length; i++) paintHouse(T, i); for (const m of T.meshes) dirty(m); }
+    const showSet = (T, v) => { for (const m of T.meshes) m.visible = v; };
+
     // The map a game is played on, from its layout.
     const mapOf = s => Rules.MAPS[Object.keys(Rules.MAPS).find(k => Rules.MAPS[k].layout === s.layout)] || {};
     function buildScenery() {
@@ -1313,13 +1581,10 @@ const World = (() => {
       const rc = new THREE.Color(th.rock);
       tiled(sc.rock, plainTint, rocks.map(t => ({ x: t.x, y: terrainAt(M, t.x, t.y) - 0.06, z: t.y, s: t.s * 1.2, a: t.a, c: colA.copy(rc).multiplyScalar(0.62 + rand() * 0.3).getHex() })));
 
-      // Houses, plaster walls under pitched roofs, and in each town its other buildings: the biggest a church with a
-      // tower and spire at one end, a long one a barn of dark boards under a broad roof, a square one a market hall
-      // over open arches, and a small one a windmill. Some houses have hipped roofs, and most a chimney. What a
-      // building is comes of the map alone, so every player sees the same town; the rules know only houses.
-      const wall = [0xcfc4ae, 0xb9ad96, 0xd8d0be, 0xa89a82], roofC = [0x8a4a34, 0x6e4032, 0x5c5a58, 0x7a5a42];
-      const hb = [], hr = [], win = [], hrub = [], kind = M.houses.map(() => 'house');
-      const byTown = new Map();
+      // Houses, and in each town its other buildings: the biggest a church, a long one a barn, a square one a hall
+      // and a small one a mill. What a building is comes of the map alone, so every player sees the same town; the
+      // rules know only houses. How each is built is the viewer's age's, in townSet.
+      const kind = M.houses.map(() => 'house'), byTown = new Map();
       M.houses.forEach((h, i) => { if (!byTown.has(h.town)) byTown.set(h.town, []); byTown.get(h.town).push(i); });
       for (const list of byTown.values()) {
         const area = i => M.houses[i].w * M.houses[i].h, free = list.slice().sort((a, b) => area(b) - area(a) || a - b);
@@ -1329,51 +1594,18 @@ const World = (() => {
         take(i => M.houses[i].w === M.houses[i].h && area(i) >= 9, 'hall');
         take(i => area(i) <= 4, 'mill');
       }
-      const extra = { block: [], spire: [], mill: [], millcap: [], sails: [], hip: [] };
+      // Rubble kept hidden until the house falls, the same in every age.
+      const hg = new Float32Array(M.houses.length), hrub = [];
       for (const [hi, h] of M.houses.entries()) {
-        const cx = h.x + h.w / 2, cz = h.y + h.h / 2, g = Math.min(terrainAt(M, h.x, h.y), terrainAt(M, h.x + h.w, h.y + h.h)) - 0.12;
-        const tall = 0.62 * h.floors + 0.2, along = h.w >= h.h, k = kind[hi], r = (hi * 2654435761 >>> 0) / 4294967296;
-        const body = { x: cx, y: g, z: cz, sx: h.w - 0.3, sy: tall + 0.2, sz: h.h - 0.3, c: wall[h.tone * 4 | 0] };
-        const roof = { x: cx, y: g + tall + 0.08, z: cz, sx: (along ? h.h : h.w) - 0.1, sy: 0.9, sz: (along ? h.w : h.h) - 0.1, a: along ? Math.PI / 2 : 0, c: roofC[h.tone * 3.99 | 0] };
-        let floors0 = 0, wins = true;
-        if (k === 'church') {
-          // The tower at the end of the long side, twice the nave's height, and its spire.
-          const ex = along ? h.x + 0.75 : cx, ez = along ? cz : h.y + 0.75, th = tall * 1.6 + 1.2;
-          extra.block.push({ x: ex, y: g, z: ez, sx: 1.2, sy: th, sz: 1.2, c: 0xd8d0be, h: hi });
-          extra.spire.push({ x: ex, y: g + th, z: ez, sx: 1.25, sy: 1.8, sz: 1.25, c: 0x5c5a58, h: hi });
-          body.c = 0xd8d0be;
-        } else if (k === 'barn') {
-          body.sy = 0.75; body.c = 0x7a4a36; roof.y = g + 0.63; roof.sy = 1.3; roof.c = 0x5a5650; wins = false;
-          extra.block.push({ x: along ? cx : cx + (h.w / 2 - 0.13), y: g, z: along ? cz + (h.h / 2 - 0.13) : cz, sx: along ? 0.9 : 0.04, sy: 0.6, sz: along ? 0.04 : 0.9, c: 0x3a2a20, h: hi });
-        } else if (k === 'hall') {
-          // An upper floor over open arches: the body lifted, a pillar at each corner and between.
-          body.y = g + 0.62; body.sy = tall - 0.42; floors0 = 1;
-          for (const [px, pz] of [[-1, -1], [1, -1], [-1, 1], [1, 1], [0, -1], [0, 1], [-1, 0], [1, 0]]) extra.block.push({ x: cx + px * (h.w / 2 - 0.3), y: g, z: cz + pz * (h.h / 2 - 0.3), sx: 0.24, sy: 0.64, sz: 0.24, c: body.c, h: hi });
-        } else if (k === 'mill') {
-          const mh = 1.9;
-          extra.mill.push({ x: cx, y: g, z: cz, sx: 1.5, sy: mh, sz: 1.5, c: 0xd8d0be, h: hi });
-          extra.millcap.push({ x: cx, y: g + mh, z: cz, sx: 1.3, sy: 1.2, sz: 1.3, c: 0x6e4032, h: hi });
-          extra.sails.push({ x: cx + 0.62, y: g + mh - 0.05, z: cz, s: 1.35, a: Math.PI / 2 - 0.4, c: 0xffffff, h: hi, mill: true, ph: r * 6.28 });
-          body.sx = body.sz = 0.01; body.sy = 0.01; roof.sx = roof.sz = roof.sy = 0.001; wins = false;
-        } else {
-          // A hipped roof on a square house now and then, and a chimney on most.
-          if (h.w === h.h && r < 0.5) { extra.hip.push({ x: cx, y: g + tall + 0.08, z: cz, sx: h.w * 1.02, sy: 2, sz: h.h * 1.02, c: roof.c, h: hi }); roof.sx = roof.sz = roof.sy = 0.001; }
-          if (r > 0.25) extra.block.push({ x: cx + (along ? (r - 0.6) * h.w * 0.6 : 0.2), y: g + tall + 0.1, z: cz + (along ? 0.2 : (r - 0.6) * h.h * 0.6), sx: 0.26, sy: 0.75, sz: 0.26, c: 0x8a6a56, h: hi });
-        }
-        hb.push(body); hr.push(roof);
-        if (wins) for (let f = floors0; f < h.floors; f++) {
-          const wy = g + 0.42 + f * 0.62;
-          for (const s of [-1, 1]) for (let k = 0; k < Math.max(1, h.w - 1); k++) win.push({ x: h.x + 0.7 + k * (h.w - 1.4) / Math.max(1, h.w - 2 || 1), y: wy, z: cz + s * (h.h / 2 - 0.14), sx: 0.26, sy: 0.3, sz: 0.03, c: 0x2a2c30, h: hi });
-          for (const s of [-1, 1]) for (let k = 0; k < Math.max(1, h.h - 1); k++) win.push({ x: cx + s * (h.w / 2 - 0.14), y: wy, z: h.y + 0.7 + k * (h.h - 1.4) / Math.max(1, h.h - 2 || 1), sx: 0.03, sy: 0.3, sz: 0.26, c: 0x2a2c30, h: hi });
-        }
-        // Rubble kept hidden until the house falls.
+        const cx = h.x + h.w / 2, cz = h.y + h.h / 2, g = hg[hi] = Math.min(terrainAt(M, h.x, h.y), terrainAt(M, h.x + h.w, h.y + h.h)) - 0.12;
         for (let k = 0; k < 3; k++) hrub.push({ x: cx + (k - 1) * h.w * 0.28, y: g + 0.1, z: cz + ((k * 7) % 3 - 1) * h.h * 0.22, s: 0.9 + 0.3 * k, a: k * 2.1, c: 0x8c8478, h: hi });
       }
-      const hbm = instanced(sc.block, plainTint, hb), hrm = instanced(sc.roof, plainTint, hr), wm = instanced(sc.block, plainTint, win, false), rm = instanced(sc.rubble, plainTint, hrub);
+      const rm = instanced(sc.rubble, plainTint, hrub);
       hrub.forEach((o, i) => setInst(rm, i, o, true)); dirty(rm);
-      const xm = {};
-      for (const [m, list] of Object.entries(extra)) if (list.length) xm[m] = { mesh: instanced(sc[m], plainTint, list), list };
-      scen.houses = { hb, hr, win, hrub, hbm, hrm, wm, rm, xm, kind, ruined: new Uint8Array(M.houses.length) };
+      const towns = [...byTown.values()].map(list => ({ list, x: list.reduce((a, i) => a + M.houses[i].x + M.houses[i].w / 2, 0) / list.length, z: list.reduce((a, i) => a + M.houses[i].y + M.houses[i].h / 2, 0) / list.length }));
+      scen.houses = { kind, g: hg, hrub, rm, towns, ruined: new Uint8Array(M.houses.length), sets: {}, cur: null, trans: null };
+      const T0 = scen.houses.cur = scen.houses.sets[townAge()] = townSet(townAge());
+      T0.on.fill(1); paintTown(T0);
       buildFences();
       buildRoadside();
       buildPlants();
@@ -1881,35 +2113,50 @@ const World = (() => {
           if (++n > 14) break;
         }
       }
-      // Houses: a ruin is a low broken shell with no roof, its rubble about it.
+      // Houses: a ruin is a low broken shell with no roof, its rubble about it. When the viewer's age changes the
+      // towns are rebuilt in the new age's manner, one at a time and the nearest first, in a little dust.
       scen.houseT -= dt;
       if (scen.houseT <= 0) {
         scen.houseT = 0.25;
-        const Hh = scen.houses, first = !Hh.ready;
+        const Hh = scen.houses, first = !Hh.ready, age = townAge(), touched = new Set();
         Hh.ready = true;
         let ch = false;
         for (let i = 0; i < Hh.ruined.length; i++) {
           const r = S.hh[i] <= 0 ? 1 : 0;
           if (r === Hh.ruined[i]) continue;
           Hh.ruined[i] = r; ch = true;
-          const b = Hh.hb[i];
-          setInst(Hh.hbm, i, r ? Object.assign({}, b, { sy: b.sy * 0.42, c: 0x7a7064 }) : b);
-          setInst(Hh.hrm, i, Hh.hr[i], !!r);
+          for (let j = i * 3; j < i * 3 + 3; j++) setInst(Hh.rm, j, Hh.hrub[j], !r);
+          for (const T of [Hh.cur, Hh.trans && Hh.trans.to]) if (T) { paintHouse(T, i); touched.add(T); }
+          const b = Hh.cur.hb[i];
           if (r && !first && VIS(b.x, b.z)) { explosion(b.x, b.y + 0.8, b.z, 1.2, 30); for (let k = 0; k < 5; k++) dustPuff(b.x + (Math.random() - 0.5) * 2, b.y + 0.3, b.z + (Math.random() - 0.5) * 2, 1.6); }
         }
-        if (ch) {
-          Hh.win.forEach((w, j) => setInst(Hh.wm, j, w, !!Hh.ruined[w.h]));
-          Hh.hrub.forEach((o, j) => setInst(Hh.rm, j, o, !Hh.ruined[o.h]));
-          dirty(Hh.hbm); dirty(Hh.hrm); dirty(Hh.wm); dirty(Hh.rm);
-          for (const X of Object.values(Hh.xm)) { X.list.forEach((o, j) => setInst(X.mesh, j, o, !!Hh.ruined[o.h])); dirty(X.mesh); }
+        if (ch) dirty(Hh.rm);
+        const done = tr => { tr.to.on.fill(1); paintTown(tr.to); showSet(tr.from, false); Hh.cur = tr.to; Hh.trans = null; };
+        if (Hh.trans && Hh.trans.to.age !== age) done(Hh.trans);
+        if (!Hh.trans && Hh.cur.age !== age) {
+          const to = Hh.sets[age] || (Hh.sets[age] = townSet(age)), d = t => Math.hypot(t.x - cam.x, t.z - cam.y);
+          to.on.fill(0); paintTown(to); showSet(to, true);
+          Hh.trans = { from: Hh.cur, to, order: Hh.towns.slice().sort((a, b) => d(a) - d(b)), k: 0 };
         }
+        const tr = Hh.trans;
+        if (tr) {
+          for (const i of tr.order[tr.k++].list) {
+            tr.from.on[i] = 0; tr.to.on[i] = 1; paintHouse(tr.from, i); paintHouse(tr.to, i);
+            const b = tr.to.hb[i];
+            if (!first && !Hh.ruined[i] && VIS(b.x, b.z)) dustPuff(b.x, b.y + 0.3, b.z, 1.3);
+          }
+          touched.add(tr.from); touched.add(tr.to);
+          if (tr.k >= tr.order.length) done(tr);
+        }
+        for (const T of touched) for (const m of T.meshes) dirty(m);
       }
-      // Windmill sails turn with the wind, faster the harder it blows.
-      const Sm = scen.houses.xm.sails;
-      if (Sm) {
-        const turn = 0.25 + 0.6 * Math.min(1, Math.hypot(SH.uWind.value.x, SH.uWind.value.y));
-        Sm.list.forEach((o, j) => { if (scen.houses.ruined[o.h] || !VIS(o.x, o.z)) return; o.rz = SH.uTime.value * turn + o.ph; setInst(Sm.mesh, j, o); });
-        dirty(Sm.mesh);
+      // Windmill sails turn with the wind, faster the harder it blows, and a turbine's blades the faster still.
+      const wind = Math.min(1, Math.hypot(SH.uWind.value.x, SH.uWind.value.y)), HS = scen.houses;
+      for (const T of [HS.cur, HS.trans && HS.trans.to]) if (T) for (const [m, turn] of [['sails', 0.25 + 0.6 * wind], ['blades', 0.8 + 1.2 * wind]]) {
+        const X = T.xm[m];
+        if (!X) continue;
+        X.list.forEach((o, j) => { if (!T.on[o.h] || HS.ruined[o.h] || !VIS(o.x, o.z)) return; o.rz = SH.uTime.value * turn + o.ph; setInst(X.mesh, j, o); });
+        dirty(X.mesh);
       }
       // Bridges: a fallen one is two stubs from the banks with its middle in the river.
       const B = scen.bridges;
