@@ -1352,7 +1352,7 @@
           // Distance to the nearest road, per pixel of the land.
           C.tLand.value = K.land();
           // The shadows cast on the land, when they are to be hatched.
-          if (K.opts.hatch) C.tShade.value = K.shadows(K.target('shade'));
+          if (K.opts.hatch && K.shadowK() > 0) C.tShade.value = K.shadows(K.target('shade'));
           const q = new THREE.Vector3(CX, 1, CY).project(camera); C.uOff.value.set((q.x + 1) / 2 * w, (q.y + 1) / 2 * h);
           C.uStyle.value = K.opts.ink;
           K.landUniforms(C);

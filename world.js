@@ -70,7 +70,7 @@ const World = (() => {
     const SH = {
       tFog: { value: white }, tDetail: { value: null }, tTerr: { value: white }, tH: { value: white }, tMarks: { value: white }, uTime: { value: 0 },
       uTeam0: { value: new THREE.Color(0x3f8cff) }, uTeams: { value: SLOT_COLORS.map(c => new THREE.Color(c).offsetHSL(0, 0, 0.06)) }, uFogOn: { value: 1 }, uBorder: { value: 1 }, uMap: { value: 128 },
-      uHaze: { value: new THREE.Color(0xf29a5e) }, uHazeK: { value: 0.012 }, uHazeFrom: { value: 80 }, uShroud: { value: new THREE.Color(0x120907) }, uSunDir: { value: new THREE.Vector3(1, 0.3, 0) }, uCastK: { value: 1 }, uDustT: { value: new THREE.Vector2() },
+      uHaze: { value: new THREE.Color(0xf29a5e) }, uHazeK: { value: 0.012 }, uHazeFrom: { value: 80 }, uShroud: { value: new THREE.Color(0x120907) }, uSunDir: { value: new THREE.Vector3(1, 0.3, 0) }, uCastK: { value: 1 }, uShadowK: { value: 1 }, uDustT: { value: new THREE.Vector2() },
       // The wind on the ground, how far it has carried the clouds, how overcast it is, and lying snow.
       uWind: { value: new THREE.Vector2(0.3, 0.1) }, uCloud: { value: new THREE.Vector2() }, uCloudK: { value: 0.2 }, uCloudT: { value: 0.3 }, uSnowC: { value: 0 },
       // The height above which snow lies on the heights in any weather.
@@ -110,6 +110,8 @@ const World = (() => {
         return uWind * s * (0.6 + 0.4 * sin(ph)) + vec2(-uWind.y, uWind.x) * s * 0.2 * sin(ph * 1.9 + 1.3);
       }`;
 
+    // The directional light's shadow lookup in three's lighting chunk, which patch scales by uShadowK.
+    const SUN_SHADOW = 'getShadow( directionalShadowMap[ i ], directionalLightShadow.shadowMapSize, directionalLightShadow.shadowBias, directionalLightShadow.shadowRadius, vDirectionalShadowCoord[ i ] )';
     function patch(mat, o = {}) {
       const key = 'dg' + (o.plain ? 'p' : '') + (o.terrain ? 't' : '') + (o.tint ? 'i' : '') + (o.sway ? 's' : '');
       mat.customProgramCacheKey = () => key;
@@ -150,7 +152,7 @@ const World = (() => {
           gl_Position = projectionMatrix * mvPosition;`);
         f = f.replace('#include <common>', `#include <common>
           uniform sampler2D tFog, tDetail, tTerr, tMarks, tTrail; uniform float uTreadK, uTime, uFogOn, uBorder, uHazeK, uHazeFrom, uMap, uCloudK, uSnowC; uniform vec3 uTeam0, uTeams[8], uHaze, uShroud, uSunDir; uniform vec2 uCloud;
-          varying vec3 vW; varying vec3 vL; varying float vGlow; varying vec3 vTint;`);
+          varying vec3 vW; varying vec3 vL; varying float vGlow; varying vec3 vTint; uniform float uShadowK;`);
         if (o.plain || o.tint) v = v.replace('vGlow = ', 'vTint = vec3(0.0); vGlow = ');
         if (o.terrain) {
           f = f.replace('#include <map_fragment>', `#include <map_fragment>
@@ -190,6 +192,8 @@ const World = (() => {
             bc += uTeam0 * 0.85 * smoothstep(w, 0.0, la) * uBorder;
             bc += other * 0.85 * smoothstep(w, 0.0, lb) * uBorder;
             gl_FragColor.rgb = bc;` : '';
+        // The sun's cast shadows at the strength the settings ask for.
+        f = f.replace('#include <lights_fragment_begin>', THREE.ShaderChunk.lights_fragment_begin.replace(SUN_SHADOW, 'mix( 1.0, $&, uShadowK )'));
         f = f.replace('#include <opaque_fragment>', `#include <opaque_fragment>
           // Cloud shadows go by on the wind, darker the more overcast it is. Snow lies on whatever faces up.
           float cl = texture2D(tDetail, vW.xz * 0.006 + uCloud).r;
@@ -246,7 +250,8 @@ const World = (() => {
     }
     SH.tDetail.value = makeDetail();
 
-    let style = Looks.get('ink'), inkStyle = 8, roadStyle = 3, oreStyle = 5, shadeHatch = true;
+    // shadowK is the cast shadows' strength from the settings: 1, 0.7, or 0, when the shadow map is not drawn.
+    let style = Looks.get('ink'), inkStyle = 8, roadStyle = 3, oreStyle = 5, shadeHatch = true, shadowK = 1;
     // The kind of thing being drawn into the line passes, shared with the pass's material, and whether it sways.
     const catU = { value: 1 }, catRef = { mat: null, norm: null, lines: null }, swayU = { value: 0 };
     const maskMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
@@ -473,7 +478,7 @@ const World = (() => {
         scene.overrideMaterial = material;
         renderer.shadowMap.autoUpdate = false;
         renderer.setRenderTarget(target); renderer.setClearColor(clear, alpha); renderer.clear(); renderer.render(scene, camera);
-        renderer.shadowMap.autoUpdate = true;
+        renderer.shadowMap.autoUpdate = shadowK > 0;
         scene.overrideMaterial = null; camera.layers.mask = was;
         renderer.setClearColor(theme ? theme.shroud : 0, 1);
         return target.texture;
@@ -489,7 +494,7 @@ const World = (() => {
         renderer.setRenderTarget(linesRT); renderer.setClearColor(0x808080, 0); renderer.clear();
         gl.clearBufferfv(gl.COLOR, 0, NONE); gl.clearBufferfv(gl.COLOR, 2, NONE);
         renderer.render(scene, camera);
-        renderer.shadowMap.autoUpdate = true;
+        renderer.shadowMap.autoUpdate = shadowK > 0;
         scene.overrideMaterial = null; camera.layers.mask = was;
         renderer.setClearColor(theme ? theme.shroud : 0, 1);
         const [mask, norm, anchor] = linesRT.texture;
@@ -540,7 +545,7 @@ const World = (() => {
         // The mask, the normals and the anchors together, in one draw where the browser allows it.
         lines: () => linesMat ? drawLines() : { mask: K.mask(), norm: K.norm(), anchor: K.anchor() },
         // The shadows cast on the land, in alpha, from the shadow map the frame has already drawn.
-        shadows: target => drawInto(target, 0x000000, 0, 3, shadowMat),
+        shadows: target => drawInto(target, 0x000000, 0, 3, shadowMat), shadowK: () => shadowK,
         landUniforms,
         paper: () => paperTex || (paperTex = Looks.paper(THREE)),
         target(name) {
@@ -3968,7 +3973,7 @@ const World = (() => {
       // Cast shadows fall from a sun no lower than SHADOW_EL, so a low sun's reach at most twice a caster's height,
       // and fade as it sinks. The land keeps the true sun's shading.
       const el = Math.asin(clamp(dir.y, -1, 1)), hz = Math.hypot(dir.x, dir.z) || 1;
-      SH.uCastK.value = smooth(0.1, 0.28, el);
+      SH.uCastK.value = smooth(0.1, 0.28, el) * shadowK;
       if (el < SHADOW_EL) dir.set(dir.x / hz * Math.cos(SHADOW_EL), Math.sin(SHADOW_EL), dir.z / hz * Math.cos(SHADOW_EL));
       const texel = half * 2 / sun.shadow.mapSize.x;
       sun.target.position.x = Math.round(sun.target.position.x / texel) * texel;
@@ -4216,7 +4221,7 @@ const World = (() => {
       renderer.setRenderTarget(rt); renderer.setClearColor(0x000000, 0); renderer.clear(); renderer.render(scene, camera);
       const px = new Uint8Array(w * h * 4);
       renderer.readRenderTargetPixels(rt, 0, 0, w, h, px);
-      renderer.setRenderTarget(null); renderer.setClearColor(theme.shroud, 1); renderer.shadowMap.autoUpdate = true;
+      renderer.setRenderTarget(null); renderer.setClearColor(theme.shroud, 1); renderer.shadowMap.autoUpdate = shadowK > 0;
       scene.overrideMaterial = null;
       for (const o of hidden) o.visible = true;
       rt.dispose();
@@ -4249,6 +4254,7 @@ const World = (() => {
       setRoad(n) { roadStyle = n; },
       // Shadows on the land drawn as pen hatching, or as a wash.
       setShadeHatch(on) { shadeHatch = !!on; },
+      setShadowK(k) { shadowK = k; SH.uShadowK.value = k; renderer.shadowMap.autoUpdate = k > 0; renderer.shadowMap.needsUpdate = k > 0; },
       setOre(n) { oreStyle = n; },
       study(o) { studySky = o; },
       // Draws a plate of the place at x, y with the next frame, and hands it to cb as a picture's data URL; raw

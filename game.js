@@ -667,6 +667,14 @@ const Game = (() => {
     const showShade = () => $('s-shade').querySelectorAll('button').forEach(b => b.classList.toggle('on', (b.dataset.v === 'hatch') === shadeHatch));
     $('s-shade').querySelectorAll('button').forEach(b => b.addEventListener('click', () => { shadeHatch = b.dataset.v === 'hatch'; store.set('dg-shade', shadeHatch ? null : 'wash'); world.setShadeHatch(shadeHatch); showShade(); audio.ui('click'); }));
     world.setShadeHatch(shadeHatch); showShade();
+    // How strong the cast shadows are: full, lighter, or none, when the sun's shadow map is not drawn at all. Light
+    // is 0.7, since hatching at half its ink all but vanishes on the paper.
+    const SHADOW_K = { full: 1, light: 0.7, off: 0 };
+    let shadowLvl = store.get('dg-shadow', 'full');
+    if (!(shadowLvl in SHADOW_K)) shadowLvl = 'full';
+    const showShadow = () => $('s-shadow').querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.v === shadowLvl));
+    $('s-shadow').querySelectorAll('button').forEach(b => b.addEventListener('click', () => { shadowLvl = b.dataset.v; store.set('dg-shadow', shadowLvl === 'full' ? null : shadowLvl); world.setShadowK(SHADOW_K[shadowLvl]); showShadow(); audio.ui('click'); }));
+    world.setShadowK(SHADOW_K[shadowLvl]); showShadow();
     // The score on or off, apart from the sound button, which silences everything.
     const showMusic = () => $('s-music').querySelectorAll('button').forEach(b => b.classList.toggle('on', (b.dataset.v === 'on') === audio.musicOn));
     $('s-music').querySelectorAll('button').forEach(b => b.addEventListener('click', () => { audio.wake(); audio.setMusic(b.dataset.v === 'on'); showMusic(); audio.ui('click'); }));
