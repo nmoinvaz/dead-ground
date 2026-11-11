@@ -517,8 +517,10 @@ const Hud = (() => {
       }
       const e = entAt(px, py), us = state.sel.filter(u => alive(u) && !u.b);
       if (e && e.team !== t) {
-        // Marks the enemy and every enemy seen near it. Alt picks the one alone.
-        if (state.alt) game.order(s, t, { c: 'attack', ids, id: e.id });
+        // Marks the enemy and every enemy seen near it. Alt picks the one alone, and Shift adds it to those the units
+        // are to take in turn.
+        if (state.shift) { game.order(s, t, { c: 'attack', ids, id: e.id, queue: true }); say('Target added.'); }
+        else if (state.alt) game.order(s, t, { c: 'attack', ids, id: e.id });
         else game.order(s, t, { c: 'strike', ids, id: e.id, x: e.x, y: e.y, r: STRIKE_R });
         marker(e.x, e.y, '#ff5a40');
         game.audio.ack(us[0], true);
@@ -558,7 +560,7 @@ const Hud = (() => {
       // Infantry sent near a cover point go to the point itself.
       const snap = us.some(u => u.d.men) ? tacSnap(s, g.x, g.y) : null;
       if (snap) { g.x = snap.x; g.y = snap.y; }
-      game.order(s, t, { c: 'move', ids, x: g.x, y: g.y, a: !!forceAttack });
+      game.order(s, t, { c: 'move', ids, x: g.x, y: g.y, a: !!forceAttack, queue: !!state.shift });
       marker(g.x, g.y, forceAttack ? '#ffa040' : '#7fe0a0');
       game.audio.ack(us[0], forceAttack);
     }
@@ -590,7 +592,7 @@ const Hud = (() => {
     function down(e) {
       // The top bar and the notes live inside the view. A press on them is theirs, not the map's.
       if (e.target !== view && e.target !== gl && e.target !== ov) return;
-      state.alt = e.altKey;
+      state.alt = e.altKey; state.shift = e.shiftKey;
       if (!game.playing) return;
       e.preventDefault();
       game.audio.wake();
@@ -1278,7 +1280,7 @@ const Hud = (() => {
       pg.setTransform(1, 0, 0, 1, 0, 0); pg.clearRect(0, 0, planC.width, planC.height); pg.setTransform(og.getTransform());
       pg.strokeStyle = PLAN; pg.setLineDash([0.5, 3.6]); pg.lineCap = 'round'; pg.lineWidth = 2.1;
       og.strokeStyle = PLAN; dotted();
-      const ends = [], shared = new Set();
+      const ends = [], shared = new Set(), nums = [];
       let byId = null, drawn = 0;
       for (const e of selected) {
         if (!e || e.b || e.team !== t || e.hp <= 0 || !e.ord) continue;
@@ -1311,6 +1313,21 @@ const Hud = (() => {
         }
         pg.lineTo(bx, by); pg.stroke();
         if (!ends.some(p => Math.abs(p[0] - bx) < 8 && Math.abs(p[1] - by) < 8)) ends.push([bx, by]);
+        // Orders queued with Shift: on from there through each in turn, each numbered.
+        if (e.oq && e.oq.length) {
+          let qx0 = bx, qy0 = by;
+          nums.push([bx, by, 1]);
+          e.oq.forEach((q, i) => {
+            let px2 = q.x, py2 = q.y;
+            if (q.t === 'attack') { byId = byId || new Map(s.ents.map(u => [u.id, u])); const v = byId.get(q.id); if (!v || v.hp <= 0 || !Rules.seenBy(s, t, v)) return; px2 = v.x; py2 = v.y; }
+            px2 = clamp(px2, 0, W); py2 = clamp(py2, 0, H);
+            const [sx, sy] = world.project(px2, Rules.heightAt(s.map, px2, py2) + 0.2, py2);
+            pg.beginPath(); pg.moveTo(qx0, qy0); pg.lineTo(sx, sy); pg.stroke();
+            if (!ends.some(p => Math.abs(p[0] - sx) < 8 && Math.abs(p[1] - sy) < 8)) ends.push([sx, sy]);
+            nums.push([sx, sy, i + 2]);
+            qx0 = sx; qy0 = sy;
+          });
+        }
       }
       if (drawn) {
         pg.globalCompositeOperation = 'destination-out'; pg.setLineDash([]);
@@ -1319,6 +1336,11 @@ const Hud = (() => {
         og.save(); og.setTransform(1, 0, 0, 1, 0, 0); og.globalAlpha = 1; og.drawImage(planC, 0, 0); og.restore();
       }
       for (const [x, y] of ends) { og.beginPath(); og.ellipse(x, y, 9, 5.5, 0, 0, 6.3); og.stroke(); }
+      if (nums.length) {
+        og.fillStyle = PLAN; og.font = 'italic 600 12px Georgia, serif'; og.textAlign = 'left'; og.textBaseline = 'bottom';
+        const put = new Set();
+        for (const [x, y, n] of nums) { const key = `${Math.round(x / 6)},${Math.round(y / 6)}`; if (put.has(key)) continue; put.add(key); og.fillText(String(n), x + 9, y - 5); }
+      }
       og.restore();
     }
     // A key to the plan, as the atlas's ghost plan carries one, in the corner the selection panel leaves free.
