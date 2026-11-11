@@ -236,6 +236,9 @@ body[data-look="ink"][data-scheme="dark"] #end, body[data-look="ink"][data-schem
 .help dt { color: var(--amber); font-family: var(--mono); font-size: 12px; align-self: center; }
 .help dd { margin: 0; }
 #credit { font: 12px var(--mono); color: #8d8c78; }
+/* The credit's links in its own small type and dim ink, underlined finely, darker on hover, with room to tap. */
+#credit a, #source a { color: inherit; text-decoration: underline; text-decoration-thickness: 1px; text-underline-offset: 3px; padding: 10px 0; }
+#credit a:hover, #source a:hover { color: var(--ink, #1f1a16); }
 /* A newer build on the site, offered as a reload. It sits under the top bar, clear of the banner. */
 #update { position: absolute; z-index: 15; top: calc(96px + env(safe-area-inset-top, 0px)); left: 50%; transform: translateX(-50%); padding: 7px 16px; cursor: pointer;
   background: var(--paper-hi, #faf4e4); border: 1.5px solid var(--ink, #1f1a16); box-shadow: 2px 2px 0 rgba(31,26,22,.5); color: var(--ink, #1f1a16); font: 500 16px "Jost", "Futura", sans-serif; white-space: nowrap; }
@@ -243,6 +246,7 @@ body[data-look="ink"][data-scheme="dark"] #end, body[data-look="ink"][data-schem
 #update:hover b, #update:focus-visible b { color: var(--redink, #a3301e); }
 /* Which build this page is, from the source commit it was made from. */
 #build { margin: 10px 0 0; font: 12px var(--mono); opacity: .7; }
+#source { margin: 2px 0 0; font: 12px var(--mono); opacity: .7; }
 /* The build on the lobby pages, beside the credit and under the open games. */
 #t-rooms .ver { margin: 8px 0 0; font: 12px var(--mono); color: var(--ink-dim, #8d8c78); }
 #s-pic-note { margin: 5px 0 0; font: 12px var(--mono); opacity: .7; }
@@ -655,7 +659,8 @@ body[data-look="ink"] .sheet { box-shadow: 4px 4px 0 var(--ink); }
       <div class="choice"><h2>Shadows</h2><div id="s-shade" class="two"><button data-v="hatch">Hatched</button><button data-v="wash">Wash</button></div></div>
       <div class="choice"><h2>Shadow strength</h2><div id="s-shadow"><button data-v="full">Full</button><button data-v="light">Light</button><button data-v="off">Off</button></div></div>
       <div class="choice"><h2>Music</h2><div id="s-music" class="two"><button data-v="on">On</button><button data-v="off">Off</button></div></div>
-      <p id="build">Build 071a057 2026-11-11 10:19</p>
+      <p id="build">Build c38897b 2026-11-11 10:23</p>
+      <p id="source"><a href="https://github.com/nmoinvaz/mapmakers-war" target="_blank" rel="noopener">Source on GitHub</a></p>
     </div>
     <div id="banner" hidden></div>
     <button id="update" hidden>A new version of Mapmaker’s War is out. <b>Reload</b></button>
@@ -697,7 +702,7 @@ body[data-look="ink"] .sheet { box-shadow: 4px 4px 0 var(--ink); }
         <dt>K</dt><dd>Another pen technique</dd>
         <dt>Enter</dt><dd>In a game with other people, say something to everyone; the microphone in the bar puts you on voice</dd>
       </dl>
-      <div id="credit">x.com/nmnvzr &middot; Opus 5.5<span class="ver"></span></div>
+      <div id="credit"><a href="https://x.com/nmnvzr" target="_blank" rel="noopener">x.com/nmnvzr</a> &middot; Opus 5.5 &middot; <a href="https://github.com/nmoinvaz/mapmakers-war" target="_blank" rel="noopener">Source on GitHub</a><span class="ver"></span></div>
     </div>
 
     <div id="t-setup" class="sheet" hidden>
