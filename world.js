@@ -2937,6 +2937,9 @@ const World = (() => {
         });
       }
       for (const [mesh, c] of [[L.batherM, nb], [L.batherM2, nb2], [L.towelM, nt], [L.umbM, nu], [L.bmachM, nm], [L.shoreBoatM, nbo]]) { mesh.count = c; dirty(mesh); }
+      // The townsfolk dress as the viewer's age has it.
+      const fa = Math.max(1, Math.min(6, worldAge()));
+      if (L.folkAge !== fa) { L.folkAge = fa; L.folkM.geometry = MODELS.scenery.folkBy[fa][0]; L.folkM2.geometry = MODELS.scenery.folkBy[fa][1]; }
       L.folkM.count = n; dirty(L.folkM); L.folkM2.count = n2; dirty(L.folkM2);
       // The stalls of a market day, round the park's fountain.
       let ns = 0;
