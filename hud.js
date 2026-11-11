@@ -389,7 +389,8 @@ const Hud = (() => {
         }
         x = bx; y = by;
       }
-      world.setGhost({ kind: m.kind, x, y, ok: Rules.fits(S(), team(), m.kind, x, y) });
+      const pc = Rules.placeCheck(S(), team(), m.kind, x, y);
+      world.setGhost({ kind: m.kind, x, y, ok: pc.ok, why: pc.why, cells: pc.cells });
       state.ghost = { x, y };
     }
 
@@ -1183,10 +1184,11 @@ const Hud = (() => {
         og.stroke();
       }
     }
-    // The ghost plan, in pen and ink: what is planned in dotted orange, what was in dashed blue-grey.
+    // The ghost plan, in pen and ink: what is planned in dotted orange, what was in dashed blue-grey, and a building
+    // being placed in green or red.
     // The plan's orange is a burnt orange, between the first pale one and the darkest, dotted close enough to read
     // on cream paper without weighing on the map.
-    const PLAN = '#d0602a', PLAN_BAD = '#b8301a', WAS = '#5a71a0';
+    const PLAN = '#d0602a', WAS = '#5a71a0';
     const INK_OF = { '#7fe0a0': '#1f6b34', '#ffa040': '#b4400e', '#ff8a70': '#a8200e' };
     const dotted = () => { og.setLineDash([0.5, 3.6]); og.lineCap = 'round'; og.lineWidth = 2.1; };
     const dashed = () => { og.setLineDash([6, 4]); og.lineCap = 'butt'; og.lineWidth = 1.4; };
@@ -1226,7 +1228,22 @@ const Hud = (() => {
       og.globalAlpha = 1;
       // What is planned: the building being placed, and where the chosen units are bound.
       const g = world.ghostState;
-      if (g) { og.strokeStyle = g.ok ? PLAN : PLAN_BAD; dotted(); const d = BUILDINGS[g.kind]; box3(s, g.x, g.y, d.w, d.h, world.bHeight(g.kind)); }
+      if (g) {
+        // A building being placed: each cell of its footprint washed green where it is clear and red where it is
+        // not, and its box ruled solid in green when it fits, dashed in red when it does not. Dark paper turns the
+        // whole overlay, so these inks serve both.
+        const fit = '#3d7a3a', nofit = '#b8301a';
+        og.save(); og.setLineDash([]);
+        for (const [x, y, bad] of g.cells || []) {
+          const q = [[x, y], [x + 1, y], [x + 1, y + 1], [x, y + 1]].map(([a, b]) => world.project(a, terrainAt(s.map, clamp(a, 0, W), clamp(b, 0, H)) + 0.04, b));
+          og.globalAlpha = bad ? 0.34 : 0.22; og.fillStyle = bad ? nofit : fit;
+          og.beginPath(); og.moveTo(q[0][0], q[0][1]); for (let i = 1; i < 4; i++) og.lineTo(q[i][0], q[i][1]); og.closePath(); og.fill();
+        }
+        og.restore();
+        og.strokeStyle = g.ok ? fit : nofit;
+        if (g.ok) { og.setLineDash([]); og.lineCap = 'round'; og.lineWidth = 1.8; } else dashed();
+        const d = BUILDINGS[g.kind]; box3(s, g.x, g.y, d.w, d.h, world.bHeight(g.kind));
+      }
       if (!planC || planC.width !== ov.width || planC.height !== ov.height) { planC = planC || document.createElement('canvas'); planC.width = ov.width; planC.height = ov.height; pg = planC.getContext('2d'); }
       pg.setTransform(1, 0, 0, 1, 0, 0); pg.clearRect(0, 0, planC.width, planC.height); pg.setTransform(og.getTransform());
       pg.strokeStyle = PLAN; pg.setLineDash([0.5, 3.6]); pg.lineCap = 'round'; pg.lineWidth = 2.1;
@@ -2321,8 +2338,13 @@ const Hud = (() => {
         if (game.playing) { scroll(dt); updateCams(); updateReadouts(); drawMini(dt); }
         const hover = game.playing && state.mouse.in && !state.drag ? entAt(state.mouse.x, state.mouse.y) : null;
         state.hover = hover;
+        const gh = world.ghostState;
         if (game.playing && state.mouse.in && !state.drag && !hover && !state.mode) { if (!townTipAt(state.mouse.x, state.mouse.y)) oreTipAt(state.mouse.x, state.mouse.y); }
-        else if (!oreTip.hidden) { oreTip.hidden = true; tipKey = ''; }
+        else if (game.playing && state.mouse.in && state.mode && state.mode.type === 'place' && gh && !gh.ok) {
+          // Why the building being placed cannot stand where it is.
+          if (tipKey !== 'why:' + gh.why) { tipKey = 'why:' + gh.why; oreTip.textContent = gh.why; }
+          oreTip.style.left = (state.mouse.x + 12) + 'px'; oreTip.style.top = (state.mouse.y + 14) + 'px'; oreTip.hidden = false;
+        } else if (!oreTip.hidden) { oreTip.hidden = true; tipKey = ''; }
         if (game.playing) {
           const m = state.mode, en = hover && hover.team !== team(), mine = state.sel.some(e => !e.b && e.team === team());
           view.dataset.cur = m ? (m.type === 'place' ? 'place' : 'aim') : en && mine ? 'attack' : mine ? 'order' : hover ? 'pick' : '';
