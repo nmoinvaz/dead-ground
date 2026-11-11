@@ -249,6 +249,7 @@ const Rules = (() => {
     airfield: { name: 'Airfield', sym: 'air', w: 6, h: 4, hp: 1000, cost: 1200, time: 11, power: -30, terr: 7, sight: 8, armor: 'bld', cat: 'bld', tech: 2, need: 'factory', note: 'Launches drones, helicopters and jets.' },
     fob: { name: 'Forward Base', sym: 'fob', w: 3, h: 3, hp: 900, cost: 1000, time: 10, power: -10, terr: 18, sight: 10, armor: 'bld', cat: 'bld', tech: 2, need: 'barracks', note: 'Pushes your border far out and lets you build there.' },
     derrick: { name: 'Oil Derrick', sym: 'oil', w: 2, h: 2, hp: 500, cost: 400, time: 4, power: 0, terr: 5, sight: 6, armor: 'bld', cat: 'bld', tech: 1, well: true, yield: 1.2, note: 'Goes on an oil well in your territory. Pumps oil, which pays for armour.' },
+    datacenter: { name: 'AI Data Center', sym: 'dat', w: 4, h: 3, hp: 1000, cost: 2500, time: 20, power: -100, terr: 5, sight: 6, armor: 'bld', cat: 'bld', tech: 1, need: 'radar', note: 'Research a quarter faster, the enemy\'s main army found each minute, and the weather forecast. Needs a lot of power.' },
     silo: { name: 'Missile Silo', sym: 'sil', w: 3, h: 3, hp: 1200, cost: 3000, time: 24, power: -100, terr: 7, sight: 6, armor: 'bld', cat: 'bld', tech: 3, need: 'radar', charge: 240, note: 'A thermobaric missile every four minutes. The enemy is warned.' },
     bunker: { name: 'MG Bunker', sym: 'bnk', w: 2, h: 2, hp: 600, cost: 350, time: 4, power: -5, terr: 5, sight: 11, armor: 'bld', cat: 'def', tech: 1, need: 'barracks', weapons: ['mg'], note: 'Holds off infantry.' },
     atgun: { name: 'AT Gun', sym: 'atg', w: 2, h: 2, hp: 550, cost: 600, time: 6, power: -10, terr: 5, sight: 13, armor: 'bld', cat: 'def', tech: 1, need: 'barracks', weapons: ['atgun'], turret: 2, note: 'Long-barrelled gun against vehicles.' },
@@ -282,6 +283,7 @@ const Rules = (() => {
     fob: { age: 2, names: [0, 'Outpost', 'Redoubt', 'Forward Base', 'Forward Base', 'Forward Base'] },
     derrick: { age: 4 },
     silo: { age: 5, names: [0, 0, 0, 0, 'Missile Silo', 'Orbital Lance'] },
+    datacenter: { age: 5, names: [0, 0, 0, 0, 'AI Data Center', 'AI Core'] },
     bunker: { names: ['Archer Tower', 'Archer Tower', 'Musket Redoubt', 'MG Nest', 'MG Bunker', 'Pulse Turret'], arms: ['towerbow', 'towerbow', 'musketv', 'mg', 'mg', 'pulse'] },
     atgun: { names: ['Ballista', 'Springald', 'Cannon Battery', 'Field Gun', 'AT Gun', 'Coil Gun'], arms: ['ballista', 'ballista', 'ball', 'atgun', 'atgun', 'coil'] },
     sam: { age: 4, names: [0, 0, 0, 'AA Battery', 'SAM Site', 'Laser AA'], arms: [0, 0, 0, 'flak', 'sam', 'laser'] },
@@ -1727,7 +1729,8 @@ const Rules = (() => {
       const k = clamp(age / (SHOWER_LIFE * 0.15), 0, 1) * clamp((SHOWER_LIFE - age) / (SHOWER_LIFE * 0.15), 0, 1);
       list.push({ x: CX + dx * s - dy * off, y: CY + dy * s + dx * off, r: rad, kind, k });
     }
-    S._sh = { at: t, list };
+    // Only the present is kept, so a look ahead, as the forecast's, leaves the world's own reckoning untouched.
+    if (t === S.tick) S._sh = { at: t, list };
     return list;
   }
   // A dust storm comes as a haboob: a wall of dust rolling across the map on its spell's wind, from beyond one edge
@@ -1747,7 +1750,7 @@ const Rules = (() => {
       const a = (spellHash(S.seed + 77, j) % 6283) / 1000, front = (-0.75 + 1.5 * (t - j * SPELL) / HEAVY) * W;
       if (!wall || wj > wall.k) wall = { dx: mcos(a), dy: msin(a), front, k: wj };
     }
-    S._dw = { at: t, wall };
+    if (t === S.tick) S._dw = { at: t, wall };
     return wall;
   }
   // How thick the dust is at a point, 0 clear to 1.
@@ -3776,7 +3779,7 @@ const Rules = (() => {
 
   // An upgrade under way at a building is paid for as it goes, like anything in a queue, and slowed by low power.
   function upTick(S, P, e) {
-    const o = e.up, d = upCost(o.k, o.tier), rate = DT / d.time * (P.low ? 0.5 : 1), pay = d.cost * rate, payOil = d.oil * rate;
+    const o = e.up, d = upCost(o.k, o.tier), rate = DT / d.time * (P.low ? 0.5 : 1) * (dataOn(S, P.team) ? DATA_RESEARCH : 1), pay = d.cost * rate, payOil = d.oil * rate;
     if (P.supply < pay || P.oil < payOil) { if (!o.short) { o.short = true; ownEvent(S, P.team, P.supply < pay ? 'nosupply' : 'nooil'); } return; }
     o.short = false;
     P.supply -= pay; P.oil -= payOil; o.paid += pay; o.paidOil += payOil; P.stats.spent += pay; P.stats.spentOil += payOil;
@@ -3952,6 +3955,30 @@ const Rules = (() => {
     }
   }
 
+  // The AI Data Center. While a side has one standing and enough power, its research and upgrades go DATA_RESEARCH
+  // as fast, and every DATA_EVERY the strongest enemy army it can find is lit up for a few seconds wherever it is,
+  // with word of it, and a warning when it is near the side's base. Its weather forecast is the picture's alone.
+  const DATA_RESEARCH = 1.25, DATA_EVERY = 60 * HZ, DATA_SEE = 8 * HZ;
+  const dataOn = (S, team) => !!(S.P[team] && S.P[team].counts.datacenter && !S.P[team].low);
+  function stepIntel(S) {
+    if (S.tick % DATA_EVERY !== DATA_EVERY / 2) return;
+    const armies = new Map();
+    for (const e of S.ents) {
+      if (e.b || e.hp <= 0 || e.team < 0 || e.d.cargo || e.d.trade || !armed(e) || isAir(e)) continue;
+      const k = e.team * 4096 + ((e.y / 12) | 0) * 64 + ((e.x / 12) | 0), a = armies.get(k) || { team: e.team, sx: 0, sy: 0, v: 0 };
+      const v = worth(e.d); a.sx += e.x * v; a.sy += e.y * v; a.v += v; armies.set(k, a);
+    }
+    for (const P of S.P) {
+      if (!P.alive || !dataOn(S, P.team)) continue;
+      let best = null;
+      for (const a of armies.values()) if (a.team !== P.team && S.P[a.team] && S.P[a.team].alive && (!best || a.v > best.v)) best = a;
+      if (!best || best.v < 300) continue;
+      const x = best.sx / best.v, y = best.sy / best.v, b = S.bases[P.team];
+      S.sweeps.push({ team: P.team, x, y, r: 9, until: S.tick + DATA_SEE });
+      S.ev.push({ t: 'intel', team: P.team, foe: best.team, x, y, near: !!b && mhypot(x - b[0], y - b[1]) < 45 });
+    }
+  }
+
   function stepEconomy(S) {
     if (S.tick % HZ === 0) {
       for (const t of S.towns) if (t.owner >= 0) { const P = S.P[t.owner]; P.supply += 5 * P.income; P.oil += 0.25 * P.income; P.stats.townIn += 5 * P.income; P.stats.oilIn += 0.25 * P.income; }
@@ -3967,7 +3994,7 @@ const Rules = (() => {
         if (item.prog >= 1) { if (cat === 'bld' || cat === 'def') continue; finish(S, P, cat, item); q.shift(); continue; }
         if (item.hold) continue;
         const d = item.cost;
-        const rate = DT / d.time * (P.low ? 0.5 : 1);
+        const rate = DT / d.time * (P.low ? 0.5 : 1) * (cat === 'tech' && dataOn(S, P.team) ? DATA_RESEARCH : 1);
         const pay = (d.cost || 0) * rate, payOil = (d.oil || 0) * rate;
         if (P.supply < pay || P.oil < payOil) { if (!item.short) { item.short = true; ownEvent(S, P.team, P.supply < pay ? 'nosupply' : 'nooil'); } continue; }
         item.short = false;
@@ -4537,6 +4564,7 @@ const Rules = (() => {
     }
     S.cmds.length = 0;
     stepEconomy(S);
+    stepIntel(S);
     stepTowns(S);
     const danger = S.tick % SCAT_EVERY === 0 && S.shots.length ? dangerOf(S) : null;
     for (let i = 0; i < S.ents.length; i++) {
@@ -4633,7 +4661,7 @@ const Rules = (() => {
     HZ, DT, RES, UNITS, BUILDINGS, WEAPONS, TECH, POWERS, DIFFICULTY, LAYOUT, SIZES, MAPS, spread, use,
     AGES, MAX_AGE, POWER_AGE, LINES, LINE_ORDER, formOf, lineCount, nameOf, armOf,
     get W() { return W; }, get H() { return H; }, get VW() { return VW; }, get VH() { return VH; },
-    ORE_KINDS, fishWater, dustWall, dustAt, groundedAt, newGame, step, push, spawn, addBuilding, scoreOf, worth, SERIES, pickFrom, fits, spotFor, roomy, blockedReason, near, rehash, seenBy, terrainAt, heightAt, los, isAir, armed, cellOf, summary, exitOf,
+    ORE_KINDS, fishWater, dustWall, dustAt, groundedAt, dataOn, newGame, step, push, spawn, addBuilding, scoreOf, worth, SERIES, pickFrom, fits, spotFor, roomy, blockedReason, near, rehash, seenBy, terrainAt, heightAt, los, isAir, armed, cellOf, summary, exitOf,
     mulberry, noiser, clamp, lerp, smooth, angleTo, toXY, toUV, gap, setSize, save, load, hashOf, restartSlot, razeSlot, makeMap, mapFor, layoutFor,
     msin, mcos, matan2, mhypot,
     BRIDGE_HP, SPELL, SKIES, WEATHERS, nightAt, skyOf, offGoing, route, weatherAt, sky, dayAt, spellOf, bridgeAt, clsOf, houseHp, hurtBridge, ignite, shielded,

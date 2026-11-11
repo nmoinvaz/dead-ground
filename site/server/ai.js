@@ -76,6 +76,8 @@ const AI = (() => {
     if (opened(P, BUILDINGS.airfield) && !has(P, 'airfield')) pref.push('airfield');
     if (opened(P, BUILDINGS.fob) && !has(P, 'fob') && me.level !== 'recruit') pref.push('fob');
     if (opened(P, BUILDINGS.silo) && !has(P, 'silo') && D_silo(me)) pref.push('silo');
+    // An AI Data Center once the side is rich, with the power for it built first.
+    if (opened(P, BUILDINGS.datacenter) && !has(P, 'datacenter') && has(P, 'radar') && P.supply > 3000) pref.push(margin >= 110 ? 'datacenter' : 'power');
     if (has(P, 'factory') < 2 && P.supply > 3000) pref.push('factory');
     if (has(P, 'refinery') < 3 && P.supply > 2500) pref.push('refinery');
     if ((S.map.fish || []).length && S.map.seaCells > 300 && !has(P, 'dock') && has(P, 'factory') && P.supply > 800 && dockSpot(S, me)) pref.push('dock');

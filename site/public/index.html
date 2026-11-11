@@ -632,7 +632,7 @@ body[data-look="ink"] .sheet { box-shadow: 4px 4px 0 var(--ink); }
       <div class="choice"><h2>Map sheet frame</h2><div id="s-sheet" class="two"><button data-v="on">On</button><button data-v="off">Off</button></div></div>
       <div class="choice"><h2>Shadows</h2><div id="s-shade" class="two"><button data-v="hatch">Hatched</button><button data-v="wash">Wash</button></div></div>
       <div class="choice"><h2>Music</h2><div id="s-music" class="two"><button data-v="on">On</button><button data-v="off">Off</button></div></div>
-      <p id="build">Build 933743e 2026-11-10 13:11</p>
+      <p id="build">Build e730fd1 2026-11-10 17:23</p>
     </div>
     <div id="banner" hidden></div>
     <button id="update" hidden>A new version of Mapmaker’s War is out. <b>Reload</b></button>
@@ -994,6 +994,7 @@ const Rules = (() => {
     airfield: { name: 'Airfield', sym: 'air', w: 6, h: 4, hp: 1000, cost: 1200, time: 11, power: -30, terr: 7, sight: 8, armor: 'bld', cat: 'bld', tech: 2, need: 'factory', note: 'Launches drones, helicopters and jets.' },
     fob: { name: 'Forward Base', sym: 'fob', w: 3, h: 3, hp: 900, cost: 1000, time: 10, power: -10, terr: 18, sight: 10, armor: 'bld', cat: 'bld', tech: 2, need: 'barracks', note: 'Pushes your border far out and lets you build there.' },
     derrick: { name: 'Oil Derrick', sym: 'oil', w: 2, h: 2, hp: 500, cost: 400, time: 4, power: 0, terr: 5, sight: 6, armor: 'bld', cat: 'bld', tech: 1, well: true, yield: 1.2, note: 'Goes on an oil well in your territory. Pumps oil, which pays for armour.' },
+    datacenter: { name: 'AI Data Center', sym: 'dat', w: 4, h: 3, hp: 1000, cost: 2500, time: 20, power: -100, terr: 5, sight: 6, armor: 'bld', cat: 'bld', tech: 1, need: 'radar', note: 'Research a quarter faster, the enemy\'s main army found each minute, and the weather forecast. Needs a lot of power.' },
     silo: { name: 'Missile Silo', sym: 'sil', w: 3, h: 3, hp: 1200, cost: 3000, time: 24, power: -100, terr: 7, sight: 6, armor: 'bld', cat: 'bld', tech: 3, need: 'radar', charge: 240, note: 'A thermobaric missile every four minutes. The enemy is warned.' },
     bunker: { name: 'MG Bunker', sym: 'bnk', w: 2, h: 2, hp: 600, cost: 350, time: 4, power: -5, terr: 5, sight: 11, armor: 'bld', cat: 'def', tech: 1, need: 'barracks', weapons: ['mg'], note: 'Holds off infantry.' },
     atgun: { name: 'AT Gun', sym: 'atg', w: 2, h: 2, hp: 550, cost: 600, time: 6, power: -10, terr: 5, sight: 13, armor: 'bld', cat: 'def', tech: 1, need: 'barracks', weapons: ['atgun'], turret: 2, note: 'Long-barrelled gun against vehicles.' },
@@ -1027,6 +1028,7 @@ const Rules = (() => {
     fob: { age: 2, names: [0, 'Outpost', 'Redoubt', 'Forward Base', 'Forward Base', 'Forward Base'] },
     derrick: { age: 4 },
     silo: { age: 5, names: [0, 0, 0, 0, 'Missile Silo', 'Orbital Lance'] },
+    datacenter: { age: 5, names: [0, 0, 0, 0, 'AI Data Center', 'AI Core'] },
     bunker: { names: ['Archer Tower', 'Archer Tower', 'Musket Redoubt', 'MG Nest', 'MG Bunker', 'Pulse Turret'], arms: ['towerbow', 'towerbow', 'musketv', 'mg', 'mg', 'pulse'] },
     atgun: { names: ['Ballista', 'Springald', 'Cannon Battery', 'Field Gun', 'AT Gun', 'Coil Gun'], arms: ['ballista', 'ballista', 'ball', 'atgun', 'atgun', 'coil'] },
     sam: { age: 4, names: [0, 0, 0, 'AA Battery', 'SAM Site', 'Laser AA'], arms: [0, 0, 0, 'flak', 'sam', 'laser'] },
@@ -2472,7 +2474,8 @@ const Rules = (() => {
       const k = clamp(age / (SHOWER_LIFE * 0.15), 0, 1) * clamp((SHOWER_LIFE - age) / (SHOWER_LIFE * 0.15), 0, 1);
       list.push({ x: CX + dx * s - dy * off, y: CY + dy * s + dx * off, r: rad, kind, k });
     }
-    S._sh = { at: t, list };
+    // Only the present is kept, so a look ahead, as the forecast's, leaves the world's own reckoning untouched.
+    if (t === S.tick) S._sh = { at: t, list };
     return list;
   }
   // A dust storm comes as a haboob: a wall of dust rolling across the map on its spell's wind, from beyond one edge
@@ -2492,7 +2495,7 @@ const Rules = (() => {
       const a = (spellHash(S.seed + 77, j) % 6283) / 1000, front = (-0.75 + 1.5 * (t - j * SPELL) / HEAVY) * W;
       if (!wall || wj > wall.k) wall = { dx: mcos(a), dy: msin(a), front, k: wj };
     }
-    S._dw = { at: t, wall };
+    if (t === S.tick) S._dw = { at: t, wall };
     return wall;
   }
   // How thick the dust is at a point, 0 clear to 1.
@@ -4521,7 +4524,7 @@ const Rules = (() => {
 
   // An upgrade under way at a building is paid for as it goes, like anything in a queue, and slowed by low power.
   function upTick(S, P, e) {
-    const o = e.up, d = upCost(o.k, o.tier), rate = DT / d.time * (P.low ? 0.5 : 1), pay = d.cost * rate, payOil = d.oil * rate;
+    const o = e.up, d = upCost(o.k, o.tier), rate = DT / d.time * (P.low ? 0.5 : 1) * (dataOn(S, P.team) ? DATA_RESEARCH : 1), pay = d.cost * rate, payOil = d.oil * rate;
     if (P.supply < pay || P.oil < payOil) { if (!o.short) { o.short = true; ownEvent(S, P.team, P.supply < pay ? 'nosupply' : 'nooil'); } return; }
     o.short = false;
     P.supply -= pay; P.oil -= payOil; o.paid += pay; o.paidOil += payOil; P.stats.spent += pay; P.stats.spentOil += payOil;
@@ -4697,6 +4700,30 @@ const Rules = (() => {
     }
   }
 
+  // The AI Data Center. While a side has one standing and enough power, its research and upgrades go DATA_RESEARCH
+  // as fast, and every DATA_EVERY the strongest enemy army it can find is lit up for a few seconds wherever it is,
+  // with word of it, and a warning when it is near the side's base. Its weather forecast is the picture's alone.
+  const DATA_RESEARCH = 1.25, DATA_EVERY = 60 * HZ, DATA_SEE = 8 * HZ;
+  const dataOn = (S, team) => !!(S.P[team] && S.P[team].counts.datacenter && !S.P[team].low);
+  function stepIntel(S) {
+    if (S.tick % DATA_EVERY !== DATA_EVERY / 2) return;
+    const armies = new Map();
+    for (const e of S.ents) {
+      if (e.b || e.hp <= 0 || e.team < 0 || e.d.cargo || e.d.trade || !armed(e) || isAir(e)) continue;
+      const k = e.team * 4096 + ((e.y / 12) | 0) * 64 + ((e.x / 12) | 0), a = armies.get(k) || { team: e.team, sx: 0, sy: 0, v: 0 };
+      const v = worth(e.d); a.sx += e.x * v; a.sy += e.y * v; a.v += v; armies.set(k, a);
+    }
+    for (const P of S.P) {
+      if (!P.alive || !dataOn(S, P.team)) continue;
+      let best = null;
+      for (const a of armies.values()) if (a.team !== P.team && S.P[a.team] && S.P[a.team].alive && (!best || a.v > best.v)) best = a;
+      if (!best || best.v < 300) continue;
+      const x = best.sx / best.v, y = best.sy / best.v, b = S.bases[P.team];
+      S.sweeps.push({ team: P.team, x, y, r: 9, until: S.tick + DATA_SEE });
+      S.ev.push({ t: 'intel', team: P.team, foe: best.team, x, y, near: !!b && mhypot(x - b[0], y - b[1]) < 45 });
+    }
+  }
+
   function stepEconomy(S) {
     if (S.tick % HZ === 0) {
       for (const t of S.towns) if (t.owner >= 0) { const P = S.P[t.owner]; P.supply += 5 * P.income; P.oil += 0.25 * P.income; P.stats.townIn += 5 * P.income; P.stats.oilIn += 0.25 * P.income; }
@@ -4712,7 +4739,7 @@ const Rules = (() => {
         if (item.prog >= 1) { if (cat === 'bld' || cat === 'def') continue; finish(S, P, cat, item); q.shift(); continue; }
         if (item.hold) continue;
         const d = item.cost;
-        const rate = DT / d.time * (P.low ? 0.5 : 1);
+        const rate = DT / d.time * (P.low ? 0.5 : 1) * (cat === 'tech' && dataOn(S, P.team) ? DATA_RESEARCH : 1);
         const pay = (d.cost || 0) * rate, payOil = (d.oil || 0) * rate;
         if (P.supply < pay || P.oil < payOil) { if (!item.short) { item.short = true; ownEvent(S, P.team, P.supply < pay ? 'nosupply' : 'nooil'); } continue; }
         item.short = false;
@@ -5282,6 +5309,7 @@ const Rules = (() => {
     }
     S.cmds.length = 0;
     stepEconomy(S);
+    stepIntel(S);
     stepTowns(S);
     const danger = S.tick % SCAT_EVERY === 0 && S.shots.length ? dangerOf(S) : null;
     for (let i = 0; i < S.ents.length; i++) {
@@ -5378,7 +5406,7 @@ const Rules = (() => {
     HZ, DT, RES, UNITS, BUILDINGS, WEAPONS, TECH, POWERS, DIFFICULTY, LAYOUT, SIZES, MAPS, spread, use,
     AGES, MAX_AGE, POWER_AGE, LINES, LINE_ORDER, formOf, lineCount, nameOf, armOf,
     get W() { return W; }, get H() { return H; }, get VW() { return VW; }, get VH() { return VH; },
-    ORE_KINDS, fishWater, dustWall, dustAt, groundedAt, newGame, step, push, spawn, addBuilding, scoreOf, worth, SERIES, pickFrom, fits, spotFor, roomy, blockedReason, near, rehash, seenBy, terrainAt, heightAt, los, isAir, armed, cellOf, summary, exitOf,
+    ORE_KINDS, fishWater, dustWall, dustAt, groundedAt, dataOn, newGame, step, push, spawn, addBuilding, scoreOf, worth, SERIES, pickFrom, fits, spotFor, roomy, blockedReason, near, rehash, seenBy, terrainAt, heightAt, los, isAir, armed, cellOf, summary, exitOf,
     mulberry, noiser, clamp, lerp, smooth, angleTo, toXY, toUV, gap, setSize, save, load, hashOf, restartSlot, razeSlot, makeMap, mapFor, layoutFor,
     msin, mcos, matan2, mhypot,
     BRIDGE_HP, SPELL, SKIES, WEATHERS, nightAt, skyOf, offGoing, route, weatherAt, sky, dayAt, spellOf, bridgeAt, clsOf, houseHp, hurtBridge, ignite, shielded,
@@ -5468,6 +5496,8 @@ const AI = (() => {
     if (opened(P, BUILDINGS.airfield) && !has(P, 'airfield')) pref.push('airfield');
     if (opened(P, BUILDINGS.fob) && !has(P, 'fob') && me.level !== 'recruit') pref.push('fob');
     if (opened(P, BUILDINGS.silo) && !has(P, 'silo') && D_silo(me)) pref.push('silo');
+    // An AI Data Center once the side is rich, with the power for it built first.
+    if (opened(P, BUILDINGS.datacenter) && !has(P, 'datacenter') && has(P, 'radar') && P.supply > 3000) pref.push(margin >= 110 ? 'datacenter' : 'power');
     if (has(P, 'factory') < 2 && P.supply > 3000) pref.push('factory');
     if (has(P, 'refinery') < 3 && P.supply > 2500) pref.push('refinery');
     if ((S.map.fish || []).length && S.map.seaCells > 300 && !has(P, 'dock') && has(P, 'factory') && P.supply > 800 && dockSpot(S, me)) pref.push('dock');
@@ -6589,6 +6619,31 @@ const Models = (() => {
       d.prism([[0.7, -0.22], [0.76, 0.2], [0.86, 0.18], [0.92, -0.16]], 0.14, 0, 0, 0, P.yellow);
       d.box(0.1, 0.34, 0.24, -0.66, -0.3, 0, P.steelDk);
       buildings.derrick = [part('body', b), part('beam', d, { pivot: [0, 0.96, 0], nod: true })];
+    }
+
+    // AI Data Center: a long low hall of server racks with a row of chillers on its roof, a pair of cooling
+    // towers at one end, a generator yard with its stacks and a fenced edge. The hall's long sides are banded with
+    // narrow vents, and a lit strip of glass marks the door.
+    {
+      const b = G();
+      pad(b, 4, 3, P.concDk);
+      b.box(3.1, 0.62, 1.7, -0.3, 0.08, -0.25, P.bld);
+      b.box(3.14, 0.05, 1.74, -0.3, 0.7, -0.25, P.bld2);
+      for (const z of [-1.11, 0.61]) for (let i = 0; i < 14; i++) b.box(0.13, 0.36, 0.02, -1.72 + i * 0.205, 0.2, z, P.steelDk);
+      b.box(0.5, 0.36, 0.02, -0.3, 0.12, 0.61, P.glass, { g: 0.9 });
+      for (let i = 0; i < 6; i++) {
+        const x = -1.55 + i * 0.5;
+        b.box(0.36, 0.16, 0.36, x, 0.75, -0.25, P.bld2);
+        b.cyl(0.13, 0.13, 0.03, x, 0.92, -0.25, P.steelDk, { seg: 12 });
+      }
+      for (const z of [-0.75, 0.25]) b.cyl(0.24, 0.32, 0.9, 1.55, 0.53, z, P.concLt, { seg: 16 });
+      for (const z of [-0.75, 0.25]) b.cyl(0.25, 0.25, 0.03, 1.55, 0.99, z, P.steelDk, { seg: 16 });
+      b.box(0.9, 0.34, 0.5, -1.3, 0.08, 1.0, P.olive);
+      for (const x of [-1.55, -1.05]) b.cyl(0.05, 0.05, 0.42, x, 0.42, 1.0, P.steelDk, { seg: 8 });
+      for (let i = 0; i < 18; i++) b.box(0.025, 0.24, 0.025, -1.9 + i * 0.22, 0.08, 1.38, P.steel);
+      b.box(3.96, 0.02, 0.02, 0, 0.28, 1.38, P.steel);
+      lights(b, [[-1.85, 0.74, -1.1], [1.25, 0.74, -1.1], [1.55, 1.02, -0.75]]);
+      buildings.datacenter = [part('body', b)];
     }
 
     // Missile silo, a heavy lid over a shaft. The doors open as it charges.
@@ -8543,7 +8598,7 @@ const Models = (() => {
     {
       const lin = hex => new THREE.Color(hex), near = (v, k) => Math.abs(v[0] - k.r) + Math.abs(v[1] - k.g) + Math.abs(v[2] - k.b) < 0.02;
       const GLASS = lin(P.glass), YEL = lin(P.yellow), KEEP = [lin(P.ore), lin(P.red)], GL = lin(A.glow), BLUE = lin(0x1d4660), LT = lin(0xd6dadf), DK = lin(0x343a42);
-      const FOOT = { hq: 5, power: 3, refinery: 4, barracks: 3, factory: 4, radar: 3, airfield: [6, 4], fob: 3, silo: 3 }, LIT = { g: 0.8 };
+      const FOOT = { hq: 5, power: 3, refinery: 4, barracks: 3, factory: 4, radar: 3, airfield: [6, 4], fob: 3, silo: 3, datacenter: [4, 3] }, LIT = { g: 0.8 };
       const rings = (g, x, y0, z, h, rs) => rs.forEach((r, i) => g.add(new THREE.TorusGeometry(r, 0.018, 4, 18), x, y0 + h * (i + 1) / (rs.length + 1), z, A.glow, { rx: R90, g: 0.4 }));
       const SIGN = {
         hq: g => { g.cyl(0.02, 0.13, 1.6, -0.5, 2.72, 0.1, A.exo, { seg: 8 }); rings(g, -0.5, 1.92, 0.1, 1.4, [0.34, 0.24, 0.15]); },
@@ -8556,7 +8611,7 @@ const Models = (() => {
         for (const n of NAMES) { const x = a.attributes[n].array, y = b.attributes[n].array, arr = new Float32Array(x.length + y.length); arr.set(x); arr.set(y, x.length); g.setAttribute(n, new THREE.Float32BufferAttribute(arr, a.attributes[n].itemSize)); }
         return g;
       };
-      for (const k of ['hq', 'power', 'refinery', 'barracks', 'factory', 'radar', 'airfield', 'fob', 'derrick', 'silo', 'bunker', 'atgun', 'sam']) {
+      for (const k of ['hq', 'power', 'refinery', 'barracks', 'factory', 'radar', 'airfield', 'fob', 'derrick', 'silo', 'datacenter', 'bunker', 'atgun', 'sam']) {
         buildings[k + '@6'] = buildings[k].map(p => {
           let g = p.geo.clone();
           const c = g.attributes.color, gl = g.attributes.aGlow, tm = g.attributes.aTeam, v = [0, 0, 0];
@@ -13666,6 +13721,7 @@ const World = (() => {
           planes.push({ x: e.x, z: e.y, dx: dx / d * 26, dz: dy / d * 26, t: 0 });
           break;
         }
+        case 'intel': if (e.team === viewTeam) rings.add(e.x, heightAt(M, e.x, e.y), e.y, 9, 1.6, 0xd85a3a); break;
         case 'uav': {
           if (VIS(e.x, e.y)) rings.add(e.x, heightAt(M, e.x, e.y), e.y, 14, 1.2, 0x8fd0ff);
           // The call's aircraft over the ground it lights up: a biplane on a recon flight, a drone on a UAV sweep.
@@ -14159,6 +14215,7 @@ const Hud = (() => {
       case 'hel': g.moveTo(-a, -b); g.lineTo(a, b); g.lineTo(a, -b); g.lineTo(-a, b); g.closePath(); break;
       case 'jet': g.moveTo(0, -b); g.lineTo(a, b * 0.6); g.lineTo(0, b * 0.1); g.lineTo(-a, b * 0.6); g.closePath(); break;
       case 'uav': g.moveTo(-a, -b * 0.6); g.lineTo(0, b * 0.6); g.lineTo(a, -b * 0.6); break;
+      case 'dat': for (let i = -1; i <= 1; i++) { g.moveTo(-a * 0.6, i * b * 0.45); g.lineTo(a * 0.6, i * b * 0.45); } break;
       case 'flare': for (let i = 0; i < 8; i++) { const an = i * 0.785; g.moveTo(Math.cos(an) * a * 0.3, Math.sin(an) * b * 0.3); g.lineTo(Math.cos(an) * a, Math.sin(an) * b); } break;
       case 'par': g.arc(0, 0, a * 0.7, Math.PI, 0); g.moveTo(-a * 0.7, 0); g.lineTo(0, b); g.lineTo(a * 0.7, 0); break;
       default: g.rect(-a * 0.5, -b * 0.5, a, b);
@@ -14276,7 +14333,7 @@ const Hud = (() => {
     ];
     // Everything a side may come to build; the sidebar shows what its age has opened.
     const ALL = {
-      bld: ['power', 'refinery', 'barracks', 'factory', 'radar', 'derrick', 'fob', 'airfield', 'dock', 'silo'],
+      bld: ['power', 'refinery', 'barracks', 'factory', 'radar', 'derrick', 'fob', 'airfield', 'dock', 'silo', 'datacenter'],
       def: ['bunker', 'atgun', 'sam', 'rail'],
       pow: ['tech', 'flare', 'uav', 'barrage', 'para', 'launch'],
     };
@@ -15479,6 +15536,34 @@ const Hud = (() => {
       }
       og.restore();
     }
+    // The AI Data Center's forecast: where the rain clouds and a dust storm's front will be a minute from now, as
+    // dashed outlines on the land lettered with what is coming.
+    const FORECAST = 60 * Rules.HZ;
+    function drawForecast(s) {
+      const M = s.map, at = (x, y) => world.project(x, Rules.terrainAt(M, Math.max(0, Math.min(M.W - 1, x)), Math.max(0, Math.min(M.H - 1, y))), y), t1 = s.tick + FORECAST;
+      og.save(); og.setLineDash([7, 5]); og.lineWidth = 1.6; og.font = `italic 600 12px ${labelFont()}`; og.textAlign = 'center'; og.textBaseline = 'middle';
+      const word = (text, x, y, col) => { og.lineWidth = 3; og.strokeStyle = 'rgba(246,240,226,0.9)'; og.strokeText(text, x, y); og.fillStyle = col; og.fillText(text, x, y); og.lineWidth = 1.6; };
+      for (const c of Rules.showersAt(s, t1)) {
+        if (c.k < 0.3) continue;
+        const col = c.kind === 'snow' ? 'rgba(90,110,150,0.85)' : c.storm > 0.3 ? 'rgba(60,64,96,0.9)' : 'rgba(64,92,140,0.85)';
+        og.strokeStyle = col; og.beginPath();
+        for (let i = 0; i <= 32; i++) { const a = i / 32 * 6.283, [x, y] = at(c.x + Math.cos(a) * c.r * 0.8, c.y + Math.sin(a) * c.r * 0.8); i ? og.lineTo(x, y) : og.moveTo(x, y); }
+        og.stroke();
+        const [lx, ly] = at(c.x, c.y);
+        if (lx > 0 && ly > 0 && lx < world.vw && ly < world.vh) word(c.kind === 'snow' ? 'Snow in a minute' : c.storm > 0.3 ? 'Storm in a minute' : 'Rain in a minute', lx, ly, col);
+      }
+      const dw = Rules.dustWall(s, t1);
+      if (dw && dw.k > 0.3) {
+        // The front, a line across the map at right angles to the wind, from edge to edge.
+        const cx = M.W / 2 + dw.dx * dw.front, cy = M.H / 2 + dw.dy * dw.front, col = 'rgba(150,104,52,0.9)';
+        og.strokeStyle = col; og.beginPath();
+        for (let i = 0; i <= 40; i++) { const k = (i / 40 - 0.5) * M.W * 1.5, [x, y] = at(cx - dw.dy * k, cy + dw.dx * k); i ? og.lineTo(x, y) : og.moveTo(x, y); }
+        og.stroke();
+        const [lx, ly] = at(cx, cy);
+        if (lx > 0 && ly > 0 && lx < world.vw && ly < world.vh) word('Dust storm front in a minute', lx, ly, col);
+      }
+      og.restore();
+    }
     // Lightning, a jagged bolt for a moment, with thunder after, later the farther off it falls. A strike the rules
     // make comes down where it lands; in a storm, now and then, one falls under a storm cloud in the view.
     let bolt = null, boltT = 8;
@@ -15709,6 +15794,7 @@ const Hud = (() => {
       if (!s) return;
       const selected = new Set(state.sel);
       const P0 = t >= 0 ? s.P[t] : null;
+      if (t >= 0 && Rules.dataOn(s, t)) drawForecast(s);
       // With a building that trains units selected, the one its kind comes out of is lettered, where there is a
       // choice of them.
       const trainAt = new Set();
@@ -18302,6 +18388,13 @@ const Game = (() => {
             break;
           }
           case 'weather': if (G.playing) { const v = e.passed ? SKY_PASS[e.was] : SKY_SAY[e.kind]; if (v && !(e.kind === 'cloud' && e.was === 'clear')) { hud.say(v[0], v[1]); if (v[2]) audio.voice('sky', v[2], oldAge()); } } break;
+          // The AI Data Center's word of the enemy's main army, and its warning when that army is near the base.
+          case 'intel': if (G.playing && e.team === G.team) {
+            let near = null, nd = 1e9; for (const tw of S.towns) { const d = Math.hypot(tw.x - e.x, tw.y - e.y); if (d < nd) { nd = d; near = tw; } }
+            const where = near && nd < 30 ? ` near ${Rules.townName(S, near.id)}` : '';
+            if (e.near) { hud.say(`Intelligence: a large enemy force is close to your base${where}.`, 'bad'); hud.alert(e.x, e.y); }
+            else hud.say(`Intelligence: the enemy's main army is${where || ' marked on the map'}.`);
+          } break;
           // One of the player's fishing boats on water with no fishing ground, said once a minute at most.
           case 'nofish': if (G.playing && e.team === G.team && S.tick - (G.lastNoFish ?? -1e9) > 60 * Rules.HZ) { G.lastNoFish = S.tick; hud.say('A fishing boat has no fishing grounds in its water. Build its dock on other water.', 'bad'); } break;
           // One of the player's squads breaking, said now and then, not for every squad.
