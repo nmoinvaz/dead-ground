@@ -2263,6 +2263,32 @@ const Rules = (() => {
     }
     return true;
   }
+  // Where a building being placed would stand and why it could not, for the player placing it: each cell of its
+  // footprint marked clear or not, and the first reason found, in plain words. It only reads, and its answer is
+  // fits's own.
+  function placeCheck(S, team, kind, cx, cy) {
+    const d = BUILDINGS[kind], M = S.map, ok = fits(S, team, kind, cx, cy), cells = [], why = [];
+    const say = s => { if (!why.includes(s)) why.push(s); };
+    const house = (x, y) => M.houses.some((h, i) => S.hh[i] > 0 && x >= h.x && x < h.x + h.w && y >= h.y && y < h.y + h.h);
+    if (cx < 1 || cy < 1 || cx + d.w >= W - 1 || cy + d.h >= H - 1) say('Too near the edge of the map');
+    for (let y = cy; y < cy + d.h; y++) for (let x = cx; x < cx + d.w; x++) {
+      if (x < 0 || y < 0 || x >= W || y >= H) { cells.push([x, y, 1]); continue; }
+      const c = y * W + x, v = (y * RES + 1) * VW + x * RES + 1, wv = M.wl ? M.wl[v] : M.water;
+      let bad = '';
+      if (S.occ[c]) bad = 'Something already stands here';
+      else if (S.ore[c] && !d.well) bad = 'Ore lies here';
+      else if (d.shore) {
+        if (M.deck[v] > 0 || (S.gnd[c] & 16)) bad = 'On a bridge or a ford';
+        else if (S.terr[c] >= 0 && S.terr[c] !== team) bad = "Inside another side's border";
+      } else if (S.gnd[c] & 4) bad = house(x, y) ? 'A house stands here' : M.h[v] < wv ? 'In the water' : M.roadDist[v] <= 1.2 ? 'On a road' : M.brookDist && M.brookDist[v] < 0.75 ? 'On a brook' : 'Too steep';
+      else if (S.terr[c] !== team) bad = 'Outside your border';
+      cells.push([x, y, bad ? 1 : 0]);
+      if (bad) say(bad);
+    }
+    if (!ok && d.well && !M.wells.some(e => e.x === cx + 1 && e.y === cy + 1)) say('Must stand on an oil well');
+    if (!ok && d.shore && !why.length) say('Needs a bank behind it and open water before it');
+    return { ok, why: ok ? '' : why[0] || 'Cannot stand here', cells };
+  }
 
   // A dock juts off the shore, its back on the bank and its front out over the water, with open water close
   // beyond. A cliff, a ford or a bridge will not take it. It need not stand inside the border, only within
@@ -4880,7 +4906,7 @@ const Rules = (() => {
     HZ, DT, RES, UNITS, BUILDINGS, WEAPONS, TECH, POWERS, DIFFICULTY, LAYOUT, SIZES, MAPS, spread, use,
     AGES, MAX_AGE, POWER_AGE, LINES, LINE_ORDER, formOf, lineCount, nameOf, armOf,
     get W() { return W; }, get H() { return H; }, get VW() { return VW; }, get VH() { return VH; },
-    ORE_KINDS, fishWater, dustWall, dustAt, groundedAt, dataOn, satUp, satPass, newGame, step, push, spawn, addBuilding, scoreOf, worth, SERIES, pickFrom, fits, spotFor, roomy, blockedReason, near, rehash, seenBy, terrainAt, heightAt, waterLevel, townPay, townShare, los, isAir, armed, cellOf, summary, exitOf,
+    ORE_KINDS, fishWater, dustWall, dustAt, groundedAt, dataOn, satUp, satPass, newGame, step, push, spawn, addBuilding, scoreOf, worth, SERIES, pickFrom, fits, spotFor, roomy, blockedReason, near, rehash, seenBy, terrainAt, heightAt, waterLevel, townPay, townShare, placeCheck, los, isAir, armed, cellOf, summary, exitOf,
     mulberry, noiser, clamp, lerp, smooth, angleTo, toXY, toUV, gap, setSize, save, load, hashOf, restartSlot, razeSlot, makeMap, mapFor, layoutFor,
     msin, mcos, matan2, mhypot,
     BRIDGE_HP, SPELL, SKIES, WEATHERS, nightAt, skyOf, offGoing, route, weatherAt, sky, dayAt, spellOf, bridgeAt, clsOf, houseHp, hurtBridge, ignite, shielded,

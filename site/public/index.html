@@ -644,7 +644,7 @@ body[data-look="ink"] .sheet { box-shadow: 4px 4px 0 var(--ink); }
       <div class="choice"><h2>Map sheet frame</h2><div id="s-sheet" class="two"><button data-v="on">On</button><button data-v="off">Off</button></div></div>
       <div class="choice"><h2>Shadows</h2><div id="s-shade" class="two"><button data-v="hatch">Hatched</button><button data-v="wash">Wash</button></div></div>
       <div class="choice"><h2>Music</h2><div id="s-music" class="two"><button data-v="on">On</button><button data-v="off">Off</button></div></div>
-      <p id="build">Build 5e43065 2026-11-10 22:09</p>
+      <p id="build">Build 250039c 2026-11-10 22:51</p>
     </div>
     <div id="banner" hidden></div>
     <button id="update" hidden>A new version of Mapmaker’s War is out. <b>Reload</b></button>
@@ -3030,6 +3030,32 @@ const Rules = (() => {
       if (!ignoreTerr && S.terr[c] !== team) return false;
     }
     return true;
+  }
+  // Where a building being placed would stand and why it could not, for the player placing it: each cell of its
+  // footprint marked clear or not, and the first reason found, in plain words. It only reads, and its answer is
+  // fits's own.
+  function placeCheck(S, team, kind, cx, cy) {
+    const d = BUILDINGS[kind], M = S.map, ok = fits(S, team, kind, cx, cy), cells = [], why = [];
+    const say = s => { if (!why.includes(s)) why.push(s); };
+    const house = (x, y) => M.houses.some((h, i) => S.hh[i] > 0 && x >= h.x && x < h.x + h.w && y >= h.y && y < h.y + h.h);
+    if (cx < 1 || cy < 1 || cx + d.w >= W - 1 || cy + d.h >= H - 1) say('Too near the edge of the map');
+    for (let y = cy; y < cy + d.h; y++) for (let x = cx; x < cx + d.w; x++) {
+      if (x < 0 || y < 0 || x >= W || y >= H) { cells.push([x, y, 1]); continue; }
+      const c = y * W + x, v = (y * RES + 1) * VW + x * RES + 1, wv = M.wl ? M.wl[v] : M.water;
+      let bad = '';
+      if (S.occ[c]) bad = 'Something already stands here';
+      else if (S.ore[c] && !d.well) bad = 'Ore lies here';
+      else if (d.shore) {
+        if (M.deck[v] > 0 || (S.gnd[c] & 16)) bad = 'On a bridge or a ford';
+        else if (S.terr[c] >= 0 && S.terr[c] !== team) bad = "Inside another side's border";
+      } else if (S.gnd[c] & 4) bad = house(x, y) ? 'A house stands here' : M.h[v] < wv ? 'In the water' : M.roadDist[v] <= 1.2 ? 'On a road' : M.brookDist && M.brookDist[v] < 0.75 ? 'On a brook' : 'Too steep';
+      else if (S.terr[c] !== team) bad = 'Outside your border';
+      cells.push([x, y, bad ? 1 : 0]);
+      if (bad) say(bad);
+    }
+    if (!ok && d.well && !M.wells.some(e => e.x === cx + 1 && e.y === cy + 1)) say('Must stand on an oil well');
+    if (!ok && d.shore && !why.length) say('Needs a bank behind it and open water before it');
+    return { ok, why: ok ? '' : why[0] || 'Cannot stand here', cells };
   }
 
   // A dock juts off the shore, its back on the bank and its front out over the water, with open water close
@@ -5648,7 +5674,7 @@ const Rules = (() => {
     HZ, DT, RES, UNITS, BUILDINGS, WEAPONS, TECH, POWERS, DIFFICULTY, LAYOUT, SIZES, MAPS, spread, use,
     AGES, MAX_AGE, POWER_AGE, LINES, LINE_ORDER, formOf, lineCount, nameOf, armOf,
     get W() { return W; }, get H() { return H; }, get VW() { return VW; }, get VH() { return VH; },
-    ORE_KINDS, fishWater, dustWall, dustAt, groundedAt, dataOn, satUp, satPass, newGame, step, push, spawn, addBuilding, scoreOf, worth, SERIES, pickFrom, fits, spotFor, roomy, blockedReason, near, rehash, seenBy, terrainAt, heightAt, waterLevel, townPay, townShare, los, isAir, armed, cellOf, summary, exitOf,
+    ORE_KINDS, fishWater, dustWall, dustAt, groundedAt, dataOn, satUp, satPass, newGame, step, push, spawn, addBuilding, scoreOf, worth, SERIES, pickFrom, fits, spotFor, roomy, blockedReason, near, rehash, seenBy, terrainAt, heightAt, waterLevel, townPay, townShare, placeCheck, los, isAir, armed, cellOf, summary, exitOf,
     mulberry, noiser, clamp, lerp, smooth, angleTo, toXY, toUV, gap, setSize, save, load, hashOf, restartSlot, razeSlot, makeMap, mapFor, layoutFor,
     msin, mcos, matan2, mhypot,
     BRIDGE_HP, SPELL, SKIES, WEATHERS, nightAt, skyOf, offGoing, route, weatherAt, sky, dayAt, spellOf, bridgeAt, clsOf, houseHp, hurtBridge, ignite, shielded,
@@ -15224,7 +15250,8 @@ const Hud = (() => {
         }
         x = bx; y = by;
       }
-      world.setGhost({ kind: m.kind, x, y, ok: Rules.fits(S(), team(), m.kind, x, y) });
+      const pc = Rules.placeCheck(S(), team(), m.kind, x, y);
+      world.setGhost({ kind: m.kind, x, y, ok: pc.ok, why: pc.why, cells: pc.cells });
       state.ghost = { x, y };
     }
 
@@ -16018,10 +16045,11 @@ const Hud = (() => {
         og.stroke();
       }
     }
-    // The ghost plan, in pen and ink: what is planned in dotted orange, what was in dashed blue-grey.
+    // The ghost plan, in pen and ink: what is planned in dotted orange, what was in dashed blue-grey, and a building
+    // being placed in green or red.
     // The plan's orange is a burnt orange, between the first pale one and the darkest, dotted close enough to read
     // on cream paper without weighing on the map.
-    const PLAN = '#d0602a', PLAN_BAD = '#b8301a', WAS = '#5a71a0';
+    const PLAN = '#d0602a', WAS = '#5a71a0';
     const INK_OF = { '#7fe0a0': '#1f6b34', '#ffa040': '#b4400e', '#ff8a70': '#a8200e' };
     const dotted = () => { og.setLineDash([0.5, 3.6]); og.lineCap = 'round'; og.lineWidth = 2.1; };
     const dashed = () => { og.setLineDash([6, 4]); og.lineCap = 'butt'; og.lineWidth = 1.4; };
@@ -16061,7 +16089,22 @@ const Hud = (() => {
       og.globalAlpha = 1;
       // What is planned: the building being placed, and where the chosen units are bound.
       const g = world.ghostState;
-      if (g) { og.strokeStyle = g.ok ? PLAN : PLAN_BAD; dotted(); const d = BUILDINGS[g.kind]; box3(s, g.x, g.y, d.w, d.h, world.bHeight(g.kind)); }
+      if (g) {
+        // A building being placed: each cell of its footprint washed green where it is clear and red where it is
+        // not, and its box ruled solid in green when it fits, dashed in red when it does not. Dark paper turns the
+        // whole overlay, so these inks serve both.
+        const fit = '#3d7a3a', nofit = '#b8301a';
+        og.save(); og.setLineDash([]);
+        for (const [x, y, bad] of g.cells || []) {
+          const q = [[x, y], [x + 1, y], [x + 1, y + 1], [x, y + 1]].map(([a, b]) => world.project(a, terrainAt(s.map, clamp(a, 0, W), clamp(b, 0, H)) + 0.04, b));
+          og.globalAlpha = bad ? 0.34 : 0.22; og.fillStyle = bad ? nofit : fit;
+          og.beginPath(); og.moveTo(q[0][0], q[0][1]); for (let i = 1; i < 4; i++) og.lineTo(q[i][0], q[i][1]); og.closePath(); og.fill();
+        }
+        og.restore();
+        og.strokeStyle = g.ok ? fit : nofit;
+        if (g.ok) { og.setLineDash([]); og.lineCap = 'round'; og.lineWidth = 1.8; } else dashed();
+        const d = BUILDINGS[g.kind]; box3(s, g.x, g.y, d.w, d.h, world.bHeight(g.kind));
+      }
       if (!planC || planC.width !== ov.width || planC.height !== ov.height) { planC = planC || document.createElement('canvas'); planC.width = ov.width; planC.height = ov.height; pg = planC.getContext('2d'); }
       pg.setTransform(1, 0, 0, 1, 0, 0); pg.clearRect(0, 0, planC.width, planC.height); pg.setTransform(og.getTransform());
       pg.strokeStyle = PLAN; pg.setLineDash([0.5, 3.6]); pg.lineCap = 'round'; pg.lineWidth = 2.1;
@@ -17156,8 +17199,13 @@ const Hud = (() => {
         if (game.playing) { scroll(dt); updateCams(); updateReadouts(); drawMini(dt); }
         const hover = game.playing && state.mouse.in && !state.drag ? entAt(state.mouse.x, state.mouse.y) : null;
         state.hover = hover;
+        const gh = world.ghostState;
         if (game.playing && state.mouse.in && !state.drag && !hover && !state.mode) { if (!townTipAt(state.mouse.x, state.mouse.y)) oreTipAt(state.mouse.x, state.mouse.y); }
-        else if (!oreTip.hidden) { oreTip.hidden = true; tipKey = ''; }
+        else if (game.playing && state.mouse.in && state.mode && state.mode.type === 'place' && gh && !gh.ok) {
+          // Why the building being placed cannot stand where it is.
+          if (tipKey !== 'why:' + gh.why) { tipKey = 'why:' + gh.why; oreTip.textContent = gh.why; }
+          oreTip.style.left = (state.mouse.x + 12) + 'px'; oreTip.style.top = (state.mouse.y + 14) + 'px'; oreTip.hidden = false;
+        } else if (!oreTip.hidden) { oreTip.hidden = true; tipKey = ''; }
         if (game.playing) {
           const m = state.mode, en = hover && hover.team !== team(), mine = state.sel.some(e => !e.b && e.team === team());
           view.dataset.cur = m ? (m.type === 'place' ? 'place' : 'aim') : en && mine ? 'attack' : mine ? 'order' : hover ? 'pick' : '';
