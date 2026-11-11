@@ -660,7 +660,7 @@ body[data-look="ink"] .sheet { box-shadow: 4px 4px 0 var(--ink); }
       <div class="choice"><h2>Shadow strength</h2><div id="s-shadow"><button data-v="full">Full</button><button data-v="light">Light</button><button data-v="off">Off</button></div></div>
       <div class="choice"><h2>Edge lines</h2><div id="s-edges" class="two"><button data-v="quick">Quick</button><button data-v="exact">Exact</button></div></div>
       <div class="choice"><h2>Music</h2><div id="s-music" class="two"><button data-v="on">On</button><button data-v="off">Off</button></div></div>
-      <p id="build">Build ea796d9 2026-11-11 15:32</p>
+      <p id="build">Build 1e60559 2026-11-11 15:44</p>
       <p id="source"><a href="https://github.com/nmoinvaz/mapmakers-war" target="_blank" rel="noopener">Source on GitHub</a></p>
     </div>
     <div id="banner" hidden></div>
@@ -6900,21 +6900,22 @@ const Models = (() => {
       sword: { R: [0.12, 0.43, 0.062], L: [0.006, 0.33, -0.094], RE: [0.05, 0.398, 0.11], LE: [-0.008, 0.405, -0.094] },
       tool: { R: [0.012, 0.318, 0.1], L: [0.01, 0.322, -0.098], RE: [-0.004, 0.4, 0.104], LE: [-0.004, 0.4, -0.102] },
       none: { R: [0.012, 0.322, 0.096], L: [0.012, 0.322, -0.096], RE: [-0.006, 0.402, 0.1], LE: [-0.006, 0.402, -0.1] },
+      hold: { R: [0.1, 0.36, 0.034], L: [0.1, 0.36, -0.034], RE: [0.02, 0.39, 0.1], LE: [0.02, 0.39, -0.1] },
     };
     // Which pose a man takes for what he carries.
     const POSE_OF = { spear: 'spear', pike: 'pike', bow: 'bow', longbow: 'bow', grenade: 'throw', sword: 'sword' };
     // His arms from the shoulders: upper arm to the elbow, forearm to the hand, and the hand, in his sleeve's
-    // colour, then what he carries in them.
+    // colour, then what he carries in them. With o.pose his arms take that pose and his hands are left empty.
     function armsInto(g, o) {
       const c = o.sleeve ?? (o.cloth || P.olive), k = o.arms || (o.tube ? 'tube' : o.rifle ? 'rifle' : o.tool ? 'tool' : 'none');
-      const ps = POSES[POSE_OF[k] || (k === 'tube' || k === 'tool' || k === 'none' ? k : 'gun')];
+      const ps = POSES[o.pose || POSE_OF[k] || (k === 'tube' || k === 'tool' || k === 'none' ? k : 'gun')];
       for (const [sh, el, hd] of [[SHO[0], ps.RE, ps.R], [SHO[1], ps.LE, ps.L]]) {
         limb(g, sh, el, 0.021, 0.017, c);
         g.sph(0.0165, el[0], el[1], el[2], c, { seg: 5, rings: 3 });
         limb(g, el, hd, 0.017, 0.013, c);
         g.sph(0.0145, hd[0], hd[1], hd[2], P.skin, { seg: 5, rings: 4 });
       }
-      carry(g, k, ps, o);
+      if (!o.pose) carry(g, k, ps, o);
       return g;
     }
     // What a man carries, laid in his hands as his pose has them.
@@ -7895,37 +7896,64 @@ const Models = (() => {
     function weaponAt(g, k, x, y, z) {
       if (k === 'lance') g.cyl(0.008, 0.012, 0.9, x + 0.22, y, z, A.woodDk, { axis: 'x', seg: 5 });
       if (k === 'sword' || k === 'sabre') g.box(0.014, 0.24, 0.03, x + 0.08, y + 0.06, z, A.mail, { rz: -0.5 });
-      if (k === 'bow') for (let i = -2; i <= 2; i++) g.box(0.01, 0.07, 0.01, x + 0.1 - Math.abs(i) * 0.012, y - 0.04 + i * 0.07, z - 0.01, A.woodDk, { rz: i * 0.25 });
+      if (k === 'bow') for (let i = -2; i <= 2; i++) g.box(0.01, 0.07, 0.01, x + 0.17 - Math.abs(i) * 0.012, y - 0.04 + i * 0.07, z + 0.02, A.woodDk, { rz: i * 0.25 });
       if (k === 'carbine') g.box(0.3, 0.016, 0.012, x + 0.1, y - 0.1, z - 0.01, A.wood);
     }
     // How each rider's weapon moves in a fight.
     const RBLOW = { lance: 'thrust', sword: 'chop', sabre: 'chop', bow: 'draw', carbine: 'shot' };
-    // A rider seated on a horse at (x, z): body, head and hat, and what he carries, unless o.held takes the weapon
-    // to a part of its own, adding his shoulder to that list.
-    function rider(g, x, z, o) {
-      const y = 0.46, c = o.cloth || A.tunic;
-      g.cyl(0.055, 0.05, 0.2, x - 0.02, y + 0.12, z, c, { seg: 7 });
-      if (o.vest) g.cyl(0.06, 0.056, 0.13, x - 0.02, y + 0.13, z, o.vest, { seg: 7 });
-      for (const s of [-1, 1]) g.cyl(0.024, 0.02, 0.18, x + 0.02, y + 0.02, z + s * 0.07, o.legs || c, { seg: 5, rz: 0.9 });
-      const hy2 = y + 0.27;
-      g.sph(head * 0.5, x - 0.01, hy2, z, P.skin, { seg: 8, rings: 6, sy: 1.1 });
-      if (o.hat === 'crest' || o.hat === 'knight') g.sph(head * 0.64, x - 0.01, hy2 + 0.008, z, o.hat === 'knight' ? A.mail : A.bronze, { seg: 8, rings: 5, top: !!(o.hat === 'crest'), sy: 1.1 });
-      if (o.hat === 'crest') g.box(0.1, 0.04, 0.014, x - 0.02, hy2 + 0.05, z, A.coatR, TB);
-      if (o.hat === 'knight') g.box(0.06, 0.06, 0.012, x - 0.02, hy2 + 0.07, z, o.plume || A.plume, TB);
-      if (o.hat === 'tricorne') { g.cyl(0.08, 0.08, 0.016, x - 0.01, hy2 + 0.035, z, 0x1e1c1a, { seg: 3, ry: 0.5 }); }
-      if (o.hat === 'helm') g.sph(head * 0.66, x - 0.01, hy2 + 0.01, z, A.mail, { seg: 8, rings: 5, top: true, sy: 1.2 });
-      if (o.held && o.arms) o.held.push([x, y + 0.2, z - 0.06]);
-      else weaponAt(g, o.arms, x, y + 0.2, z - 0.06);
-      if (o.shield) g.cyl(0.08, 0.08, 0.014, x, y + 0.14, z + 0.09, o.shield, { axis: 'z', seg: 12, t: 0.5 });
+    // A rider's right arm from his shoulder to the grip of what he holds: the elbow and the hand, in his sleeve.
+    const GRIP = { lance: [[-0.01, -0.1, 0.02], [0.1, -0.01, 0]], sword: [[0.04, -0.04, 0.07], [0.022, 0.07, 0]], bow: [[0.07, -0.06, 0.06], [0.17, -0.01, 0.02]], carbine: [[-0.04, -0.09, 0.03], [0.02, -0.092, -0.01]] };
+    GRIP.sabre = GRIP.sword;
+    function armTo(g, sh, el, hd, c) {
+      limb(g, sh, el, 0.021, 0.017, c); g.sph(0.0165, el[0], el[1], el[2], c, { seg: 5, rings: 3 });
+      limb(g, el, hd, 0.017, 0.013, c); g.sph(0.0145, hd[0], hd[1], hd[2], P.skin, { seg: 5, rings: 4 });
     }
-    // A rider's weapon as a part of its own, one for each shoulder in the list.
-    const heldPart = (k, at) => { const g = G(); weaponAt(g, k, 0, 0, 0); return part('held', g, { rig: 'held', at, blow: RBLOW[k] || 'shot' }); };
+    // A rider at (x, z), built as the soldiers are, his right side toward +z. On a horse he sits upright on the
+    // saddle, his thighs over its barrel and his shins down to the stirrups, his left hand on the reins to its mouth.
+    // With o.stand he stands on a floor at o.floor, as a chariot's crew does, and with o.y he sits at that height, his
+    // legs left out, as in a howdah. His right arm and what it holds go to a part of their own when o.held takes them,
+    // which adds his shoulder to that list; else they are drawn with him, or with nothing to hold his right hand is on
+    // the reins too.
+    function rider(g, x, z, o) {
+      const r = G(), c = o.cloth || A.tunic, lc = o.legs || c, sl = o.sleeve ?? c;
+      const hip = o.stand ? (o.floor ?? 0) + MAN_H * 0.5 : (o.y ?? 0.46) + 0.02, sh = hip + 0.186, hy = sh + 0.03 + head * 0.5;
+      trunk(r, c, hip);
+      if (o.vest) r.add(new THREE.LatheGeometry(TRUNK.slice(2, 7).map(p => new THREE.Vector2(p.x * 1.07, p.y)), 8), 0, hip, 0, o.vest, { sx: 0.64, t: 0.55 });
+      for (const s of [-1, 1]) r.sph(0.024, 0, sh - 0.012, s * 0.064, sl, { seg: 5, rings: 3 });
+      if (o.stand) for (const s of [-1, 1]) r.merge(manLegs(lc), 0, hip, s * 0.042);
+      else if (o.y === undefined) for (const s of [-1, 1]) {
+        const hp = [0, hip + 0.01, s * 0.045], kn = [0.12, hip - 0.06, s * 0.1], an = [0.09, hip - 0.21, s * 0.105];
+        limb(r, hp, kn, 0.032, 0.023, lc); r.sph(0.022, kn[0], kn[1], kn[2], lc, { seg: 5, rings: 3 });
+        limb(r, kn, an, 0.022, 0.017, lc);
+        limb(r, an, [0.09, hip - 0.25, s * 0.105], 0.018, 0.019, P.boots); r.box(0.07, 0.024, 0.034, 0.1, hip - 0.27, s * 0.105, P.boots);
+      }
+      r.cyl(0.016, 0.019, 0.04, 0.003, sh + 0.028, 0, P.skin, { seg: 5 });
+      r.sph(head * 0.46, 0.005, hy, 0, P.skin, { seg: 8, rings: 6, sy: 1.18 });
+      if (o.hat === 'crest' || o.hat === 'helm') r.sph(head * 0.6, -0.002, hy + 0.008, 0, o.hat === 'helm' ? A.mail : A.bronze, { seg: 8, rings: 4, top: true, sy: o.hat === 'helm' ? 1.15 : 0.95 });
+      // A crest as a low ridge from brow to nape.
+      if (o.hat === 'crest') r.sph(0.05, -0.008, hy + 0.04, 0, A.coatR, Object.assign({ seg: 8, rings: 4, top: true, sy: 0.7, sz: 0.18 }, TB));
+      if (o.hat === 'knight') { r.sph(head * 0.6, 0, hy + 0.002, 0, A.mail, { seg: 8, rings: 5, sy: 1.12 }); r.box(0.008, 0.008, 0.05, head * 0.6 - 0.002, hy + 0.006, 0, 0x1e1c1a); r.sph(0.032, -0.012, hy + 0.06, 0, o.plume || A.plume, Object.assign({ seg: 6, rings: 4, sx: 0.9, sy: 1.5, sz: 0.35 }, TB)); }
+      if (o.hat === 'tricorne') { r.sph(0.04, -0.004, hy + 0.026, 0, 0x1e1c1a, { seg: 8, rings: 4, top: true, sy: 0.8 }); r.cyl(0.074, 0.074, 0.016, -0.004, hy + 0.034, 0, 0x1e1c1a, { seg: 3, ry: Math.PI / 2 }); }
+      if (!o.hat) r.sph(head * 0.5, -0.006, hy + 0.012, 0, 0x3a2e24, { seg: 8, rings: 4, top: true, sy: 0.85 });
+      // The left hand on the reins, and the right too when it holds nothing.
+      const shL = [0, sh - 0.008, -0.068], shR = [0, sh - 0.008, 0.068], rein = o.reins ?? (o.stand || o.y !== undefined ? null : [0.44, 0.57, 0]);
+      const hand = s => [0.125, sh - 0.135, s * 0.035];
+      armTo(r, shL, [0.035, sh - 0.105, -0.085], hand(-1), sl);
+      if (rein) limb(r, hand(-1), rein, 0.004, 0.004, 0x2a2018, { seg: 3 });
+      if (!o.arms) { armTo(r, shR, [0.035, sh - 0.105, 0.085], hand(1), sl); if (rein) limb(r, hand(1), rein, 0.004, 0.004, 0x2a2018, { seg: 3 }); }
+      else if (o.held) o.held.push([x + shR[0], shR[1], z + shR[2]]);
+      else { const [el, hd] = GRIP[o.arms]; armTo(r, shR, el, hd, sl); weaponAt(r, o.arms, shR[0], shR[1], shR[2]); }
+      if (o.shield) r.cyl(0.08, 0.08, 0.014, 0.04, sh - 0.08, -0.105, o.shield, { axis: 'z', seg: 12, t: 0.5 });
+      g.merge(r, x, 0, z);
+    }
+    // A rider's right arm and weapon as a part of their own, one for each shoulder in the list, in his sleeve's colour.
+    const heldPart = (k, at, c = A.tunic) => { const g = G(), [el, hd] = GRIP[k]; armTo(g, [0, 0, 0], el, hd, c); weaponAt(g, k, 0, 0, 0); return part('held', g, { rig: 'held', at, blow: RBLOW[k] || 'shot' }); };
     // Riders three abreast in a wedge, the leader ahead, on horses whose legs move and with weapons that strike.
     function troop(o, coat) {
       const g = G(), hips = [], held = [];
       [[0.2, 0], [-0.25, 0.3], [-0.25, -0.3]].forEach(([x, z], i) => { horse(g, x, z, coat, Object.assign({}, o, { rig: hips, off: i * 0.37 })); rider(g, x - 0.02, z, Object.assign({}, o, { held })); });
       const parts = [part('hull', g), ...horseLegs(coat, hips)];
-      if (held.length) parts.push(heldPart(o.arms, held));
+      if (held.length) parts.push(heldPart(o.arms, held, o.sleeve ?? o.cloth));
       parts.gait = GAIT.horse;
       return parts;
     }
@@ -8009,8 +8037,8 @@ const Models = (() => {
       b.box(0.26, 0.05, 0.4, -0.2, 0.26, 0, A.wood, T);
       b.prism([[-0.34, 0], [-0.34, 0.16], [-0.06, 0.2], [-0.04, 0]], 0.4, 0, 0.3, 0, A.bronze, T);
       b.box(0.5, 0.02, 0.02, 0.1, 0.3, 0, A.woodDk);
-      rider(b, -0.22, 0.08, { cloth: A.linen, hat: 'crest' }); rider(b, -0.22, -0.08, { cloth: A.tunic, hat: 'crest', arms: 'bow', held });
-      units.chariot = [part('hull', b), ...horseLegs(0x6b4a32, h1), ...horseLegs(0x8a6a4a, h2), wheelPart(wh), heldPart('bow', held)];
+      rider(b, -0.22, 0.08, { cloth: A.linen, hat: 'crest', stand: true, floor: 0.31, reins: [0.85, 0.52, -0.08] }); rider(b, -0.22, -0.08, { cloth: A.tunic, hat: 'crest', arms: 'bow', held, stand: true, floor: 0.31 });
+      units.chariot = [part('hull', b), ...horseLegs(0x6b4a32, h1), ...horseLegs(0x8a6a4a, h2), wheelPart(wh), heldPart('bow', held, A.tunic)];
       units.chariot.gait = GAIT.horse;
     }
     // War elephant: a great beast with tusks and a howdah of archers, its cloth in the side's colour. Its legs walk
@@ -8030,8 +8058,7 @@ const Models = (() => {
       b.cyl(0.22, 0.22, 0.03, -0.05, 1.33, 0, A.woodDk, { seg: 12 });
       for (const [dx, dz] of [[0.1, 0.13], [0.1, -0.13], [-0.2, 0.13], [-0.2, -0.13]]) b.box(0.02, 0.24, 0.02, dx, 1.32, dz, A.woodDk);
       b.cyl(0.02, 0.28, 0.1, -0.05, 1.6, 0, A.canvas, Object.assign({ seg: 12 }, T));
-      b.cyl(0.04, 0.035, 0.14, -0.05, 1.37, 0.08, A.tunic, { seg: 6 }); b.sph(0.035, -0.05, 1.47, 0.08, P.skin, { seg: 6, rings: 4 });
-      b.cyl(0.04, 0.035, 0.14, -0.05, 1.37, -0.1, A.linen, { seg: 6 }); b.sph(0.035, -0.05, 1.47, -0.1, P.skin, { seg: 6, rings: 4 });
+      rider(b, -0.05, 0.08, { cloth: A.tunic, y: 1.2 }); rider(b, -0.05, -0.1, { cloth: A.linen, y: 1.2 });
       b.cyl(0.01, 0.025, 0.26, -0.58, 0.62, 0, 0x3a3634, { rz: 0.35, seg: 5 });
       // The head about its neck at (0.42, 0.84).
       // The head: a high domed brow, great ears swept back flat against it, a trunk hanging in two lengths that curve
@@ -8049,6 +8076,24 @@ const Models = (() => {
       units.elephant = [part('hull', b), ...legRig('elephant', hips, GAIT.elephant, 0.28, 0.26, 0.09, 0.085, A.hide, (l, L2) => l.cyl(0.1, 0.1, 0.03, 0, -L2 - 0.015, 0, 0x5a5652, { seg: 8 })), part('head', h, { rig: 'head', pivot: [0.42, 0.84, 0] })];
       units.elephant.gait = GAIT.elephant;
     }
+    // A gun's crew as a part of its own, which stands still while the gun runs back as it fires: each man at (x, z)
+    // facing ry, dressed as o, his arms in a pose, and in his hands a rammer or a staff upright, or a ball, shell or
+    // stone held before him in both.
+    function crewPart(o, men) {
+      const g = G();
+      for (const [x, z, ry, pose, holds] of men) {
+        const m = body(Object.assign({ helmet: false, rifle: 0 }, o, { pose }));
+        hat(m, o.hat, o.crest);
+        for (const k of [-1, 1]) m.merge(legs(o.legs ?? o.cloth), 0, MAN_H * 0.5, k * 0.042);
+        const R = POSES[pose].R;
+        if (holds === 'rammer') { m.cyl(0.008, 0.008, 0.72, R[0], 0.44, R[2], A.woodDk, { seg: 4 }); m.cyl(0.024, 0.024, 0.07, R[0], 0.8, R[2], 0x5a4e3e, { seg: 6 }); }
+        else if (holds === 'staff') { m.cyl(0.007, 0.007, 0.5, R[0], 0.42, R[2], A.woodDk, { seg: 4 }); m.box(0.006, 0.04, 0.03, R[0], 0.66, R[2], 0x3a3634); }
+        else if (holds === 'shell') m.cyl(0.03, 0.03, 0.13, 0.11, 0.37, 0, 0x8a7444, { axis: 'z', seg: 8 });
+        else if (holds) m.sph(holds === 'ball' ? 0.04 : 0.05, 0.11, 0.37, 0, holds === 'ball' ? 0x2a2826 : 0x9a9488, { seg: 8, rings: 6 });
+        g.merge(m, x, 0, z, ry, 1);
+      }
+      return part('crew', g, { still: true });
+    }
     // Catapult: a wheeled frame and a throwing arm that lies back on the frame, its cup and stone behind, and that
     // swings up against the crossbar to throw, then is winched down again and loaded.
     {
@@ -8065,7 +8110,8 @@ const Models = (() => {
       a.box(0.54, 0.045, 0.045, -0.21, -0.0225, 0, A.wood, { rz: 0.08 });
       a.cyl(0.07, 0.05, 0.06, -0.46, -0.03, 0, A.woodDk, { seg: 8, rz: 0.08 });
       const st = G(); st.sph(0.06, -0.46, 0.03, 0, 0x9a9488, { seg: 6, rings: 4 });
-      units.catapult = [part('hull', b), wheelPart(wh), part('arm', a, { rig: 'throw', pivot: [0, 0.3, 0], throw: 'catapult' }), part('stone', st, { rig: 'loaded' })];
+      units.catapult = [part('hull', b), wheelPart(wh), part('arm', a, { rig: 'throw', pivot: [0, 0.3, 0], throw: 'catapult' }), part('stone', st, { rig: 'loaded' }),
+        crewPart({ cloth: A.tunic, vest: A.bronze, vestT: 0.4, hat: 'crest' }, [[-0.62, 0.14, 0, 'pike'], [-0.55, -0.32, 0.4, 'hold', 'stone']])];
       units.catapult.release = [0.12, 0.76];
     }
     // Trebuchet: a tall A-frame, a long arm with its sling at the back and a box of counterweight hung at the front.
@@ -8082,7 +8128,8 @@ const Models = (() => {
       const sl = G(); sl.box(0.02, 0.36, 0.02, 0, -0.36, 0, A.rope);
       const st = G(); st.sph(0.07, 0, -0.4, 0, 0x9a9488, { seg: 6, rings: 4 });
       units.trebuchet = [part('hull', b), wheelPart(wh), part('arm', a, { rig: 'throw', pivot: [0, 1.08, 0], throw: 'trebuchet' }),
-        part('weight', cw, { rig: 'hang', at: [0.5 * cs, 0.5 * sn, 0] }), part('sling', sl, { rig: 'hang', at: [-1.0 * cs, -1.0 * sn, 0] }), part('stone', st, { rig: 'hang', at: [-1.0 * cs, -1.0 * sn, 0], loaded: true })];
+        part('weight', cw, { rig: 'hang', at: [0.5 * cs, 0.5 * sn, 0] }), part('sling', sl, { rig: 'hang', at: [-1.0 * cs, -1.0 * sn, 0] }), part('stone', st, { rig: 'hang', at: [-1.0 * cs, -1.0 * sn, 0], loaded: true }),
+        crewPart({ cloth: A.tunic2, vest: A.mail, vestT: 0.3, hat: 'kettle' }, [[-0.2, 0.52, -0.3, 'pike'], [-0.55, -0.5, 0.3, 'hold', 'stone']])];
       units.trebuchet.release = [0.4, 1.95];
     }
     // Cannon: a black barrel on a two-wheeled carriage with its trail on the ground. It runs back as it fires.
@@ -8095,7 +8142,7 @@ const Models = (() => {
       b.sph(0.08, -0.15, 0.34, 0, 0x2a2826, { seg: 8, rings: 6 });
       for (const [x, z] of [[-0.5, 0.18], [-0.56, 0.08]]) b.sph(0.05, x, 0.06, z, 0x2a2826, { seg: 6, rings: 4 });
       mark(b, 0.16, 0.16, -0.36, 0.26, 0, { rz: 0.18 });
-      units.cannonart = [part('hull', b), wheelPart(wh)];
+      units.cannonart = [part('hull', b), wheelPart(wh), crewPart({ cloth: A.coatB, vest: A.white, vestT: 0, hat: 'tricorne', legs: A.white }, [[0.3, 0.42, 0, 'spear', 'rammer'], [-0.62, 0.26, 0, 'spear', 'staff'], [-0.3, -0.42, 0, 'hold', 'ball']])];
       units.cannonart.kick = 0.16;
     }
     // Howitzer: a short heavy barrel behind a shield on two wheels, its split trail spread on the ground.
@@ -8107,7 +8154,8 @@ const Models = (() => {
       mark(b, 0.2, 0.2, -0.5, 0.2, 0, { rz: 0.12 });
       const t = G(); t.box(0.04, 0.34, 0.56, 0.16, -0.06, 0, A.field, T); t.box(0.3, 0.14, 0.2, -0.02, 0, 0, A.iron);
       const gn = G(); gn.cyl(0.05, 0.065, 0.66, 0.3, 0, 0, 0x3a3e42, { axis: 'x', seg: 10 }); gn.cyl(0.075, 0.075, 0.08, 0.64, 0, 0, 0x2a2826, { axis: 'x', seg: 10 });
-      units.howitzer = [part('hull', b), part('turret', t, { pivot: [0, 0.36, 0], aim: true }), part('gun', gn, { parent: 'turret', pivot: [0.02, 0.07, 0], tilt: 0.5, recoil: 0.08 })];
+      units.howitzer = [part('hull', b), part('turret', t, { pivot: [0, 0.36, 0], aim: true }), part('gun', gn, { parent: 'turret', pivot: [0.02, 0.07, 0], tilt: 0.5, recoil: 0.08 }),
+        crewPart({ cloth: A.khaki, vest: A.field, hat: 'brodie', legs: A.khaki }, [[-0.3, 0.42, 0, 'tool'], [-0.55, -0.4, 0, 'hold', 'shell'], [-0.75, 0.42, 0, 'none']])];
     }
     // A lorry chassis of the first motors: a cab, solid-tyred wheels and a long bed.
     function lorry(g, cab = A.field) {
@@ -14558,6 +14606,8 @@ const World = (() => {
       for (let i = 0; i < parts.length; i++) {
         const p = parts[i], d = p.def;
         if (d.id === 'hull' || d.id === 'body') { emit(p, base, color); continue; }
+        // A gun's crew stands where it is while the gun runs back under it.
+        if (d.still) { if (P.kick) { m2.makeRotationZ(-P.kick * 0.5); m3.makeTranslation(P.kick, 0, 0); m2.multiply(m3); mOut.multiplyMatrices(base, m2); emit(p, mOut, color); } else emit(p, base, color); continue; }
         if (d.rig) {
           if (d.rig === 'leg') {
             // Each hip in turn: swing at the hip, lean out by its splay, then the lower leg from the knee, which the
@@ -14682,7 +14732,13 @@ const World = (() => {
       const bob = moving ? Math.abs(Math.sin(phase)) * 0.018 * (1 - 0.5 * c) : 0;
       if (arms && P && !fallen) heldPose(arms.def.blow, P, i * 0.04, hp2); else { hp2[0] = 0; hp2[1] = 0; }
       const lean = arms && arms.def.blow === 'thrust' ? Math.max(0, -hp2[0]) * 1.1 : 0;
-      compose(m1, x, y + bob + (-0.06 * c - 0.14 * k + 0.04 * q) * US, z, yaw, -fallen * 1.5 - lean - 0.22 * c - 0.1 * k - 1.47 * q, 0, US);
+      // A man who falls crumples: his knees buckle and his hip drops till he kneels on both, and he topples forward
+      // about his knees as his shins come straight, to lie face down on the ground.
+      const fb = fallen ? smooth(0, 0.45, fallen) : 0, ft = fallen ? smooth(0.3, 1, fallen) : 0;
+      if (fallen) {
+        compose(m1, x, y + (-0.172 * fb + 0.03 * ft) * US, z, yaw, 0, 0, US);
+        m3.makeTranslation(0.01, 0.172, 0); m1.multiply(m3); m3.makeRotationZ(-1.53 * ft); m1.multiply(m3); m3.makeTranslation(-0.01, -0.172, 0); m1.multiply(m3);
+      } else compose(m1, x, y + bob + (-0.06 * c - 0.14 * k + 0.04 * q) * US, z, yaw, -lean - 0.22 * c - 0.1 * k - 1.47 * q, 0, US);
       const hK = 1 + (manVar(seed * 3.1 + i * 7.7 + 1.3) - 0.5) * 0.1, bK = 1 + (manVar(seed * 5.3 + i * 3.9 + 2.9) - 0.5) * 0.12;
       m3.makeScale(bK, hK, bK); m1.multiply(m3);
       put(body, m1, color);
@@ -14692,13 +14748,14 @@ const World = (() => {
       const sw = moving ? Math.sin(phase) * 0.62 * (1 - k - q) : 0, hipH = 0.31 - 0.14 * k - 0.06 * c;
       for (const s of [-1, 1]) {
         let tt = s * sw + 0.35 * c, ts = (moving ? -(0.12 + 0.6 * Math.max(0, Math.cos(phase) * s)) * (1 - k - q) : 0) - 0.6 * c;
+        if (fallen) { tt = -0.15 * fb * (1 - ft); ts = -Math.min(1.3 * fb, 1.53 - 1.5 * ft); }
         if (shinP && k > 0) {
           const kt = s > 0 ? 1.3 : -0.15, ks = s > 0 ? Math.acos(clamp((hipH - 0.138 * Math.cos(kt)) / 0.173, -1, 1)) - kt : -1.45 - kt;
           tt += (kt - tt) * k; ts += (ks - ts) * k;
         }
         m2.makeTranslation(0, 0.31, s * 0.042);
         m3.makeRotationZ(tt); m2.multiply(m3);
-        if (!shinP) { m3.makeScale(1, 1 - 0.18 * c - k * (s > 0 ? 0.22 : 0.51), 1); m2.multiply(m3); }
+        if (!shinP) { m3.makeScale(1, 1 - 0.18 * c - k * (s > 0 ? 0.22 : 0.51) - 0.5 * fb * (1 - ft), 1); m2.multiply(m3); }
         mOut.multiplyMatrices(m1, m2);
         put(leg, mOut, color);
         if (shinP) {
@@ -14711,7 +14768,8 @@ const World = (() => {
       if (arms) {
         const pv = arms.def.pivot;
         m2.makeTranslation(pv[0] + hp2[1], pv[1], pv[2]);
-        m3.makeRotationZ(hp2[0] + 1.47 * q); m2.multiply(m3);
+        // Lying down, prone or fallen, his arms come forward along the ground.
+        m3.makeRotationZ(hp2[0] + 1.47 * q + 1.4 * ft); m2.multiply(m3);
         m3.makeTranslation(-pv[0], -pv[1], -pv[2]); m2.multiply(m3);
         mOut.multiplyMatrices(m1, m2);
         put(arms, mOut, color);
@@ -14904,8 +14962,8 @@ const World = (() => {
         const c = corpses[i];
         c.t += dt;
         if (c.t > 9) { corpses.splice(i, 1); continue; }
-        const k = Math.min(1, c.t / 0.45), sink = c.t > 7.5 ? (c.t - 7.5) * 0.3 : 0;
-        drawMan(sets['man' + c.kind], c.x, c.y - sink, c.z, c.yaw, 0, false, c.color, k * k);
+        const k = Math.min(1, c.t / 0.8), sink = c.t > 7.5 ? (c.t - 7.5) * 0.3 : 0;
+        drawMan(sets['man' + c.kind], c.x, c.y - sink, c.z, c.yaw, 0, false, c.color, k);
       }
       for (let i = wrecks.length - 1; i >= 0; i--) {
         const w = wrecks[i];
