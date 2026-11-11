@@ -91,6 +91,11 @@ const World = (() => {
       uShowS: { value: Array.from({ length: 8 }, () => new THREE.Vector2()) },
       // Up to sixteen town parks: x, y, radius and the turn of their paths.
       uPark: { value: Array.from({ length: 16 }, () => new THREE.Vector4()) },
+      // Up to four golf courses: each course's middle and reach, its holes' tees and greens, and its bunkers and
+      // ponds, a pond's radius negative.
+      uGolfC: { value: Array.from({ length: 4 }, () => new THREE.Vector3()) },
+      uGolf: { value: Array.from({ length: 16 }, () => new THREE.Vector4()) },
+      uGolfB: { value: Array.from({ length: 24 }, () => new THREE.Vector3()) },
       // The kind of the bridges: 0 timber, 1 stone, 2 iron, 3 concrete.
       uBridgeKind: { value: 3 },
       // How far tread marks darken the ground, none where the look draws them itself.
@@ -1176,7 +1181,7 @@ const World = (() => {
         const sl = Math.hypot(terrainAt(M, x + 1, y) - terrainAt(M, x - 1, y), terrainAt(M, x, y + 1) - terrainAt(M, x, y - 1)) / 2;
         if ((M.ground[c] & 27) || M.ore[c] || z < M.water + 0.35 || sl > 0.6 || (beachMap && beachMap[c] > 30) || (BD && BD[v] < 1.2) || M.roadDist[v] < 1.2) continue;
         if (M.houses.some(h => x > h.x - 1.5 && x < h.x + h.w + 1.5 && y > h.y - 1.5 && y < h.y + h.h + 1.5)) continue;
-        if (parks.some(p => Math.hypot(p.x - x, p.y - y) < p.r + 1) || S.bases.some(b => Math.hypot(b[0] - x, b[1] - y) < 22)) continue;
+        if (parks.some(p => Math.hypot(p.x - x, p.y - y) < p.r + 1) || golf.some(q => Math.hypot(q.x - x, q.y - y) < q.r + 1) || S.bases.some(b => Math.hypot(b[0] - x, b[1] - y) < 22)) continue;
         cov[c * 4 + 1] = 255;
       }
       if (beachTex) beachTex.dispose();
@@ -1196,6 +1201,7 @@ const World = (() => {
       const age = Math.max(1, Math.min(6, worldAge()));
       if (age === fieldAge) return;
       fieldAge = age;
+      showGolf(age >= GOLF_AGE);
       const [reach, rowH, plotW, hedge0, wall0, orch0, mead0] = FIELDS[age], bare = theme.tree === 'conifer' || theme.tree === 'acacia';
       const hedge = bare ? hedge0 * 0.25 : hedge0, wall = bare ? wall0 + hedge0 * 0.75 : wall0;
       SH.uFieldK.value.set(reach * FIELD_R / FIELD_OUT, rowH, plotW, hedge);
@@ -1357,6 +1363,7 @@ const World = (() => {
       buildRoadside();
       buildPlants();
       buildParks();
+      buildGolf();
       buildFields();
 
       // Wellheads in a black stain, each bridge on its piers.
@@ -1572,13 +1579,122 @@ const World = (() => {
       fount.forEach((o, i) => { o.m = fm; o.i = i; }); bench.forEach((o, i) => { o.m = bm; o.i = i; }); tree.forEach((o, i) => { o.m = tm; o.i = i; });
       scen.plants.list.push(...fount, ...bench, ...tree);
     }
-    // A plant under a building goes while the building stands.
+    // Golf courses on a few gentle maps: one by a town near each base, where a stretch of open, rolling ground
+    // lies clear of roads, houses, parks and ore. Each has four holes laid out round a clubhouse, a tee by the house
+    // and a fairway running out to a green with its flag, bunkers by the greens and along a fairway, a pond, and
+    // trees along the holes. The ink look draws the turf; the house, flags and trees stand on it. Only the picture
+    // has them, so they change nothing in play, and the ground takes scars and craters as any open ground does.
+    // A course is laid out from the first, but shows only from the Gunpowder Age, when golf was played on links.
+    const GOLF_MAPS = new Set(['duel', 'lakes', 'oldforest', 'highlands', 'greenwood']), GOLF_AGE = 3;
+    let golf = [], golfKit = [], golfOn = null;
+    function showGolf(on) {
+      if (on === golfOn) return;
+      golfOn = on;
+      golf.forEach((q, i) => SH.uGolfC.value[i].set(q.x, q.y, on ? q.r + 1.5 : 0));
+      for (const p of golfKit) p.off = on ? 0 : 1;
+      if (scen.plants) scen.plants.seen = -1;
+    }
+    function buildGolf() {
+      golf = []; golfKit = []; golfOn = null;
+      const clear = () => { for (const v of SH.uGolfC.value) v.set(0, 0, 0); for (const v of SH.uGolf.value) v.set(0, 0, 0, 0); for (const v of SH.uGolfB.value) v.set(0, 0, 0); };
+      clear();
+      if (!GOLF_MAPS.has(M.layout || M.kind) || S.theatre === 'winter') return;
+      const rand = mulberry(M.seed + 61), sc = MODELS.scenery, th = theme, lf = th.leaf.map(c => new THREE.Color(c)), R = 6;
+      // Gentle slopes only forbid building (bit 4), which suits a course. Steep, wet, wooded or ford cells do not.
+      const open = (x, y) => {
+        const c = Rules.cellOf(x, y);
+        return x > 2 && y > 2 && x < W - 2 && y < H - 2 && !(M.ground[c] & 27) && !M.ore[c] && terrainAt(M, x, y) > M.water + 0.3 && M.roadDist[Math.round(y * RES) * VW + Math.round(x * RES)] >= 1.4;
+      };
+      // Each of the map's bases in its own order, whoever holds the seats, so every player sees the same courses,
+      // and for each its three nearest towns in turn, until one has room.
+      const near = b => M.towns.filter(t => Math.hypot(t.x - b[0], t.y - b[1]) > 18).sort((p, q) => Math.hypot(p.x - b[0], p.y - b[1]) - Math.hypot(q.x - b[0], q.y - b[1])).slice(0, 3);
+      for (const b of M.bases) {
+        if (golf.length >= 4) break;
+        const n0 = golf.length;
+        for (const t of near(b)) for (let k = 0; k < 60 && golf.length === n0; k++) {
+          const a = rand() * 6.28, d = 9 + rand() * 14, x = t.x + Math.cos(a) * d, y = t.y + Math.sin(a) * d;
+          if (x < R + 3 || y < R + 3 || x > W - R - 3 || y > H - R - 3) continue;
+          let ok = true, lo = 1e9, hi = -1e9;
+          for (let j = -R; j <= R && ok; j += 0.9) for (let i = -R; i <= R && ok; i += 0.9) {
+            if (i * i + j * j > R * R) continue;
+            if (!open(x + i, y + j)) ok = false;
+            const z = terrainAt(M, x + i, y + j); lo = Math.min(lo, z); hi = Math.max(hi, z);
+          }
+          if (!ok || hi - lo > 2.5) continue;
+          if (M.houses.some(h => Math.hypot(h.x + h.w / 2 - x, h.y + h.h / 2 - y) < R + 2)) continue;
+          if (M.bases.some(b => Math.hypot(b[0] - x, b[1] - y) < 24)) continue;
+          if (parks.some(p => Math.hypot(p.x - x, p.y - y) < p.r + R + 1) || golf.some(q => Math.hypot(q.x - x, q.y - y) < 2 * R + 4)) continue;
+          // Four holes out from the clubhouse, each a straight fairway from a tee by the house to a green near the
+          // course's edge, turned a little from the last.
+          const a0 = rand() * 6.28, holes = [], bunk = [];
+          for (let h = 0; h < 4; h++) {
+            const ta = a0 + h * Math.PI / 2, ga = ta + 0.35 + rand() * 0.3, tr = 1.9, gr = R * (0.72 + rand() * 0.1);
+            const tee = [x + Math.cos(ta) * tr, y + Math.sin(ta) * tr], gr2 = [x + Math.cos(ga) * gr, y + Math.sin(ga) * gr];
+            holes.push([tee[0], tee[1], gr2[0], gr2[1]]);
+            const ux = gr2[0] - tee[0], uy = gr2[1] - tee[1], ul = Math.hypot(ux, uy), nx = -uy / ul, ny = ux / ul, sd = rand() < 0.5 ? -1 : 1;
+            bunk.push([gr2[0] + nx * 1.15 * sd - ux / ul * 0.3, gr2[1] + ny * 1.15 * sd - uy / ul * 0.3, 0.3 + rand() * 0.1]);
+            if (h % 2 === 0) bunk.push([tee[0] + ux * 0.55 - nx * 0.95 * sd, tee[1] + uy * 0.55 - ny * 0.95 * sd, 0.28]);
+          }
+          const pa = a0 + Math.PI / 4 + Math.PI / 2 * Math.floor(rand() * 4);
+          bunk.push([x + Math.cos(pa) * R * 0.5, y + Math.sin(pa) * R * 0.5, -(0.75 + rand() * 0.3)]);
+          golf.push({ x, y, r: R, holes, bunk, town: t.id });
+        }
+      }
+      let bi = 0;
+      golf.forEach((q, i) => {
+        q.holes.forEach((h, j) => SH.uGolf.value[i * 4 + j].set(...h));
+        for (const b of q.bunk) if (bi < 24) SH.uGolfB.value[bi++].set(...b);
+      });
+      // A tree stands only in the rough, clear of every fairway, green, tee, bunker and the pond, and of the house.
+      const clearOf = (q, x, y) => Math.hypot(x - q.x, y - q.y) > 2 && q.bunk.every(b => Math.hypot(x - b[0], y - b[1]) > Math.abs(b[2]) + 0.5) && q.holes.every(h => {
+        const ux = h[2] - h[0], uy = h[3] - h[1], t = Math.max(0, Math.min(1, ((x - h[0]) * ux + (y - h[1]) * uy) / (ux * ux + uy * uy)));
+        return Math.hypot(x - h[0] - ux * t, y - h[1] - uy * t) > 1.2 && Math.hypot(x - h[2], y - h[3]) > 1.5;
+      });
+      // The clubhouse, a flag on each green, and trees along the holes. The flags keep their red, as the animals do.
+      const house = [], roofs = [], wins = [], poles = [], flags = [], tree = [];
+      for (const q of golf) {
+        const g = terrainAt(M, q.x, q.y) - 0.1, cell = Rules.cellOf(q.x, q.y);
+        // Drawn as the town houses are: plaster under a pitched roof, a window row each side and a chimney.
+        house.push({ x: q.x, y: g, z: q.y, sx: 2.0, sy: 0.82, sz: 1.2, c: 0xd8d0be, cell });
+        roofs.push({ x: q.x, y: g + 0.7, z: q.y, sx: 1.3, sy: 0.75, sz: 2.1, a: Math.PI / 2, c: 0x6e4032, cell });
+        house.push({ x: q.x + 0.55, y: g + 0.72, z: q.y + 0.2, sx: 0.24, sy: 0.7, sz: 0.24, c: 0x8a6a56, cell });
+        for (const s of [-1, 1]) for (let k = 0; k < 3; k++) wins.push({ x: q.x - 0.6 + k * 0.6, y: g + 0.38, z: q.y + s * 0.585, sx: 0.26, sy: 0.28, sz: 0.03, c: 0x2a2c30, cell });
+        for (const h of q.holes) {
+          const gx = h[2], gy = h[3], gz = terrainAt(M, gx, gy);
+          poles.push({ x: gx, y: gz, z: gy, sx: 0.25, sy: 2.4, sz: 0.25, c: 0xf2eee2, cell: Rules.cellOf(gx, gy) });
+          flags.push({ x: gx + 0.22, y: gz + 0.82, z: gy, sx: 0.42, sy: 0.26, sz: 0.03, c: 0xc8402a, cell: Rules.cellOf(gx, gy) });
+          const ux = gx - h[0], uy = gy - h[1], ul = Math.hypot(ux, uy), nx = -uy / ul, ny = ux / ul;
+          for (let k = 0; k < 4; k++) {
+            const f = 0.2 + k * 0.2, sd = k % 2 ? 1 : -1, tx = h[0] + ux * f + nx * (1.5 + rand() * 0.5) * sd, ty = h[1] + uy * f + ny * (1.5 + rand() * 0.5) * sd;
+            if (!open(tx, ty) || Math.hypot(tx - q.x, ty - q.y) > q.r || !clearOf(q, tx, ty)) continue;
+            tree.push({ x: tx, y: terrainAt(M, tx, ty) - 0.04, z: ty, s: 0.45 + rand() * 0.15, a: rand() * 6.28, c: colA.copy(lf[0]).lerp(lf[1], rand()).getHex(), cell: Rules.cellOf(tx, ty) });
+          }
+        }
+      }
+      if (!golf.length) return;
+      // The land's own shrubs and reeds give way to the turf, for good.
+      const ms = new Set();
+      for (const p of scen.plants.list) {
+        if (!golf.some(q => Math.hypot(p.x - q.x, p.z - q.y) < q.r + 1 && !clearOf(q, p.x, p.z))) continue;
+        p.off = 1; p.hid = 1; setInst(p.m, p.i, p, true); ms.add(p.m);
+      }
+      ms.forEach(dirty);
+      const hm = instanced(sc.block, plainTint, house), rm = instanced(sc.roof, plainTint, roofs), wm = instanced(sc.block, plainTint, wins, false);
+      const pm = lineCat(instanced(sc.post, plainTint, poles), 0.5), fm = lineCat(instanced(sc.block, plainTint, flags, false), 0.6);
+      const tm = tree.length ? lineCat(instanced(sc[th.tree], treeTint, tree), 0.459, true) : null;
+      house.forEach((o, i) => { o.m = hm; o.i = i; }); roofs.forEach((o, i) => { o.m = rm; o.i = i; }); wins.forEach((o, i) => { o.m = wm; o.i = i; });
+      poles.forEach((o, i) => { o.m = pm; o.i = i; }); flags.forEach((o, i) => { o.m = fm; o.i = i; }); tree.forEach((o, i) => { o.m = tm; o.i = i; });
+      scen.plants.list.push(...house, ...roofs, ...wins, ...poles, ...flags, ...tree);
+      golfKit = [...house, ...roofs, ...wins, ...poles, ...flags];
+      showGolf(worldAge() >= GOLF_AGE);
+    }
+    // A plant under a building goes while the building stands. One cleared for a golf course stays gone.
     function updatePlants() {
       const P = scen && scen.plants;
       if (!P || P.seen === S.occVer) return;
       P.seen = S.occVer;
       const ms = new Set();
-      for (const p of P.list) { const hid = S.occ[p.cell] ? 1 : 0; if (hid !== (p.hid || 0)) { p.hid = hid; setInst(p.m, p.i, p, !!hid); ms.add(p.m); } }
+      for (const p of P.list) { const hid = S.occ[p.cell] || p.off ? 1 : 0; if (hid !== (p.hid || 0)) { p.hid = hid; setInst(p.m, p.i, p, !!hid); ms.add(p.m); } }
       ms.forEach(dirty);
     }
     // The age the world is seen in: the side being shown, or the most advanced side when watching them all.

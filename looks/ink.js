@@ -19,13 +19,13 @@
       // 45 and 135 degrees, then flat and upright lines for the darkest, each line a little uneven with small gaps.
       // The ground's hatching is pinned to the map so it pans with it, the units' redraws a few times a second.
       const ink = new THREE.ShaderMaterial({ uniforms: { t: { value: null }, tSubj: { value: null }, tHeat: { value: null }, tPaper: { value: null }, res: { value: new THREE.Vector2(1, 1) }, uTime: { value: 0 }, uK: { value: 1 }, uOff: { value: new THREE.Vector2() }, uStyle: { value: 8 }, tNorm: { value: null }, tFogS: { value: null }, tLand: { value: null }, uSun2: { value: new THREE.Vector2(-1, 0) }, uUpV: { value: new THREE.Vector3(0, 1, 0) }, uRoad: { value: 0 }, uOre: { value: 0 }, uMarks: { value: 1 }, uRoadAge: { value: 4 }, uShadeH: { value: 1 }, tShade: { value: null },
-        uWindS: { value: new THREE.Vector2() }, uView: { value: new THREE.Vector2(1, 0) }, tFx: { value: null }, tAnc: { value: null }, uDark: { value: 0 }, uTone: { value: 0 }, uInks: { value: 0 }, uFxs: { value: 0 }, uFire: { value: 0 }, uUnits: { value: 0 }, tH: SH.tH, uHSize: { value: new THREE.Vector2(1, 1) }, uHScale: { value: 1 }, uSnowF: { value: 0 }, uSnowC: SH.uSnowC, uSnowLine: SH.uSnowLine, tFlow: SH.tFlow, tBrook: SH.tBrook, uFlora: SH.uFlora, uShow: SH.uShow, uShowS: SH.uShowS, tCover: SH.tCover, uFieldK: SH.uFieldK, uFieldK2: SH.uFieldK2, uPark: SH.uPark, uBridgeKind: SH.uBridgeKind, uFog: { value: 0 }, uMist: { value: 0 }, uNight: { value: 0 },
+        uWindS: { value: new THREE.Vector2() }, uView: { value: new THREE.Vector2(1, 0) }, tFx: { value: null }, tAnc: { value: null }, uDark: { value: 0 }, uTone: { value: 0 }, uInks: { value: 0 }, uFxs: { value: 0 }, uFire: { value: 0 }, uUnits: { value: 0 }, tH: SH.tH, uHSize: { value: new THREE.Vector2(1, 1) }, uHScale: { value: 1 }, uSnowF: { value: 0 }, uSnowC: SH.uSnowC, uSnowLine: SH.uSnowLine, tFlow: SH.tFlow, tBrook: SH.tBrook, uFlora: SH.uFlora, uShow: SH.uShow, uShowS: SH.uShowS, uGolfC: SH.uGolfC, uGolf: SH.uGolf, uGolfB: SH.uGolfB, tCover: SH.tCover, uFieldK: SH.uFieldK, uFieldK2: SH.uFieldK2, uPark: SH.uPark, uBridgeKind: SH.uBridgeKind, uFog: { value: 0 }, uMist: { value: 0 }, uNight: { value: 0 },
         uDayMul: { value: new THREE.Vector3(1, 1, 1) }, uDayAdd: { value: new THREE.Vector3() }, uWaterL: { value: -0.15 }, uCloudK: SH.uCloudK, tMarks: SH.tMarks, uMap: SH.uMap,
         uCloud: SH.uCloud, uCloudT: SH.uCloudT, uSunW: SH.uSunDir, uCloudA: { value: 0 }, uCloudG: { value: 0 }, uRayK: { value: 0 }, uDust: { value: new THREE.Vector4() },
         uInvVP: { value: new THREE.Matrix4() }, uW2S: { value: new THREE.Vector4(1, 0, 0, 1) }, uLev: { value: 1 }, tTerr: SH.tTerr, uBorder: SH.uBorder, uMe: { value: 0 },
         // Each side's colour as the anchor pass keeps it, its hue and how coloured it is, and its inks on either paper.
         uSideKey: { value: [...Array(8)].map(() => new THREE.Vector2()) }, uSideL: { value: [...Array(8)].map(() => new THREE.Vector3()) }, uSideD: { value: [...Array(8)].map(() => new THREE.Vector3()) }, uSideB: { value: [...Array(8)].map(() => new THREE.Vector3()) } }, vertexShader: vs, depthTest: false, depthWrite: false, fragmentShader: `
-        varying vec2 vUv; uniform sampler2D t, tSubj, tHeat, tPaper, tNorm, tFogS, tLand, tMarks; uniform float uMap; uniform vec2 res, uOff, uSun2, uWindS, uView, uHSize; uniform float uHScale, uFxs, uFire; uniform int uUnits, uInks; uniform float uDark, uTone; uniform sampler2D tH, tFx, tAnc, tFlow, tBrook, tCover, tShade; uniform vec4 uFieldK, uFieldK2; uniform vec4 uShow[8]; uniform vec2 uShowS[8]; uniform vec4 uPark[16]; uniform vec3 uUpV, uDayMul, uDayAdd; uniform float uTime, uK, uSnowF, uSnowC, uSnowLine, uFlora, uBridgeKind, uFog, uMist, uNight, uWaterL, uCloudK, uMarks, uRoadAge, uShadeH; uniform int uStyle, uRoad, uOre;
+        varying vec2 vUv; uniform sampler2D t, tSubj, tHeat, tPaper, tNorm, tFogS, tLand, tMarks; uniform float uMap; uniform vec2 res, uOff, uSun2, uWindS, uView, uHSize; uniform float uHScale, uFxs, uFire; uniform int uUnits, uInks; uniform float uDark, uTone; uniform sampler2D tH, tFx, tAnc, tFlow, tBrook, tCover, tShade; uniform vec4 uFieldK, uFieldK2; uniform vec4 uShow[8]; uniform vec2 uShowS[8]; uniform vec3 uGolfC[4]; uniform vec4 uGolf[16]; uniform vec3 uGolfB[24]; uniform vec4 uPark[16]; uniform vec3 uUpV, uDayMul, uDayAdd; uniform float uTime, uK, uSnowF, uSnowC, uSnowLine, uFlora, uBridgeKind, uFog, uMist, uNight, uWaterL, uCloudK, uMarks, uRoadAge, uShadeH; uniform int uStyle, uRoad, uOre;
         uniform vec2 uSideKey[8]; uniform vec3 uSideL[8], uSideD[8], uSideB[8];
         uniform sampler2D tTerr; uniform float uBorder, uMe;
         uniform vec2 uCloud; uniform vec3 uSunW; uniform float uCloudT, uCloudA, uCloudG, uRayK; uniform vec4 uDust;
@@ -698,6 +698,50 @@
                 pc = mix(pc, CONT, (1.0 - smoothstep(0.35 * pAA * uK, 0.9 * pAA * uK, abs(path - pw))) * 0.5);
                 base = mix(base, pc, inside * isG * (1.0 - onRoad));
                 base = mix(base, CONT, (1.0 - smoothstep(0.35 * hw * uK, 1.0 * hw * uK, abs(pr - pk.z))) * 0.55 * isG * (1.0 - onRoad));
+              }
+              // A golf course as a survey map draws one: fairways of close-mown turf a fresher green than the rough,
+              // mown in stripes from the Industrial Age on, each ruled at its edge, round greens a shade brighter
+              // still, pale tees, bunkers of stippled sand and a pond. Only near a course is any of it worked out.
+              for (int gci = 0; gci < 4; gci++) {
+                vec3 gc = uGolfC[gci];
+                if (gc.z <= 0.0) break;
+                if (length(Wl - gc.xy) > gc.z) continue;
+                pkIn = 1.0;
+                float gAA = max(fwidth(Wl.x), 1e-4) * 1.5, mown = step(3.5, uRoadAge);
+                vec3 FW = dk ? vec3(0.22, 0.32, 0.2) : vec3(0.8, 0.87, 0.73), GR = dk ? vec3(0.26, 0.38, 0.23) : vec3(0.74, 0.85, 0.66);
+                for (int j = 0; j < 4; j++) {
+                  vec4 h = uGolf[gci * 4 + j];
+                  vec2 a = h.xy, ab = h.zw - h.xy; float L = length(ab), t = clamp(dot(Wl - a, ab) / (L * L), 0.0, 1.0);
+                  float d = length(Wl - a - ab * t), hw = 0.7;
+                  float fair = 1.0 - smoothstep(hw - gAA, hw + gAA, d);
+                  float stripe = mown * step(0.5, fract(t * L / 1.1)) * 0.06;
+                  base = mix(base, FW + stripe, fair * isG * (1.0 - onRoad) * 0.5);
+                  base = mix(base, CONT, (1.0 - smoothstep(0.3 * gAA * uK, 0.9 * gAA * uK, abs(d - hw))) * 0.35 * isG * (1.0 - onRoad));
+                  float gd = length(Wl - h.zw), green = 1.0 - smoothstep(0.95 - gAA, 0.95 + gAA, gd);
+                  base = mix(base, GR, green * isG * (1.0 - onRoad) * 0.7);
+                  base = mix(base, CONT, (1.0 - smoothstep(0.3 * gAA * uK, 0.9 * gAA * uK, abs(gd - 0.95))) * 0.5 * isG * (1.0 - onRoad));
+                  float td = length(Wl - a), tee = 1.0 - smoothstep(0.32 - gAA, 0.32 + gAA, td);
+                  base = mix(base, dk ? vec3(0.36, 0.42, 0.32) : vec3(0.9, 0.92, 0.84), tee * isG * 0.6);
+                }
+                for (int gbi = 0; gbi < 24; gbi++) {
+                  vec3 bk = uGolfB[gbi];
+                  if (bk.z == 0.0) break;
+                  float bd = length(Wl - bk.xy), br = abs(bk.z), bin = 1.0 - smoothstep(br - gAA, br + gAA, bd + (noise(Wl * 3.0) - 0.5) * 0.12);
+                  if (bin <= 0.0 && bd > br + 0.3) continue;
+                  if (bk.z > 0.0) {
+                    // A bunker: pale sand stippled fine, its lip ruled.
+                    vec2 sq = Wl * 6.0 * exp2(-gLm), si = floor(sq);
+                    float dot0 = (1.0 - smoothstep(0.12, 0.2, length(fract(sq) - 0.5))) * step(0.6, hash(si + 13.0));
+                    vec3 SA = mix(base, dk ? vec3(0.46, 0.42, 0.33) : vec3(0.92, 0.87, 0.74), 0.6);
+                    base = mix(base, mix(SA, dk ? vec3(0.62, 0.58, 0.5) : vec3(0.6, 0.52, 0.38), dot0 * 0.7), bin * isG);
+                  } else {
+                    // A pond: still water in the map's own wash, ruled across in fine lines, its bank lined in blue.
+                    float wr = abs(fract(Wl.y * 2.2 * exp2(-gLm)) - 0.5) / max(fwidth(Wl.y * 2.2 * exp2(-gLm)), 1e-4);
+                    vec3 PW = dk ? vec3(0.13, 0.15, 0.2) : LILAC;
+                    base = mix(base, mix(PW, dk ? vec3(0.3, 0.36, 0.5) : LILAC_D, (1.0 - smoothstep(0.4 * uK, 1.0 * uK, wr)) * 0.35), bin * isG);
+                  }
+                  base = mix(base, bk.z > 0.0 ? CONT : (dk ? vec3(0.34, 0.4, 0.56) : LILAC_D), (1.0 - smoothstep(0.3 * gAA * uK, 0.9 * gAA * uK, abs(bd - br))) * 0.5 * isG);
+                }
               }
               // Wild flowers in patches on the gentler ground, a dot of colour each laid on the land: poppies,
               // buttercups and cornflowers on the steppe, a sparse pink bloom on the salt flats, heather in the snowy
