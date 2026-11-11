@@ -2363,7 +2363,8 @@ const Rules = (() => {
     for (const P of S.P) {
       const was = P.low;
       P.low = !S.free && P.tech >= POWER_AGE && P.use > P.prod;
-      if (P.low && !was) ownEvent(S, P.team, 'lowpower');
+      if (P.low && !was) { ownEvent(S, P.team, 'lowpower'); P.lowFor = 0; }
+      else if (!P.low && was) ownEvent(S, P.team, 'powerok');
     }
   }
 
@@ -4197,6 +4198,8 @@ const Rules = (() => {
 
   function stepEconomy(S) {
     if (S.tick % HZ === 0) {
+      // A side short of power is told again each minute it stays short.
+      for (const P of S.P) if (P.low && (P.lowFor = (P.lowFor || 0) + 1) % 60 === 0) ownEvent(S, P.team, 'lowpower');
       const z = townSizes(S.map);
       for (const t of S.towns) if (t.owner >= 0) {
         const P = S.P[t.owner], k = townShare(S, t.id), ore = TOWN_PAY * P.income * k, oil = TOWN_OIL * P.income * k;
