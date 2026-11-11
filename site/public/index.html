@@ -658,8 +658,9 @@ body[data-look="ink"] .sheet { box-shadow: 4px 4px 0 var(--ink); }
       <div class="choice"><h2>Map sheet frame</h2><div id="s-sheet" class="two"><button data-v="on">On</button><button data-v="off">Off</button></div></div>
       <div class="choice"><h2>Shadows</h2><div id="s-shade" class="two"><button data-v="hatch">Hatched</button><button data-v="wash">Wash</button></div></div>
       <div class="choice"><h2>Shadow strength</h2><div id="s-shadow"><button data-v="full">Full</button><button data-v="light">Light</button><button data-v="off">Off</button></div></div>
+      <div class="choice"><h2>Edge lines</h2><div id="s-edges" class="two"><button data-v="quick">Quick</button><button data-v="exact">Exact</button></div></div>
       <div class="choice"><h2>Music</h2><div id="s-music" class="two"><button data-v="on">On</button><button data-v="off">Off</button></div></div>
-      <p id="build">Build b8be074 2026-11-11 12:41</p>
+      <p id="build">Build b986106 2026-11-11 13:33</p>
       <p id="source"><a href="https://github.com/nmoinvaz/mapmakers-war" target="_blank" rel="noopener">Source on GitHub</a></p>
     </div>
     <div id="banner" hidden></div>
@@ -9621,7 +9622,13 @@ if (typeof module !== 'undefined') module.exports = Looks;
         float oA(vec2 uv) { return 1.0 - smoothstep(0.02, 0.035, abs(A(uv) - 0.55)); }
         // The water's surface, on its own band below the scenery.
         float wBand(vec2 uv) { float a = A(uv); return smoothstep(0.08, 0.15, a) * (1.0 - smoothstep(0.3, 0.37, a)); }
+        // The brightness averaged round a point, for the edge lines: read from the picture's alpha, where the quick
+        // pass left it, else worked out here.
+        #ifdef LUM_PASS
+        float Ls(vec2 uv, vec2 k) { return texture2D(t, uv).a; }
+        #else
         float Ls(vec2 uv, vec2 k) { return (L(uv) * 2.0 + L(uv + k * vec2(2.5, 0)) + L(uv - k * vec2(2.5, 0)) + L(uv + k * vec2(0, 2.5)) + L(uv - k * vec2(0, 2.5))) / 6.0; }
+        #endif
         // One set of parallel lines: ang in degrees, d the spacing and w the width, in px at 1080p.
         float hatch(vec2 p, float ang, float d, float w, float seed, float gaps) {
           float a = radians(ang);
@@ -10875,6 +10882,14 @@ if (typeof module !== 'undefined') module.exports = Looks;
         }` });
       const look = Looks.get('ink');
       // Each side's key as the anchor pass writes it, the hue and colourfulness of its linear colour, and its inks.
+      // Quick edge lines: the picture copied with its brightness averaged round each pixel, as Ls does it, in its
+      // alpha, once a frame. The ink pass reads the copy for the picture and the average both, since a texture of
+      // its own would pass the sixteen a pass may read.
+      const lumMat = new THREE.ShaderMaterial({ uniforms: { t: { value: null }, k: { value: new THREE.Vector2() } }, vertexShader: vs, depthTest: false, depthWrite: false, fragmentShader: `
+        varying vec2 vUv; uniform sampler2D t; uniform vec2 k;
+        float L(vec2 uv) { return dot(texture2D(t, uv).rgb, vec3(0.299, 0.587, 0.114)); }
+        void main() { gl_FragColor = vec4(texture2D(t, vUv).rgb, (L(vUv) * 2.0 + L(vUv + k * vec2(2.5, 0)) + L(vUv - k * vec2(2.5, 0)) + L(vUv + k * vec2(0, 2.5)) + L(vUv - k * vec2(0, 2.5))) / 6.0); }` });
+      let lumRT = null, lumOn = null;
       let sides = false;
       const setSides = C => {
         World.SLOT_COLORS.forEach((hex, i) => {
@@ -10920,6 +10935,15 @@ if (typeof module !== 'undefined') module.exports = Looks;
           C.uNight.value = sky.night; C.uDayMul.value.set(...sky.mul); C.uDayAdd.value.set(...sky.add);
           C.uWaterL.value = K.waterLevel; C.uWindS.value.set(sky.windS, 0);
           C.uMe.value = Math.max(0, K.viewTeam); C.uView.value.set(Math.cos(K.cam.yaw), Math.sin(K.cam.yaw)); C.uHSize.value.set(Rules.VW, Rules.VH); C.uHScale.value = Rules.RES;
+          // The quick edge lines' pass, and the ink pass compiled to read it, or to work the average out itself.
+          const quick = !!K.opts.lum;
+          if (quick !== lumOn) { lumOn = quick; ink.defines = ink.defines || {}; if (quick) ink.defines.LUM_PASS = 1; else delete ink.defines.LUM_PASS; ink.needsUpdate = true; }
+          if (quick) {
+            if (!lumRT || lumRT.width !== w || lumRT.height !== h) { if (lumRT) lumRT.dispose(); lumRT = new THREE.WebGLRenderTarget(w, h, { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, depthBuffer: false }); }
+            lumMat.uniforms.t.value = K.ldr.texture; lumMat.uniforms.k.value.set(C.uK.value / w, C.uK.value / h);
+            K.run(lumMat, lumRT);
+            C.t.value = lumRT.texture;
+          }
           K.run(ink, null);
         },
       };
@@ -11261,7 +11285,8 @@ const World = (() => {
     SH.tDetail.value = makeDetail();
 
     // shadowK is the cast shadows' strength from the settings: 1, 0.7, or 0, when the shadow map is not drawn.
-    let style = Looks.get('ink'), inkStyle = 8, roadStyle = 3, oreStyle = 5, shadeHatch = true, shadowK = 1;
+    // lumPass draws the ink's edge lines from a brightness buffer made once a frame, the quick way, on unless turned off.
+    let style = Looks.get('ink'), inkStyle = 8, roadStyle = 3, oreStyle = 5, shadeHatch = true, shadowK = 1, lumPass = true;
     // The kind of thing being drawn into the line passes, shared with the pass's material, and whether it sways.
     const catU = { value: 1 }, catRef = { mat: null, norm: null, lines: null }, swayU = { value: 0 };
     const maskMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
@@ -11537,7 +11562,7 @@ const World = (() => {
         get w() { return w; }, get h() { return h; }, get ldr() { return ldr; }, get a0() { return a0; }, get a1() { return a1; },
         get time() { return SH.uTime.value; }, get camera() { return camera; }, get cam() { return cam; }, get sky() { return sky; },
         get theme() { return theme; }, get viewTeam() { return viewTeam; }, get center() { return [CX, CY]; }, get waterLevel() { return (M ? M.water : -0.15) + waterRise.value; },
-        get opts() { return { ink: inkStyle, road: roadStyle, ore: oreStyle, hatch: shadeHatch }; },
+        get opts() { return { ink: inkStyle, road: roadStyle, ore: oreStyle, hatch: shadeHatch, lum: lumPass }; },
         // Each side's colour, as numbers.
         get sides() { return teamCol.map(c => c.getHex()); },
         // Whether roads carry modern markings, from the Industrial Age.
@@ -15283,6 +15308,7 @@ const World = (() => {
       setRoad(n) { roadStyle = n; },
       // Shadows on the land drawn as pen hatching, or as a wash.
       setShadeHatch(on) { shadeHatch = !!on; },
+      setQuickEdges(on) { lumPass = !!on; },
       setShadowK(k) { shadowK = k; SH.uShadowK.value = k; renderer.shadowMap.autoUpdate = k > 0; renderer.shadowMap.needsUpdate = k > 0; },
       setOre(n) { oreStyle = n; },
       study(o) { studySky = o; },
@@ -19995,6 +20021,11 @@ const Game = (() => {
     const showShadow = () => $('s-shadow').querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.v === shadowLvl));
     $('s-shadow').querySelectorAll('button').forEach(b => b.addEventListener('click', () => { shadowLvl = b.dataset.v; store.set('dg-shadow', shadowLvl === 'full' ? null : shadowLvl); world.setShadowK(SHADOW_K[shadowLvl]); showShadow(); audio.ui('click'); }));
     world.setShadowK(SHADOW_K[shadowLvl]); showShadow();
+    // Edge lines drawn the quick way, from a brightness buffer made once a frame, unless the exact way is chosen.
+    let quickEdges = store.get('dg-edges', 'quick') !== 'exact';
+    const showEdges = () => $('s-edges').querySelectorAll('button').forEach(b => b.classList.toggle('on', (b.dataset.v === 'quick') === quickEdges));
+    $('s-edges').querySelectorAll('button').forEach(b => b.addEventListener('click', () => { quickEdges = b.dataset.v === 'quick'; store.set('dg-edges', quickEdges ? null : 'exact'); world.setQuickEdges(quickEdges); showEdges(); audio.ui('click'); }));
+    world.setQuickEdges(quickEdges); showEdges();
     // The score on or off, apart from the sound button, which silences everything.
     const showMusic = () => $('s-music').querySelectorAll('button').forEach(b => b.classList.toggle('on', (b.dataset.v === 'on') === audio.musicOn));
     $('s-music').querySelectorAll('button').forEach(b => b.addEventListener('click', () => { audio.wake(); audio.setMusic(b.dataset.v === 'on'); showMusic(); audio.ui('click'); }));
