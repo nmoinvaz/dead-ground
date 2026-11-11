@@ -3669,6 +3669,8 @@ const Rules = (() => {
       return;
     }
     stepSalvo(S, u);
+    // When a unit's order is done, or it is only answering fire, it takes the next it was given with Shift.
+    if ((!u.ord || u.ord.ans) && u.oq && u.oq.length) nextQueued(S, u);
     if (d.move === 'jet') return jetTick(S, u);
     if (d.move === 'air') return airTick(S, u);
     // A squad that has stopped by a cover point holds it. On the move it has none.
@@ -4495,8 +4497,41 @@ const Rules = (() => {
     return null;
   }
 
+  // Orders queued with Shift. A unit busy with an order takes a queued one after it; one with nothing to do takes
+  // it at once. Any other order to units drops what was queued for them. A queued move keeps the units' spread
+  // about where they stood when it was given.
+  const QUEUE_MAX = 8, QUEUE_DROP = new Set(['move', 'attack', 'strike', 'guard', 'stop', 'capture', 'bridge', 'mend', 'harvest']);
+  function queueOrder(S, team, c) {
+    const us = unitsOf(S, team, c.ids);
+    const busy = us.filter(u => (u.ord && u.ord.t !== 'harvest' && !u.ord.ans) || (u.oq && u.oq.length)), idle = us.filter(u => !busy.includes(u));
+    let cx = 0, cy = 0;
+    for (const u of busy) { cx += u.x / busy.length; cy += u.y / busy.length; }
+    for (const u of busy) {
+      if (u.d.cargo) continue;
+      u.oq = u.oq || [];
+      if (u.oq.length >= QUEUE_MAX) continue;
+      u.oq.push(c.c === 'attack' ? { t: 'attack', id: c.id } : { t: 'move', x: clamp(c.x + (u.x - cx) * 0.5, 1, W - 1), y: clamp(c.y + (u.y - cy) * 0.5, 1, H - 1), a: !!c.a });
+    }
+    if (idle.length) apply(S, team, Object.assign({}, c, { ids: idle.map(u => u.id), queue: false }));
+  }
+  // A unit's next queued order, passing over any whose target has fallen or is no longer seen.
+  function nextQueued(S, u) {
+    while (u.oq && u.oq.length) {
+      const o = u.oq.shift();
+      if (o.t === 'move') { orderMove(S, [u], o.x, o.y, o.a); return; }
+      const t = S.byId.get(o.id);
+      if (!t || t.hp <= 0 || !seenBy(S, u.team, t) || (t.team !== u.team && shielded(S, t.team))) continue;
+      if (u.d.move === 'jet') { if (u.ammo > 0 && !groundedAt(S, u.x, u.y) && !groundedAt(S, t.x, t.y)) { u.ord = { t: 'attack', id: t.id, x: t.x, y: t.y }; return; } continue; }
+      u.ord = { t: 'attack', id: t.id }; u.tgt = t.id; u.wpT = 0; u.stuck = 0; u.home = null;
+      return;
+    }
+    u.oq = null;
+  }
+
   function apply(S, team, c) {
     const P = S.P[team];
+    if (c.queue && (c.c === 'attack' || c.c === 'move') && Array.isArray(c.ids)) return queueOrder(S, team, c);
+    if (QUEUE_DROP.has(c.c) && Array.isArray(c.ids)) for (const u of unitsOf(S, team, c.ids)) u.oq = null;
     // Any order to attack ends the giver's own shield.
     if (shielded(S, team)) {
       const tg = c.c === 'attack' ? S.byId.get(c.id) : null;
