@@ -75,7 +75,13 @@
         float oA(vec2 uv) { return 1.0 - smoothstep(0.02, 0.035, abs(A(uv) - 0.55)); }
         // The water's surface, on its own band below the scenery.
         float wBand(vec2 uv) { float a = A(uv); return smoothstep(0.08, 0.15, a) * (1.0 - smoothstep(0.3, 0.37, a)); }
+        // The brightness averaged round a point, for the edge lines: read from the picture's alpha, where the quick
+        // pass left it, else worked out here.
+        #ifdef LUM_PASS
+        float Ls(vec2 uv, vec2 k) { return texture2D(t, uv).a; }
+        #else
         float Ls(vec2 uv, vec2 k) { return (L(uv) * 2.0 + L(uv + k * vec2(2.5, 0)) + L(uv - k * vec2(2.5, 0)) + L(uv + k * vec2(0, 2.5)) + L(uv - k * vec2(0, 2.5))) / 6.0; }
+        #endif
         // One set of parallel lines: ang in degrees, d the spacing and w the width, in px at 1080p.
         float hatch(vec2 p, float ang, float d, float w, float seed, float gaps) {
           float a = radians(ang);
@@ -1329,6 +1335,14 @@
         }` });
       const look = Looks.get('ink');
       // Each side's key as the anchor pass writes it, the hue and colourfulness of its linear colour, and its inks.
+      // Quick edge lines: the picture copied with its brightness averaged round each pixel, as Ls does it, in its
+      // alpha, once a frame. The ink pass reads the copy for the picture and the average both, since a texture of
+      // its own would pass the sixteen a pass may read.
+      const lumMat = new THREE.ShaderMaterial({ uniforms: { t: { value: null }, k: { value: new THREE.Vector2() } }, vertexShader: vs, depthTest: false, depthWrite: false, fragmentShader: `
+        varying vec2 vUv; uniform sampler2D t; uniform vec2 k;
+        float L(vec2 uv) { return dot(texture2D(t, uv).rgb, vec3(0.299, 0.587, 0.114)); }
+        void main() { gl_FragColor = vec4(texture2D(t, vUv).rgb, (L(vUv) * 2.0 + L(vUv + k * vec2(2.5, 0)) + L(vUv - k * vec2(2.5, 0)) + L(vUv + k * vec2(0, 2.5)) + L(vUv - k * vec2(0, 2.5))) / 6.0); }` });
+      let lumRT = null, lumOn = null;
       let sides = false;
       const setSides = C => {
         World.SLOT_COLORS.forEach((hex, i) => {
@@ -1374,6 +1388,15 @@
           C.uNight.value = sky.night; C.uDayMul.value.set(...sky.mul); C.uDayAdd.value.set(...sky.add);
           C.uWaterL.value = K.waterLevel; C.uWindS.value.set(sky.windS, 0);
           C.uMe.value = Math.max(0, K.viewTeam); C.uView.value.set(Math.cos(K.cam.yaw), Math.sin(K.cam.yaw)); C.uHSize.value.set(Rules.VW, Rules.VH); C.uHScale.value = Rules.RES;
+          // The quick edge lines' pass, and the ink pass compiled to read it, or to work the average out itself.
+          const quick = !!K.opts.lum;
+          if (quick !== lumOn) { lumOn = quick; ink.defines = ink.defines || {}; if (quick) ink.defines.LUM_PASS = 1; else delete ink.defines.LUM_PASS; ink.needsUpdate = true; }
+          if (quick) {
+            if (!lumRT || lumRT.width !== w || lumRT.height !== h) { if (lumRT) lumRT.dispose(); lumRT = new THREE.WebGLRenderTarget(w, h, { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, depthBuffer: false }); }
+            lumMat.uniforms.t.value = K.ldr.texture; lumMat.uniforms.k.value.set(C.uK.value / w, C.uK.value / h);
+            K.run(lumMat, lumRT);
+            C.t.value = lumRT.texture;
+          }
           K.run(ink, null);
         },
       };

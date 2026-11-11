@@ -251,7 +251,8 @@ const World = (() => {
     SH.tDetail.value = makeDetail();
 
     // shadowK is the cast shadows' strength from the settings: 1, 0.7, or 0, when the shadow map is not drawn.
-    let style = Looks.get('ink'), inkStyle = 8, roadStyle = 3, oreStyle = 5, shadeHatch = true, shadowK = 1;
+    // lumPass draws the ink's edge lines from a brightness buffer made once a frame, the quick way, on unless turned off.
+    let style = Looks.get('ink'), inkStyle = 8, roadStyle = 3, oreStyle = 5, shadeHatch = true, shadowK = 1, lumPass = true;
     // The kind of thing being drawn into the line passes, shared with the pass's material, and whether it sways.
     const catU = { value: 1 }, catRef = { mat: null, norm: null, lines: null }, swayU = { value: 0 };
     const maskMat = new THREE.MeshBasicMaterial({ color: 0xffffff });
@@ -527,7 +528,7 @@ const World = (() => {
         get w() { return w; }, get h() { return h; }, get ldr() { return ldr; }, get a0() { return a0; }, get a1() { return a1; },
         get time() { return SH.uTime.value; }, get camera() { return camera; }, get cam() { return cam; }, get sky() { return sky; },
         get theme() { return theme; }, get viewTeam() { return viewTeam; }, get center() { return [CX, CY]; }, get waterLevel() { return (M ? M.water : -0.15) + waterRise.value; },
-        get opts() { return { ink: inkStyle, road: roadStyle, ore: oreStyle, hatch: shadeHatch }; },
+        get opts() { return { ink: inkStyle, road: roadStyle, ore: oreStyle, hatch: shadeHatch, lum: lumPass }; },
         // Each side's colour, as numbers.
         get sides() { return teamCol.map(c => c.getHex()); },
         // Whether roads carry modern markings, from the Industrial Age.
@@ -4273,6 +4274,7 @@ const World = (() => {
       setRoad(n) { roadStyle = n; },
       // Shadows on the land drawn as pen hatching, or as a wash.
       setShadeHatch(on) { shadeHatch = !!on; },
+      setQuickEdges(on) { lumPass = !!on; },
       setShadowK(k) { shadowK = k; SH.uShadowK.value = k; renderer.shadowMap.autoUpdate = k > 0; renderer.shadowMap.needsUpdate = k > 0; },
       setOre(n) { oreStyle = n; },
       study(o) { studySky = o; },

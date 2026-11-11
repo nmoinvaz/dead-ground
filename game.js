@@ -675,6 +675,11 @@ const Game = (() => {
     const showShadow = () => $('s-shadow').querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.v === shadowLvl));
     $('s-shadow').querySelectorAll('button').forEach(b => b.addEventListener('click', () => { shadowLvl = b.dataset.v; store.set('dg-shadow', shadowLvl === 'full' ? null : shadowLvl); world.setShadowK(SHADOW_K[shadowLvl]); showShadow(); audio.ui('click'); }));
     world.setShadowK(SHADOW_K[shadowLvl]); showShadow();
+    // Edge lines drawn the quick way, from a brightness buffer made once a frame, unless the exact way is chosen.
+    let quickEdges = store.get('dg-edges', 'quick') !== 'exact';
+    const showEdges = () => $('s-edges').querySelectorAll('button').forEach(b => b.classList.toggle('on', (b.dataset.v === 'quick') === quickEdges));
+    $('s-edges').querySelectorAll('button').forEach(b => b.addEventListener('click', () => { quickEdges = b.dataset.v === 'quick'; store.set('dg-edges', quickEdges ? null : 'exact'); world.setQuickEdges(quickEdges); showEdges(); audio.ui('click'); }));
+    world.setQuickEdges(quickEdges); showEdges();
     // The score on or off, apart from the sound button, which silences everything.
     const showMusic = () => $('s-music').querySelectorAll('button').forEach(b => b.classList.toggle('on', (b.dataset.v === 'on') === audio.musicOn));
     $('s-music').querySelectorAll('button').forEach(b => b.addEventListener('click', () => { audio.wake(); audio.setMusic(b.dataset.v === 'on'); showMusic(); audio.ui('click'); }));
