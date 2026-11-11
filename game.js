@@ -180,6 +180,9 @@ const Game = (() => {
       toggle() { a.muted = !a.muted; if (master) master.gain.value = a.muted ? 0 : 0.8; try { localStorage.setItem('dg-mute', a.muted ? '1' : ''); } catch (e) { /* no store */ } },
     };
     try { a.muted = !!localStorage.getItem('dg-mute'); a.musicOn = localStorage.getItem('dg-music') !== 'off'; } catch (e) { /* no store */ }
+    // A browser lets sound start only on a click or a key. Any first one does, so a game taken up again from its
+    // save, or rejoined, has its sound and music back without a menu button being pressed.
+    for (const ev of ['pointerdown', 'keydown']) window.addEventListener(ev, () => a.wake(), { capture: true });
     return a;
   }
 
@@ -345,6 +348,8 @@ const Game = (() => {
       G.theme = o.theme; G.speed = o.speed; $('speed').textContent = G.speed + 'x';
       G.mapKey = o.map || 'duel'; G.names = o.names || ['You', `Computer (${Rules.DIFFICULTY[o.diff || 'regular'].name})`];
       enterPlay(S, G.theme, o.team ?? 0);
+      // The sound and the music as they were left, where the browser lets sound start before a click.
+      audio.wake();
       hud.setGroups(o.groups);
       Object.assign(world.cam, o.cam);
       hud.say('Resumed where you left off.');
