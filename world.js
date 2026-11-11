@@ -70,7 +70,7 @@ const World = (() => {
     const SH = {
       tFog: { value: white }, tDetail: { value: null }, tTerr: { value: white }, tH: { value: white }, tMarks: { value: white }, uTime: { value: 0 },
       uTeam0: { value: new THREE.Color(0x3f8cff) }, uTeams: { value: SLOT_COLORS.map(c => new THREE.Color(c).offsetHSL(0, 0, 0.06)) }, uFogOn: { value: 1 }, uBorder: { value: 1 }, uMap: { value: 128 },
-      uHaze: { value: new THREE.Color(0xf29a5e) }, uHazeK: { value: 0.012 }, uHazeFrom: { value: 80 }, uShroud: { value: new THREE.Color(0x120907) }, uSunDir: { value: new THREE.Vector3(1, 0.3, 0) },
+      uHaze: { value: new THREE.Color(0xf29a5e) }, uHazeK: { value: 0.012 }, uHazeFrom: { value: 80 }, uShroud: { value: new THREE.Color(0x120907) }, uSunDir: { value: new THREE.Vector3(1, 0.3, 0) }, uCastK: { value: 1 },
       // The wind on the ground, how far it has carried the clouds, how overcast it is, and lying snow.
       uWind: { value: new THREE.Vector2(0.3, 0.1) }, uCloud: { value: new THREE.Vector2() }, uCloudK: { value: 0.2 }, uCloudT: { value: 0.3 }, uSnowC: { value: 0 },
       // The height above which snow lies on the heights in any weather.
@@ -3828,11 +3828,17 @@ const World = (() => {
     }
 
     // The sun's shadow camera over the view, snapped to its texels so the shadows hold still as the view pans.
+    const SHADOW_EL = Math.atan(0.5);
     function aimSun() {
       const c = cam, half = c.dist * 0.72;
       sun.target.position.set(c.x + Math.cos(c.yaw) * half * 0.15, 1, c.y + Math.sin(c.yaw) * half * 0.15);
       const dir = new THREE.Vector3(...sky.sun).normalize();
       SH.uSunDir.value.copy(dir);
+      // Cast shadows fall from a sun no lower than SHADOW_EL, so a low sun's reach at most twice a caster's height,
+      // and fade as it sinks. The land keeps the true sun's shading.
+      const el = Math.asin(clamp(dir.y, -1, 1)), hz = Math.hypot(dir.x, dir.z) || 1;
+      SH.uCastK.value = smooth(0.1, 0.28, el);
+      if (el < SHADOW_EL) dir.set(dir.x / hz * Math.cos(SHADOW_EL), Math.sin(SHADOW_EL), dir.z / hz * Math.cos(SHADOW_EL));
       const texel = half * 2 / sun.shadow.mapSize.x;
       sun.target.position.x = Math.round(sun.target.position.x / texel) * texel;
       sun.target.position.z = Math.round(sun.target.position.z / texel) * texel;
