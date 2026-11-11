@@ -2284,6 +2284,29 @@ const Hud = (() => {
       oreTip.style.left = (px + 12) + 'px'; oreTip.style.top = (py + 14) + 'px';
       oreTip.hidden = false;
     }
+    // A town under the pointer, once seen: its name, who holds it, its houses, and what it pays a minute, or would
+    // pay the player, by its size and what of it still stands. Shown in the ore's note, built of text nodes only, as
+    // a side's name is a player's own and is never read as markup.
+    function townTipAt(px, py) {
+      const s = S(), g = world.pick(px, py), me = team();
+      if (!g || !s.P[me]) return false;
+      let t = null, td = 10;
+      for (const q of s.towns) { const d = Math.hypot(g.x - q.x, g.y - q.y); if (d < td) { td = d; t = q; } }
+      if (!t || !s.P[me].seen[Rules.cellOf(t.x, t.y)]) return false;
+      const pay = Rules.townPay(s, t.id, me), ore = Math.round(pay.ore * 60), oil = Math.round(pay.oil * 60), ruins = pay.houses - pay.standing;
+      const key = `town${t.id}:${t.owner}:${ore}:${oil}:${ruins}`;
+      if (key !== tipKey) {
+        tipKey = key;
+        const holder = t.owner < 0 ? 'held by no one' : t.owner === me ? 'yours' : `held by ${String((game.names && game.names[t.owner]) || `Side ${t.owner + 1}`)}`;
+        const size = pay.houses ? `a ${pay.kind} of ${pay.houses} house${pay.houses === 1 ? '' : 's'}${ruins ? `, ${ruins} in ruins` : ''}` : 'no houses';
+        const bold = text => { const b = document.createElement('b'); b.textContent = text; return b; };
+        const dot = ' · ';
+        oreTip.replaceChildren(bold(Rules.townName(s, t.id)), dot + holder + dot + size + dot + (t.owner === me ? 'pays ' : 'would pay you '), bold(`$${ore}`), ' and ', bold(`${oil} oil`), ' a minute');
+      }
+      oreTip.style.left = (px + 12) + 'px'; oreTip.style.top = (py + 14) + 'px';
+      oreTip.hidden = false;
+      return true;
+    }
 
     return {
       state, pickTab, say, symbol, enter, leave, select, layoutMini, pop, strike,
@@ -2298,7 +2321,7 @@ const Hud = (() => {
         if (game.playing) { scroll(dt); updateCams(); updateReadouts(); drawMini(dt); }
         const hover = game.playing && state.mouse.in && !state.drag ? entAt(state.mouse.x, state.mouse.y) : null;
         state.hover = hover;
-        if (game.playing && state.mouse.in && !state.drag && !hover && !state.mode) oreTipAt(state.mouse.x, state.mouse.y);
+        if (game.playing && state.mouse.in && !state.drag && !hover && !state.mode) { if (!townTipAt(state.mouse.x, state.mouse.y)) oreTipAt(state.mouse.x, state.mouse.y); }
         else if (!oreTip.hidden) { oreTip.hidden = true; tipKey = ''; }
         if (game.playing) {
           const m = state.mode, en = hover && hover.team !== team(), mine = state.sel.some(e => !e.b && e.team === team());
