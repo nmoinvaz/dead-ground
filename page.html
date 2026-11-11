@@ -88,6 +88,9 @@ body[data-look="ink"][data-scheme="dark"] #end, body[data-look="ink"][data-schem
 #pwrbar { position: absolute; left: 0; top: 0; bottom: 0; width: 0; background: var(--good); transition: width .3s; }
 #pwrbar.tight { background: var(--warn); }
 #pwrbar.low { background: var(--red); animation: blink .6s steps(2) infinite; }
+/* Short of power: a mark beside the gauge, and the power plant's card wanted. */
+#pwrwarn { align-self: center; margin-left: 6px; padding: 0 5px; font: 700 10px/1.6 var(--ui); letter-spacing: .08em; text-transform: uppercase; color: #fff; background: var(--red); white-space: nowrap; animation: blink 1.2s steps(2) infinite; }
+.cam.wanted { box-shadow: inset 0 0 0 2px var(--red); animation: pulse 1s ease-in-out infinite; }
 @keyframes blink { 50% { opacity: .35; } }
 .spacer { flex: 1; }
 .tools { display: flex; gap: 4px; pointer-events: auto; }
@@ -386,7 +389,7 @@ body[data-look="ink"] #net { background: var(--paper-hi); border: 2px solid var(
   .help { display: none; }
 }
 @media (prefers-reduced-motion: reduce) {
-  .cam.ready, #pwrbar.low, .tab.lit i, #agecard.show, .cam.fresh { animation: none; }
+  .cam.ready, #pwrbar.low, .tab.lit i, #agecard.show, .cam.fresh, #pwrwarn, .cam.wanted { animation: none; }
 }
 
 /* Pen and ink: the panels are cream paper ruled in black ink, labels in a draughtsman's plain lettering, figures typed,
@@ -405,6 +408,8 @@ body[data-look="ink"] #pwrtrack { background: var(--paper-hi); border-color: var
 body[data-look="ink"] #pwrbar { background: repeating-linear-gradient(135deg, var(--good) 0 2px, transparent 2px 4px); }
 body[data-look="ink"] #pwrbar.tight { background: repeating-linear-gradient(135deg, var(--warn) 0 2px, transparent 2px 4px); }
 body[data-look="ink"] #pwrbar.low { background: repeating-linear-gradient(135deg, var(--redink) 0 2px, transparent 2px 4px); }
+body[data-look="ink"] #pwrwarn { color: var(--paper-hi); background: var(--redink); }
+body[data-look="ink"] .cam.wanted { box-shadow: inset 0 0 0 2px var(--redink); }
 body[data-look="ink"] .tools button:hover, body[data-look="ink"] #sel .acts button:hover { color: var(--redink); }
 body[data-look="ink"] .tools button.off { color: #9a8f80; }
 body[data-look="ink"] #objective { background: rgba(250,244,228,.94); border-left: 4px solid var(--redink); color: var(--ink); box-shadow: 2px 2px 0 rgba(31,26,22,.4); }
@@ -616,7 +621,7 @@ body[data-look="ink"] .sheet { box-shadow: 4px 4px 0 var(--ink); }
     <div id="top">
       <div class="gauge"><label>Ore</label><span class="led" id="sup">0</span></div>
       <div class="gauge"><label>Oil</label><span class="led" id="oil">0</span></div>
-      <div class="gauge grow"><label>Pwr</label><div id="pwrtrack"><i id="pwrbar"></i></div><span class="led small" id="pwr">0/0</span></div>
+      <div class="gauge grow"><label>Pwr</label><div id="pwrtrack"><i id="pwrbar"></i></div><span class="led small" id="pwr">0/0</span></div><span id="pwrwarn" hidden>Low power</span>
       <div class="spacer"></div>
       <div class="tools">
         <button id="b-speed" title="Game speed"><span id="speed">1x</span></button>

@@ -317,7 +317,7 @@ const Hud = (() => {
           off = !si; if (si) { prog = si.charge / si.d.charge; ready = prog >= 1; if (ready) prog = 0; label = ready ? 'FIRE' : si ? Math.ceil(si.d.charge - si.charge) + 's' : ''; }
         } else if (POWERS[k]) {
           const cd = p.cooldown[k], d = POWERS[k];
-          off = (!d.free && !p.counts.radar) || p.tech < d.tech;
+          off = (!d.free && (!p.counts.radar || p.low)) || p.tech < d.tech;
           if (cd > 0) { prog = 1 - cd / d.cd; label = Math.ceil(cd) + 's'; }
         } else {
           off = !!Rules.blockedReason(s, t, k);
@@ -330,6 +330,13 @@ const Hud = (() => {
           else if (head && BUILDINGS[k]) off = true;
           if (count) off = false;
         }
+        // While power is short: work under way says it goes at half speed, the silo's and the data center's cards
+        // that they have none, and the power plant's card is marked as the thing to build.
+        if (p.low) {
+          if ((k === 'launch' && p.counts.silo) || (k === 'datacenter' && p.counts.datacenter)) label = 'NO POWER';
+          else if (prog > 0 && !ready && !label && !POWERS[k] && k !== 'launch') label = '½ SPEED';
+        }
+        b.classList.toggle('wanted', !!p.low && k === 'power');
         b.classList.toggle('off', off);
         b.classList.toggle('ready', ready);
         b.style.setProperty('--p', (prog * 360).toFixed(1) + 'deg');
@@ -389,8 +396,10 @@ const Hud = (() => {
         }
         x = bx; y = by;
       }
-      const pc = Rules.placeCheck(S(), team(), m.kind, x, y);
-      world.setGhost({ kind: m.kind, x, y, ok: pc.ok, why: pc.why, cells: pc.cells });
+      const pc = Rules.placeCheck(S(), team(), m.kind, x, y), pl = P();
+      // A building that draws power, placed now, would leave the side short: said before it is placed.
+      const after = pl.prod - pl.use + Math.min(0, d.power || 0), short = !S().free && pl.tech >= Rules.POWER_AGE && d.power < 0 && after < 0;
+      world.setGhost({ kind: m.kind, x, y, ok: pc.ok, why: pc.why, cells: pc.cells, power: short ? `Power will run short: ${pl.use - (d.power || 0)}/${pl.prod}` : '' });
       state.ghost = { x, y };
     }
 
@@ -2049,6 +2058,23 @@ const Hud = (() => {
       }
       $('pwr').parentElement.classList.toggle('off', p.tech < Rules.POWER_AGE);
       if (p.tech < Rules.POWER_AGE) $('pwr').textContent = '—';
+      // Short of power: a mark beside the gauge gives the shortfall, and both say what it costs now, naming only
+      // what this side has.
+      const gauge = $('pwr').parentElement, warn = $('pwrwarn');
+      if (p.low) {
+        warn.textContent = `Low power −${p.use - p.prod}`;
+        const costs = ['Training and building at half speed', 'Upgrades and research at half speed'];
+        if (p.counts.silo) costs.push('Missile silo not charging');
+        if (p.counts.datacenter) costs.push('AI Data Center off');
+        const calls = Object.values(POWERS).filter(d => !d.free && d.tech <= p.tech).map(d => (d.names && d.names[p.tech]) || d.name);
+        if (p.counts.radar && calls.length) costs.push(`Calls unavailable: ${calls.join(', ')}`);
+        const note = `Low power: ${p.use - p.prod} short. Build a power plant.\n` + costs.join('\n');
+        if (gauge.title !== note) { gauge.title = note; warn.title = note; }
+        warn.hidden = false;
+      } else {
+        if (gauge.title) { gauge.title = 'Power used of power made'; warn.title = ''; }
+        warn.hidden = true;
+      }
       const towns = s.towns.filter(t => t.owner === team()).length;
       $('towns').textContent = `${towns}/${s.towns.length}`;
       updateSelPanel();
@@ -2340,9 +2366,10 @@ const Hud = (() => {
         state.hover = hover;
         const gh = world.ghostState;
         if (game.playing && state.mouse.in && !state.drag && !hover && !state.mode) { if (!townTipAt(state.mouse.x, state.mouse.y)) oreTipAt(state.mouse.x, state.mouse.y); }
-        else if (game.playing && state.mouse.in && state.mode && state.mode.type === 'place' && gh && !gh.ok) {
-          // Why the building being placed cannot stand where it is.
-          if (tipKey !== 'why:' + gh.why) { tipKey = 'why:' + gh.why; oreTip.textContent = gh.why; }
+        else if (game.playing && state.mouse.in && state.mode && state.mode.type === 'place' && gh && (!gh.ok || gh.power)) {
+          // Why the building being placed cannot stand where it is, and whether it would leave power short.
+          const text = [gh.ok ? '' : gh.why, gh.power].filter(Boolean).join(' \u00b7 ');
+          if (tipKey !== 'why:' + text) { tipKey = 'why:' + text; oreTip.textContent = text; }
           oreTip.style.left = (state.mouse.x + 12) + 'px'; oreTip.style.top = (state.mouse.y + 14) + 'px'; oreTip.hidden = false;
         } else if (!oreTip.hidden) { oreTip.hidden = true; tipKey = ''; }
         if (game.playing) {

@@ -2,8 +2,9 @@
 // the world on a fixed clock while the picture eases between steps.
 const Game = (() => {
   const $ = id => document.getElementById(id);
+  // Each call: what is written in the log, its tone, and what is spoken when that differs, as a recorded line.
   const VOICE = {
-    buildready: ['Construction complete', ''], unitready: ['Unit ready', ''], lowpower: ['Low power', 'bad'], baseattack: ['Our base is under attack', 'bad'],
+    buildready: ['Construction complete', ''], unitready: ['Unit ready', ''], lowpower: ['Low power, build a power plant', 'bad', 'Low power'], powerok: ['Power restored', 'good'], baseattack: ['Our base is under attack', 'bad'],
     truckattack: ['Ore truck under attack', 'bad'], nosupply: ['Insufficient supply', 'bad'], nooil: ['Insufficient oil', 'bad'], newtech: ['New technology available', ''],
     towntaken: ['Town captured', 'good'], townlost: ['Town lost', 'bad'], captured: ['Building captured', 'good'], lostbuilding: ['Building lost', 'bad'],
     siloready: ['Missile ready', 'good'], missile: ['Warning, missile launch detected', 'bad'], upgraded: ['Upgrade complete', 'good'],
@@ -448,7 +449,7 @@ const Game = (() => {
           case 'say':
             // A new age has its own card, so its call names the age and leaves no line in the log.
             if (G.playing && e.team === G.team && e.line === 'newtech') audio.voice(e.line, `The ${Rules.AGES[S.P[e.team].tech].name} Age`, oldAge());
-            else if (G.playing && e.team === G.team) { const v = (oldAge() && VOICE_OLD[e.line]) || VOICE[e.line]; if (v) { hud.say(v[0] + '.', v[1]); audio.voice(e.line, v[0], oldAge()); } }
+            else if (G.playing && e.team === G.team) { const v = (oldAge() && VOICE_OLD[e.line]) || VOICE[e.line]; if (v) { hud.say(v[0] + '.', v[1]); audio.voice(e.line, v[2] || v[0], oldAge()); } }
             break;
           case 'alert': if (G.playing && e.team === G.team) hud.alert(e.x, e.y); break;
           // A finished tier names itself and what the side now has, and the call says only that it is done.
