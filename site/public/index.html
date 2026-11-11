@@ -200,6 +200,10 @@ body[data-look="ink"][data-scheme="dark"] #end, body[data-look="ink"][data-schem
 .cam .ct { position: absolute; left: 4px; bottom: 2px; font: normal 11px/1 var(--mono); color: var(--amber); text-shadow: 0 1px 2px #000; }
 .cam .key { position: absolute; top: 2px; left: 3px; font: 10px var(--mono); color: var(--dim); text-decoration: none; }
 .cam .qty { position: absolute; top: 2px; right: 4px; font: 15px var(--mono); color: var(--amber); text-decoration: none; text-shadow: 0 1px 2px #000; }
+/* Several of a kind in hand at once: a thin bar for each along the card's foot. */
+.cam .lanes { position: absolute; left: 3px; right: 3px; bottom: 2px; display: flex; flex-direction: column; gap: 1px; pointer-events: none; }
+.cam .lanes i { display: block; height: 2px; background: var(--amber); box-shadow: 0 0 2px #000; }
+#tip .at { font-style: italic; }
 .cam .state { position: absolute; left: 0; right: 0; top: 34%; text-align: center; font: 700 14px var(--ui); letter-spacing: .1em; color: #fff; text-shadow: 0 1px 3px #000; }
 .cam.busy::after { content: ""; position: absolute; inset: 0; background: conic-gradient(rgba(0,0,0,0) var(--p), rgba(0,0,0,.66) var(--p)); pointer-events: none; }
 .cam.off { filter: grayscale(.9) brightness(.46); }
@@ -453,6 +457,7 @@ body[data-look="ink"] .cam:hover { box-shadow: inset 0 0 0 1.5px var(--redink); 
 body[data-look="ink"] .cam .nm { color: var(--ink); text-shadow: 0 0 3px var(--paper-hi), 0 0 2px var(--paper-hi), 0 0 1px var(--paper-hi); font-family: var(--display); font-weight: 400; font-size: 14px; }
 body[data-look="ink"] .cam .ct, body[data-look="ink"] .cam .qty { color: var(--redink); text-shadow: 0 0 2px var(--paper-hi), 0 0 2px var(--paper-hi); }
 body[data-look="ink"] .cam .key { color: var(--ink-dim); }
+body[data-look="ink"] .cam .lanes i { background: var(--redink); box-shadow: 0 0 0 1px var(--paper-hi); }
 body[data-look="ink"] .cam .state { color: var(--ink); text-shadow: 0 0 3px var(--paper-hi), 0 0 3px var(--paper-hi); }
 body[data-look="ink"] .cam.busy::after { background: conic-gradient(rgba(0,0,0,0) var(--p), rgba(242,232,210,.72) var(--p)); }
 /* A card that cannot be had is hatched across in ink, its picture and name still readable under it. */
@@ -649,7 +654,7 @@ body[data-look="ink"] .sheet { box-shadow: 4px 4px 0 var(--ink); }
       <div class="choice"><h2>Map sheet frame</h2><div id="s-sheet" class="two"><button data-v="on">On</button><button data-v="off">Off</button></div></div>
       <div class="choice"><h2>Shadows</h2><div id="s-shade" class="two"><button data-v="hatch">Hatched</button><button data-v="wash">Wash</button></div></div>
       <div class="choice"><h2>Music</h2><div id="s-music" class="two"><button data-v="on">On</button><button data-v="off">Off</button></div></div>
-      <p id="build">Build f1ceee8 2026-11-10 23:03</p>
+      <p id="build">Build 23165bf 2026-11-10 23:11</p>
     </div>
     <div id="banner" hidden></div>
     <button id="update" hidden>A new version of Mapmaker’s War is out. <b>Reload</b></button>
@@ -5682,7 +5687,7 @@ const Rules = (() => {
     HZ, DT, RES, UNITS, BUILDINGS, WEAPONS, TECH, POWERS, DIFFICULTY, LAYOUT, SIZES, MAPS, spread, use,
     AGES, MAX_AGE, POWER_AGE, LINES, LINE_ORDER, formOf, lineCount, nameOf, armOf,
     get W() { return W; }, get H() { return H; }, get VW() { return VW; }, get VH() { return VH; },
-    ORE_KINDS, fishWater, dustWall, dustAt, groundedAt, dataOn, satUp, satPass, newGame, step, push, spawn, addBuilding, scoreOf, worth, SERIES, pickFrom, fits, spotFor, roomy, blockedReason, near, rehash, seenBy, terrainAt, heightAt, waterLevel, townPay, townShare, placeCheck, los, isAir, armed, cellOf, summary, exitOf,
+    ORE_KINDS, fishWater, dustWall, dustAt, groundedAt, dataOn, satUp, satPass, newGame, step, push, spawn, addBuilding, scoreOf, worth, SERIES, pickFrom, fits, spotFor, roomy, blockedReason, near, rehash, seenBy, terrainAt, heightAt, waterLevel, townPay, townShare, placeCheck, trainersOf, TRAINER_OF, los, isAir, armed, cellOf, summary, exitOf,
     mulberry, noiser, clamp, lerp, smooth, angleTo, toXY, toUV, gap, setSize, save, load, hashOf, restartSlot, razeSlot, makeMap, mapFor, layoutFor,
     msin, mcos, matan2, mhypot,
     BRIDGE_HP, SPELL, SKIES, WEATHERS, nightAt, skyOf, offGoing, route, weatherAt, sky, dayAt, spellOf, bridgeAt, clsOf, houseHp, hurtBridge, ignite, shielded,
@@ -15024,7 +15029,7 @@ const Hud = (() => {
     const mini = $('map'), mg = mini.getContext('2d');
     const state = {
       tab: 'bld', sel: [], groups: {}, mode: null, drag: null, hover: null, hoverTown: -1, alerts: [], marks: [], lastAlert: null, attackMove: false, tipKind: null, seenTabs: {},
-      keys: new Set(), mouse: { x: 0, y: 0, in: false }, touches: new Map(), pinch: null, lastTap: 0, cams: {}, cameos: {}, hintShown: 0, side: 0, touchUsed: false, ping: 0,
+      keys: new Set(), mouse: { x: 0, y: 0, in: false }, touches: new Map(), pinch: null, lastTap: 0, cams: {}, camAt: {}, cameos: {}, hintShown: 0, side: 0, touchUsed: false, ping: 0,
     };
     const S = () => game.S, team = () => Math.max(0, game.team), P = () => game.S.P[team()];
 
@@ -15176,6 +15181,7 @@ const Hud = (() => {
         const b = state.cams[k], st = b.querySelector('.state'), qty = b.querySelector('.qty'), ct = b.querySelector('.ct');
         const info = camInfo(k);
         let off = false, ready = false, prog = 0, label = '', count = 0;
+        const inHand = [];
         if (k === 'tech') {
           const q = p.q.tech[0];
           off = !TECH[p.tech + 1];
@@ -15192,6 +15198,13 @@ const Hud = (() => {
           off = !!Rules.blockedReason(s, t, k);
           const q = queueOf(k);
           for (const it of q) if (sameLine(it.kind, k)) count++;
+          // The units of this line in hand at once: the rules give each building that trains them the next item in
+          // the queue not held, its chosen building first.
+          if (UNITS[k]) {
+            const halls = Rules.trainersOf(s, t, Rules.TRAINER_OF[UNITS[k].cat]);
+            let slot = 0;
+            for (const it of q) { if (slot >= halls.length) break; if (it.hold) continue; const by = halls[slot++]; if (sameLine(it.kind, k)) inHand.push([it.prog, by]); }
+          }
           // Units are trained at several buildings at once, so a unit's card shows the one of its kind furthest on.
           let head = q[0];
           if (UNITS[k]) for (const it of q) if (sameLine(it.kind, k) && (!sameLine(head.kind, k) || it.prog > head.prog)) head = it;
@@ -15211,9 +15224,21 @@ const Hud = (() => {
         b.style.setProperty('--p', (prog * 360).toFixed(1) + 'deg');
         b.classList.toggle('busy', prog > 0);
         if (st.textContent !== label) st.textContent = label;
-        // A line set to repeat is marked with a looping arrow beside its count.
-        const show = (count > 1 && UNITS[k] ? count : '') + (UNITS[k] && repeating(k) ? ' ↻' : '');
+        // A line set to repeat is marked with a looping arrow beside its count. Several in hand at once read as ×n,
+        // with those still waiting after, a thin bar for each along the card's foot, and the buildings at work named
+        // in its note.
+        const many = inHand.length > 1;
+        const show = (many ? `×${inHand.length}` + (count > inHand.length ? ` +${count - inHand.length}` : '') : count > 1 && UNITS[k] ? count : '') + (UNITS[k] && repeating(k) ? ' ↻' : '');
         if (qty.textContent !== String(show)) qty.textContent = show;
+        let ln = b.querySelector('.lanes');
+        if (many || ln) {
+          if (!ln) { ln = document.createElement('span'); ln.className = 'lanes'; b.append(ln); }
+          const n = many ? inHand.length : 0;
+          while (ln.children.length < n) ln.append(document.createElement('i'));
+          while (ln.children.length > n) ln.lastChild.remove();
+          inHand.slice(0, n).forEach(([pg], i) => { const w = (pg * 100).toFixed(1) + '%'; if (ln.children[i].style.width !== w) ln.children[i].style.width = w; });
+        }
+        state.camAt[k] = many ? 'In training at ' + inHand.map(([, by]) => Rules.nameOf(by.kind, p.tech) + (by.primary ? ' (chosen)' : '')).join(', ') : '';
         const price = info.cost ? '$' + info.cost + (info.oil ? ' · ' + info.oil + ' oil' : '') : '';
         if (ct.textContent !== price) ct.textContent = price;
       }
@@ -15228,7 +15253,8 @@ const Hud = (() => {
       const tip = $('tip'), k = state.tipKind;
       if (!k) { if (tip.dataset.k) { tip.dataset.k = ''; tip.innerHTML = '<p class="idle">Hover a picture for what it does.</p>'; } return; }
       const info = camInfo(k), why = UNITS[k] || BUILDINGS[k] ? Rules.blockedReason(S(), team(), k) : null;
-      const html = `<h3>${info.name}</h3><p class="price">${info.cost ? '$' + info.cost : ''}${info.oil ? ' &middot; ' + info.oil + ' oil' : ''}${info.power ? ' &middot; ' + (info.power > 0 ? '+' : '') + info.power + ' power' : ''}</p><p>${info.note || ''}</p>${why ? `<p class="why">${why}</p>` : ''}`;
+      const at = state.camAt[k];
+      const html = `<h3>${info.name}</h3><p class="price">${info.cost ? '$' + info.cost : ''}${info.oil ? ' &middot; ' + info.oil + ' oil' : ''}${info.power ? ' &middot; ' + (info.power > 0 ? '+' : '') + info.power + ' power' : ''}</p><p>${info.note || ''}</p>${at ? `<p class="at">${at}</p>` : ''}${why ? `<p class="why">${why}</p>` : ''}`;
       if (tip.innerHTML !== html) tip.innerHTML = html;
       tip.dataset.k = k;
     }
