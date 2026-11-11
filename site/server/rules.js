@@ -390,6 +390,35 @@ const Rules = (() => {
   // A bridge stands this much damage. A house stands less, more for each floor.
   const BRIDGE_HP = 1500;
   const houseHp = h => 260 + 220 * h.floors;
+  // A held town pays its side ore and oil each second by its size: the floor of its houses still standing, a
+  // damaged house by what is left of it, against the map's mean town when whole. A share of TOWN_FLOOR is paid
+  // whatever the size, so a hamlet pays about half the mean and the largest towns about half as much again, while
+  // a map's towns together pay what they always have. A held town mends: its damaged houses over HOUSE_MEND
+  // seconds, and a ruin is rebuilt after HOUSE_REBUILD seconds held.
+  const TOWN_PAY = 5, TOWN_OIL = 0.25, TOWN_FLOOR = 0.35, HOUSE_MEND = 120, HOUSE_REBUILD = 150;
+  const houseFloor = h => h.w * h.h * h.floors;
+  function townSizes(M) {
+    if (M._tsz) return M._tsz;
+    const list = M.towns.map(() => []);
+    M.houses.forEach((h, i) => { if (list[h.town]) list[h.town].push(i); });
+    const full = list.map(l => l.reduce((a, i) => a + houseFloor(M.houses[i]), 0));
+    return (M._tsz = { list, full, mean: full.reduce((a, b) => a + b, 0) / Math.max(1, full.length) });
+  }
+  // A town's share of the mean town's pay, as it stands now.
+  function townShare(S, ti) {
+    const z = townSizes(S.map);
+    if (!z.mean) return 1;
+    let now = 0;
+    for (const i of z.list[ti]) { const h = S.map.houses[i]; now += houseFloor(h) * clamp(S.hh[i] / houseHp(h), 0, 1); }
+    return TOWN_FLOOR + (1 - TOWN_FLOOR) * now / z.mean;
+  }
+  // What a town pays a side a second, its houses standing and in all, and what it is by its size when whole: a
+  // hamlet, a village or a town.
+  function townPay(S, ti, team) {
+    const z = townSizes(S.map), k = townShare(S, ti), inc = team >= 0 && S.P[team] ? S.P[team].income : 1;
+    const whole = z.mean ? TOWN_FLOOR + (1 - TOWN_FLOOR) * z.full[ti] / z.mean : 1;
+    return { ore: TOWN_PAY * inc * k, oil: TOWN_OIL * inc * k, share: k, houses: z.list[ti].length, standing: z.list[ti].filter(i => S.hh[i] > 0).length, kind: whole < 0.75 ? 'hamlet' : whole < 1.25 ? 'village' : 'town' };
+  }
 
   const DIFFICULTY = {
     // ageEvery is the minutes between reaching for each next age, up to maxAge, and rich, if set, the supply over an
@@ -1965,7 +1994,7 @@ const Rules = (() => {
       // The ground as it now is, which woods, bridges and fords change, and what has happened to the trees,
       // bridges and houses.
       gnd: new Uint8Array(M.ground), gndVer: 0, wood: new Uint8Array(N), woodVer: 0, burn: [], crush: [],
-      bridges: M.bridges.map(() => ({ hp: BRIDGE_HP, fix: 0, c4: 0 })), hh: M.houses.map(houseHp), flooded: false,
+      bridges: M.bridges.map(() => ({ hp: BRIDGE_HP, fix: 0, c4: 0 })), hh: M.houses.map(houseHp), hr: M.houses.map(() => 0), flooded: false,
       trail: new Uint8Array(N), trailSum: 0,
     };
     S.rand = rngOf(S);
@@ -2130,7 +2159,7 @@ const Rules = (() => {
       ore: b64.en(new Uint8Array(S.ore.buffer.slice(0))),
       P: S.P.map(P => { const o = plain(P); o.vis = bits(P.vis); o.seen = bits(P.seen); o.q = {}; for (const c in P.q) o.q[c] = P.q[c].map(it => { const j = Object.assign({}, it); delete j.cost; return j; }); return o; }),
       // The ground and the trees as pairs of cell and value, only where they differ from the map's start.
-      gnd: diffs(S.gnd, S.map.ground), wood: diffs(S.wood, null), gndVer: S.gndVer, woodVer: S.woodVer, burn: S.burn, bridges: S.bridges, hh: S.hh, flooded: S.flooded,
+      gnd: diffs(S.gnd, S.map.ground), wood: diffs(S.wood, null), gndVer: S.gndVer, woodVer: S.woodVer, burn: S.burn, bridges: S.bridges, hh: S.hh, hr: S.hr, flooded: S.flooded,
       trail: b64.en(S.trail), trailSum: S.trailSum, hist: S.hist,
     };
   }
@@ -2164,6 +2193,7 @@ const Rules = (() => {
     // A game saved before the record was kept starts its record now.
     if (o.hist) S.hist = o.hist;
     if (o.hh && o.hh.length === S.hh.length) S.hh = o.hh.slice();
+    if (o.hr && o.hr.length === S.hh.length) S.hr = o.hr.slice();
     if (o.bridges && o.bridges.length === S.bridges.length) S.bridges = o.bridges.map(b => Object.assign({}, b));
     S.bridges.forEach((b, i) => { if (b.hp <= 0) for (const v of S.map.bridges[i].verts) S.map.deck[v] = 0; });
     S.occ.fill(0);
@@ -4141,7 +4171,16 @@ const Rules = (() => {
 
   function stepEconomy(S) {
     if (S.tick % HZ === 0) {
-      for (const t of S.towns) if (t.owner >= 0) { const P = S.P[t.owner]; P.supply += 5 * P.income; P.oil += 0.25 * P.income; P.stats.townIn += 5 * P.income; P.stats.oilIn += 0.25 * P.income; }
+      const z = townSizes(S.map);
+      for (const t of S.towns) if (t.owner >= 0) {
+        const P = S.P[t.owner], k = townShare(S, t.id), ore = TOWN_PAY * P.income * k, oil = TOWN_OIL * P.income * k;
+        P.supply += ore; P.oil += oil; P.stats.townIn += ore; P.stats.oilIn += oil;
+        for (const i of z.list[t.id]) {
+          const full = houseHp(S.map.houses[i]);
+          if (S.hh[i] > 0) S.hh[i] = Math.min(full, S.hh[i] + full / HOUSE_MEND);
+          else if ((S.hr[i] = (S.hr[i] || 0) + 1) >= HOUSE_REBUILD) { S.hh[i] = full; S.hr[i] = 0; }
+        }
+      }
     }
     for (const P of S.P) {
       const relay = upK(S, P.team, 'relay');
@@ -4841,7 +4880,7 @@ const Rules = (() => {
     HZ, DT, RES, UNITS, BUILDINGS, WEAPONS, TECH, POWERS, DIFFICULTY, LAYOUT, SIZES, MAPS, spread, use,
     AGES, MAX_AGE, POWER_AGE, LINES, LINE_ORDER, formOf, lineCount, nameOf, armOf,
     get W() { return W; }, get H() { return H; }, get VW() { return VW; }, get VH() { return VH; },
-    ORE_KINDS, fishWater, dustWall, dustAt, groundedAt, dataOn, satUp, satPass, newGame, step, push, spawn, addBuilding, scoreOf, worth, SERIES, pickFrom, fits, spotFor, roomy, blockedReason, near, rehash, seenBy, terrainAt, heightAt, waterLevel, los, isAir, armed, cellOf, summary, exitOf,
+    ORE_KINDS, fishWater, dustWall, dustAt, groundedAt, dataOn, satUp, satPass, newGame, step, push, spawn, addBuilding, scoreOf, worth, SERIES, pickFrom, fits, spotFor, roomy, blockedReason, near, rehash, seenBy, terrainAt, heightAt, waterLevel, townPay, townShare, los, isAir, armed, cellOf, summary, exitOf,
     mulberry, noiser, clamp, lerp, smooth, angleTo, toXY, toUV, gap, setSize, save, load, hashOf, restartSlot, razeSlot, makeMap, mapFor, layoutFor,
     msin, mcos, matan2, mhypot,
     BRIDGE_HP, SPELL, SKIES, WEATHERS, nightAt, skyOf, offGoing, route, weatherAt, sky, dayAt, spellOf, bridgeAt, clsOf, houseHp, hurtBridge, ignite, shielded,

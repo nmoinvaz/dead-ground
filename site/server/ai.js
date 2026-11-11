@@ -209,7 +209,9 @@ const AI = (() => {
     const rifles = army.filter(u => u.d.capture && (!u.ord || u.ord.t === 'capture'));
     if (!rifles.length) return army;
     const b = S.bases[me.team];
-    const open = S.towns.filter(t => t.owner !== me.team && (t.capTeam !== me.team)).sort((p, q) => Math.hypot(p.x - b[0], p.y - b[1]) - Math.hypot(q.x - b[0], q.y - b[1]));
+    // The nearest first, a town that pays more counting as nearer.
+    const cost = t => Math.hypot(t.x - b[0], t.y - b[1]) / (0.5 + 0.5 * R.townShare(S, t.id));
+    const open = S.towns.filter(t => t.owner !== me.team && (t.capTeam !== me.team)).sort((p, q) => cost(p) - cost(q));
     const busy = new Set();
     for (const u of rifles) if (u.ord && u.ord.t === 'capture') busy.add(u.id);
     const free = rifles.filter(u => !busy.has(u.id));
