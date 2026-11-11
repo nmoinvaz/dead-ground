@@ -182,6 +182,10 @@
           seenE = max(seenE, isDst); visE = max(visE, isDst);
           // A waterfall's sheet on the land under the pixel, and the distance from its foot, set by the mixture.
           float fallK = 0.0, foamD = 9.0;
+          // The water's level under the pixel, lower in a gorge such as The Falls', and how much of a falls' rapids
+          // lie there.
+          vec4 LW = texture2D(tH, (Wl * uHScale + 0.5) / uHSize);
+          float wLev = uWaterL - LW.g, rapK = LW.b;
           // Ground never seen is drawn as the sketch alone, so the drawing under it is skipped. A quad of pixels skips
           // it only when all four lie there, as the drawing takes derivatives across the quad. Two rounds of
           // derivatives carry each pixel's need to the other three.
@@ -216,7 +220,7 @@
             float v = clamp((l - 0.03) / 0.52, 0.0, 1.0);
             // The water's flat surface shows over a strip of bank above the water line, its edge zigzagging along the
             // land's triangles. The mixture draws that strip as light bank, with no shade and no edge of its own.
-            float falseW = uStyle == 8 ? wBand(vUv) * smoothstep(0.0, 0.03, F.b - 20.0 - uWaterL) : 0.0;
+            float falseW = uStyle == 8 ? wBand(vUv) * smoothstep(0.0, 0.03, F.b - 20.0 - wLev) : 0.0;
             v = mix(v, 0.85, falseW);
             // Mostly bare paper and single hatching, as in the film, with the dark steps kept for real shadow.
             float n = floor(pow(1.0 - v, 1.7) * 7.6);
@@ -317,13 +321,13 @@
               isS = max(0.0, isS - isO - isBr - isT - isL - isD);
               // Water is where the river bed lies under the water line. The water mesh's own edge zigzags along its
               // triangles, so it only says that something lower than scenery is here.
-              float lh = F.b - 20.0, wl = uWaterL - lh, dep = max(wl, 0.0);
+              float lh = F.b - 20.0, wl = wLev - lh, dep = max(wl, 0.0);
               // A brook is drawn from its distance map, not from the land's water, so it keeps a clean narrow line. Its
               // depth rises from its banks to its middle, and its banks, water lines and wash follow from that as a
               // river's do. A road carries it in a culvert, so none is drawn across a road.
               vec4 bk4 = texture2D(tBrook, (Wl * uHScale + 0.5) / uHSize);
               vec2 bkS = bk4.rg;
-              fallK = bk4.b * (1.0 - step(0.15, s0)); foamD = bk4.a * 3.0;
+              fallK = bk4.b * (1.0 - step(0.3, s0)); foamD = bk4.a * 3.0;
               float bkD = bkS.r * 4.0, bkHW = 0.48;
               dep = max(dep, max(bkHW - bkD, 0.0) / bkHW * 0.25 * smoothstep(1.2, 1.6, LND.r) * (1.0 - smoothstep(0.3, 0.37, s0)));
               // How far the view is drawn back, 0 at the usual view and 1 at a wide one, and for units from closer
@@ -795,9 +799,16 @@
                 float dsh = mix(step(0.68, pnoise(u2 / rL, FLOW_P / rL, floor(rq) * 2.3)), step(0.68, pnoise(u2 / (2.0 * rL), FLOW_P / (2.0 * rL), floor(rq) * 2.3)), gLf);
                 rip = mix(rip, row * dsh * 1.35, flowK);
               }
+              // Rapids above a great falls: the rows closer, the strokes longer and quicker, the water whiter.
+              if (rapK > 0.01 && isW > 0.0) {
+                vec2 rq2 = Wl * vec2(1.0, 3.2) * exp2(-gLm) + vec2(0.0, uTime * 1.6);
+                float rr = (1.0 - smoothstep(0.08, 0.2, abs(fract(rq2.x * 1.7 + noise(Wl * 0.6) * 2.0) - 0.5))) * step(0.42, noise(vec2(rq2.x * 3.0, rq2.y)));
+                rip = max(rip, rr * rapK * 1.3);
+              }
               // Water on dark paper is a deep blue, its lines and ripples lighter than it.
               vec3 WTR = dk ? vec3(0.115, 0.15, 0.235) : LILAC, WTR_D = dk ? vec3(0.32, 0.4, 0.6) : LILAC_D, RIP = dk ? vec3(0.4, 0.5, 0.7) : vec3(1.0);
               base = mix(base, mix(mix(WTR, WTR_D, wLine * 0.6), RIP, rip * 0.55 * (1.0 - wLine)), isW);
+              base = mix(base, dk ? vec3(0.3, 0.36, 0.5) : vec3(0.93, 0.94, 0.98), rapK * 0.3 * isW);
               // A brook's ford lies shallow, its wash paler.
               base = mix(base, mix(base, paperC, 0.5), bkS.g * isW);
               base = mix(base, base * (dk ? 0.5 : 0.8), shB * isW);
@@ -831,9 +842,9 @@
               vec3 lWash = mix(min(lCol * (dk ? 1.15 : 1.3), vec3(1.0)), lMat * lSh, 0.75);
               base = mix(base, mix(lWash, dk ? paperC : vec3(1.0), 0.12), isL);
               // Dust heads in a flat wash of their own colour, deep at the foot and pale at the crown, their form left to
-              // the hatching.
+              // the hatching. A falls' white mist stays pale on dark paper.
               vec3 dMat = clamp(subj.rgb * 2.0 / 0.62, 0.0, 1.0);
-              base = mix(base, dk ? mix(paperC, dMat * 0.62, 0.7) : mix(paperC, dMat, 0.75), isD);
+              base = mix(base, dk ? mix(paperC, dMat * mix(0.62, 0.92, smoothstep(0.85, 0.95, min(dMat.r, min(dMat.g, dMat.b)))), 0.7) : mix(paperC, dMat, 0.75), isD);
               // Ore in the chosen style: 1 a soft ochre wash, 2 a stippled deposit, 3 engraved, 4 faceted, 5 gold leaf.
               vec3 OCH = vec3(0.92, 0.78, 0.45), GOLD_P = vec3(0.97, 0.9, 0.66), BRN = vec3(0.45, 0.32, 0.14);
               float up = dot(nV, uUpV);
@@ -968,7 +979,7 @@
               float fEw = max(fwidth(fallK), 1e-4);
               col = mix(col, dk ? vec3(0.5, 0.6, 0.78) : vec3(0.36, 0.42, 0.58), (1.0 - smoothstep(0.4 * uK, 1.1 * uK, abs(fallK - 0.3) / fEw)) * 0.55);
             }
-            if (foamD < 1.8 && s0 < 0.15) {
+            if (foamD < 1.8 && s0 < 0.3) {
               float fdw = max(fwidth(foamD), 1e-4), fa = noise(Wl * 5.0 + vec2(uTime * 0.7, 0.0));
               float fring = (1.0 - smoothstep(0.5 * uK, 1.4 * uK, abs(foamD - 0.95) / fdw)) * step(0.35, fa);
               float spray = smoothstep(0.45, 0.7, noise(Wl * 2.6 - vec2(0.0, uTime * 0.9)) + 0.35 * (1.0 - foamD)) * (1.0 - smoothstep(0.8, 1.8, foamD));
