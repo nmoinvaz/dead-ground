@@ -46,6 +46,7 @@ const Hud = (() => {
       case 'hel': g.moveTo(-a, -b); g.lineTo(a, b); g.lineTo(a, -b); g.lineTo(-a, b); g.closePath(); break;
       case 'jet': g.moveTo(0, -b); g.lineTo(a, b * 0.6); g.lineTo(0, b * 0.1); g.lineTo(-a, b * 0.6); g.closePath(); break;
       case 'uav': g.moveTo(-a, -b * 0.6); g.lineTo(0, b * 0.6); g.lineTo(a, -b * 0.6); break;
+      case 'sat': g.rect(-a * 0.18, -b * 0.3, a * 0.36, b * 0.6); g.rect(-a, -b * 0.22, a * 0.66, b * 0.44); g.rect(a * 0.34, -b * 0.22, a * 0.66, b * 0.44); break;
       case 'dat': for (let i = -1; i <= 1; i++) { g.moveTo(-a * 0.6, i * b * 0.45); g.lineTo(a * 0.6, i * b * 0.45); } break;
       case 'flare': for (let i = 0; i < 8; i++) { const an = i * 0.785; g.moveTo(Math.cos(an) * a * 0.3, Math.sin(an) * b * 0.3); g.lineTo(Math.cos(an) * a, Math.sin(an) * b); } break;
       case 'par': g.arc(0, 0, a * 0.7, Math.PI, 0); g.moveTo(-a * 0.7, 0); g.lineTo(0, b); g.lineTo(a * 0.7, 0); break;
@@ -166,7 +167,7 @@ const Hud = (() => {
     const ALL = {
       bld: ['power', 'refinery', 'barracks', 'factory', 'radar', 'derrick', 'fob', 'airfield', 'dock', 'silo', 'datacenter'],
       def: ['bunker', 'atgun', 'sam', 'rail'],
-      pow: ['tech', 'flare', 'uav', 'barrage', 'para', 'launch'],
+      pow: ['tech', 'flare', 'uav', 'barrage', 'para', 'sat', 'launch'],
     };
     const LISTS = { bld: [], def: [], inf: [], veh: [], air: [], sea: [], pow: [] };
     // The build keys run along the top row, past P, which pauses, to [ for a tenth picture.
@@ -1395,6 +1396,46 @@ const Hud = (() => {
       }
       og.restore();
     }
+    // A satellite constellation's pass: a train of twelve small satellites high over the map on a straight track,
+    // each a pale body with two blue solar panels edged in ink, some catching the sun. The side that launched it
+    // also sees the dashed ground track and the pale swath of ground the pass lights up.
+    function drawSatPass(s, team, own) {
+      const q = Rules.satPass(s, team);
+      if (!q) return;
+      const M = s.map, clampW = v => Math.max(0, Math.min(M.W - 1, v)), clampH = v => Math.max(0, Math.min(M.H - 1, v));
+      const at = (sv, off = 0, up = 0) => { const x = q.px + q.dx * sv - q.dy * off, y = q.py + q.dy * sv + q.dx * off; return world.project(x, Rules.terrainAt(M, clampW(x), clampH(y)) + up, y); };
+      const inMap = sv => { const x = q.px + q.dx * sv, y = q.py + q.dy * sv; return x > -6 && y > -6 && x < M.W + 6 && y < M.H + 6; };
+      const from = Math.max(-q.L / 2, q.s - 90), to = q.s;
+      og.save();
+      if (own && to > from) {
+        // The swath already passed over, fading behind the train.
+        og.beginPath();
+        for (let sv = from; sv <= to; sv += 3) { const [x, y] = at(sv, 10); sv === from ? og.moveTo(x, y) : og.lineTo(x, y); }
+        for (let sv = to; sv >= from; sv -= 3) { const [x, y] = at(sv, -10); og.lineTo(x, y); }
+        og.closePath(); og.fillStyle = 'rgba(250,247,236,0.32)'; og.fill();
+        og.setLineDash([3, 5]); og.strokeStyle = 'rgba(60,80,120,0.5)'; og.lineWidth = 1;
+        for (const sg of [10, -10]) { og.beginPath(); for (let sv = from; sv <= to; sv += 2) { const [x, y] = at(sv, sg); sv === from ? og.moveTo(x, y) : og.lineTo(x, y); } og.stroke(); }
+        og.setLineDash([10, 6]); og.strokeStyle = 'rgba(40,60,110,0.65)'; og.lineWidth = 1.4; og.beginPath();
+        for (let sv = from; sv <= to + 40; sv += 2) { const [x, y] = at(sv); sv === from ? og.moveTo(x, y) : og.lineTo(x, y); }
+        og.stroke(); og.setLineDash([]);
+      }
+      const [h0x, h0y] = at(q.s, 0, 26), [h1x, h1y] = at(q.s + 4, 0, 26), dir = Math.atan2(h1y - h0y, h1x - h0x);
+      for (let i = 0; i < 12; i++) {
+        const sv = q.s - i * 6;
+        if (!inMap(sv)) continue;
+        const [px, py] = at(sv, 0, 26), k = 1.6 - i * 0.04;
+        og.save(); og.translate(px, py); og.rotate(dir + Math.PI / 2); og.scale(k, k); og.lineWidth = 1.1; og.strokeStyle = '#1f1a16';
+        for (const sx of [-1, 1]) {
+          const x0 = sx < 0 ? -11.5 : 3.5;
+          og.fillStyle = '#3c5c8c'; og.beginPath(); og.rect(x0, -2.6, 8, 5.2); og.fill(); og.stroke();
+          og.strokeStyle = 'rgba(230,236,250,0.7)'; og.lineWidth = 0.6; og.beginPath(); for (let c = 1; c < 4; c++) { og.moveTo(x0 + c * 2, -2.4); og.lineTo(x0 + c * 2, 2.4); } og.stroke(); og.strokeStyle = '#1f1a16'; og.lineWidth = 1.1;
+        }
+        og.fillStyle = '#f2ede0'; og.beginPath(); og.rect(-3.2, -3.2, 6.4, 6.4); og.fill(); og.stroke();
+        og.restore();
+        if (i % 4 === 1) { og.strokeStyle = 'rgba(255,250,220,0.95)'; og.lineWidth = 1.2; og.beginPath(); og.moveTo(px - 5, py); og.lineTo(px + 5, py); og.moveTo(px, py - 5); og.lineTo(px, py + 5); og.stroke(); }
+      }
+      og.restore();
+    }
     // Lightning, a jagged bolt for a moment, with thunder after, later the farther off it falls. A strike the rules
     // make comes down where it lands; in a storm, now and then, one falls under a storm cloud in the view.
     let bolt = null, boltT = 8;
@@ -1626,6 +1667,7 @@ const Hud = (() => {
       const selected = new Set(state.sel);
       const P0 = t >= 0 ? s.P[t] : null;
       if (t >= 0 && Rules.dataOn(s, t)) drawForecast(s);
+      for (let tm = 0; tm < s.P.length; tm++) if (Rules.satUp(s, tm)) drawSatPass(s, tm, tm === t);
       // With a building that trains units selected, the one its kind comes out of is lettered, where there is a
       // choice of them.
       const trainAt = new Set();

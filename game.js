@@ -443,6 +443,8 @@ const Game = (() => {
             break;
           }
           case 'weather': if (G.playing) { const v = e.passed ? SKY_PASS[e.was] : SKY_SAY[e.kind]; if (v && !(e.kind === 'cloud' && e.was === 'clear')) { hud.say(v[0], v[1]); if (v[2]) audio.voice('sky', v[2], oldAge()); } } break;
+          // A satellite constellation launched: the side's own word, and a warning to the others.
+          case 'satlaunch': if (G.playing) { if (e.team === G.team) hud.say('The constellation is on its way to orbit. Its first pass comes in twenty seconds.', 'good'); else hud.say('An enemy rocket has put a satellite constellation in orbit.', 'bad'); } break;
           // The AI Data Center's word of the enemy's main army, and its warning when that army is near the base.
           case 'intel': if (G.playing && e.team === G.team) {
             let near = null, nd = 1e9; for (const tw of S.towns) { const d = Math.hypot(tw.x - e.x, tw.y - e.y); if (d < nd) { nd = d; near = tw; } }
