@@ -338,6 +338,7 @@ const Rules = (() => {
     uav: { name: 'UAV Sweep', sym: 'uav', cost: 150, cd: 60, tech: 4, r: 14, life: 15, names: [0, 0, 0, 'Recon Flight', 'UAV Sweep', 'UAV Sweep'], note: 'Lights up a patch of the map for a while.' },
     barrage: { name: 'Artillery Barrage', sym: 'art', cost: 500, cd: 120, tech: 3, r: 6, names: [0, 0, 'Cannon Barrage', 'Artillery Barrage', 'Artillery Barrage', 'Orbital Barrage'], note: 'Twelve heavy shells on one spot.' },
     para: { name: 'Paradrop', sym: 'par', cost: 600, cd: 150, tech: 5, r: 4, note: 'Three squads of infantry, anywhere you can see.' },
+    sat: { name: 'Satellite Constellation', sym: 'sat', cost: 2000, cd: 420, tech: 6, r: 10, life: 240, note: 'A rocket puts a constellation in orbit for four minutes. Its passes light up strips of the map, the first across where you point, and night and weather no longer shorten your units\' sight.' },
   };
 
   // Upgrades, researched at a building and kept by the side. Each has three tiers, which the Ancient, Gunpowder and
@@ -1800,7 +1801,7 @@ const Rules = (() => {
     return {
       team, supply: o.supply || 3500, oil: o.oil || 250, tech: 1, income: 1, carried: 0,
       q: { bld: [], def: [], inf: [], veh: [], air: [], sea: [], tech: [] }, prod: 0, use: 0, low: false, vis: new Uint8Array(N), seen: new Uint8Array(N),
-      counts: {}, cooldown: { flare: 0, uav: 0, barrage: 0, para: 0 }, stats: freshStats(), spoke: {}, hints: {}, exposed: false, up: {},
+      counts: {}, cooldown: { flare: 0, uav: 0, barrage: 0, para: 0, sat: 0 }, stats: freshStats(), spoke: {}, hints: {}, exposed: false, up: {},
       silo: 0, alive: true, shield: 0, born: 0,
     };
   }
@@ -2273,9 +2274,11 @@ const Rules = (() => {
     for (const e of S.ents) {
       if (e.hp <= 0) continue;
       const P = S.P[e.team];
-      if (e.b) light(P, e.x, e.y, (e.d.sight + Math.max(e.w, e.h) / 2) * fkAt(e) * (armOf(S, e) ? 1 : nb) * inSh(e), 3, false);
-      else if (e.d.move === 'air' || e.d.move === 'jet') light(P, e.x, e.y, e.d.sight * faAt(e) * (1 - 0.3 * n) * inSh(e), 0, true);
-      else light(P, e.x, e.y, e.d.sight * fkAt(e) * nu * (e.cov >= 0 ? 1.2 : 1) * inSh(e), 1.1, false);
+      // Under a side's satellite constellation its units see as by a clear day.
+      const up = satUp(S, e.team);
+      if (e.b) light(P, e.x, e.y, (e.d.sight + Math.max(e.w, e.h) / 2) * (up ? 1 : fkAt(e) * (armOf(S, e) ? 1 : nb) * inSh(e)), 3, false);
+      else if (e.d.move === 'air' || e.d.move === 'jet') light(P, e.x, e.y, e.d.sight * (up ? 1 : faAt(e) * (1 - 0.3 * n) * inSh(e)), 0, true);
+      else light(P, e.x, e.y, e.d.sight * (up ? 1 : fkAt(e) * nu * inSh(e)) * (e.cov >= 0 ? 1.2 : 1), 1.1, false);
     }
     for (const t of S.towns) if (t.owner >= 0) light(S.P[t.owner], t.x, t.y, 9 * fkAt(t) * (1 - 0.25 * n), 2, false);
     for (const s of S.sweeps) if (s.until > S.tick) light(S.P[s.team], s.x, s.y, s.r, 0, true);
@@ -3955,6 +3958,36 @@ const Rules = (() => {
     }
   }
 
+  // A satellite constellation. While it is up, a pass crosses the map every SAT_EVERY, its train of satellites
+  // taking SAT_PASS to cross on a straight track at its own angle, the first through the point the side chose and
+  // the rest through points of the middle of the map. The ground under the train is seen as it passes, and the
+  // side's units see as far by night and in any weather as by a clear day.
+  const SAT_RISE = 20 * HZ, SAT_EVERY = 40 * HZ, SAT_PASS = 24 * HZ, SAT_R = 10, SAT_SEE = 5 * HZ;
+  const satUp = (S, team) => { const o = S.P[team] && S.P[team].sat; return !!o && S.tick >= o.start && S.tick < o.until; };
+  // The pass under way at a time: its track through (px, py) along (dx, dy), its length, and how far along it the
+  // train's head has come, or null between passes.
+  function satPass(S, team, t = S.tick) {
+    const o = S.P[team] && S.P[team].sat;
+    if (!o || t < o.start || t >= o.until) return null;
+    const k = Math.floor((t - o.start) / SAT_EVERY), tau = t - o.start - k * SAT_EVERY;
+    if (tau > SAT_PASS) return null;
+    const h = spellHash(o.h, k), a = (h % 6283) / 1000;
+    const px = k === 0 ? o.x : W * (0.2 + 0.6 * ((h >>> 10) % 1000) / 1000), py = k === 0 ? o.y : H * (0.2 + 0.6 * ((h >>> 20) % 1000) / 1000);
+    const L = W * 1.6;
+    return { px, py, dx: mcos(a), dy: msin(a), L, s: -L / 2 + L * tau / SAT_PASS, k };
+  }
+  function stepSat(S) {
+    if (S.tick % HZ) return;
+    for (const P of S.P) {
+      if (!P.sat) continue;
+      if (S.tick >= P.sat.until) { P.sat = null; continue; }
+      const q = satPass(S, P.team);
+      if (!q) continue;
+      const x = q.px + q.dx * q.s, y = q.py + q.dy * q.s;
+      if (x > -SAT_R && y > -SAT_R && x < W + SAT_R && y < H + SAT_R) S.sweeps.push({ team: P.team, x, y, r: SAT_R, until: S.tick + SAT_SEE });
+    }
+  }
+
   // The AI Data Center. While a side has one standing and enough power, its research and upgrades go DATA_RESEARCH
   // as fast, and every DATA_EVERY the strongest enemy army it can find is lit up for a few seconds wherever it is,
   // with word of it, and a warning when it is near the side's base. Its weather forecast is the picture's alone.
@@ -4459,6 +4492,11 @@ const Rules = (() => {
         S.shots.push({ w: 'barrage', kind: 'barrage', team, by: 0, t: 0, dur: delay, x: sx, y: sy, tx: sx, ty: sy, tz: 0 });
         S.ev.push({ t: 'incoming', x: sx, y: sy, dur: delay, team });
       }
+    } else if (name === 'sat') {
+      // The rocket rises from the base, and the constellation's first pass comes SAT_RISE after.
+      const b = S.bases[team];
+      P.sat = { start: S.tick + SAT_RISE, until: S.tick + SAT_RISE + d.life * HZ, x, y, h: spellHash(S.seed + 4007 + team * 131, S.tick) };
+      S.ev.push({ t: 'satlaunch', team, x: b[0], y: b[1] });
     } else if (name === 'para') {
       const from = S.bases[team];
       S.ev.push({ t: 'plane', team, x: from[0], y: from[1], tx: x, ty: y, dur: 4 });
@@ -4565,6 +4603,7 @@ const Rules = (() => {
     S.cmds.length = 0;
     stepEconomy(S);
     stepIntel(S);
+    stepSat(S);
     stepTowns(S);
     const danger = S.tick % SCAT_EVERY === 0 && S.shots.length ? dangerOf(S) : null;
     for (let i = 0; i < S.ents.length; i++) {
@@ -4661,7 +4700,7 @@ const Rules = (() => {
     HZ, DT, RES, UNITS, BUILDINGS, WEAPONS, TECH, POWERS, DIFFICULTY, LAYOUT, SIZES, MAPS, spread, use,
     AGES, MAX_AGE, POWER_AGE, LINES, LINE_ORDER, formOf, lineCount, nameOf, armOf,
     get W() { return W; }, get H() { return H; }, get VW() { return VW; }, get VH() { return VH; },
-    ORE_KINDS, fishWater, dustWall, dustAt, groundedAt, dataOn, newGame, step, push, spawn, addBuilding, scoreOf, worth, SERIES, pickFrom, fits, spotFor, roomy, blockedReason, near, rehash, seenBy, terrainAt, heightAt, los, isAir, armed, cellOf, summary, exitOf,
+    ORE_KINDS, fishWater, dustWall, dustAt, groundedAt, dataOn, satUp, satPass, newGame, step, push, spawn, addBuilding, scoreOf, worth, SERIES, pickFrom, fits, spotFor, roomy, blockedReason, near, rehash, seenBy, terrainAt, heightAt, los, isAir, armed, cellOf, summary, exitOf,
     mulberry, noiser, clamp, lerp, smooth, angleTo, toXY, toUV, gap, setSize, save, load, hashOf, restartSlot, razeSlot, makeMap, mapFor, layoutFor,
     msin, mcos, matan2, mhypot,
     BRIDGE_HP, SPELL, SKIES, WEATHERS, nightAt, skyOf, offGoing, route, weatherAt, sky, dayAt, spellOf, bridgeAt, clsOf, houseHp, hurtBridge, ignite, shielded,

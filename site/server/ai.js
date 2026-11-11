@@ -355,6 +355,11 @@ const AI = (() => {
         }
       }
     }
+    // A satellite constellation once rich, its first pass over the enemy's base.
+    if (POWERS.sat && opened(P, POWERS.sat) && !(P.cooldown.sat > 0) && !P.sat && P.counts.radar && P.supply > 4000) {
+      const foe = foeOf(S, me);
+      if (foe >= 0) { const t = S.bases[foe]; R.push(S, me.team, { c: 'power', name: 'sat', x: t[0], y: t[1] }); me.lastPower = S.tick; return; }
+    }
     if (opened(P, POWERS.uav) && P.cooldown.uav <= 0 && P.supply > 1200) {
       const foe = foeOf(S, me);
       if (foe < 0) return;
