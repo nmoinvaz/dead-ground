@@ -35,7 +35,8 @@ const Game = (() => {
   const SKY_OF = { desert: 'Dust storms, little rain and no snow.', steppe: 'Rain, thunderstorms and fog, with a little snow.', winter: 'Deep snow and fog, and no rain.' };
   const WEATHER_OF = { random: 'In their usual measure.', mild: 'Mostly fair, with no storms of any kind.', harsh: 'Often, and the storms come hard.' };
   // What each choice of resources means, for the set-up.
-  const WIN_NOTE = { conquest: 'A side is out when its last building falls.', regicide: 'Each side starts with a general. A side is out when its general falls, or its last building.' };
+  const WIN_NOTE = { conquest: 'A side is out when its last building falls.', regicide: 'Each side starts with a general. A side is out when its general falls, or its last building.',
+    koth: `Nothing is built. Each side starts with a home town, and the towns it holds raise its soldiers. Every 10 seconds a side holding more hills than another takes 5 from its score for each hill more. A side at 0, or with no town, is out. Played on ${Object.values(Rules.MAPS).filter(m => m.koth).map(m => m.name).join(', ')}.` };
   const RES_NOTE = { std: 'Ore, oil and power are dug, pumped and built for, and everything costs.', free: 'Nothing costs a thing and power never runs short. Only build times and the fighting count.' };
   const weatherNote = (theme, w) => w === 'off' ? 'Fair skies all game.' : `${SKY_OF[theme] || ''} ${WEATHER_OF[w] || ''}`;
 
@@ -340,7 +341,7 @@ const Game = (() => {
       const m = Rules.MAPS[sk.map], seats = [], you = sk.slots.findIndex(s => s.kind === 'you');
       sk.slots.forEach((s, t) => { if (s.kind === 'you' || s.kind === 'ai') seats.push(t); });
       if (seats.length < 2 || you < 0) return;
-      const S = Rules.newGame({ seed: params.has('seed') ? +params.get('seed') : sk.seed, layout: m.layout, seats, shuffle: Math.random, age: sk.age || 1, theatre: sk.theme, weather: sk.weather || 'random', free: sk.res === 'free', regicide: sk.win === 'regicide' });
+      const S = Rules.newGame({ seed: params.has('seed') ? +params.get('seed') : sk.seed, layout: m.layout, seats, shuffle: Math.random, age: sk.age || 1, theatre: sk.theme, weather: sk.weather || 'random', free: sk.res === 'free', regicide: sk.win === 'regicide', koth: sk.win === 'koth' && !!m.koth });
       sk.slots.forEach((s, t) => { if (s.kind === 'ai') S.ais.push(AI.create(t, s.level, S.seed + t)); });
       G.names = sk.slots.map(s => s.kind === 'you' ? (G.name || 'You') : s.kind === 'ai' ? `Computer (${Rules.DIFFICULTY[s.level].name})` : '');
       G.theme = sk.theme; G.mapKey = sk.map; G.online = false;
@@ -348,7 +349,7 @@ const Game = (() => {
       enterPlay(S, G.theme, you);
       saveT = 0;
       const foes = seats.length - 1;
-      hud.say(`Deployed: ${m.name}, ${THEATRES[G.theme]}, the ${Rules.AGES[S.age0].name} Age${S.free ? ', unlimited resources' : ''}${S.regicide ? ', Regicide' : ''}. ${foes === 1 ? 'One enemy' : foes + ' enemies'} on the map. Good hunting, Commander.`);
+      hud.say(`Deployed: ${m.name}, ${THEATRES[G.theme]}, the ${Rules.AGES[S.age0].name} Age${S.free ? ', unlimited resources' : ''}${S.regicide ? ', Regicide' : ''}${S.koth ? ', King of the Hill' : ''}. ${foes === 1 ? 'One enemy' : foes + ' enemies'} on the map. Good hunting, Commander.`);
     }
 
     // A game against the computer is kept in the browser, so a refresh or a closed tab loses nothing. The world, the
@@ -833,8 +834,10 @@ const Game = (() => {
       $('weather-about').textContent = weatherNote(v.theme, v.weather || 'random');
       $('m-res').querySelectorAll('button').forEach(b => { const on = b.dataset.v === (v.res || 'std'); b.classList.toggle('on', on); b.disabled = !edit && !on; });
       $('res-about').textContent = RES_NOTE[v.res || 'std'];
-      $('m-win').querySelectorAll('button').forEach(b => { const on = b.dataset.v === (v.win || 'conquest'); b.classList.toggle('on', on); b.disabled = !edit && !on; });
-      $('win-about').textContent = WIN_NOTE[v.win || 'conquest'];
+      // King of the Hill is played only on maps with high points, and falls back to Conquest elsewhere.
+      const win = v.win === 'koth' && !m.koth ? 'conquest' : v.win || 'conquest';
+      $('m-win').querySelectorAll('button').forEach(b => { const on = b.dataset.v === win; b.classList.toggle('on', on); b.disabled = (!edit && !on) || (b.dataset.v === 'koth' && !m.koth); });
+      $('win-about').textContent = WIN_NOTE[win] + (v.win === 'koth' && !m.koth ? ' King of the Hill is not played on this map.' : '');
       drawPreview(v.map, v.seed, v.slots);
       // The slots.
       const list = $('slots');

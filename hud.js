@@ -199,9 +199,13 @@ const Hud = (() => {
     });
     function pickTab(id) {
       // The Sea tab shows only on a map with open water, and the Dock only there too.
-      const wet = !!(S() && S().map.seaCells > 200);
-      $('tab-sea').hidden = !wet;
+      const wet = !!(S() && S().map.seaCells > 200), koth = !!(S() && S().koth);
+      $('tab-sea').hidden = !wet || koth;
       if (id === 'sea' && !wet) id = 'bld';
+      // In King of the Hill nothing is built and no aircraft or ships are raised, so the towns' recruits come first.
+      for (const k of ['bld', 'def', 'air']) $('tab-' + k).hidden = koth;
+      if (koth && (id === 'bld' || id === 'def' || id === 'air' || id === 'sea')) id = 'inf';
+      $('kraise').hidden = !koth;
       state.tab = id;
       lineLists(P() ? P().tech : 1);
       for (const t of TABS) $('tab-' + t.id).classList.toggle('on', t.id === id);
@@ -289,7 +293,8 @@ const Hud = (() => {
         return;
       }
       if (why) { say(why + '.'); game.audio.ui('deny'); return; }
-      for (let i = 0; i < n; i++) game.order(s, t, { c: 'train', kind: k });
+      // In King of the Hill the town chosen on the map trains first.
+      for (let i = 0; i < n; i++) game.order(s, t, s.koth && state.townPick >= 0 ? { c: 'train', kind: k, from: state.townPick } : { c: 'train', kind: k });
       game.audio.ui('click');
     }
     const repeating = k => { const p = P(), d = UNITS[k]; return !!(p && d && p.repeat && p.repeat[d.line]); };
@@ -500,7 +505,19 @@ const Hud = (() => {
         select([e], add && e.team === team() && !e.b);
         if (e.team === team() && !e.b) game.audio.ack(e);
         if (e.b && e.team === team()) { const tab = e.kind === 'barracks' ? 'inf' : e.kind === 'factory' ? 'veh' : e.kind === 'airfield' ? 'air' : e.kind === 'radar' || e.kind === 'silo' || e.kind === 'capitol' ? 'pow' : e.kind === 'hq' ? 'bld' : null; if (tab && tab !== state.tab) pickTab(tab); }
-      } else if (!add) select([]);
+      } else if (!add) { select([]); pickTown(px, py); }
+    }
+    // King of the Hill: a click on the ground in one of the side's own towns makes it the one that recruits.
+    function pickTown(px, py) {
+      const s = S(), g = s && s.koth && world.pick(px, py);
+      if (!g) return;
+      let best = null, bd = 7;
+      for (const n of s.towns) if (n.owner === team() && Math.hypot(n.x - g.x, n.y - g.y) < bd) { bd = Math.hypot(n.x - g.x, n.y - g.y); best = n; }
+      if (!best || state.townPick === best.id) return;
+      state.townPick = best.id;
+      say(`${Rules.townName(s, best.id)} recruits now.`);
+      game.audio.ui('click');
+      updateCams(true);
     }
 
     function boxSelect(x0, y0, x1, y1, add) {
@@ -1776,6 +1793,38 @@ const Hud = (() => {
       og.fillStyle = 'rgba(20,18,14,0.86)'; og.fillRect(x - tw / 2, yy - 11, tw, 18);
       og.fillStyle = '#f2e8d2'; og.fillText(text, x, yy + 2); og.restore();
     }
+    // King of the Hill: each hill a dashed ring on the ground as wide as the men who take it must stand, in its
+    // holder's colour, a flag on a pole over it, the taking under way as an arc round the flag, and its name, a spot
+    // height as a survey sheet letters one.
+    function drawPoints(s, ink) {
+      if (!s.koth) return;
+      const R0 = Rules.KOTH_R, M = s.map;
+      for (const p of s.points) {
+        const z = terrainAt(M, p.x, p.y), [x, y] = world.project(p.x, z, p.y), [, yt] = world.project(p.x, z + 3.4, p.y);
+        if (x < -60 || y < -60 || x > world.vw + 60 || y > world.vh + 60) continue;
+        const col = p.owner < 0 ? INK : ink ? SLOT_PLATE[p.owner] : SLOT_CSS[p.owner];
+        og.save(); og.lineJoin = 'round'; og.lineCap = 'round';
+        og.setLineDash([7, 5]); og.lineWidth = 2; og.strokeStyle = col; og.beginPath();
+        for (let i = 0; i <= 36; i++) {
+          const a = i / 36 * 6.2832, gx = p.x + Math.cos(a) * R0, gy = p.y + Math.sin(a) * R0, q = world.project(gx, terrainAt(M, gx, gy) + 0.1, gy);
+          if (i) og.lineTo(q[0], q[1]); else og.moveTo(q[0], q[1]);
+        }
+        og.stroke(); og.setLineDash([]);
+        og.strokeStyle = INK; og.lineWidth = 2; og.beginPath(); og.moveTo(x, y); og.lineTo(x, yt); og.stroke();
+        og.fillStyle = p.owner < 0 ? '#faf4e4' : ink ? washOf(p.owner) : SLOT_CSS[p.owner]; og.lineWidth = 1.4;
+        og.beginPath(); og.moveTo(x, yt); og.lineTo(x + 18, yt + 6); og.lineTo(x, yt + 12); og.closePath(); og.fill(); og.stroke();
+        if (p.cap > 0) {
+          og.lineWidth = 3; og.strokeStyle = 'rgba(250,244,228,0.9)'; og.beginPath(); og.arc(x + 6, yt + 6, 17, 0, 6.3); og.stroke();
+          og.strokeStyle = p.capTeam >= 0 ? (ink ? SLOT_PLATE[p.capTeam] : SLOT_CSS[p.capTeam]) : '#d9d4c3'; og.beginPath(); og.arc(x + 6, yt + 6, 17, -1.57, -1.57 + p.cap * 6.283); og.stroke();
+        }
+        const name = 'Hill ' + Math.round(100 + p.z * 10);
+        og.font = `italic 600 13px ${labelFont()}`; og.textAlign = 'left'; og.textBaseline = 'middle';
+        og.strokeStyle = 'rgba(250,244,228,0.95)'; og.lineWidth = 3.5; og.strokeText(name, x + 24, yt + 6);
+        og.fillStyle = INK; og.fillText(name, x + 24, yt + 6);
+        og.restore();
+      }
+    }
+
     function drawOverlay(dt) {
       // The overlay is drawn at the canvas's own device pixels where the page knows them, so its lines and words are
       // never stretched by the browser.
@@ -1830,6 +1879,7 @@ const Hud = (() => {
           og.fillStyle = col; og.fillText(name.toUpperCase(), x, y - 18); og.restore();
         }
       }
+      drawPoints(s, ink);
 
       // Pictograms come in as the view pulls back past the play distance, and take the units' places at the
       // farthest. Units of one side close together on screen share one tag that counts each kind, so a bunched
@@ -2058,6 +2108,13 @@ const Hud = (() => {
         g.fillStyle = n.owner < 0 ? (ink ? '#6b6052' : '#e8e0c8') : ink ? SLOT_PLATE[n.owner] : SLOT_CSS[n.owner];
         g.fillRect(n.x - 2, n.y - 2, 4, 4);
       }
+      // King of the Hill: each hill a diamond in its holder's colour, ringed in ink, every hill known from the start.
+      if (s.koth) for (const p of s.points) {
+        const r = Math.max(3, s.map.W / 34);
+        g.fillStyle = p.owner < 0 ? (ink ? '#faf4e4' : '#e8e0c8') : ink ? SLOT_PLATE[p.owner] : SLOT_CSS[p.owner];
+        g.strokeStyle = ink ? '#2a221b' : 'rgba(0,0,0,0.85)'; g.lineWidth = r * 0.3;
+        g.beginPath(); g.moveTo(p.x, p.y - r); g.lineTo(p.x + r, p.y); g.lineTo(p.x, p.y + r); g.lineTo(p.x - r, p.y); g.closePath(); g.fill(); g.stroke();
+      }
       // Units are dots of a fixed size on the panel, whatever the map's size, each ringed in ink so it stands off
       // the land. Each side is one path, filled then stroked.
       const ur = size * 0.0085 / k, ring = ink ? '#2a221b' : 'rgba(0,0,0,0.8)', dots = new Map();
@@ -2141,6 +2198,29 @@ const Hud = (() => {
         if (was > 0 && p.tech > was) freshen(was, p.tech);
         if (picStale) game.pictures(); else buildCams();
         if (was > 0 && p.tech > was && game.team >= 0) ageCard(p.tech);
+      }
+      // King of the Hill: every side's score, this side's first, and the hills it holds, in place of the power gauge,
+      // as nothing is built to run on power. Under the tabs, where its recruits come out, what that town raises, and
+      // its army against the cap its houses set.
+      const kg = $('kgauge');
+      kg.hidden = !s.koth; $('pwr').parentElement.hidden = !!s.koth;
+      if (s.koth) {
+        const me = game.team, order = s.P.filter(Q => !Q.out).map(Q => Q.team).sort((a, b) => (b === me) - (a === me) || a - b);
+        const key = order.map(k => s.score[k]).join(',');
+        if (kg.dataset.k !== key) {
+          kg.dataset.k = key;
+          const box = $('kscore'); box.textContent = '';
+          order.forEach((k, i) => { if (i) box.append(' · '); const b = document.createElement('b'); b.style.color = SLOT_CSS[k]; b.textContent = s.score[k]; box.append(b); });
+        }
+        const held = me >= 0 ? s.points.filter(q => q.owner === me).length : 0, ht = `${held}/${s.points.length}`;
+        if ($('kheld').textContent !== ht) $('kheld').textContent = ht;
+        if (me >= 0) {
+          const towns = s.towns.filter(n => n.owner === me), pick = towns.find(n => n.id === state.townPick) || towns.find(n => n.id === p.townPick) || towns[0];
+          const RAISE = { hamlet: 'foot', village: 'foot, horse and light vehicles', town: 'foot, horse, guns and armour' };
+          const army = s.ents.reduce((n, e) => n + (e.team === me && !e.b && e.hp > 0 ? 1 : 0), 0);
+          const text = pick ? `${Rules.townName(s, pick.id)}, a ${Rules.townPay(s, pick.id, me).kind}, raises ${RAISE[Rules.townPay(s, pick.id, me).kind]}. Army ${army} of ${Rules.kothCap(s, me)}.` : 'No town left to raise an army.';
+          if ($('kraise').textContent !== text) $('kraise').textContent = text;
+        }
       }
       $('pwr').parentElement.classList.toggle('off', p.tech < Rules.POWER_AGE);
       if (p.tech < Rules.POWER_AGE) $('pwr').textContent = '—';
@@ -2445,7 +2525,7 @@ const Hud = (() => {
     return {
       state, pickTab, say, symbol, enter, leave, select, layoutMini, pop, strike,
       reset() {
-        state.sel = []; state.groups = {}; state.mode = null; state.marks = []; state.alerts = []; state.lastAlert = null; state.selKey = null; state.fogC = null; ro = { sup: -1, oil: -1 };
+        state.sel = []; state.groups = {}; state.mode = null; state.marks = []; state.alerts = []; state.lastAlert = null; state.selKey = null; state.fogC = null; ro = { sup: -1, oil: -1 }; state.townPick = -1;
         world.setGhost(null); showBanner(''); $('log').textContent = '';
         pickTab('bld');
       },

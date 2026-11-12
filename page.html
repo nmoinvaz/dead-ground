@@ -183,6 +183,10 @@ body[data-look="ink"][data-scheme="dark"] #end, body[data-look="ink"][data-schem
 #stats div { display: flex; justify-content: space-between; align-items: baseline; gap: 6px; min-width: 0; background: #1b1d15; padding: 1px 5px; border: 1px solid #0a0b07; }
 #stats b { font: 12px var(--mono); color: var(--amber); min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 #tabs { display: grid; grid-auto-flow: column; grid-auto-columns: auto; gap: 2px; }
+/* King of the Hill: where the side recruits, what that town raises and the army against its cap. */
+#kraise { margin: 0; padding: 2px 4px; font: 12px var(--ui); color: var(--dim); line-height: 1.35; }
+#kraise b { color: inherit; font-weight: 600; }
+#kscore b { font-weight: 600; }
 .tab { position: relative; padding: 4px 0 3px; background: linear-gradient(#2f3328, #1d1f17); border: 1px solid #0a0b07; font: 600 12px var(--ui); letter-spacing: .03em; color: var(--dim); text-transform: uppercase; }
 .tab:hover { color: var(--stencil); }
 .tab.on { background: linear-gradient(#59442a, #3b2c17); color: var(--amber); border-color: #1c1409; }
@@ -631,6 +635,7 @@ body[data-look="ink"] .sheet { box-shadow: 4px 4px 0 var(--ink); }
       <div class="gauge"><label>Ore</label><span class="led" id="sup">0</span></div>
       <div class="gauge"><label>Oil</label><span class="led" id="oil">0</span></div>
       <div class="gauge grow"><label>Pwr</label><div id="pwrtrack"><i id="pwrbar"></i></div><span class="led small" id="pwr">0/0</span></div><span id="pwrwarn" hidden>Low power</span>
+      <div class="gauge" id="kgauge" hidden title="Every 10 seconds a side holding more hills than another takes 5 from its score for each hill more. A side at 0, or with no town, is out."><label>Hill</label><span class="led" id="kscore"></span><span class="led small" id="kheld"></span></div>
       <div class="spacer"></div>
       <div class="tools">
         <button id="b-speed" title="Game speed"><span id="speed">1x</span></button>
@@ -669,6 +674,7 @@ body[data-look="ink"] .sheet { box-shadow: 4px 4px 0 var(--ink); }
     <div id="res" hidden></div>
     <div id="stats"><div id="agecell">Age<b id="techlv">Ancient</b></div><div>Towns<b id="towns">0/6</b></div></div>
     <nav id="tabs"></nav>
+    <p id="kraise" hidden></p>
     <div id="cams"></div>
     <div id="tip"><p class="idle">Hover a picture for what it does.</p></div>
   </aside>
@@ -727,7 +733,7 @@ body[data-look="ink"] .sheet { box-shadow: 4px 4px 0 var(--ink); }
             <div id="m-res" class="pick two"><button data-v="std">Standard</button><button data-v="free">Unlimited</button></div>
             <p id="res-about"></p>
             <h3>Victory</h3>
-            <div id="m-win" class="pick two"><button data-v="conquest">Conquest</button><button data-v="regicide">Regicide</button></div>
+            <div id="m-win" class="pick three"><button data-v="conquest">Conquest</button><button data-v="regicide">Regicide</button><button data-v="koth">King of the Hill</button></div>
             <p id="win-about"></p>
           </div>
           <div id="chat" hidden><div id="chat-log"></div><input id="chat-in" maxlength="200" placeholder="Say something, then Enter" autocomplete="off" spellcheck="false"></div>
