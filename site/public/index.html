@@ -665,7 +665,7 @@ body[data-look="ink"] .sheet { box-shadow: 4px 4px 0 var(--ink); }
       <div class="choice"><h2>Shadow strength</h2><div id="s-shadow"><button data-v="full">Full</button><button data-v="light">Light</button><button data-v="off">Off</button></div></div>
       <div class="choice"><h2>Edge lines</h2><div id="s-edges" class="two"><button data-v="quick">Quick</button><button data-v="exact">Exact</button></div></div>
       <div class="choice"><h2>Music</h2><div id="s-music" class="two"><button data-v="on">On</button><button data-v="off">Off</button></div></div>
-      <p id="build">Build de0e960 2026-11-11 23:24</p>
+      <p id="build">Build dc0f95f 2026-11-11 23:43</p>
       <p id="source"><a href="https://github.com/nmoinvaz/mapmakers-war" target="_blank" rel="noopener">Source on GitHub</a></p>
     </div>
     <div id="banner" hidden></div>
@@ -1302,7 +1302,7 @@ const Rules = (() => {
   };
   const SIZES = {
     duel: 128, quad: 192, world: 256, gulf: 128, pass: 128, lakes: 192,
-    greenwood: 128, oldforest: 192, twinlakes: 128, ponds: 192, seas: 128, isles: 192, peaks: 128, highlands: 192, rivers3: 128, crater: 192, mesa: 128, nile: 128, atlantis: 192, falls: 128,
+    greenwood: 128, oldforest: 192, twinlakes: 128, ponds: 192, seas: 128, isles: 192, peaks: 128, highlands: 192, rivers3: 128, crater: 192, mesa: 128, nile: 128, atlantis: 192, falls: 128, summit: 128,
   };
   // The maps a game may be set on, each a layout and the most sides it seats.
   const MAPS = {
@@ -1327,6 +1327,7 @@ const Rules = (() => {
     atlantis: { name: 'Atlantis', layout: 'atlantis', seats: 4, ruins: true, about: 'A great island of rings of land and water round a central citadel, joined by bridges, with canals cut in from the sea. Ships can sail the rings.' },
     falls: { name: 'The Falls', layout: 'falls', seats: 2, about: 'A broad river drops over a great horseshoe fall, as at Niagara, into a deep gorge between the two sides. Bridges and a ford cross above the falls, an island town stands between them, and only a high bridge spans the gorge. Docks hold each reach.' },
     mesa: { name: 'Mesa Country', layout: 'mesa', seats: 2, koth: 3, theatre: 'desert', flora: 'cactus', about: 'Open desert of dunes and sheer-sided mesas, with stands of cactus. The mesas wall off the lines of march.' },
+    summit: { name: 'The Summit', layout: 'summit', seats: 2, koth: 3, about: 'One great mountain between the bases, its top far above the land, climbed on foot by four ridges, with a camp partway up each base\'s. Roads run round its foot.' },
   };
   // The theatre a game on a map is fought in: the map's own, if it fixes one, or the one chosen.
   const theatreOf = (map, chosen) => (MAPS[map] && MAPS[map].theatre) || chosen;
@@ -1516,7 +1517,7 @@ const Rules = (() => {
   }
 
   // ---- The second set of maps: woods, lakes, seas, islands, mountains and rivers ----
-  const MORE = new Set(['greenwood', 'oldforest', 'twinlakes', 'ponds', 'seas', 'isles', 'peaks', 'highlands', 'rivers3', 'crater', 'mesa', 'nile', 'atlantis', 'falls']);
+  const MORE = new Set(['greenwood', 'oldforest', 'twinlakes', 'ponds', 'seas', 'isles', 'peaks', 'highlands', 'rivers3', 'crater', 'mesa', 'nile', 'atlantis', 'falls', 'summit']);
   function moreLayout(kind, L, all, fordAt, R) {
     const dry = () => [99, 0];
     // Two sides on the River Duel's frame, mirrored through the middle.
@@ -1735,6 +1736,46 @@ const Rules = (() => {
       L.fish = []; all(L.fish, polar(10, 22.5));
       const gapIn = polar(52, 45), gapOut = polar(84, 45);
       R(polar(120, 45), gapOut, 1.5); R(gapOut, gapIn, 0.5); R(gapIn, tIn, 1.5); R(tIn, polar(50, 112.5), 2); R(polar(50, 112.5), turnK(tIn, 1), 2);
+    } else if (kind === 'summit') {
+      // One great mountain between the bases, after Everest, its top far above the land. A knife-edge ridge runs down
+      // to each base and to each flank, its crest wide enough for men and too steep for wheels, and the faces between
+      // the ridges are too steep for anything. Each base's ridge has a camp on a shelf partway up, and the camps and
+      // the summit are the map's high points. Roads run round the mountain's foot to towns in the valleys.
+      duel(); L.river = dry;
+      // The summit's height and the radius of its flat top, how steeply a crest and a face fall a cell, the skirt's
+      // height, and how far the camps stand from the top.
+      const TOP = 22, CAP = 2.5, CREST = 0.86, FACE = 1.9, SKIRT = 7, CAMP = 18;
+      // A crest's height t past the top's edge: an even fall, broken on a base's ridge by the camp's shelf.
+      const crest = (t, shelf) => {
+        if (!shelf) return TOP - CREST * t;
+        const a = CAMP - CAP - 2.5;
+        return TOP - CREST * Math.min(t, a) - 0.1 * clamp(t - a, 0, 5) - CREST * Math.max(0, t - a - 5);
+      };
+      // A crest is flat for a few cells either side of its line and its sides fall away, both wider as it comes down.
+      const side = (k, t) => 1 - smooth(2 + 0.08 * t, 5 + 0.2 * t, k);
+      // The base ridges wander, and the flank ridges lean toward the bases and wander, by sines of odd turn, so the
+      // map stays the same under its half turn.
+      const vBase = u => 2.5 * msin(0.09 * u) + 1.2 * msin(0.21 * u), uFlank = v => 0.15 * v + 2.5 * msin(0.08 * v) + 1.4 * msin(0.19 * v);
+      L.wall = (x, y, sym) => {
+        const [u, v] = toUV(x, y), d = mhypot(u, v), t = Math.max(0, d - CAP);
+        // The faces drop sheer from the summit, rough with gullies, to a skirt that slopes gently out to the plain.
+        const rough = sym ? (sym(x, y, 0.16, 3) - 0.5) * 2.4 * smooth(2, 6, t) * (1 - smooth(14, 22, t)) : 0;
+        const face = Math.max(TOP - FACE * t + rough, SKIRT * (1 - smooth(6, 32, t)));
+        const base = face + Math.max(0, crest(t, true) - face) * side(Math.abs(v - vBase(u)), t);
+        const flank = face + Math.max(0, crest(t, false) - face) * side(Math.abs(u - uFlank(v)), t);
+        return Math.max(0, base, flank) + 1.6 * (1 - smooth(30, 44, d));
+      };
+      // The land's own relief is calmed on the mountain, and no benches are cut in it, so its ridges are its ways up.
+      L.calm = (x, y) => { const [u, v] = toUV(x, y); return smooth(30, 42, mhypot(u, v)); };
+      L.noBench = (x, y) => { const [u, v] = toUV(x, y); return 1 - smooth(34, 40, mhypot(u, v)); };
+      L.highs = [[CX, CY], uvp(-CAMP, vBase(-CAMP)), mirror(uvp(-CAMP, vBase(-CAMP)))];
+      L.bases.push(uvp(-56, 0), mirror(uvp(-56, 0)));
+      const tN = uvp(-14, 52), tS = uvp(-14, -52), tC = uvp(-36, 0), hub = uvp(-48, 0);
+      for (const t of [tN, tS, tC]) all(L.towns, t);
+      duelKit(-56, 0);
+      [[-34, 30, 5.5], [-34, -30, 5.5], [0, 46, 5]].forEach(o => all(L.ore, uvp(o[0], o[1]), [o[2]]));
+      [[-26, 46], [-26, -46], [-44, -14]].forEach(o => all(L.wells, uvp(o[0], o[1])));
+      R(hub, tN, 3); R(hub, tS, 3); R(hub, tC, 2); R(tN, mirror(tS), 2.5);
     } else if (kind === 'mesa') {
       // Open desert between two bases: long dune ridges on the flanks and sheer-sided, flat-topped mesas that wall
       // off the ways across, the roads winding between them.
@@ -1969,7 +2010,8 @@ const Rules = (() => {
     // Height. Rolling ground, ridges that make dead ground, then the river and its banks.
     const h = new Float32Array(VW * VH), water = -0.15;
     for (let j = 0; j < VH; j++) for (let i = 0; i < VW; i++) {
-      const x = i / RES, y = j / RES, m = flatness(x, y);
+      // A layout may calm the land's own relief where it raises its own, as on The Summit's mountain.
+      const x = i / RES, y = j / RES, m = flatness(x, y) * (L.calm ? L.calm(x, y) : 1);
       const roll = (sym(x, y, 0.035, 4) - 0.5) * 3.2;
       const big = sym(x, y, 0.024, 3);
       const rd = 1 - Math.abs(sym(x, y, 0.03, 3) - 0.5) * 7;
@@ -1990,15 +2032,17 @@ const Rules = (() => {
       }
     }
     for (let c = 0; c < h.length; c++) h[c] = lerp(h[c], blur[c], smooth(5.5, 2, roadDist[c]));
-    // A layout's own walls of rock, as High Pass's ridge, raised over the ground.
-    if (L.wall) for (let j = 0; j < VH; j++) for (let i = 0; i < VW; i++) h[j * VW + i] += L.wall(i / RES, j / RES);
+    // A layout's own walls of rock, as High Pass's ridge, raised over the ground. It may roughen them with the map's
+    // noise, the same under its turns.
+    if (L.wall) for (let j = 0; j < VH; j++) for (let i = 0; i < VW; i++) h[j * VW + i] += L.wall(i / RES, j / RES, sym);
     // Mountains break into benches with sheer faces of rock between them, which nothing climbs, so a mountain is
     // climbed only by its ways up: spurs where the faces give out, picked by a noise the same under the map's turns,
     // and wherever a road goes. Each step is CLIFF_STEP high, its face a quarter of the rise.
     for (let j = 0; j < VH; j++) for (let i = 0; i < VW; i++) {
       const c = j * VW + i, z = h[c], k = smooth(CLIFF_FROM, CLIFF_FROM + 1.5, z);
       if (k <= 0) continue;
-      const x = i / RES, y = j / RES, way = smooth(0.42, 0.5, sym(x, y, 0.045, 2)) * smooth(4, 7, roadDist[c]);
+      // A layout may keep the benches off ground whose ways up it lays itself.
+      const x = i / RES, y = j / RES, way = smooth(0.42, 0.5, sym(x, y, 0.045, 2)) * smooth(4, 7, roadDist[c]) * (L.noBench ? 1 - L.noBench(x, y) : 1);
       if (way <= 0) continue;
       const t = (z - CLIFF_FROM) / CLIFF_STEP, f = t - Math.floor(t), terr = CLIFF_FROM + (Math.floor(t) + smooth(0.75, 0.98, f)) * CLIFF_STEP;
       h[c] = lerp(z, terr, k * way);
@@ -2394,7 +2438,7 @@ const Rules = (() => {
     const fish = (L.fish || []).map(p => ({ x: p[0], y: p[1] }));
     let seaCells = 0;
     for (let c = 0; c < N; c++) seaCells += sea[c];
-    return { W, H, seed, kind, h, deck, water, ground, ore: oreCells, oreKind, oreFields, wells, towns, roads, roadDist, bridges, scatter, houses, oreRich, bases: L.bases, faces, fords: L.fords, fordCells, wadeCells, brooks, brookFords, brookDist: bD, brookFord: bF, falls, wl, cascades: L.cascades || [], sea, fish, seaCells, monuments: (L.monuments || []).map(([k, x, y, r, a]) => ({ k, x, y, r, a })) };
+    return { W, H, seed, kind, h, deck, water, ground, ore: oreCells, oreKind, oreFields, wells, towns, roads, roadDist, bridges, scatter, houses, oreRich, bases: L.bases, faces, fords: L.fords, fordCells, wadeCells, brooks, brookFords, brookDist: bD, brookFord: bF, falls, wl, cascades: L.cascades || [], sea, fish, seaCells, monuments: (L.monuments || []).map(([k, x, y, r, a]) => ({ k, x, y, r, a })), highs: L.highs || null };
   }
 
   // A map is kept only if vehicles can get from the first base to every other base, town and well.
@@ -5032,7 +5076,10 @@ const Rules = (() => {
   // turns, so every side is as near the high ground as every other: an odd one at the very middle, when there is
   // footing there, and the rest in sets, one to each turn, whose ends stand within a cell's height of each other.
   function kothPoints(S, n) {
-    const M = S.map, h = new Float32Array(N);
+    const M = S.map;
+    // A layout that names its high points, laid in its own turns, has those.
+    if (M.highs) return M.highs.map(([x, y], i) => ({ x, y, z: terrainAt(M, x, y), id: i, owner: -1, cap: 0, capTeam: -1 }));
+    const h = new Float32Array(N);
     for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) h[y * W + x] = terrainAt(M, x + 0.5, y + 0.5);
     const firm = c => !(M.ground[c] & 2) && h[c] >= waterLevel(M, c % W + 0.5, (c / W | 0) + 0.5);
     const ord = Array.from({ length: N }, (_, c) => c).sort((a, b) => h[b] - h[a] || a - b);
