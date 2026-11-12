@@ -660,7 +660,7 @@ body[data-look="ink"] .sheet { box-shadow: 4px 4px 0 var(--ink); }
       <div class="choice"><h2>Shadow strength</h2><div id="s-shadow"><button data-v="full">Full</button><button data-v="light">Light</button><button data-v="off">Off</button></div></div>
       <div class="choice"><h2>Edge lines</h2><div id="s-edges" class="two"><button data-v="quick">Quick</button><button data-v="exact">Exact</button></div></div>
       <div class="choice"><h2>Music</h2><div id="s-music" class="two"><button data-v="on">On</button><button data-v="off">Off</button></div></div>
-      <p id="build">Build d847c66 2026-11-11 16:50</p>
+      <p id="build">Build 24fe839 2026-11-11 17:48</p>
       <p id="source"><a href="https://github.com/nmoinvaz/mapmakers-war" target="_blank" rel="noopener">Source on GitHub</a></p>
     </div>
     <div id="banner" hidden></div>
@@ -4349,7 +4349,18 @@ const Rules = (() => {
     }
     return best;
   }
-  function nearestOre(S, x, y, team) {
+  // The ore nearest a spot, in the field nearest it. Cells in taken are passed over while any other is free, and with
+  // clear, cells within two of a building, which a truck cannot reach without rubbing on its corner.
+  const nearBuilding = (S, c) => {
+    const x = c % W, y = (c - x) / W;
+    for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) {
+      const nx = x + dx, ny = y + dy;
+      if (nx >= 0 && ny >= 0 && nx < W && ny < H && S.occ[ny * W + nx]) return true;
+    }
+    return false;
+  };
+  // The field is the one nearest (fx, fy), the spot itself unless given.
+  function nearestOre(S, x, y, team, taken = null, clear = false, fx = x, fy = y) {
     let best = -1, bd = Infinity;
     const P = S.P[team];
     // Fields first, so trucks go to a whole field rather than the last crumb near home.
@@ -4361,16 +4372,31 @@ const Rules = (() => {
       if (!P.seen[cellOf(f.x, f.y)]) continue;
       const owner = S.terr[cellOf(f.x, f.y)];
       if (owner >= 0 && owner !== team) continue;
-      const d = mhypot(f.x - x, f.y - y);
+      const d = mhypot(f.x - fx, f.y - fy);
       if (d < fd) { fd = d; fieldBest = f; }
     }
     const ax = fieldBest ? fieldBest.x : x, ay = fieldBest ? fieldBest.y : y, R = fieldBest ? fieldBest.r + 3 : 18;
     for (let cy = Math.max(1, ay - R | 0); cy <= Math.min(H - 2, ay + R | 0); cy++) for (let cx = Math.max(1, ax - R | 0); cx <= Math.min(W - 2, ax + R | 0); cx++) {
       const c = cy * W + cx;
-      if (!S.ore[c] || S.occ[c] || (S.gnd[c] & 9)) continue;
+      if (!S.ore[c] || S.occ[c] || (S.gnd[c] & 9) || (taken && taken.has(c))) continue;
       const d = mhypot(cx + 0.5 - x, cy + 0.5 - y);
-      if (d < bd) { bd = d; best = c; }
+      if (d < bd && !(clear && nearBuilding(S, c))) { bd = d; best = c; }
     }
+    return best < 0 && (taken || clear) ? nearestOre(S, x, y, team, null, false, fx, fy) : best;
+  }
+  // The smelter a truck works for: the one it was sent to, or else the side's smelter with the fewest trucks working
+  // for it, the nearest of those, kept until it falls.
+  function smelterOf(S, u) {
+    const o = u.ord, r = o.sm ? S.byId.get(o.sm) : null;
+    if (r && r.hp > 0 && r.team === u.team && r.kind === 'refinery') return r;
+    const n = new Map();
+    for (const e of S.ents) if (!e.b && e !== u && e.team === u.team && e.hp > 0 && e.ord && e.ord.t === 'harvest' && e.ord.sm) n.set(e.ord.sm, (n.get(e.ord.sm) || 0) + 1);
+    let best = null, bn = Infinity, bd = Infinity;
+    for (const e of S.ents) if (e.b && e.team === u.team && e.kind === 'refinery' && e.hp > 0) {
+      const k = n.get(e.id) || 0, d = mhypot(e.x - u.x, e.y - u.y);
+      if (k < bn || (k === bn && d < bd)) { bn = k; bd = d; best = e; }
+    }
+    o.sm = best ? best.id : 0;
     return best;
   }
 
@@ -4387,7 +4413,7 @@ const Rules = (() => {
       return;
     }
     if (u.cargo >= cap - 0.5 || (o.phase === 'return')) {
-      const r = nearestRefinery(S, u);
+      const r = o.own ? nearestRefinery(S, u) : smelterOf(S, u);
       if (!r) return;
       o.phase = 'return';
       const [ex, ey] = exitOf(S, r);
@@ -4401,7 +4427,13 @@ const Rules = (() => {
     }
     if (o.cell === undefined || o.cell < 0 || !S.ore[o.cell]) {
       if (S.tick < (o.next || 0)) return;
-      o.cell = nearestOre(S, u.x, u.y, u.team);
+      // A truck sent to a field by hand digs on near where it is. Else, setting out empty, it takes the ore nearest
+      // its smelter's dock that no other truck of its side is digging, and part loaded it digs on beside where it
+      // stands, so each trip starts close to home and a load is dug without running back and forth.
+      const sm = o.own ? null : smelterOf(S, u), taken = new Set();
+      if (sm) for (const e of S.ents) if (e !== u && !e.b && e.team === u.team && e.hp > 0 && e.ord && e.ord.t === 'harvest' && e.ord.cell >= 0) taken.add(e.ord.cell);
+      const [dx, dy] = sm ? exitOf(S, sm) : [u.x, u.y];
+      o.cell = !sm ? nearestOre(S, u.x, u.y, u.team) : u.cargo < 1 ? nearestOre(S, dx, dy, u.team, taken, true) : nearestOre(S, u.x, u.y, u.team, taken);
       o.next = S.tick + 10;
       if (o.cell < 0) { if (u.cargo > 0) o.phase = 'return'; return; }
     }
@@ -5543,7 +5575,7 @@ const Rules = (() => {
     } else if (c.c === 'stop') {
       for (const u of unitsOf(S, team, c.ids)) { u.ord = u.d.cargo ? { t: 'harvest' } : null; u.tgt = 0; u.home = null; }
     } else if (c.c === 'harvest') {
-      for (const u of unitsOf(S, team, c.ids)) if (u.d.cargo) u.ord = { t: 'harvest', cell: c.cell };
+      for (const u of unitsOf(S, team, c.ids)) if (u.d.cargo) u.ord = c.cell >= 0 ? { t: 'harvest', cell: c.cell, own: true } : { t: 'harvest', sm: c.ref | 0 };
     } else if (c.c === 'capture') {
       const town = S.towns[c.town], us = unitsOf(S, team, c.ids).filter(u => u.d.men && u.kind !== 'engineer');
       us.forEach((u, i) => {
@@ -16637,7 +16669,7 @@ const Hud = (() => {
         return;
       }
       if (us.every(u => u.d.cargo) && s.ore[Rules.cellOf(g.x, g.y)]) { game.order(s, t, { c: 'harvest', ids, cell: Rules.cellOf(g.x, g.y) }); marker(g.x, g.y, '#ffd34d'); game.audio.ack(us[0]); return; }
-      if (e && e.kind === 'refinery' && us.some(u => u.d.cargo)) { game.order(s, t, { c: 'harvest', ids, cell: -1 }); return; }
+      if (e && e.kind === 'refinery' && us.some(u => u.d.cargo)) { game.order(s, t, { c: 'harvest', ids, cell: -1, ref: e.id }); return; }
       // Infantry sent near a cover point go to the point itself.
       const snap = us.some(u => u.d.men) ? tacSnap(s, g.x, g.y) : null;
       if (snap) { g.x = snap.x; g.y = snap.y; }

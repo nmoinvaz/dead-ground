@@ -16,7 +16,7 @@ const EMPTY = 3 * 60 * 1000;
 
 // The commands a player may send in a game and the fields each takes. 'raze' and 'income' are the server's own.
 const CMDS = {
-  move: ['ids', 'x', 'y', 'a'], attack: ['ids', 'id'], strike: ['ids', 'id', 'x', 'y', 'r'], stop: ['ids'], harvest: ['ids', 'cell'],
+  move: ['ids', 'x', 'y', 'a'], attack: ['ids', 'id'], strike: ['ids', 'id', 'x', 'y', 'r'], stop: ['ids'], harvest: ['ids', 'cell', 'ref'],
   capture: ['ids', 'town'], train: ['kind'], build: ['kind'], research: [], hold: ['cat', 'i'], cancel: ['cat', 'i'],
   place: ['kind', 'x', 'y'], sell: ['id'], repair: ['id'], rally: ['id', 'x', 'y'], power: ['name', 'x', 'y'], launch: ['x', 'y'],
   form: ['ids', 'f'], stance: ['ids', 'v'], fallback: ['ids', 'on'], explore: ['ids', 'on'], guard: ['ids', 'id'], upgrade: ['id', 'k'], unupgrade: ['id'],
@@ -37,6 +37,8 @@ function clean(S, c) {
     else if (k === 'on') o.on = !!v;
     else if (k === 'k') { if (typeof v !== 'string' || !Object.prototype.hasOwnProperty.call(R.UPGRADES, v)) return null; o.k = v; }
     else if (k === 'town') { const t = v | 0; if (t < 0 || t >= S.towns.length) return null; o.town = t; }
+    // A smelter for trucks to work for, none when left out.
+    else if (k === 'ref') o.ref = Number.isFinite(+v) ? +v | 0 : 0;
     else {
       const n = +v;
       if (!Number.isFinite(n)) return null;
