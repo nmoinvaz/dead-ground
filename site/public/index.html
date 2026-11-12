@@ -259,6 +259,8 @@ body[data-look="ink"][data-scheme="dark"] #end, body[data-look="ink"][data-schem
 #loading { position: absolute; inset: 0; z-index: 20; background: #f2e8d2; display: flex; flex-direction: column; gap: 14px; align-items: center; justify-content: center; font: 500 20px "Jost", "Futura", "Trebuchet MS", sans-serif; letter-spacing: .32em; color: #1f1a16; }
 body.ready #loading { display: none; }
 body.ready.rejoining #loading { display: flex; }
+body.lost #loading { display: flex; }
+body.lost #loading .lbar { display: none; }
 body[data-scheme="dark"] #loading { background: #1a1814; color: #e8e0d0; }
 /* The loading bar: it creeps on by itself while the page is read, as the browser draws it apart from the page's own
    work, and then follows the game's own steps to the end. */
@@ -665,7 +667,7 @@ body[data-look="ink"] .sheet { box-shadow: 4px 4px 0 var(--ink); }
       <div class="choice"><h2>Shadow strength</h2><div id="s-shadow"><button data-v="full">Full</button><button data-v="light">Light</button><button data-v="off">Off</button></div></div>
       <div class="choice"><h2>Edge lines</h2><div id="s-edges" class="two"><button data-v="quick">Quick</button><button data-v="exact">Exact</button></div></div>
       <div class="choice"><h2>Music</h2><div id="s-music" class="two"><button data-v="on">On</button><button data-v="off">Off</button></div></div>
-      <p id="build">Build 3c40ad9 2026-11-12 08:56</p>
+      <p id="build">Build 084a07c 2026-11-12 09:24</p>
       <p id="source"><a href="https://github.com/nmoinvaz/mapmakers-war" target="_blank" rel="noopener">Source on GitHub</a></p>
     </div>
     <div id="banner" hidden></div>
@@ -20926,7 +20928,7 @@ const Game = (() => {
 
     // A resize clears the canvas, so a size is only applied at the top of a frame, just before it is drawn, and never
     // when nothing has changed. Shown between a resize and a draw, the cleared canvas flashes.
-    let scale = 1, over = 1, fitDue = true, fitKey = '';
+    let scale = 1, over = 1, overNew = true, fitDue = true, fitKey = '';
     const OVER_PX = 3840 * 2160;
     function fit() { fitDue = true; }
     // The canvas's own size in device pixels, as the browser lays it out. The CSS size times the pixel ratio can miss
@@ -20939,6 +20941,21 @@ const Game = (() => {
         if (s && s[0]) { devPx = [s[0].inlineSize, s[0].blockSize]; fit(); }
       }).observe(canvas, { box: 'device-pixel-content-box' });
     } catch (e) { /* not offered */ }
+    // A graphics card or its driver may drop the drawing under load. The page asks for it back, which three.js answers
+    // by making everything again, and this machine draws at the screen's own pixels from then on. If it does not come
+    // back, the page says so, as otherwise only the labels over the picture would be left.
+    let lostT = 0;
+    canvas.addEventListener('webglcontextlost', e => {
+      e.preventDefault();
+      store.set('dg-over', 'off'); over = 1; scale = 1; fitKey = ''; fit();
+      clearTimeout(lostT);
+      lostT = setTimeout(() => {
+        $('loading-word').textContent = 'PICTURE LOST';
+        $('loading-note').textContent = 'The graphics card dropped the picture and has not given it back. Reload the page to draw it again.';
+        document.body.classList.add('lost');
+      }, 4000);
+    });
+    canvas.addEventListener('webglcontextrestored', () => { clearTimeout(lostT); document.body.classList.remove('lost'); fitKey = ''; fit(); });
     function applyFit() {
       fitDue = false;
       const r = view.getBoundingClientRect(), w = Math.max(2, r.width), h = Math.max(2, r.height), dpr = devicePixelRatio || 1;
@@ -20946,8 +20963,11 @@ const Game = (() => {
       const base = Math.min(dpr, 2), known = devPx && Math.abs(devPx[0] - w * dpr) < 3 && Math.abs(devPx[1] - h * dpr) < 3;
       const ovPx = known ? devPx.map(v => Math.max(2, Math.round(v * base / dpr))) : [Math.round(w * base), Math.round(h * base)];
       // A Sharp picture on a screen of under 2 is drawn at up to 2 and shrunk onto the canvas, as at the screen's own
-      // pixels the pen lines and edges step. It is held to a 4K screen's pixels.
-      over = picture === 'fast' ? 1 : Math.max(1, Math.min(2 / base, Math.sqrt(OVER_PX / (ovPx[0] * ovPx[1]))));
+      // pixels the pen lines and edges step. It is held to a 4K screen's pixels, and to the screen's own on a machine
+      // whose graphics have dropped the picture. It starts at the screen's own pixels and earns the rest by frames that
+      // keep pace, so a weak graphics card is never handed them all at once.
+      over = picture === 'fast' || store.get('dg-over') === 'off' ? 1 : Math.max(1, Math.min(2 / base, Math.sqrt(OVER_PX / (ovPx[0] * ovPx[1]))));
+      if (over > 1 && overNew) { overNew = false; scale = 1 / over; }
       const k = over * scale, px = ovPx.map(v => Math.max(2, Math.round(v * k))), key = `${w}x${h}:${px}:${ovPx}`;
       if (key === fitKey) return;
       fitKey = key;
@@ -21231,7 +21251,7 @@ const Game = (() => {
     function setPicture(v) {
       picture = v; store.set('dg-picture', v);
       Object.assign(RES, { t: 0, ceil: 1, calm: 0 });
-      scale = 1; fit();
+      scale = 1; overNew = true; fit();
       $('s-pic').querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.v === picture));
     }
     // A Sharp picture drawn past the screen's own pixels gives up those over them on a machine too slow for them.
@@ -21248,7 +21268,9 @@ const Game = (() => {
       if (RES.ft > 0.03 && RES.wk < RES.ft * 0.85 && scale > lo) {
         scale = Math.max(lo, Math.round(scale * Math.max(0.9, Math.sqrt(0.025 / RES.ft)) * 20) / 20);
         RES.ceil = Math.max(lo, was - 0.05); RES.calm = 0;
-      } else if (RES.ft < 0.0185 && scale < RES.ceil) scale = Math.min(RES.ceil, scale + 0.1);
+      // Pixels are won back while frames keep pace, or while the page's own work fills them, as the drawing then has
+      // time to spare.
+      } else if ((RES.ft < 0.0185 || RES.wk > RES.ft * 0.85) && scale < RES.ceil) scale = Math.min(RES.ceil, scale + 0.1);
       if (scale !== was) { RES.t = 0; fit(); }
     }
 
@@ -21347,7 +21369,8 @@ const Game = (() => {
       scheme = b.dataset.v; applyScheme(); audio.ui('click');
       store.set('dg-paper', scheme);
     }));
-    $('s-pic').querySelectorAll('button').forEach(b => b.addEventListener('click', () => { setPicture(b.dataset.v); audio.ui('click'); }));
+    // Picking Sharp again lets a machine that once dropped the picture try the extra pixels again.
+    $('s-pic').querySelectorAll('button').forEach(b => b.addEventListener('click', () => { if (b.dataset.v === 'sharp') store.set('dg-over', null); setPicture(b.dataset.v); audio.ui('click'); }));
     // Ore, oil and power stand in the top bar or in the sidebar, as the player chooses, the top bar unless told. An
     // upright phone or a short window has no room for them in its sidebar, so there they keep to the top bar.
     let gauges = store.get('dg-gauges', 'top');
