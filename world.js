@@ -4681,12 +4681,13 @@ const World = (() => {
       const sc = new THREE.Scene(), cm = new THREE.PerspectiveCamera(24, w / h, 0.1, 100);
       // The light the hatching follows, from the upper left as the card is seen.
       const lampDir = new THREE.Vector3(-3, 5, 4).normalize();
-      const out = {}, was = SH.uFogOn.value, oldTarget = renderer.getRenderTarget(), pix = new Uint8Array(W * H * 4);
+      const out = {}, jobs = [], was = SH.uFogOn.value, oldTarget = renderer.getRenderTarget();
       SH.uFogOn.value = 0;
+      // The pictures are put together on canvases kept in memory, not on the GPU, so encoding them never waits on it.
       const big = document.createElement('canvas'); big.width = W; big.height = H;
-      const bg = big.getContext('2d');
+      const bg = big.getContext('2d', { willReadFrequently: true });
       const oc = document.createElement('canvas'); oc.width = w * 2; oc.height = h * 2;
-      const og = oc.getContext('2d'); og.imageSmoothingQuality = 'high';
+      const og = oc.getContext('2d', { willReadFrequently: true }); og.imageSmoothingQuality = 'high';
       for (const it of list) {
         const group = new THREE.Group(), meshes = [];
         const parts = it.man ? MODELS.man[it.kind] : it.b ? MODELS.buildings[it.kind] : MODELS.units[it.kind];
@@ -4727,19 +4728,51 @@ const World = (() => {
         for (const [scheme, pal] of Object.entries(CAMEO_PAPER)) {
           K.ink.uniforms.uInk.value.set(...pal.ink); K.ink.uniforms.uPaper.value.set(...pal.paper); K.ink.uniforms.uDim.value = pal.dim; K.ink.uniforms.uWash.value = pal.wash;
           renderer.setRenderTarget(iRT); renderer.setClearColor(0x000000, 0); renderer.clear(); renderer.render(K.qs, K.qc);
-          renderer.readRenderTargetPixels(iRT, 0, 0, W, H, pix);
-          const im = bg.createImageData(W, H);
-          for (let y = 0; y < H; y++) im.data.set(pix.subarray((H - 1 - y) * W * 4, (H - y) * W * 4), y * W * 4);
-          bg.putImageData(im, 0, 0);
-          og.clearRect(0, 0, oc.width, oc.height); og.drawImage(big, 0, 0, oc.width, oc.height);
-          out[scheme === 'light' ? it.kind : it.kind + '|dark'] = oc.toDataURL('image/png');
+          jobs.push([scheme === 'light' ? it.kind : it.kind + '|dark', readLater(iRT, W, H)]);
         }
         sc.remove(group);
         for (const m of meshes) m.dispose();
       }
       renderer.setClearColor(0x000000, 1); renderer.setRenderTarget(oldTarget);
       SH.uFogOn.value = was; cRT.dispose(); nRT.dispose(); iRT.dispose();
-      return out;
+      // Each picture, once its pixels are back, turned upright, drawn down to the card's size, and encoded off the
+      // page's own thread.
+      return (async () => {
+        for (const [key, read] of jobs) {
+          const pix = await read;
+          if (!pix) continue;
+          const im = bg.createImageData(W, H);
+          for (let y = 0; y < H; y++) im.data.set(pix.subarray((H - 1 - y) * W * 4, (H - y) * W * 4), y * W * 4);
+          bg.putImageData(im, 0, 0);
+          og.clearRect(0, 0, oc.width, oc.height); og.drawImage(big, 0, 0, oc.width, oc.height);
+          const blob = await new Promise(r => oc.toBlob(r, 'image/png'));
+          if (blob) out[key] = URL.createObjectURL(blob);
+        }
+        return out;
+      })();
+    }
+    // A target's pixels read back without stalling on the GPU: read into a pixel buffer behind a fence, and copied out
+    // on a later turn once the fence has passed. A lost context gives none.
+    function readLater(target, W, H) {
+      const gl = renderer.getContext(), n = W * H * 4, buf = gl.createBuffer();
+      renderer.setRenderTarget(target);
+      gl.bindBuffer(gl.PIXEL_PACK_BUFFER, buf); gl.bufferData(gl.PIXEL_PACK_BUFFER, n, gl.STREAM_READ);
+      gl.readPixels(0, 0, W, H, gl.RGBA, gl.UNSIGNED_BYTE, 0);
+      gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
+      const sync = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
+      gl.flush();
+      return new Promise(res => {
+        const poll = () => {
+          if (gl.isContextLost() || !sync) return res(null);
+          if (gl.getSyncParameter(sync, gl.SYNC_STATUS) !== gl.SIGNALED) return setTimeout(poll, 4);
+          gl.deleteSync(sync);
+          const px = new Uint8Array(n);
+          gl.bindBuffer(gl.PIXEL_PACK_BUFFER, buf); gl.getBufferSubData(gl.PIXEL_PACK_BUFFER, 0, px); gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
+          gl.deleteBuffer(buf);
+          res(px);
+        };
+        poll();
+      });
     }
 
     // The units and buildings alone, white on clear, as a canvas the size of the picture. For style studies.

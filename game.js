@@ -306,8 +306,8 @@ const Game = (() => {
     }
 
     // The battle behind the title is two commanders fighting from the fourth minute on.
-    // It is played forward in slices of a frame's time, so the title is up at once and stays answering; the battle
-    // shows when it has caught up, fading in over the paper the first time.
+    // It is played forward in slices of a frame's time, longer while nothing is drawn, so the title is up at once and
+    // stays answering; the battle shows when it has caught up, fading in over the paper the first time.
     const AHEAD = 20 * 60 * 4.5;
     let ahead = null;
     function attract() {
@@ -318,8 +318,8 @@ const Game = (() => {
     function attractAhead() {
       if (!ahead) return;
       if (G.playing) { ahead = null; return; }
-      const S = ahead.S, t0 = performance.now();
-      while (ahead.n < AHEAD && performance.now() - t0 < 14) { Rules.step(S); S.ev.length = 0; ahead.n++; }
+      const S = ahead.S, t0 = performance.now(), slice = G.S ? 14 : 30;
+      while (ahead.n < AHEAD && performance.now() - t0 < slice) { Rules.step(S); S.ev.length = 0; ahead.n++; }
       if (ahead.n < AHEAD) return;
       ahead = null;
       const first = !G.S;
@@ -334,7 +334,7 @@ const Game = (() => {
       $('title').hidden = true; $('end').hidden = true; $('veil').hidden = true;
       $('view').classList.remove('dawn');
       begin(S, theme, team);
-      cameos();
+      cameoDue = true; cameos();
       pictures();
       hud.reset();
       G.playing = true; G.paused = false; G.outcome = null; G.falls = {}; G.plate = null;
@@ -646,16 +646,20 @@ const Game = (() => {
     // The sidebar's pictures: the buildings as the engine renders them, the units as axonometric line drawings in
     // the look's own inks, with the player's side on their markings.
     // A building's card shows it in the player's age, and G.picAge says which age that was.
-    let renders = null, cameoList = null, cameoPart = null, cameoN = 0, cameoDue = false;
+    let renders = null, cameoList = null, cameoPart = null, cameoN = 0, cameoDue = false, cameoBusy = false;
     // The engine's pictures are drawn once a world is loaded: a few a frame after the title is up, and any left all
-    // at once as a game begins.
+    // at once as a game begins. Their pixels come back a frame or two after they are drawn, so one batch is out at a
+    // time, and the cards take them when all are in.
     function cameos(n = Infinity) {
-      if (renders || !G.S || !cameoList) return;
+      if (renders || !G.S || !cameoList || cameoBusy) return;
       cameoPart = cameoPart || {};
-      const end = Math.min(cameoList.length, cameoN + n);
-      Object.assign(cameoPart, world.cameos(cameoList.slice(cameoN, end), 0));
-      cameoN = end;
-      if (cameoN >= cameoList.length) { renders = cameoPart; cameoPart = null; pictures(); }
+      const end = Math.min(cameoList.length, cameoN + n), batch = cameoList.slice(cameoN, end);
+      cameoN = end; cameoBusy = true;
+      world.cameos(batch, 0).then(o => {
+        cameoBusy = false;
+        Object.assign(cameoPart, o);
+        if (cameoN >= cameoList.length) { renders = cameoPart; cameoPart = null; pictures(); }
+      });
     }
     function pictures() {
       if (!renders) return;
