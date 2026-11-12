@@ -282,10 +282,13 @@ const Game = (() => {
         return;
       }
       fitKey = key; sizeAt = sizeKey;
+      // A screen of under 2 whose picture is drawn at under half again its pixels has its edges smoothed, as the
+      // shrink alone leaves them stepped there.
+      const aa = base < 2 && k < 1.5;
       // The share of full size drawn, k, tells the world a machine that gave up pixels.
-      world.resize(w, h, px[0] / w, k, px, ovPx);
+      world.resize(w, h, px[0] / w, k, px, ovPx, aa);
       hud.layoutMini();
-      $('s-pic-note').textContent = `Drawn at ${px[0]} by ${px[1]}${k > 1.01 ? `, ${k.toFixed(1)} times the screen's own pixels` : k < 0.99 ? `, ${Math.round(k * 100)}% of full size` : ', full size'}.`;
+      $('s-pic-note').textContent = `Drawn at ${px[0]} by ${px[1]}${k > 1.01 ? `, ${k.toFixed(1)} times the screen's own pixels` : k < 0.99 ? `, ${Math.round(k * 100)}% of full size` : ', full size'}${aa ? ', edges smoothed' : ''}.`;
     }
     window.addEventListener('resize', fit);
     new ResizeObserver(fit).observe(view);

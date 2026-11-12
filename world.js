@@ -290,6 +290,23 @@ const World = (() => {
             c += wt * texture2D(t, mix(vUv, vec2(x / n), dir)).rgb; ws += wt;
           }
           gl_FragColor = vec4(c / ws, 1.0); }` });
+      // Edges smoothed at the canvas's own pixels, after Lottes' FXAA: each pixel is blended a little along the edge
+      // its four corners find, and kept as it was where the blend would leave the range of its neighbours.
+      const smoothE = new THREE.ShaderMaterial({ uniforms: { t: { value: null }, px: { value: new THREE.Vector2(1, 1) } }, vertexShader: vs, depthTest: false, depthWrite: false, fragmentShader: `
+        varying vec2 vUv; uniform sampler2D t; uniform vec2 px;
+        float lum(vec3 c) { return dot(c, vec3(0.299, 0.587, 0.114)); }
+        void main(){
+          vec3 cM = texture2D(t, vUv).rgb;
+          float nw = lum(texture2D(t, vUv + vec2(-1.0, -1.0) * px).rgb), ne = lum(texture2D(t, vUv + vec2(1.0, -1.0) * px).rgb);
+          float sw = lum(texture2D(t, vUv + vec2(-1.0, 1.0) * px).rgb), se = lum(texture2D(t, vUv + vec2(1.0, 1.0) * px).rgb), m = lum(cM);
+          float lo = min(m, min(min(nw, ne), min(sw, se))), hi = max(m, max(max(nw, ne), max(sw, se)));
+          vec2 d = vec2(-((nw + ne) - (sw + se)), (nw + sw) - (ne + se));
+          float red = max((nw + ne + sw + se) * 0.03125, 0.0078125), rcp = 1.0 / (min(abs(d.x), abs(d.y)) + red);
+          d = clamp(d * rcp, -8.0, 8.0) * px;
+          vec3 a = 0.5 * (texture2D(t, vUv - d / 6.0).rgb + texture2D(t, vUv + d / 6.0).rgb);
+          vec3 b = a * 0.5 + 0.25 * (texture2D(t, vUv - d * 0.5).rgb + texture2D(t, vUv + d * 0.5).rgb);
+          float lb = lum(b);
+          gl_FragColor = vec4(lb < lo || lb > hi ? a : b, 1.0); }` });
       const grade = new THREE.ShaderMaterial({ uniforms: { t: { value: null }, b1: { value: null }, b2: { value: null }, uTime: { value: 0 }, uFlash: { value: 0 }, uBloom: { value: 0.6 }, uGlow: { value: new THREE.Vector2(-0.2, 0.9) }, uGlowC: { value: new THREE.Color(0xff9550) }, uAspect: { value: 1.6 }, uVivid: { value: 0 } }, vertexShader: vs, depthTest: false, depthWrite: false, fragmentShader: `
         varying vec2 vUv; uniform sampler2D t, b1, b2; uniform float uTime, uFlash, uBloom, uAspect, uVivid; uniform vec2 uGlow; uniform vec3 uGlowC;
         vec3 aces(vec3 x){ return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0); }
@@ -452,16 +469,18 @@ const World = (() => {
       let ldr = null, maskRT = null, normRT = null, fogRT = null, landRT = null, fxRT = null, anchorRT = null, linesRT = null;
       let rt, a0, a1, b0, b1, w = 1, h = 1;
       // A picture drawn larger than the canvas is finished in fin and shrunk through mid, at the canvas's width and
-      // the picture's height, onto the canvas, cw by ch.
-      let fin = null, mid = null, cw = 0, ch = 0;
+      // the picture's height, onto the canvas, cw by ch. A picture to be smoothed is finished in fin, or shrunk into
+      // edged, and smoothed onto the canvas.
+      let fin = null, mid = null, edged = null, cw = 0, ch = 0, aa = false;
       // Screen-sized targets a look keeps for itself, by name.
       const targets = new Map();
-      function size(wp, hp, cwp = 0, chp = 0) {
-        w = wp; h = hp; cw = cwp; ch = chp;
-        for (const r of [rt, a0, a1, b0, b1, ldr, maskRT, normRT, fogRT, landRT, fxRT, anchorRT, linesRT, fin, mid, ...targets.values()]) if (r) r.dispose();
-        const big = cw > 0 && ch > 0 && (cw < w || ch < h);
-        fin = big ? new THREE.WebGLRenderTarget(w, h, { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, depthBuffer: false }) : null;
-        mid = big ? new THREE.WebGLRenderTarget(cw, h, { type: THREE.HalfFloatType, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, depthBuffer: false }) : null;
+      function size(wp, hp, cwp = 0, chp = 0, aap = false) {
+        w = wp; h = hp; cw = cwp; ch = chp; aa = aap;
+        for (const r of [rt, a0, a1, b0, b1, ldr, maskRT, normRT, fogRT, landRT, fxRT, anchorRT, linesRT, fin, mid, edged, ...targets.values()]) if (r) r.dispose();
+        const big = cw > 0 && ch > 0 && (cw < w || ch < h), lin = { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, depthBuffer: false };
+        fin = big || aa ? new THREE.WebGLRenderTarget(w, h, lin) : null;
+        mid = big ? new THREE.WebGLRenderTarget(cw, h, { ...lin, type: THREE.HalfFloatType }) : null;
+        edged = big && aa ? new THREE.WebGLRenderTarget(cw, ch, lin) : null;
         // The merged line target: the mask in bytes, filtered, as maskRT holds it, and the normals and anchors in half
         // floats, unfiltered, as normRT and anchorRT hold them.
         if (linesMat) {
@@ -601,14 +620,17 @@ const World = (() => {
           if (!painters.has(style.name)) painters.set(style.name, style.create(K));
           painters.get(style.name).render(K);
         }
-        if (fin) {
+        let last = fin;
+        if (mid) {
           const u = shrink.uniforms;
           u.t.value = fin.texture; u.src.value.set(w, h); u.dir.value.set(1, 0); u.k.value = w / cw; run(shrink, mid);
-          u.t.value = mid.texture; u.src.value.set(cw, h); u.dir.value.set(0, 1); u.k.value = h / ch; run(shrink, null);
+          u.t.value = mid.texture; u.src.value.set(cw, h); u.dir.value.set(0, 1); u.k.value = h / ch; run(shrink, edged);
+          last = edged;
         }
+        if (aa && last) { smoothE.uniforms.t.value = last.texture; smoothE.uniforms.px.value.set(1 / last.width, 1 / last.height); run(smoothE, null); }
       }
       // The buffers made again at their size, as when a look that wants multisampling takes over from one that does not.
-      const remake = () => { if (rt) size(w, h, cw, ch); };
+      const remake = () => { if (rt) size(w, h, cw, ch, aa); };
       return { size, render, grade, remake };
     })();
 
@@ -4358,8 +4380,8 @@ const World = (() => {
     // A machine that has had to give up the most pixels it may (scale under 0.8) also gets the smaller shadow map.
     // px is the drawing's size in pixels and ovPx the overlay's, each the canvas's own device pixels where the page
     // knows them, so a picture at full size is shown pixel for pixel and not stretched by the browser. A drawing
-    // larger than the overlay is shrunk onto a canvas of the overlay's size.
-    function resize(w, h, dpr, scale = 1, px = null, ovPx = null) {
+    // larger than the overlay is shrunk onto a canvas of the overlay's size, and aa smooths the edges at the end.
+    function resize(w, h, dpr, scale = 1, px = null, ovPx = null, aa = false) {
       const sm = low || scale < 0.8 ? 2048 : 4096;
       if (sun.shadow.mapSize.x !== sm) { sun.shadow.mapSize.set(sm, sm); if (sun.shadow.map) { sun.shadow.map.dispose(); sun.shadow.map = null; } }
       const bw = px ? px[0] : Math.round(w * dpr), bh = px ? px[1] : Math.round(h * dpr);
@@ -4368,7 +4390,7 @@ const World = (() => {
       renderer.setPixelRatio(1);
       renderer.setSize(cw, ch, false);
       camera.aspect = w / h; camera.updateProjectionMatrix();
-      pp.size(bw, bh, big ? cw : 0, big ? ch : 0);
+      pp.size(bw, bh, big ? cw : 0, big ? ch : 0, aa);
     }
     // The view's new shape alone, while a window is dragged: the camera and the overlay follow at once, and the
     // picture keeps its buffers, stretched by the browser, until resize is called once the size holds.
