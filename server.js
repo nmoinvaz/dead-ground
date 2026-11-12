@@ -8,7 +8,7 @@ import AI from './ai.js';
 const HZ = R.HZ;
 const LEVELS = ['recruit', 'regular', 'veteran'];
 const THEMES = ['desert', 'steppe', 'winter'];
-const WEATHERS = ['random', 'mild', 'harsh', 'off'], RESOURCES = ['std', 'free'], VICTORIES = ['conquest', 'regicide'];
+const WEATHERS = ['random', 'mild', 'harsh', 'off'], RESOURCES = ['std', 'free'], VICTORIES = ['conquest', 'regicide', 'koth'];
 // A player who drops out of a game has this long to come back before a computer takes their side over.
 const GRACE = 90 * 1000;
 // A room nobody is in closes after this long.
@@ -17,7 +17,7 @@ const EMPTY = 3 * 60 * 1000;
 // The commands a player may send in a game and the fields each takes. 'raze' and 'income' are the server's own.
 const CMDS = {
   move: ['ids', 'x', 'y', 'a'], attack: ['ids', 'id'], strike: ['ids', 'id', 'x', 'y', 'r'], stop: ['ids'], harvest: ['ids', 'cell', 'ref'],
-  capture: ['ids', 'town'], train: ['kind'], build: ['kind'], research: [], hold: ['cat', 'i'], cancel: ['cat', 'i'],
+  capture: ['ids', 'town'], train: ['kind', 'from'], build: ['kind'], research: [], hold: ['cat', 'i'], cancel: ['cat', 'i'],
   place: ['kind', 'x', 'y'], sell: ['id'], repair: ['id'], rally: ['id', 'x', 'y'], power: ['name', 'x', 'y'], launch: ['x', 'y'],
   form: ['ids', 'f'], stance: ['ids', 'v'], fallback: ['ids', 'on'], explore: ['ids', 'on'], guard: ['ids', 'id'], upgrade: ['id', 'k'], unupgrade: ['id'],
 };
@@ -39,6 +39,8 @@ function clean(S, c) {
     else if (k === 'town') { const t = v | 0; if (t < 0 || t >= S.towns.length) return null; o.town = t; }
     // A smelter for trucks to work for, none when left out.
     else if (k === 'ref') o.ref = Number.isFinite(+v) ? +v | 0 : 0;
+    // The town a King of the Hill side trains from, none when left out.
+    else if (k === 'from') o.from = v !== null && v !== undefined && Number.isFinite(+v) && +v >= 0 && +v < S.towns.length ? +v | 0 : -1;
     else {
       const n = +v;
       if (!Number.isFinite(n)) return null;
@@ -377,7 +379,7 @@ export class Room {
     this.slots.forEach((s, t) => { if (s.kind === 'human' || s.kind === 'ai') seats.push(t); });
     const waiting = this.slots.some(s => s.kind === 'human' && s.id !== this.host && !s.ready);
     if (seats.length < 2 || waiting) return;
-    this.S = R.newGame({ seed: this.seed, layout: R.MAPS[this.map].layout, seats, shuffle: Math.random, age: this.age || 1, theatre: this.theme, weather: this.weather, free: this.res === 'free', regicide: this.win === 'regicide' });
+    this.S = R.newGame({ seed: this.seed, layout: R.MAPS[this.map].layout, seats, shuffle: Math.random, age: this.age || 1, theatre: this.theme, weather: this.weather, free: this.res === 'free', regicide: this.win === 'regicide', koth: this.win === 'koth' && !!R.MAPS[this.map].koth });
     this.S.ev.length = 0;
     this.ais = this.slots.map((s, t) => s.kind === 'ai' ? AI.create(t, s.level, this.seed + t) : null);
     for (const s of this.slots) { s.out = false; s.left = false; s.away = 0; }
