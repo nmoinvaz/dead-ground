@@ -36,7 +36,7 @@ const Game = (() => {
   const WEATHER_OF = { random: 'In their usual measure.', mild: 'Mostly fair, with no storms of any kind.', harsh: 'Often, and the storms come hard.' };
   // What each choice of resources means, for the set-up.
   const WIN_NOTE = { conquest: 'A side is out when its last building falls.', regicide: 'Each side starts with a general. A side is out when its general falls, or its last building.',
-    koth: `Nothing is built. Each side starts with a home town, and the towns it holds raise its soldiers. Every 10 seconds a side holding more hills than another takes 5 from its score for each hill more. A side at 0, or with no town, is out. Played on ${Object.values(Rules.MAPS).filter(m => m.koth).map(m => m.name).join(', ')}.` };
+    koth: `Nothing is built. Each side starts with a home town, its keep, which is never taken, and the towns it holds raise its soldiers. Footpaths climb to hills walled by cliffs. Each side starts with ${Rules.KOTH_SCORE}, and every 10 seconds a side holding more hills than another takes 5 from its score for each hill more. A side at 0 is out. Played on ${Object.values(Rules.MAPS).filter(m => m.koth).map(m => m.name).join(', ')}.` };
   const RES_NOTE = { std: 'Ore, oil and power are dug, pumped and built for, and everything costs.', free: 'Nothing costs a thing and power never runs short. Only build times and the fighting count.' };
   const weatherNote = (theme, w) => w === 'off' ? 'Fair skies all game.' : `${SKY_OF[theme] || ''} ${WEATHER_OF[w] || ''}`;
 

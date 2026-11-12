@@ -1799,6 +1799,21 @@ const Hud = (() => {
     function drawPoints(s, ink) {
       if (!s.koth) return;
       const R0 = Rules.KOTH_R, M = s.map;
+      // The footpaths cut up to hills walled by cliffs, a fine dashed line as a survey sheet draws a path, eased over
+      // three cells so its steps from cell to cell do not show.
+      og.save(); og.lineJoin = 'round'; og.lineCap = 'round'; og.setLineDash([3, 4]); og.lineWidth = 1.6;
+      og.strokeStyle = ink ? INK : 'rgba(250,244,228,0.85)';
+      for (const tr of s.tracks || []) {
+        const at = tr.cells.map(c => [c % M.W + 0.5, Math.floor(c / M.W) + 0.5]);
+        og.beginPath();
+        at.forEach((q, i) => {
+          const a = at[Math.max(0, i - 1)], b = at[Math.min(at.length - 1, i + 1)], gx = (a[0] + q[0] + b[0]) / 3, gy = (a[1] + q[1] + b[1]) / 3;
+          const [px, py] = world.project(gx, terrainAt(M, gx, gy) + 0.15, gy);
+          if (i) og.lineTo(px, py); else og.moveTo(px, py);
+        });
+        og.stroke();
+      }
+      og.restore();
       for (const p of s.points) {
         const z = terrainAt(M, p.x, p.y), [x, y] = world.project(p.x, z, p.y), [, yt] = world.project(p.x, z + 3.4, p.y);
         if (x < -60 || y < -60 || x > world.vw + 60 || y > world.vh + 60) continue;
@@ -1861,7 +1876,8 @@ const Hud = (() => {
           og.lineWidth = 3; og.strokeStyle = ink ? 'rgba(250,244,228,0.9)' : 'rgba(0,0,0,0.5)'; og.beginPath(); og.arc(x, y, 13, 0, 6.3); og.stroke();
           og.strokeStyle = n.capTeam >= 0 ? (ink ? SLOT_PLATE[n.capTeam] : SLOT_CSS[n.capTeam]) : '#d9d4c3'; og.beginPath(); og.arc(x, y, 13, -1.57, -1.57 + n.cap * 6.283); og.stroke();
         }
-        const name = Rules.townName(s, n.id);
+        // A King of the Hill side's keep, which is never taken, says so after its name.
+        const name = Rules.townName(s, n.id) + (s.koth && n.keep !== undefined && n.keep === n.owner ? ', keep' : '');
         if (ink) {
           const fs = Math.round(12 + smoothstepJS(110, 200, dist) * 3), yy = y - 17;
           og.save(); og.setLineDash([]); og.lineJoin = 'round'; og.lineCap = 'round';
