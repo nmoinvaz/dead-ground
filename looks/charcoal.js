@@ -68,7 +68,7 @@
           const C = charcoal.uniforms;
           if (!C.tPaper.value) C.tPaper.value = K.paper();
           C.t.value = K.ldr.texture; C.tSubj.value = K.mask(); C.tHeat.value = K.a0.texture; C.res.value.set(K.w, K.h); C.uTime.value = K.time; C.uK.value = K.h / 1080;
-          K.run(charcoal, null);
+          K.run(charcoal, K.out);
         },
       };
     },

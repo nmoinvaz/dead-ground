@@ -1397,7 +1397,7 @@
             K.run(lumMat, lumRT);
             C.t.value = lumRT.texture;
           }
-          K.run(ink, null);
+          K.run(ink, K.out);
         },
       };
     },

@@ -250,7 +250,7 @@ const Game = (() => {
       // Past a ratio of 2 the picture is drawn at 2 and stretched, as more pixels than that cost more than they show.
       const base = Math.min(dpr, 2), known = devPx && Math.abs(devPx[0] - w * dpr) < 3 && Math.abs(devPx[1] - h * dpr) < 3;
       const ovPx = known ? devPx.map(v => Math.max(2, Math.round(v * base / dpr))) : [Math.round(w * base), Math.round(h * base)];
-      // A Sharp picture on a screen of under 2 is drawn at up to 2 and shrunk by the browser, as at the screen's own
+      // A Sharp picture on a screen of under 2 is drawn at up to 2 and shrunk onto the canvas, as at the screen's own
       // pixels the pen lines and edges step. It is held to a 4K screen's pixels.
       over = picture === 'fast' ? 1 : Math.max(1, Math.min(2 / base, Math.sqrt(OVER_PX / (ovPx[0] * ovPx[1]))));
       const k = over * scale, px = ovPx.map(v => Math.max(2, Math.round(v * k))), key = `${w}x${h}:${px}:${ovPx}`;
