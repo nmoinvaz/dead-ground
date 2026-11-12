@@ -36,7 +36,7 @@ const Game = (() => {
   const WEATHER_OF = { random: 'In their usual measure.', mild: 'Mostly fair, with no storms of any kind.', harsh: 'Often, and the storms come hard.' };
   // What each choice of resources means, for the set-up.
   const WIN_NOTE = { conquest: 'A side is out when its last building falls.', regicide: 'Each side starts with a general. A side is out when its general falls, or its last building.',
-    koth: `Nothing is built. Each side starts with a home town, its keep, which is never taken, and the towns it holds raise its soldiers. Footpaths climb to hills walled by cliffs. Each side starts with ${Rules.KOTH_SCORE}, and every 10 seconds a side holding more hills than another takes 5 from its score for each hill more. A side at 0 is out. Played on ${Object.values(Rules.MAPS).filter(m => m.koth).map(m => m.name).join(', ')}.` };
+    koth: `Nothing is built. Each side starts with a home town, its keep, which is never taken, and the towns it holds raise its soldiers. Footpaths climb to hills walled by cliffs. Each side starts with ${Rules.KOTH_SCORE}, and every 10 seconds a side holding more hills than another takes 5 from its score for each hill more. A side at 0 is out. A side holding every hill and every town but the others' keeps for ${Rules.KOTH_HOLD / Rules.HZ} seconds wins. Played on ${Object.values(Rules.MAPS).filter(m => m.koth).map(m => m.name).join(', ')}.` };
   const RES_NOTE = { std: 'Ore, oil and power are dug, pumped and built for, and everything costs.', free: 'Nothing costs a thing and power never runs short. Only build times and the fighting count.' };
   const weatherNote = (theme, w) => w === 'off' ? 'Fair skies all game.' : `${SKY_OF[theme] || ''} ${WEATHER_OF[w] || ''}`;
 
@@ -501,6 +501,10 @@ const Game = (() => {
             }
             break;
           case 'hint': if (G.playing && e.team === G.team && e.hint === 'attrition') hud.say('Attrition: troops wear down abroad. A Support Truck stops it.', 'bad'); break;
+          // King of the Hill: a side holds every hill and every town but the keeps, and the others yield in a minute.
+          case 'field':
+            if (G.playing && G.team >= 0) hud.say(e.team === G.team ? `You hold the whole field. Keep it ${Rules.KOTH_HOLD / Rules.HZ} seconds and the enemy yields.` : `${G.names[e.team] || 'The enemy'} holds the whole field. Take a hill or a town back within ${Rules.KOTH_HOLD / Rules.HZ} seconds.`, e.team === G.team ? 'good' : 'bad');
+            break;
           case 'launch': if (G.playing && e.team === G.team) audio.play('launch', { gain: 0.9 }); break;
           case 'placed': if (G.playing && e.team === G.team) audio.at('place', e.x, e.y, { gain: 0.8 }); break;
           case 'over': if (G.playing) setTimeout(outcome, 1800); drawRoster(); break;

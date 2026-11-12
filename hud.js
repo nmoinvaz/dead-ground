@@ -2229,7 +2229,9 @@ const Hud = (() => {
           const box = $('kscore'); box.textContent = '';
           order.forEach((k, i) => { if (i) box.append(' · '); const b = document.createElement('b'); b.style.color = SLOT_CSS[k]; b.textContent = s.score[k]; box.append(b); });
         }
-        const held = me >= 0 ? s.points.filter(q => q.owner === me).length : 0, ht = `${held}/${s.points.length}`;
+        // While a side holds the whole field, the seconds left before the others yield.
+        const fl = s.field ? Math.max(0, Math.ceil((Rules.KOTH_HOLD - (s.tick - s.field.since)) / Rules.HZ)) : -1;
+        const held = me >= 0 ? s.points.filter(q => q.owner === me).length : 0, ht = `${held}/${s.points.length}${fl >= 0 ? ` · ${fl}s` : ''}`;
         if ($('kheld').textContent !== ht) $('kheld').textContent = ht;
         if (me >= 0) {
           const towns = s.towns.filter(n => n.owner === me), pick = towns.find(n => n.id === state.townPick) || towns.find(n => n.id === p.townPick) || towns[0];

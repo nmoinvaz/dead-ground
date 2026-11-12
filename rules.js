@@ -2112,6 +2112,7 @@ const Rules = (() => {
       S.points = kothPoints(S, kothCount(S));
       S.tracks = kothTracks(S);
       S.score = S.P.map(() => KOTH_SCORE);
+      S.field = null;
       if (!o.empty) for (const t of seats) spawnHome(S, t);
     } else if (!o.empty) for (const t of seats) spawnBase(S, t);
     territory(S);
@@ -2268,7 +2269,7 @@ const Rules = (() => {
       // The ground and the trees as pairs of cell and value, only where they differ from the map's start.
       gnd: diffs(S.gnd, S.map.ground), wood: diffs(S.wood, null), gndVer: S.gndVer, woodVer: S.woodVer, burn: S.burn, bridges: S.bridges, hh: S.hh, hr: S.hr, flooded: S.flooded,
       trail: b64.en(S.trail), trailSum: S.trailSum, hist: S.hist,
-      koth: S.koth, points: S.points, score: S.score,
+      koth: S.koth, points: S.points, score: S.score, field: S.field,
     };
   }
   function diffs(a, base) { const o = []; for (let c = 0; c < a.length; c++) if (a[c] !== (base ? base[c] : 0)) o.push(c, a[c]); return o; }
@@ -2277,7 +2278,7 @@ const Rules = (() => {
     if (S.seed !== o.seed) throw new Error('map seed mismatch');
     Object.assign(S, { tick: o.tick, rs: o.rs, next: o.next, occVer: o.occVer, oreVer: o.oreVer, terrVer: o.terrVer, dirty: o.dirty, over: o.over, shots: o.shots, sweeps: o.sweeps, flights: o.flights, occLog: o.occLog || [] });
     S.towns = o.towns.map(t => Object.assign({}, t));
-    if (S.koth && o.points) { S.points = o.points.map(p => Object.assign({}, p)); S.score = o.score.slice(); }
+    if (S.koth && o.points) { S.points = o.points.map(p => Object.assign({}, p)); S.score = o.score.slice(); S.field = o.field ? Object.assign({}, o.field) : null; }
     S.ore = new Uint16Array(b64.de(o.ore).buffer);
     S.fields = new Map(o.fields.map(([k, v, u, m, r, q]) => [k, { ver: v, used: u, made: m, reach: r, wq: q ?? 20 }]));
     S.P = o.P.map(p => {
@@ -4304,8 +4305,9 @@ const Rules = (() => {
   // King of the Hill. There is no building: each side starts with a home town and a few squads, its towns raise its
   // soldiers, and the war is for the map's high points. Every KOTH_EVERY a side holding more points than another
   // takes KOTH_BLEED from that side's score for each point of the difference. A side at 0, or with no town, is out,
-  // though its keep is never taken.
-  const KOTH_SCORE = 750, KOTH_BLEED = 5, KOTH_EVERY = 10 * HZ, KOTH_R = 4.5;
+  // though its keep is never taken. A side holding every point and every town but the others' keeps for KOTH_HOLD
+  // has the field, and the others yield.
+  const KOTH_SCORE = 750, KOTH_BLEED = 5, KOTH_EVERY = 10 * HZ, KOTH_R = 4.5, KOTH_HOLD = 60 * HZ;
   // The high points, found from the map's terrain. A summit is scored by its prominence, how far it stands above the
   // highest saddle joining it to higher ground. A point goes on the highest cell within six of its summit that a man
   // can stand on, off water, clear of the bases and away from the map's edges. The points come in the map's own
@@ -4477,6 +4479,19 @@ const Rules = (() => {
       let loss = 0;
       for (const O of S.P) if (O !== P && O.alive) loss += Math.max(0, held[O.team] - held[P.team]) * KOTH_BLEED;
       if (loss) { S.score[P.team] = Math.max(0, S.score[P.team] - loss); S.ev.push({ t: 'bleed', team: P.team, n: loss, score: S.score[P.team] }); }
+    }
+    // The whole field: every point and every town held by one side, but the keeps of the others, which it cannot
+    // take. Held for KOTH_HOLD, the others' scores fall to 0 and they are out. S.field is the side holding it and
+    // since when, or null.
+    if (S.tick % HZ === 0) {
+      let side = -1;
+      for (const P of S.P) {
+        if (!P.alive || held[P.team] < S.points.length || !S.P.some(O => O !== P && O.alive)) continue;
+        if (S.towns.every(t => t.owner === P.team || (t.keep !== undefined && t.keep === t.owner))) side = P.team;
+      }
+      if (side < 0) S.field = null;
+      else if (!S.field || S.field.team !== side) { S.field = { team: side, since: S.tick }; S.ev.push({ t: 'field', team: side }); }
+      else if (S.tick - S.field.since >= KOTH_HOLD) for (const P of S.P) if (P.alive && P.team !== side) { S.score[P.team] = 0; S.ev.push({ t: 'yield', team: P.team, to: side }); }
     }
   }
   // What a held town raises, by its size: a hamlet foot, a village horse and light vehicles too, and a town guns and
@@ -5446,7 +5461,7 @@ const Rules = (() => {
     HZ, DT, RES, UNITS, BUILDINGS, WEAPONS, TECH, POWERS, DIFFICULTY, LAYOUT, SIZES, MAPS, spread, use,
     AGES, MAX_AGE, POWER_AGE, LINES, LINE_ORDER, formOf, lineCount, nameOf, armOf,
     get W() { return W; }, get H() { return H; }, get VW() { return VW; }, get VH() { return VH; },
-    KOTH_SCORE, KOTH_BLEED, KOTH_EVERY, KOTH_R, KOTH_RAISE, KOTH_SLOTS, KOTH_CALLS, kothTowns, kothCap, kothSlots,
+    KOTH_SCORE, KOTH_BLEED, KOTH_EVERY, KOTH_R, KOTH_HOLD, KOTH_RAISE, KOTH_SLOTS, KOTH_CALLS, kothTowns, kothCap, kothSlots,
     ORE_KINDS, fishWater, dustWall, dustAt, groundedAt, dataOn, satUp, satPass, newGame, step, push, spawn, addBuilding, scoreOf, worth, SERIES, pickFrom, fits, spotFor, roomy, blockedReason, near, rehash, seenBy, terrainAt, heightAt, waterLevel, townPay, townShare, callNeed, callOff, CIVIC_PAY, CIVIC_REACH, LEVY_NOW, LEVY_FOR, placeCheck, trainersOf, TRAINER_OF, los, isAir, armed, cellOf, summary, exitOf,
     mulberry, noiser, clamp, lerp, smooth, angleTo, toXY, toUV, gap, setSize, save, load, hashOf, restartSlot, razeSlot, makeMap, mapFor, layoutFor,
     msin, mcos, matan2, mhypot,
