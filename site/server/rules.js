@@ -2042,6 +2042,7 @@ const Rules = (() => {
       // No ore is dug, so the fields are left as ground.
       S.ore.fill(0);
       S.points = kothPoints(S, kothCount(S));
+      S.tracks = kothTracks(S);
       S.score = S.P.map(() => KOTH_SCORE);
       if (!o.empty) for (const t of seats) spawnHome(S, t);
     } else if (!o.empty) for (const t of seats) spawnBase(S, t);
@@ -4201,6 +4202,8 @@ const Rules = (() => {
     if (S.tick % 5) return;
     let changed = false;
     for (const t of S.towns) {
+      // A King of the Hill side's keep, the first of its home towns, is never taken.
+      if (t.keep !== undefined && t.keep === t.owner) continue;
       const here = new Array(S.P.length).fill(0);
       near(S, t.x, t.y, 7, u => {
         if (u.b || u.hp <= 0 || !u.d.men || u.drop > 0) return;
@@ -4228,8 +4231,9 @@ const Rules = (() => {
 
   // King of the Hill. There is no building: each side starts with a home town and a few squads, its towns raise its
   // soldiers, and the war is for the map's high points. Every KOTH_EVERY a side holding more points than another
-  // takes KOTH_BLEED from that side's score for each point of the difference. A side at 0, or with no town, is out.
-  const KOTH_SCORE = 500, KOTH_BLEED = 5, KOTH_EVERY = 10 * HZ, KOTH_R = 4.5;
+  // takes KOTH_BLEED from that side's score for each point of the difference. A side at 0, or with no town, is out,
+  // though its keep is never taken.
+  const KOTH_SCORE = 750, KOTH_BLEED = 5, KOTH_EVERY = 10 * HZ, KOTH_R = 4.5;
   // The high points, found from the map's terrain. A summit is scored by its prominence, how far it stands above the
   // highest saddle joining it to higher ground. A point goes on the highest cell within six of its summit that a man
   // can stand on, off water, clear of the bases and away from the map's edges. The points come in the map's own
@@ -4286,6 +4290,65 @@ const Rules = (() => {
     }
     return out.map((p, i) => Object.assign(p, { id: i, owner: -1, cap: 0, capTeam: -1 }));
   }
+  // A mountain's top is walled by cliffs no man climbs, so each point that cannot be walked to from the first base gets
+  // a footpath. It is cut through the cliffs of this game's own ground, two cells wide, along the dry way up that
+  // climbs least, and the paths are kept for drawing.
+  function kothTracks(S) {
+    const M = S.map, g = S.gnd, h = new Float32Array(N), dry = new Uint8Array(N), out = [];
+    for (let c = 0; c < N; c++) { const x = c % W + 0.5, y = (c / W | 0) + 0.5; h[c] = terrainAt(M, x, y); dry[c] = h[c] >= waterLevel(M, x, y) ? 1 : 0; }
+    const DX = [1, -1, 0, 0], DY = [0, 0, 1, -1], b0 = S.bases[0];
+    for (const p of S.points) {
+      const walk = new Uint8Array(N), q = [Math.floor(b0[1]) * W + Math.floor(b0[0]) + 4];
+      walk[q[0]] = 1;
+      while (q.length) {
+        const c = q.pop(), x = c % W, y = (c - x) / W;
+        for (let i = 0; i < 4; i++) {
+          const nx = x + DX[i], ny = y + DY[i], k = ny * W + nx;
+          if (nx >= 0 && ny >= 0 && nx < W && ny < H && !walk[k] && !(g[k] & 2)) { walk[k] = 1; q.push(k); }
+        }
+      }
+      const goal = cellOf(p.x, p.y);
+      if (walk[goal]) continue;
+      // Outward from the point to the nearest walkable cell. A cliff cell costs more the more it climbs.
+      const dist = new Float64Array(N).fill(Infinity), prev = new Int32Array(N).fill(-1), heap = [];
+      const less = (a, b) => dist[a] < dist[b] || (dist[a] === dist[b] && a < b);
+      const put = c => { heap.push(c); let i = heap.length - 1; while (i > 0) { const j = (i - 1) >> 1; if (!less(heap[i], heap[j])) break; [heap[i], heap[j]] = [heap[j], heap[i]]; i = j; } };
+      const take = () => {
+        const top = heap[0], last = heap.pop();
+        if (heap.length) { heap[0] = last; let i = 0; for (;;) { const l = 2 * i + 1, r = l + 1; let m = i; if (l < heap.length && less(heap[l], heap[m])) m = l; if (r < heap.length && less(heap[r], heap[m])) m = r; if (m === i) break; [heap[i], heap[m]] = [heap[m], heap[i]]; i = m; } }
+        return top;
+      };
+      dist[goal] = 0; put(goal);
+      let end = -1;
+      const done = new Uint8Array(N);
+      while (heap.length) {
+        const c = take();
+        if (done[c]) continue;
+        done[c] = 1;
+        if (walk[c]) { end = c; break; }
+        const x = c % W, y = (c - x) / W;
+        for (let i = 0; i < 4; i++) {
+          const nx = x + DX[i], ny = y + DY[i], k = ny * W + nx;
+          if (nx < 0 || ny < 0 || nx >= W || ny >= H || !dry[k] || done[k]) continue;
+          const d = dist[c] + 1 + (g[k] & 2 ? 2 + 6 * Math.abs(h[k] - h[c]) : 0);
+          if (d < dist[k]) { dist[k] = d; prev[k] = c; put(k); }
+        }
+      }
+      if (end < 0) continue;
+      const path = [];
+      for (let c = end; c >= 0; c = prev[c]) path.push(c);
+      for (const c of path) for (const k of [c, c + 1, c + W]) if (k < N && dry[k] && (g[k] & 2) && (k !== c + 1 || k % W)) g[k] &= ~2;
+      out.push({ point: p.id, cells: path });
+    }
+    // Every cut is made in the map's turns as well, so each side's way up is the same as every other's.
+    const turns = S.bases.length <= 2 ? [[-1, 0]] : [[0, 1], [-1, 0], [0, -1]], cut = [];
+    for (let c = 0; c < N; c++) if ((M.ground[c] & 2) && !(g[c] & 2)) cut.push(c);
+    for (const c of cut) for (const [k, s] of turns) {
+      const x = c % W + 0.5 - CX, y = (c / W | 0) + 0.5 - CY, m = cellOf(CX + x * k - y * s, CY + x * s + y * k);
+      if (dry[m]) g[m] &= ~2;
+    }
+    return out;
+  }
   // The points a map takes: its own number, or three on two seats, five on four and seven on eight.
   const kothCount = S => { const m = Object.values(MAPS).find(e => e.layout === S.layout); return m && m.koth || (S.bases.length <= 2 ? 3 : S.bases.length <= 4 ? 5 : 7); };
   // A side's home town, the one nearest its place that nobody holds, and a second where the map has three towns or more
@@ -4298,6 +4361,7 @@ const Rules = (() => {
       for (const t of S.towns) if (t.owner < 0 && (!t0 || mhypot(t.x - b[0], t.y - b[1]) < mhypot(t0.x - b[0], t0.y - b[1]))) t0 = t;
       if (!t0) break;
       t0.owner = team; t0.home = team;
+      if (!home) t0.keep = team;
       home = home || t0;
     }
     if (!home) return;
@@ -5208,9 +5272,12 @@ const Rules = (() => {
     stepTowns(S);
     stepPoints(S);
     const danger = S.tick % SCAT_EVERY === 0 && S.shots.length ? dangerOf(S) : null;
-    for (let i = 0; i < S.ents.length; i++) {
-      const e = S.ents[i];
-      if (e.hp <= 0) continue;
+    // Every other tick the units act from the last to the first, so no side's units always act first. Those made
+    // during the tick act after the rest.
+    const nE = S.ents.length;
+    for (let j = 0; j < S.ents.length; j++) {
+      const e = S.ents[S.tick & 1 && j < nE ? nE - 1 - j : j];
+      if (!e || e.hp <= 0) continue;
       if (danger && danger.length) scatter(S, e, danger);
       if (e.b) stepBuilding(S, e); else stepUnit(S, e);
     }
