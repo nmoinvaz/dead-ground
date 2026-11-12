@@ -665,7 +665,7 @@ body[data-look="ink"] .sheet { box-shadow: 4px 4px 0 var(--ink); }
       <div class="choice"><h2>Shadow strength</h2><div id="s-shadow"><button data-v="full">Full</button><button data-v="light">Light</button><button data-v="off">Off</button></div></div>
       <div class="choice"><h2>Edge lines</h2><div id="s-edges" class="two"><button data-v="quick">Quick</button><button data-v="exact">Exact</button></div></div>
       <div class="choice"><h2>Music</h2><div id="s-music" class="two"><button data-v="on">On</button><button data-v="off">Off</button></div></div>
-      <p id="build">Build dc0f95f 2026-11-11 23:43</p>
+      <p id="build">Build 1015b67 2026-11-12 08:27</p>
       <p id="source"><a href="https://github.com/nmoinvaz/mapmakers-war" target="_blank" rel="noopener">Source on GitHub</a></p>
     </div>
     <div id="banner" hidden></div>
@@ -20817,7 +20817,8 @@ const Game = (() => {
 
     // A resize clears the canvas, so a size is only applied at the top of a frame, just before it is drawn, and never
     // when nothing has changed. Shown between a resize and a draw, the cleared canvas flashes.
-    let scale = 1, fitDue = true, fitKey = '';
+    let scale = 1, over = 1, fitDue = true, fitKey = '';
+    const OVER_PX = 3840 * 2160;
     function fit() { fitDue = true; }
     // The canvas's own size in device pixels, as the browser lays it out. The CSS size times the pixel ratio can miss
     // it by a pixel at a ratio like 1.25, and the browser then stretches the whole picture by that pixel, which
@@ -20835,12 +20836,15 @@ const Game = (() => {
       // Past a ratio of 2 the picture is drawn at 2 and stretched, as more pixels than that cost more than they show.
       const base = Math.min(dpr, 2), known = devPx && Math.abs(devPx[0] - w * dpr) < 3 && Math.abs(devPx[1] - h * dpr) < 3;
       const ovPx = known ? devPx.map(v => Math.max(2, Math.round(v * base / dpr))) : [Math.round(w * base), Math.round(h * base)];
-      const px = ovPx.map(v => Math.max(2, Math.round(v * scale))), key = `${w}x${h}:${px}:${ovPx}`;
+      // A Sharp picture on a screen of under 2 is drawn at up to 2 and shrunk by the browser, as at the screen's own
+      // pixels the pen lines and edges step. It is held to a 4K screen's pixels.
+      over = picture === 'fast' ? 1 : Math.max(1, Math.min(2 / base, Math.sqrt(OVER_PX / (ovPx[0] * ovPx[1]))));
+      const k = over * scale, px = ovPx.map(v => Math.max(2, Math.round(v * k))), key = `${w}x${h}:${px}:${ovPx}`;
       if (key === fitKey) return;
       fitKey = key;
       world.resize(w, h, px[0] / w, scale, px, ovPx);
       hud.layoutMini();
-      $('s-pic-note').textContent = `Drawn at ${px[0]} by ${px[1]}${scale < 1 ? `, ${Math.round(scale * 100)}% of full size` : ', full size'}.`;
+      $('s-pic-note').textContent = `Drawn at ${px[0]} by ${px[1]}${k > 1.01 ? `, ${k.toFixed(1)} times the screen's own pixels` : k < 0.99 ? `, ${Math.round(k * 100)}% of full size` : ', full size'}.`;
     }
     window.addEventListener('resize', fit);
     new ResizeObserver(fit).observe(view);
@@ -21118,19 +21122,20 @@ const Game = (() => {
     function setPicture(v) {
       picture = v; store.set('dg-picture', v);
       Object.assign(RES, { t: 0, ceil: 1, calm: 0 });
-      if (v !== 'fast' && scale !== 1) { scale = 1; fit(); }
+      scale = 1; fit();
       $('s-pic').querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.v === picture));
     }
+    // A Sharp picture drawn past the screen's own pixels gives up those over them on a machine too slow for them.
     function tune(dt, work) {
-      if (picture !== 'fast' || dt > 0.5 || document.hidden) return;
+      if ((picture !== 'fast' && over <= 1) || dt > 0.5 || document.hidden) return;
       RES.ft += (dt - RES.ft) * 0.05; RES.wk += (work - RES.wk) * 0.05;
       RES.t += dt; RES.calm += dt;
       if (RES.calm > 45 && RES.ceil < 1) { RES.ceil = Math.min(1, RES.ceil + 0.1); RES.calm = 0; }
       // Two seconds after a change, so the averages hold the new size.
       if (RES.t < 2) return;
-      // Never under three fifths of full size, and only once the frame rate falls under about 33, a twentieth or a
-      // tenth at a time.
-      const lo = 0.6, was = scale;
+      // Never under three fifths of full size, or a Sharp picture under the screen's own pixels, and only once the
+      // frame rate falls under about 33, a twentieth or a tenth at a time.
+      const lo = picture === 'fast' ? 0.6 : 1 / over, was = scale;
       if (RES.ft > 0.03 && RES.wk < RES.ft * 0.85 && scale > lo) {
         scale = Math.max(lo, Math.round(scale * Math.max(0.9, Math.sqrt(0.025 / RES.ft)) * 20) / 20);
         RES.ceil = Math.max(lo, was - 0.05); RES.calm = 0;
