@@ -454,9 +454,11 @@ const Rules = (() => {
     // lines of upgrade it buys.
     // delay is the seconds before the first wave. raid, if set, is how long a wave stays out before it goes
     // home. pulse, if set, says whether units built during a wave guard home instead of joining it.
-    recruit: { think: 4, income: 0.55, wave: 2600, grow: 300, delay: 720, power: false, maxAge: 5, apm: 1, ageEvery: 8, gap: 90, silo: false, ramp: [4, 0.8], def: 2, ups: 1, name: 'Recruit' },
-    regular: { think: 3, income: 0.7, wave: 2600, grow: 400, delay: 420, power: true, maxAge: 6, apm: 2, ageEvery: 6, gap: 120, silo: false, ramp: [6, 1.6], def: 3, ups: 4, name: 'Regular' },
-    veteran: { think: 0.75, income: 1, wave: 1500, grow: 1100, delay: 360, power: true, maxAge: 6, apm: 8, ageEvery: 3.5, rich: 3000, gap: 20, silo: true, ramp: [8, 3], def: 8, ups: 7, name: 'Veteran' },
+    // Each level beats the one below about 3 games in 4. The age clock and the army cap decide most games, so the
+    // levels differ in those by little.
+    recruit: { think: 2, income: 0.8, wave: 2600, grow: 400, delay: 420, power: false, maxAge: 6, apm: 3, ageEvery: 5, gap: 120, silo: false, ramp: [6.5, 2], def: 3, ups: 4, name: 'Recruit' },
+    regular: { think: 2, income: 0.8, wave: 2600, grow: 400, delay: 420, power: true, maxAge: 6, apm: 3, ageEvery: 5, gap: 120, silo: false, ramp: [7, 2.2], def: 3, ups: 4, name: 'Regular' },
+    veteran: { think: 1.5, income: 0.85, wave: 2200, grow: 800, delay: 360, power: true, maxAge: 6, apm: 5, ageEvery: 4.75, gap: 90, silo: true, ramp: [7, 2.2], def: 3, ups: 4, name: 'Veteran' },
     // Holds a player's base while they are away: builds and defends, never sets out.
     keeper: { think: 3, income: 1, wave: 1e9, grow: 0, delay: 1e9, power: false, maxAge: 6, apm: 2, ageEvery: 6, gap: 90, silo: false, ramp: [8, 1], def: 6, stay: true, ups: 5, name: 'Keeper' },
   };
