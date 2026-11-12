@@ -660,7 +660,7 @@ body[data-look="ink"] .sheet { box-shadow: 4px 4px 0 var(--ink); }
       <div class="choice"><h2>Shadow strength</h2><div id="s-shadow"><button data-v="full">Full</button><button data-v="light">Light</button><button data-v="off">Off</button></div></div>
       <div class="choice"><h2>Edge lines</h2><div id="s-edges" class="two"><button data-v="quick">Quick</button><button data-v="exact">Exact</button></div></div>
       <div class="choice"><h2>Music</h2><div id="s-music" class="two"><button data-v="on">On</button><button data-v="off">Off</button></div></div>
-      <p id="build">Build 1e60559 2026-11-11 15:44</p>
+      <p id="build">Build d847c66 2026-11-11 16:50</p>
       <p id="source"><a href="https://github.com/nmoinvaz/mapmakers-war" target="_blank" rel="noopener">Source on GitHub</a></p>
     </div>
     <div id="banner" hidden></div>
@@ -3235,15 +3235,18 @@ const Rules = (() => {
     return false;
   }
 
+  // What each watcher's rays reached when it last looked, kept outside the world by who watches: buildings never
+  // move and units often stand, and the ground and water sight runs over do not change in play.
+  const sightOf = new WeakMap();
   // Sight runs along rays, keeping the steepest look-up angle so far, as a watcher on a hill would. Heights are the
   // water's surface where water lies, and open water, which hides nothing, is seen wk times as far: a ray goes on past
-  // the sight's reach while it is over water, and stops at the far bank.
-  function vision(S) {
-    const M = S.map;
+  // the sight's reach while it is over water, and stops at the far bank. One side looks, the side only, or every side.
+  function vision(S, only = -1) {
+    const M = S.map, mine = t => only < 0 || t === only;
     // The cells a shower hides, set below before any side looks.
     let shMask = null;
-    for (const P of S.P) P.vis.fill(0);
-    const light = (P, x, y, r, eye, air, wk = 1) => {
+    S.P.forEach((P, t) => { if (mine(t)) P.vis.fill(0); });
+    const light = (P, x, y, r, eye, air, wk = 1, who = null) => {
       const R = Math.round(r), vis = P.vis, seen = P.seen;
       const ox = x, oy = y, c0 = cellOf(ox, oy);
       vis[c0] = 1; seen[c0] = 1;
@@ -3258,19 +3261,29 @@ const Rules = (() => {
       const lv = (px, py) => M.wl ? waterLevel(M, px, py) : M.water;
       const z0 = Math.max(heightAt(M, ox, oy), lv(ox, oy)) + eye;
       const RW = wk > 1 && wetNear(M, x, y, r * wk) ? Math.round(r * wk) : R;
-      for (const [dx, dy] of raysFor(RW)) {
-        let top = -1e9;
-        for (let d = 1; d <= RW; d++) {
-          const px = ox + dx * d, py = oy + dy * d;
-          if (px < 0 || py < 0 || px >= W || py >= H) break;
-          const t = terrainAt(M, px, py), wl = lv(px, py), wet = t < wl;
-          if (d > R && !wet) break;
-          const hz = wet ? wl : t, slope = (hz + 0.5 - z0) / d;
-          if (slope >= top - 0.02 || d < 3) { const c = (py | 0) * W + (px | 0); if (!(shMask && shMask[c] && d > 3)) { vis[c] = 1; seen[c] = 1; } }
-          const block = (hz - z0) / d;
-          if (block > top) top = block;
+      // The rays are cast again only when the watcher has moved or its reach has changed; else the cells they
+      // reached last time are lit again, all but those a shower now hides.
+      let L = who && sightOf.get(who);
+      if (!L || L.x !== ox || L.y !== oy || L.z0 !== z0 || L.R !== R || L.RW !== RW || L.M !== M) {
+        const cells = [], far = [];
+        for (const [dx, dy] of raysFor(RW)) {
+          let top = -1e9;
+          for (let d = 1; d <= RW; d++) {
+            const px = ox + dx * d, py = oy + dy * d;
+            if (px < 0 || py < 0 || px >= W || py >= H) break;
+            const t = terrainAt(M, px, py), wl = lv(px, py), wet = t < wl;
+            if (d > R && !wet) break;
+            const hz = wet ? wl : t, slope = (hz + 0.5 - z0) / d;
+            if (slope >= top - 0.02 || d < 3) { cells.push((py | 0) * W + (px | 0)); far.push(d > 3 ? 1 : 0); }
+            const block = (hz - z0) / d;
+            if (block > top) top = block;
+          }
         }
+        L = { x: ox, y: oy, z0, R, RW, M, cells: Int32Array.from(cells), far: Uint8Array.from(far) };
+        if (who) sightOf.set(who, L);
       }
+      const cs = L.cells, fs = L.far;
+      for (let i = 0; i < cs.length; i++) { const c = cs[i]; if (!(shMask && shMask[c] && fs[i])) { vis[c] = 1; seen[c] = 1; } }
     };
     // Fog shortens everyone's sight, and blown sand the sight of what stands in a dust storm's dust. Radar sweeps and
     // flares see through them. By night a unit sees two fifths less, a building a little less by its lamps, and a
@@ -3289,27 +3302,28 @@ const Rules = (() => {
     shMask = mask;
     const inSh = e => mask && mask[cellOf(e.x, e.y)] ? 0.65 : 1;
     for (const e of S.ents) {
-      if (e.hp <= 0) continue;
+      if (e.hp <= 0 || !mine(e.team)) continue;
       const P = S.P[e.team];
       // Under a side's satellite constellation its units see as by a clear day.
       const up = satUp(S, e.team);
-      if (e.b) light(P, e.x, e.y, (e.d.sight + Math.max(e.w, e.h) / 2) * (up ? 1 : fkAt(e) * (armOf(S, e) ? 1 : nb) * inSh(e)), 3, false);
+      if (e.b) light(P, e.x, e.y, (e.d.sight + Math.max(e.w, e.h) / 2) * (up ? 1 : fkAt(e) * (armOf(S, e) ? 1 : nb) * inSh(e)), 3, false, 1, e);
       else if (e.d.move === 'air' || e.d.move === 'jet') light(P, e.x, e.y, e.d.sight * (up ? 1 : faAt(e) * (1 - 0.3 * n) * inSh(e)), 0, true);
       // A ground unit sees a half again as far across open water, and a scout two and a half times as far. A ship's
       // sight is its own.
-      else light(P, e.x, e.y, e.d.sight * (up ? 1 : fkAt(e) * nu * inSh(e)) * (e.cov >= 0 ? 1.2 : 1), 1.1, false, e.d.move === 'naval' ? 1 : canExplore(e) ? 2.5 : 1.5);
+      else light(P, e.x, e.y, e.d.sight * (up ? 1 : fkAt(e) * nu * inSh(e)) * (e.cov >= 0 ? 1.2 : 1), 1.1, false, e.d.move === 'naval' ? 1 : canExplore(e) ? 2.5 : 1.5, e);
     }
-    for (const t of S.towns) if (t.owner >= 0) light(S.P[t.owner], t.x, t.y, 9 * fkAt(t) * (1 - 0.25 * n), 2, false);
-    for (const s of S.sweeps) if (s.until > S.tick) light(S.P[s.team], s.x, s.y, s.r, 0, true);
+    for (const t of S.towns) if (t.owner >= 0 && mine(t.owner)) light(S.P[t.owner], t.x, t.y, 9 * fkAt(t) * (1 - 0.25 * n), 2, false, 1, t);
+    for (const s of S.sweeps) if (s.until > S.tick && mine(s.team)) light(S.P[s.team], s.x, s.y, s.r, 0, true);
     // A unit or building that has fired lately is seen by the side it fired on, wherever it stands, by its flash.
-    for (const e of S.ents) if (e.hp > 0 && e.firedUntil > S.tick && S.P[e.firedOn]) light(S.P[e.firedOn], e.x, e.y, e.b ? Math.max(e.w, e.h) / 2 + 0.5 : 0.8, 0, true);
+    for (const e of S.ents) if (e.hp > 0 && e.firedUntil > S.tick && S.P[e.firedOn] && mine(e.firedOn)) light(S.P[e.firedOn], e.x, e.y, e.b ? Math.max(e.w, e.h) / 2 + 0.5 : 0.8, 0, true);
     // The rays leave a lone cell dark here and there between them. A cell whose four neighbours are seen is seen.
-    for (const P of S.P) {
+    S.P.forEach((P, t) => {
+      if (!mine(t)) return;
       const vis = P.vis, seen = P.seen;
       for (let y = 1; y < H - 1; y++) for (let x = 1, c = y * W + 1; x < W - 1; x++, c++) {
         if (!vis[c] && vis[c - 1] && vis[c + 1] && vis[c - W] && vis[c + W]) { vis[c] = 1; seen[c] = 1; }
       }
-    }
+    });
   }
 
   // Three ways of getting about: on foot, on wheels, and on tracks, which go through woods by flattening them.
@@ -3353,7 +3367,9 @@ const Rules = (() => {
   // further out, for someone beyond it. After the ground changes a field is kept three seconds more before
   // it is made again, and at most two are made in a step, so a burst of orders is spread over steps.
   // The weather's going off the roads for a class, in twentieths, so a field is made again as the going changes.
-  const FIELDS_A_STEP = 2;
+  // A world keeps up to FIELDS_KEPT fields, dropping the one longest unused for a new one. Eight sides' squads may be
+  // making for more goals at once than half that, and a field dropped and asked for again is made again.
+  const FIELDS_A_STEP = 2, FIELDS_KEPT = 96;
   const goingKey = (S, cls) => Math.round(offGoing(cls === 'veh' ? 'wheel' : cls, sky(S)) * 20);
   function field(S, cls, gx, gy, need = 0) {
     const key = (cls === 'foot' ? 0 : cls === 'veh' ? 1 : cls === 'track' ? 2 : 3) * N + gy * W + gx, wq = goingKey(S, cls);
@@ -3364,7 +3380,7 @@ const Rules = (() => {
     if (S.fieldQueue >= FIELDS_A_STEP) return null;
     S.fieldQueue++;
     if (!f) {
-      if (S.fields.size >= 48) {
+      if (S.fields.size >= FIELDS_KEPT) {
         let oldest = null, age = Infinity;
         for (const [k, v] of S.fields) if (v.used < age) { age = v.used; oldest = k; }
         S.fields.delete(oldest); S._fields.delete(oldest);
@@ -3382,7 +3398,7 @@ const Rules = (() => {
     if (!p) { p = { dist: new Float32Array(N), dir: new Int8Array(N) }; S._fields.set(key, p); }
     p.ver = f.ver; p.reach = f.reach; p.wq = f.wq;
     const [occ, gnd] = stateAt(S, f.ver);
-    fill(S, p, cls, gx, gy, occ, gnd, f.reach, f.wq);
+    fill(S, p, cls, gx, gy, occ, gnd, f.reach, f.wq, f.ver);
     return p;
   }
   // How much of a cell is road, 1 on the carriageway fading to 0 at its verge, from the distance at its middle.
@@ -3397,13 +3413,39 @@ const Rules = (() => {
   // Dijkstra from the goal over a grid of what blocks this class, with each step costing the time it takes, so
   // roads and worn tracks are cheaper, and woods and fords dearer. Off the roads the weather's going, wq in
   // twentieths, makes open ground and young tracks dearer, while a hardened track and a road stay firm.
-  let fillBlock = null;
-  function fill(S, f, cls, gx, gy, occ, g, reach = Infinity, wq = 20) {
+  // What a fill needs of the ground is made once for each class, world, version of the ground and going, and kept
+  // for the fills after it, most of which share it: which of each cell's eight steps are open, and what a step
+  // into each cell costs before its length. The field comes out the same to the bit as working them out step by
+  // step. ver is the version occ and g stand at, or -1 for a scratch fill, which keeps nothing.
+  const fillGround = {};
+  function groundFor(S, cls, occ, g, ver, wq) {
+    let Gd = fillGround[cls];
+    if (Gd && ver >= 0 && Gd.S === S && Gd.ver === ver && Gd.wq === wq && Gd.N === N) return Gd;
+    if (!Gd || Gd.N !== N) Gd = fillGround[cls] = { N, block: new Uint8Array(N), open: new Uint8Array(N), k: new Float64Array(N) };
+    Gd.S = ver >= 0 ? S : null; Gd.ver = ver; Gd.wq = wq;
     const M = S.map, bit = BIT[cls], woodC = cls === 'track' ? 3 : 1.6, roadC = ROAD_COST[cls], offK = 20 / wq, naval = cls === 'naval';
-    if (!fillBlock || fillBlock.length !== N) fillBlock = new Uint8Array(N);
-    const block = fillBlock, road = roadW(M);
-    if (cls === 'naval') { const sea = M.sea; for (let c = 0; c < N; c++) block[c] = !sea[c] || occ[c] !== 0 ? 1 : 0; }
+    const block = Gd.block, open = Gd.open, k = Gd.k, road = roadW(M);
+    if (naval) { const sea = M.sea; for (let c = 0; c < N; c++) block[c] = !sea[c] || occ[c] !== 0 ? 1 : 0; }
     else for (let c = 0; c < N; c++) block[c] = (g[c] & bit) !== 0 || occ[c] !== 0 ? 1 : 0;
+    const DX = [1, 1, 0, -1, -1, -1, 0, 1], DY = [0, 1, 1, 1, 0, -1, -1, -1];
+    for (let y = 0, c = 0; y < H; y++) for (let x = 0; x < W; x++, c++) {
+      let o = 0;
+      for (let i = 0; i < 8; i++) {
+        const nx = x + DX[i], ny = y + DY[i];
+        if (nx < 0 || ny < 0 || nx >= W || ny >= H || block[ny * W + nx]) continue;
+        if ((i & 1) && (block[y * W + nx] || block[ny * W + x])) continue;
+        o |= 1 << i;
+      }
+      open[c] = o;
+      // Open water is the same going everywhere, under a bridge's road as well.
+      if (naval) k[c] = 1;
+      else { const gm = g[c], rw = road[c], lv = (gm >> 5) & 3, off = lv >= 3 ? TRACK_COST[3] : TRACK_COST[lv] * offK, here = rw > 0 ? off + (roadC - off) * rw : off; k[c] = here * (gm & 8 ? woodC : 1) * (gm & 16 ? 2 : 1); }
+    }
+    return Gd;
+  }
+  function fill(S, f, cls, gx, gy, occ, g, reach = Infinity, wq = 20, ver = -1) {
+    const roadC = ROAD_COST[cls], offK = 20 / wq, naval = cls === 'naval', woodC = cls === 'track' ? 3 : 1.6;
+    const Gd = groundFor(S, cls, occ, g, ver, wq), open = Gd.open, k = Gd.k;
     const dist = f.dist, dir = f.dir;
     dist.fill(Infinity); dir.fill(-1);
     // The cells waiting to be settled lie in buckets by distance (Dial's queue). A bucket is narrower than the
@@ -3420,11 +3462,11 @@ const Rules = (() => {
     if (qHead.length < B) qHead = new Int32Array(B);
     qHead.fill(-1, 0, B);
     let e = 0, live = 0;
-    const push = (c, d) => { const k = Math.floor(d * inv) & mask; qC[e] = c; qD[e] = d; qN[e] = qHead[k]; qHead[k] = e++; live++; };
     const seeds = goalCells(S, cls, gx, gy, occ, g);
-    for (const c of seeds) { dist[c] = 0; push(c, 0); }
-    const DX = [1, 1, 0, -1, -1, -1, 0, 1], DY = [0, 1, 1, 1, 0, -1, -1, -1];
-    const COST = [1, 1.41, 1, 1.41, 1, 1.41, 1, 1.41];
+    for (const c of seeds) { dist[c] = 0; const b = Math.floor(0 * inv) & mask; qC[e] = c; qD[e] = 0; qN[e] = qHead[b]; qHead[b] = e++; live++; }
+    // A step's length times the cost of the cell it goes into, rounded to the array's own precision, so a cell is
+    // never queued again for the same distance.
+    const OFF = [1, W + 1, W, W - 1, -1, -W - 1, -W, -W + 1], COST = [1, 1.41, 1, 1.41, 1, 1.41, 1, 1.41];
     for (let cur = 0; live > 0;) {
       const h = qHead[cur & mask];
       if (h < 0) {
@@ -3435,18 +3477,11 @@ const Rules = (() => {
       qHead[cur & mask] = qN[h]; live--;
       const c = qC[h], dc = qD[h];
       if (dc > dist[c] || dc > reach) continue;
-      const x = c % W, y = (c - x) / W;
+      const o = open[c];
       for (let i = 0; i < 8; i++) {
-        const nx = x + DX[i], ny = y + DY[i];
-        if (nx < 0 || ny < 0 || nx >= W || ny >= H) continue;
-        const m = ny * W + nx;
-        if (block[m]) continue;
-        if ((i & 1) && (block[y * W + nx] || block[ny * W + x])) continue;
-        // Rounded to the array's own precision, so a cell is never queued again for the same distance.
-        // Open water is the same going everywhere, under a bridge's road as well.
-        const gm = g[m], rw = road[m], lv = (gm >> 5) & 3, off = lv >= 3 ? TRACK_COST[3] : TRACK_COST[lv] * offK, here = rw > 0 ? off + (roadC - off) * rw : off;
-        const nd = Math.fround(dc + COST[i] * (naval ? 1 : here * (gm & 8 ? woodC : 1) * (gm & 16 ? 2 : 1)));
-        if (nd < dist[m]) { dist[m] = nd; dir[m] = (i + 4) & 7; push(m, nd); }
+        if ((o & (1 << i)) === 0) continue;
+        const m = c + OFF[i], nd = Math.fround(dc + COST[i] * k[m]);
+        if (nd < dist[m]) { dist[m] = nd; dir[m] = (i + 4) & 7; const b = Math.floor(nd * inv) & mask; qC[e] = m; qD[e] = nd; qN[e] = qHead[b]; qHead[b] = e++; live++; }
       }
     }
   }
@@ -3539,7 +3574,7 @@ const Rules = (() => {
     if (!q || q.reach < need) {
       q = q || { dist: new Float32Array(N), dir: new Int8Array(N), reach: 0 };
       q.reach = Math.fround(need * 1.5 + 32);
-      fill(S, q, cls, gx, gy, S.occ, S.gnd, q.reach, wq);
+      fill(S, q, cls, gx, gy, S.occ, S.gnd, q.reach, wq, S.occVer);
       scratch.set(sk, q);
       if (scratch.size > 16) scratch.delete(scratch.keys().next().value);
     }
@@ -5786,7 +5821,8 @@ const Rules = (() => {
       recount(S);
       if (dirty || S.dirty) { S.dirty = false; territory(S); }
     }
-    if (S.tick % 10 === 0) vision(S);
+    // Each side looks every half second, on a tick of its own, so the sides' sight is spread over the ticks.
+    for (let t = S.tick % 10; t < S.P.length; t += 10) vision(S, t);
     S.sweeps = S.sweeps.filter(s => s.until > S.tick);
     // A side whose last building falls is out, and what it had left goes with it. The last side standing wins.
     if (!S.over && S.tick % HZ === 0) {
