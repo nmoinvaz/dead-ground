@@ -2079,7 +2079,8 @@ const Rules = (() => {
     h.P.forEach((a, t) => {
       if (!a) return;
       const s = S.P[t].stats, sc = scoreOf(S, t, land[t]);
-      a.sc.push(sc.total); a.ar.push(Math.round(ar[t])); a.un.push(un[t]); a.bl.push(bl[t]); a.ld.push(sc.land);
+      // In King of the Hill the score is the hill score, which the report charts over the game.
+      a.sc.push(S.koth ? S.score[t] : sc.total); a.ar.push(Math.round(ar[t])); a.un.push(un[t]); a.bl.push(bl[t]); a.ld.push(sc.land);
       a.su.push(Math.round(s.mined + s.townIn)); a.oi.push(Math.round(s.oilIn)); a.tw.push(sc.towns); a.kv.push(Math.round(s.killV));
     });
     const war = [];
@@ -4210,7 +4211,8 @@ const Rules = (() => {
       if (t.owner === team) { t.cap = Math.max(0, t.cap - 0.1); if (t.cap === 0) t.capTeam = -1; continue; }
       if (t.capTeam !== team && t.cap > 0) { t.cap = Math.max(0, t.cap - 0.05 * Math.min(here[team], 3)); if (t.cap === 0) t.capTeam = team; continue; }
       t.capTeam = team;
-      t.cap += 0.05 * Math.min(here[team], 3) / (t.owner >= 0 ? 1.3 : 1) * 0.5;
+      // A King of the Hill side's home town, still held by it, takes three times as long.
+      t.cap += 0.05 * Math.min(here[team], 3) / (t.owner >= 0 ? 1.3 : 1) * 0.5 / (t.home !== undefined && t.home === t.owner ? 3 : 1);
       if (t.cap >= 1) {
         const from = t.owner;
         t.owner = team; t.cap = 0; t.capTeam = -1; changed = true;
@@ -4284,13 +4286,19 @@ const Rules = (() => {
   }
   // The points a map takes: its own number, or three on two seats, five on four and seven on eight.
   const kothCount = S => { const m = Object.values(MAPS).find(e => e.layout === S.layout); return m && m.koth || (S.bases.length <= 2 ? 3 : S.bases.length <= 4 ? 5 : 7); };
-  // A side's home town, the one nearest its place that nobody holds, and the squads it starts with there.
+  // A side's home town, the one nearest its place that nobody holds, and a second where the map has three towns or more
+  // to a side, and the squads it starts with in the first. Home towns are slower to take while their side holds them.
   function spawnHome(S, team) {
-    const b = S.bases[team];
+    const b = S.bases[team], two = S.towns.length >= 3 * S.seats.length;
     let home = null;
-    for (const t of S.towns) if (t.owner < 0 && (!home || mhypot(t.x - b[0], t.y - b[1]) < mhypot(home.x - b[0], home.y - b[1]))) home = t;
+    for (let k = two ? 2 : 1; k > 0; k--) {
+      let t0 = null;
+      for (const t of S.towns) if (t.owner < 0 && (!t0 || mhypot(t.x - b[0], t.y - b[1]) < mhypot(t0.x - b[0], t0.y - b[1]))) t0 = t;
+      if (!t0) break;
+      t0.owner = team; t0.home = team;
+      home = home || t0;
+    }
     if (!home) return;
-    home.owner = team;
     const age = S.P[team].tech, a = matan2(CY - home.y, CX - home.x), f = [mcos(a), msin(a)], s = [-f[1], f[0]];
     const at = (fw, sd) => [home.x + f[0] * fw + s[0] * sd, home.y + f[1] * fw + s[1] * sd];
     for (const [k, fw, sd] of [['inf', 5, -2.5], ['inf', 5, 2.5], ['at', 3.5, 0], ['rec', 7, 0]]) { const kind = formOf(k, age); if (kind) spawn(S, kind, team, ...at(fw, sd)); }
@@ -4331,15 +4339,16 @@ const Rules = (() => {
     }
   }
   // What a held town raises, by its size: a hamlet foot, a village horse and light vehicles too, and a town guns and
-  // armour as well, and how many it trains at once. A side's army is held to two squads a standing house it holds.
+  // armour as well, and how many it trains at once. Each town held lets a side keep so many units by its size, and two
+  // more for each of its houses standing, so a ruined town keeps fewer.
   const KOTH_RAISE = { hamlet: ['inf', 'at', 'snp', 'eng'], village: ['inf', 'at', 'snp', 'eng', 'hero', 'rec', 'mount', 'ifv', 'sup'], town: ['inf', 'at', 'snp', 'eng', 'hero', 'rec', 'mount', 'ifv', 'sup', 'aa', 'siege', 'heavy'] };
-  const KOTH_SLOTS = { hamlet: 1, village: 2, town: 3 }, KOTH_PER_HOUSE = 2;
+  const KOTH_SLOTS = { hamlet: 1, village: 2, town: 3 }, KOTH_BASE = { hamlet: 6, village: 10, town: 14 }, KOTH_PER_HOUSE = 2;
   function kothTowns(S, team) {
     const out = [];
     for (const t of S.towns) if (t.owner === team) { const p = townPay(S, t.id, team); out.push({ t, kind: p.kind, standing: p.standing }); }
     return out;
   }
-  const kothCap = (S, team) => kothTowns(S, team).reduce((n, k) => n + k.standing * KOTH_PER_HOUSE, 0);
+  const kothCap = (S, team) => kothTowns(S, team).reduce((n, k) => n + KOTH_BASE[k.kind] + k.standing * KOTH_PER_HOUSE, 0);
   // A side's towns as trainers: one for each place in each town's queue, with the lines that town raises, the side's
   // chosen town first. A unit comes out at the edge of its town facing the middle of the map.
   function kothSlots(S, team) {
