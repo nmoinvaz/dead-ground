@@ -254,6 +254,8 @@ body[data-look="ink"][data-scheme="dark"] #end, body[data-look="ink"][data-schem
 #loading { position: absolute; inset: 0; z-index: 20; background: #f2e8d2; display: flex; flex-direction: column; gap: 14px; align-items: center; justify-content: center; font: 500 20px "Jost", "Futura", "Trebuchet MS", sans-serif; letter-spacing: .32em; color: #1f1a16; }
 body.ready #loading { display: none; }
 body.ready.rejoining #loading { display: flex; }
+body.lost #loading { display: flex; }
+body.lost #loading .lbar { display: none; }
 body[data-scheme="dark"] #loading { background: #1a1814; color: #e8e0d0; }
 /* The loading bar: it creeps on by itself while the page is read, as the browser draws it apart from the page's own
    work, and then follows the game's own steps to the end. */
