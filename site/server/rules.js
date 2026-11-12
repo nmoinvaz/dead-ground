@@ -535,7 +535,7 @@ const Rules = (() => {
     atlantis: { name: 'Atlantis', layout: 'atlantis', seats: 4, ruins: true, about: 'A great island of rings of land and water round a central citadel, joined by bridges, with canals cut in from the sea. Ships can sail the rings.' },
     falls: { name: 'The Falls', layout: 'falls', seats: 2, about: 'A broad river drops over a great horseshoe fall, as at Niagara, into a deep gorge between the two sides. Bridges and a ford cross above the falls, an island town stands between them, and only a high bridge spans the gorge. Docks hold each reach.' },
     mesa: { name: 'Mesa Country', layout: 'mesa', seats: 2, koth: 3, theatre: 'desert', flora: 'cactus', about: 'Open desert of dunes and sheer-sided mesas, with stands of cactus. The mesas wall off the lines of march.' },
-    summit: { name: 'The Summit', layout: 'summit', seats: 2, koth: 3, about: 'One great mountain between the bases, its top far above the land, climbed on foot by four ridges, with a camp partway up each base\'s. Roads run round its foot.' },
+    summit: { name: 'The Summit', layout: 'summit', seats: 2, koth: 3, about: 'One great mountain between the bases, its top far above the land, climbed on foot by four ridges, with a camp partway up each base\'s. Glaciers above the camps slow the climb, and at times cloud comes down over the top and hides it. Roads run round its foot.' },
   };
   // The theatre a game on a map is fought in: the map's own, if it fixes one, or the one chosen.
   const theatreOf = (map, chosen) => (MAPS[map] && MAPS[map].theatre) || chosen;
@@ -977,6 +977,8 @@ const Rules = (() => {
       L.calm = (x, y) => { const [u, v] = toUV(x, y); return smooth(30, 42, mhypot(u, v)); };
       L.noBench = (x, y) => { const [u, v] = toUV(x, y); return 1 - smooth(34, 40, mhypot(u, v)); };
       L.highs = [[CX, CY], uvp(-CAMP, vBase(-CAMP)), mirror(uvp(-CAMP, vBase(-CAMP)))];
+      // Glaciers lie on the ridges' upper reaches above the camps, and cloud comes down at times over the top.
+      L.iceLine = 15; L.cloudLine = 16;
       L.bases.push(uvp(-56, 0), mirror(uvp(-56, 0)));
       const tN = uvp(-14, 52), tS = uvp(-14, -52), tC = uvp(-36, 0), hub = uvp(-48, 0);
       for (const t of [tN, tS, tC]) all(L.towns, t);
@@ -1498,7 +1500,8 @@ const Rules = (() => {
 
     // Cells. Bit 1 stops vehicles, bit 2 stops infantry, bit 4 forbids building. Bit 8 is standing woods,
     // which stop wheels, slow infantry and fall under tracks. Bit 16 is a ford, slow going for everyone. Bits 32
-    // and 64 hold how hard a track worn there has become, 0 to 3, set as the world goes on.
+    // and 64 hold how hard a track worn there has become, 0 to 3, set as the world goes on. Bit 128 is a glacier's
+    // ice, slow going for everyone.
     const hAt = (x, y) => { const i = clamp(Math.round(x * RES), 0, VW - 1), j = clamp(Math.round(y * RES), 0, VH - 1); return h[j * VW + i]; };
     const deckAt = (x, y) => { const i = clamp(Math.round(x * RES), 0, VW - 1), j = clamp(Math.round(y * RES), 0, VH - 1); return deck[j * VW + i]; };
     const ground = new Uint8Array(N), fordCells = [], wadeCells = [];
@@ -1522,6 +1525,8 @@ const Rules = (() => {
       if (slope > 0.95) bits |= 1 | 4;
       if (slope > 1.4) bits |= 2;
       if (slope > 0.5) bits |= 4;
+      // A layout's glaciers lie on the land above its ice line, short of a cliff, and nothing is built on them.
+      if (L.iceLine != null && !(bits & 2) && hAt(x + 0.5, y + 0.5) > L.iceLine) bits |= 4 | 128;
       return bits;
     };
     for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
@@ -1646,7 +1651,7 @@ const Rules = (() => {
     const fish = (L.fish || []).map(p => ({ x: p[0], y: p[1] }));
     let seaCells = 0;
     for (let c = 0; c < N; c++) seaCells += sea[c];
-    return { W, H, seed, kind, h, deck, water, ground, ore: oreCells, oreKind, oreFields, wells, towns, roads, roadDist, bridges, scatter, houses, oreRich, bases: L.bases, faces, fords: L.fords, fordCells, wadeCells, brooks, brookFords, brookDist: bD, brookFord: bF, falls, wl, cascades: L.cascades || [], sea, fish, seaCells, monuments: (L.monuments || []).map(([k, x, y, r, a]) => ({ k, x, y, r, a })), highs: L.highs || null };
+    return { W, H, seed, kind, h, deck, water, ground, ore: oreCells, oreKind, oreFields, wells, towns, roads, roadDist, bridges, scatter, houses, oreRich, bases: L.bases, faces, fords: L.fords, fordCells, wadeCells, brooks, brookFords, brookDist: bD, brookFord: bF, falls, wl, cascades: L.cascades || [], sea, fish, seaCells, monuments: (L.monuments || []).map(([k, x, y, r, a]) => ({ k, x, y, r, a })), highs: L.highs || null, iceLine: L.iceLine ?? null, cloudLine: L.cloudLine ?? null };
   }
 
   // A map is kept only if vehicles can get from the first base to every other base, town and well.
@@ -1890,6 +1895,25 @@ const Rules = (() => {
     return o;
   }
   const sky = S => S._wx && S._wx.at === S.tick ? S._wx : (S._wx = Object.assign(weatherAt(S.seed, S.tick, skyOf(S)), { at: S.tick }));
+  // A layout's cloud on the heights comes down over the land above its cloud line a minute at a time, by the seed
+  // and the minute alone, in a share of minutes that grows with the spell's weather. None comes in a game's first two
+  // minutes or with the weather off.
+  const CAP_SPAN = 60 * HZ, CAP_ODDS = { clear: 8, cloud: 30, rain: 45, storm: 55, fog: 60, snow: 50, sand: 10 };
+  function capDown(S) {
+    if (S.map.cloudLine == null || S.weather === 'off') return false;
+    const k = Math.floor(S.tick / CAP_SPAN);
+    if (S._cap && S._cap.k === k) return S._cap.down;
+    const down = k >= 2 && spellHash(S.seed + 911, k) % 100 < CAP_ODDS[spellOf(S.seed, Math.floor(k * CAP_SPAN / SPELL), skyOf(S))];
+    S._cap = { k, down };
+    return down;
+  }
+  // The cells the cloud covers when it is down, worked out once for the map.
+  function capCells(M) {
+    if (M._capC) return M._capC;
+    const out = [];
+    if (M.cloudLine != null) for (let c = 0; c < W * H; c++) if (terrainAt(M, c % W + 0.5, (c / W | 0) + 0.5) > M.cloudLine) out.push(c);
+    return M._capC = Int32Array.from(out);
+  }
   // Kinds of ore. Each pays about the same while a truck digs, but a load of gold is worth most and takes longest
   // to dig, and its fields are small, while iron digs fastest and its fields last longest. So gold pays best far
   // from home, where trips are long, at the cost of trucks standing longer in the open, and iron keeps a base going.
@@ -2571,14 +2595,17 @@ const Rules = (() => {
     const nu = 1 - 0.4 * n, nb = 1 - 0.15 * n;
     // Under a shower or a rain cloud sight is cut short: what stands inside one is seen only from close by, and what
     // stands in one sees a third less itself.
-    const shw = showersAt(S), mask = shw.length ? (S._shMask && S._shMask.length === N ? S._shMask.fill(0) : (S._shMask = new Uint8Array(N))) : null;
+    const shw = showersAt(S), cap = capDown(S), mask = shw.length || cap ? (S._shMask && S._shMask.length === N ? S._shMask.fill(0) : (S._shMask = new Uint8Array(N))) : null;
     if (mask) for (const s of shw) {
       const rr = s.r * 0.8 * s.k;
       if (rr < 2) continue;
       for (let cy = Math.max(0, Math.floor(s.y - rr)); cy <= Math.min(H - 1, Math.ceil(s.y + rr)); cy++) for (let cx = Math.max(0, Math.floor(s.x - rr)); cx <= Math.min(W - 1, Math.ceil(s.x + rr)); cx++) if (mhypot(cx + 0.5 - s.x, cy + 0.5 - s.y) < rr) mask[cy * W + cx] = 1;
     }
+    // Cloud down on the heights hides what stands in it as a shower does, and what stands in it sees only close by,
+    // so the heights give no view while it lies on them.
+    if (cap) for (const c of capCells(S.map)) mask[c] = 2;
     shMask = mask;
-    const inSh = e => mask && mask[cellOf(e.x, e.y)] ? 0.65 : 1;
+    const inSh = e => { const m = mask ? mask[cellOf(e.x, e.y)] : 0; return m === 2 ? 0.35 : m ? 0.65 : 1; };
     for (const e of S.ents) {
       if (e.hp <= 0 || !mine(e.team)) continue;
       const P = S.P[e.team];
@@ -2717,7 +2744,7 @@ const Rules = (() => {
       open[c] = o;
       // Open water is the same going everywhere, under a bridge's road as well.
       if (naval) k[c] = 1;
-      else { const gm = g[c], rw = road[c], lv = (gm >> 5) & 3, off = lv >= 3 ? TRACK_COST[3] : TRACK_COST[lv] * offK, here = rw > 0 ? off + (roadC - off) * rw : off; k[c] = here * (gm & 8 ? woodC : 1) * (gm & 16 ? 2 : 1); }
+      else { const gm = g[c], rw = road[c], lv = (gm >> 5) & 3, off = lv >= 3 ? TRACK_COST[3] : TRACK_COST[lv] * offK, here = rw > 0 ? off + (roadC - off) * rw : off; k[c] = here * (gm & 8 ? woodC : 1) * (gm & 144 ? 2 : 1); }
     }
     return Gd;
   }
@@ -3533,7 +3560,8 @@ const Rules = (() => {
     const mag = mhypot(dx, dy) || 1;
     dx /= mag; dy /= mag;
     const rk = naval ? 0 : 1 - smooth(0.9, 1.6, roadDistAt(S.map, u.x, u.y)), here = naval ? 0 : S.gnd[cellOf(u.x, u.y)], w = sky(S);
-    // Mud after rain bogs wheels down off the roads, snow slows everyone, and woods and fords slow what is in them.
+    // Mud after rain bogs wheels down off the roads, snow slows everyone, and woods, fords and ice slow what is in
+    // them.
     // A worn track is quicker going, and a hardened one is as firm as a road in the wet. The road's own going
     // fades out across its verge.
     const tl = (here >> 5) & 3;
@@ -3547,7 +3575,7 @@ const Rules = (() => {
     }
     // Under a dust storm's dust: blown sand off the roads slows wheels most, men less and tracks least.
     if (!naval && dustWall(S)) { const du = dustAt(S, u.x, u.y); if (du) going *= 1 - (d.move === 'wheel' ? 0.25 : d.move === 'track' ? 0.1 : 0.2) * du * (1 - rk); }
-    if (here & 16) going *= 0.5;
+    if (here & 144) going *= 0.5;
     // Pinned men crawl.
     if (d.men && pinned(u) && !u.brk) going *= 0.45;
     if ((here & 8) && d.move === 'foot') going *= 0.75;
@@ -5424,7 +5452,7 @@ const Rules = (() => {
     msin, mcos, matan2, mhypot,
     BRIDGE_HP, SPELL, SKIES, WEATHERS, nightAt, skyOf, offGoing, route, weatherAt, sky, dayAt, spellOf, bridgeAt, clsOf, houseHp, hurtBridge, ignite, shielded,
     coverPoints, coverNear, COVER_R, COVER_ARC, FORMS, formOfGroup, STANCES,
-    FB_AT, PIN, TRAINERS, producerOf, canExplore, nameFor, townName, theatreOf, UPGRADES, UP_AGE, upCost, upNote, upsAt, upK, upBlocked, hpOf, rangeOf, capOf, showersAt, showerAt,
+    FB_AT, PIN, TRAINERS, producerOf, canExplore, nameFor, townName, theatreOf, UPGRADES, UP_AGE, upCost, upNote, upsAt, upK, upBlocked, hpOf, rangeOf, capOf, showersAt, showerAt, capDown,
   };
 })();
 if (typeof module !== 'undefined') module.exports = Rules;

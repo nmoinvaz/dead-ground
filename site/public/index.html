@@ -665,7 +665,7 @@ body[data-look="ink"] .sheet { box-shadow: 4px 4px 0 var(--ink); }
       <div class="choice"><h2>Shadow strength</h2><div id="s-shadow"><button data-v="full">Full</button><button data-v="light">Light</button><button data-v="off">Off</button></div></div>
       <div class="choice"><h2>Edge lines</h2><div id="s-edges" class="two"><button data-v="quick">Quick</button><button data-v="exact">Exact</button></div></div>
       <div class="choice"><h2>Music</h2><div id="s-music" class="two"><button data-v="on">On</button><button data-v="off">Off</button></div></div>
-      <p id="build">Build 5a939d0 2026-11-12 08:35</p>
+      <p id="build">Build 3c40ad9 2026-11-12 08:56</p>
       <p id="source"><a href="https://github.com/nmoinvaz/mapmakers-war" target="_blank" rel="noopener">Source on GitHub</a></p>
     </div>
     <div id="banner" hidden></div>
@@ -1327,7 +1327,7 @@ const Rules = (() => {
     atlantis: { name: 'Atlantis', layout: 'atlantis', seats: 4, ruins: true, about: 'A great island of rings of land and water round a central citadel, joined by bridges, with canals cut in from the sea. Ships can sail the rings.' },
     falls: { name: 'The Falls', layout: 'falls', seats: 2, about: 'A broad river drops over a great horseshoe fall, as at Niagara, into a deep gorge between the two sides. Bridges and a ford cross above the falls, an island town stands between them, and only a high bridge spans the gorge. Docks hold each reach.' },
     mesa: { name: 'Mesa Country', layout: 'mesa', seats: 2, koth: 3, theatre: 'desert', flora: 'cactus', about: 'Open desert of dunes and sheer-sided mesas, with stands of cactus. The mesas wall off the lines of march.' },
-    summit: { name: 'The Summit', layout: 'summit', seats: 2, koth: 3, about: 'One great mountain between the bases, its top far above the land, climbed on foot by four ridges, with a camp partway up each base\'s. Roads run round its foot.' },
+    summit: { name: 'The Summit', layout: 'summit', seats: 2, koth: 3, about: 'One great mountain between the bases, its top far above the land, climbed on foot by four ridges, with a camp partway up each base\'s. Glaciers above the camps slow the climb, and at times cloud comes down over the top and hides it. Roads run round its foot.' },
   };
   // The theatre a game on a map is fought in: the map's own, if it fixes one, or the one chosen.
   const theatreOf = (map, chosen) => (MAPS[map] && MAPS[map].theatre) || chosen;
@@ -1769,6 +1769,8 @@ const Rules = (() => {
       L.calm = (x, y) => { const [u, v] = toUV(x, y); return smooth(30, 42, mhypot(u, v)); };
       L.noBench = (x, y) => { const [u, v] = toUV(x, y); return 1 - smooth(34, 40, mhypot(u, v)); };
       L.highs = [[CX, CY], uvp(-CAMP, vBase(-CAMP)), mirror(uvp(-CAMP, vBase(-CAMP)))];
+      // Glaciers lie on the ridges' upper reaches above the camps, and cloud comes down at times over the top.
+      L.iceLine = 15; L.cloudLine = 16;
       L.bases.push(uvp(-56, 0), mirror(uvp(-56, 0)));
       const tN = uvp(-14, 52), tS = uvp(-14, -52), tC = uvp(-36, 0), hub = uvp(-48, 0);
       for (const t of [tN, tS, tC]) all(L.towns, t);
@@ -2290,7 +2292,8 @@ const Rules = (() => {
 
     // Cells. Bit 1 stops vehicles, bit 2 stops infantry, bit 4 forbids building. Bit 8 is standing woods,
     // which stop wheels, slow infantry and fall under tracks. Bit 16 is a ford, slow going for everyone. Bits 32
-    // and 64 hold how hard a track worn there has become, 0 to 3, set as the world goes on.
+    // and 64 hold how hard a track worn there has become, 0 to 3, set as the world goes on. Bit 128 is a glacier's
+    // ice, slow going for everyone.
     const hAt = (x, y) => { const i = clamp(Math.round(x * RES), 0, VW - 1), j = clamp(Math.round(y * RES), 0, VH - 1); return h[j * VW + i]; };
     const deckAt = (x, y) => { const i = clamp(Math.round(x * RES), 0, VW - 1), j = clamp(Math.round(y * RES), 0, VH - 1); return deck[j * VW + i]; };
     const ground = new Uint8Array(N), fordCells = [], wadeCells = [];
@@ -2314,6 +2317,8 @@ const Rules = (() => {
       if (slope > 0.95) bits |= 1 | 4;
       if (slope > 1.4) bits |= 2;
       if (slope > 0.5) bits |= 4;
+      // A layout's glaciers lie on the land above its ice line, short of a cliff, and nothing is built on them.
+      if (L.iceLine != null && !(bits & 2) && hAt(x + 0.5, y + 0.5) > L.iceLine) bits |= 4 | 128;
       return bits;
     };
     for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
@@ -2438,7 +2443,7 @@ const Rules = (() => {
     const fish = (L.fish || []).map(p => ({ x: p[0], y: p[1] }));
     let seaCells = 0;
     for (let c = 0; c < N; c++) seaCells += sea[c];
-    return { W, H, seed, kind, h, deck, water, ground, ore: oreCells, oreKind, oreFields, wells, towns, roads, roadDist, bridges, scatter, houses, oreRich, bases: L.bases, faces, fords: L.fords, fordCells, wadeCells, brooks, brookFords, brookDist: bD, brookFord: bF, falls, wl, cascades: L.cascades || [], sea, fish, seaCells, monuments: (L.monuments || []).map(([k, x, y, r, a]) => ({ k, x, y, r, a })), highs: L.highs || null };
+    return { W, H, seed, kind, h, deck, water, ground, ore: oreCells, oreKind, oreFields, wells, towns, roads, roadDist, bridges, scatter, houses, oreRich, bases: L.bases, faces, fords: L.fords, fordCells, wadeCells, brooks, brookFords, brookDist: bD, brookFord: bF, falls, wl, cascades: L.cascades || [], sea, fish, seaCells, monuments: (L.monuments || []).map(([k, x, y, r, a]) => ({ k, x, y, r, a })), highs: L.highs || null, iceLine: L.iceLine ?? null, cloudLine: L.cloudLine ?? null };
   }
 
   // A map is kept only if vehicles can get from the first base to every other base, town and well.
@@ -2682,6 +2687,25 @@ const Rules = (() => {
     return o;
   }
   const sky = S => S._wx && S._wx.at === S.tick ? S._wx : (S._wx = Object.assign(weatherAt(S.seed, S.tick, skyOf(S)), { at: S.tick }));
+  // A layout's cloud on the heights comes down over the land above its cloud line a minute at a time, by the seed
+  // and the minute alone, in a share of minutes that grows with the spell's weather. None comes in a game's first two
+  // minutes or with the weather off.
+  const CAP_SPAN = 60 * HZ, CAP_ODDS = { clear: 8, cloud: 30, rain: 45, storm: 55, fog: 60, snow: 50, sand: 10 };
+  function capDown(S) {
+    if (S.map.cloudLine == null || S.weather === 'off') return false;
+    const k = Math.floor(S.tick / CAP_SPAN);
+    if (S._cap && S._cap.k === k) return S._cap.down;
+    const down = k >= 2 && spellHash(S.seed + 911, k) % 100 < CAP_ODDS[spellOf(S.seed, Math.floor(k * CAP_SPAN / SPELL), skyOf(S))];
+    S._cap = { k, down };
+    return down;
+  }
+  // The cells the cloud covers when it is down, worked out once for the map.
+  function capCells(M) {
+    if (M._capC) return M._capC;
+    const out = [];
+    if (M.cloudLine != null) for (let c = 0; c < W * H; c++) if (terrainAt(M, c % W + 0.5, (c / W | 0) + 0.5) > M.cloudLine) out.push(c);
+    return M._capC = Int32Array.from(out);
+  }
   // Kinds of ore. Each pays about the same while a truck digs, but a load of gold is worth most and takes longest
   // to dig, and its fields are small, while iron digs fastest and its fields last longest. So gold pays best far
   // from home, where trips are long, at the cost of trucks standing longer in the open, and iron keeps a base going.
@@ -3363,14 +3387,17 @@ const Rules = (() => {
     const nu = 1 - 0.4 * n, nb = 1 - 0.15 * n;
     // Under a shower or a rain cloud sight is cut short: what stands inside one is seen only from close by, and what
     // stands in one sees a third less itself.
-    const shw = showersAt(S), mask = shw.length ? (S._shMask && S._shMask.length === N ? S._shMask.fill(0) : (S._shMask = new Uint8Array(N))) : null;
+    const shw = showersAt(S), cap = capDown(S), mask = shw.length || cap ? (S._shMask && S._shMask.length === N ? S._shMask.fill(0) : (S._shMask = new Uint8Array(N))) : null;
     if (mask) for (const s of shw) {
       const rr = s.r * 0.8 * s.k;
       if (rr < 2) continue;
       for (let cy = Math.max(0, Math.floor(s.y - rr)); cy <= Math.min(H - 1, Math.ceil(s.y + rr)); cy++) for (let cx = Math.max(0, Math.floor(s.x - rr)); cx <= Math.min(W - 1, Math.ceil(s.x + rr)); cx++) if (mhypot(cx + 0.5 - s.x, cy + 0.5 - s.y) < rr) mask[cy * W + cx] = 1;
     }
+    // Cloud down on the heights hides what stands in it as a shower does, and what stands in it sees only close by,
+    // so the heights give no view while it lies on them.
+    if (cap) for (const c of capCells(S.map)) mask[c] = 2;
     shMask = mask;
-    const inSh = e => mask && mask[cellOf(e.x, e.y)] ? 0.65 : 1;
+    const inSh = e => { const m = mask ? mask[cellOf(e.x, e.y)] : 0; return m === 2 ? 0.35 : m ? 0.65 : 1; };
     for (const e of S.ents) {
       if (e.hp <= 0 || !mine(e.team)) continue;
       const P = S.P[e.team];
@@ -3509,7 +3536,7 @@ const Rules = (() => {
       open[c] = o;
       // Open water is the same going everywhere, under a bridge's road as well.
       if (naval) k[c] = 1;
-      else { const gm = g[c], rw = road[c], lv = (gm >> 5) & 3, off = lv >= 3 ? TRACK_COST[3] : TRACK_COST[lv] * offK, here = rw > 0 ? off + (roadC - off) * rw : off; k[c] = here * (gm & 8 ? woodC : 1) * (gm & 16 ? 2 : 1); }
+      else { const gm = g[c], rw = road[c], lv = (gm >> 5) & 3, off = lv >= 3 ? TRACK_COST[3] : TRACK_COST[lv] * offK, here = rw > 0 ? off + (roadC - off) * rw : off; k[c] = here * (gm & 8 ? woodC : 1) * (gm & 144 ? 2 : 1); }
     }
     return Gd;
   }
@@ -4325,7 +4352,8 @@ const Rules = (() => {
     const mag = mhypot(dx, dy) || 1;
     dx /= mag; dy /= mag;
     const rk = naval ? 0 : 1 - smooth(0.9, 1.6, roadDistAt(S.map, u.x, u.y)), here = naval ? 0 : S.gnd[cellOf(u.x, u.y)], w = sky(S);
-    // Mud after rain bogs wheels down off the roads, snow slows everyone, and woods and fords slow what is in them.
+    // Mud after rain bogs wheels down off the roads, snow slows everyone, and woods, fords and ice slow what is in
+    // them.
     // A worn track is quicker going, and a hardened one is as firm as a road in the wet. The road's own going
     // fades out across its verge.
     const tl = (here >> 5) & 3;
@@ -4339,7 +4367,7 @@ const Rules = (() => {
     }
     // Under a dust storm's dust: blown sand off the roads slows wheels most, men less and tracks least.
     if (!naval && dustWall(S)) { const du = dustAt(S, u.x, u.y); if (du) going *= 1 - (d.move === 'wheel' ? 0.25 : d.move === 'track' ? 0.1 : 0.2) * du * (1 - rk); }
-    if (here & 16) going *= 0.5;
+    if (here & 144) going *= 0.5;
     // Pinned men crawl.
     if (d.men && pinned(u) && !u.brk) going *= 0.45;
     if ((here & 8) && d.move === 'foot') going *= 0.75;
@@ -6216,7 +6244,7 @@ const Rules = (() => {
     msin, mcos, matan2, mhypot,
     BRIDGE_HP, SPELL, SKIES, WEATHERS, nightAt, skyOf, offGoing, route, weatherAt, sky, dayAt, spellOf, bridgeAt, clsOf, houseHp, hurtBridge, ignite, shielded,
     coverPoints, coverNear, COVER_R, COVER_ARC, FORMS, formOfGroup, STANCES,
-    FB_AT, PIN, TRAINERS, producerOf, canExplore, nameFor, townName, theatreOf, UPGRADES, UP_AGE, upCost, upNote, upsAt, upK, upBlocked, hpOf, rangeOf, capOf, showersAt, showerAt,
+    FB_AT, PIN, TRAINERS, producerOf, canExplore, nameFor, townName, theatreOf, UPGRADES, UP_AGE, upCost, upNote, upsAt, upK, upBlocked, hpOf, rangeOf, capOf, showersAt, showerAt, capDown,
   };
 })();
 if (typeof module !== 'undefined') module.exports = Rules;
@@ -10260,13 +10288,13 @@ if (typeof module !== 'undefined') module.exports = Looks;
       // 45 and 135 degrees, then flat and upright lines for the darkest, each line a little uneven with small gaps.
       // The ground's hatching is pinned to the map so it pans with it, the units' redraws a few times a second.
       const ink = new THREE.ShaderMaterial({ uniforms: { t: { value: null }, tSubj: { value: null }, tHeat: { value: null }, tPaper: { value: null }, res: { value: new THREE.Vector2(1, 1) }, uTime: { value: 0 }, uK: { value: 1 }, uOff: { value: new THREE.Vector2() }, uStyle: { value: 8 }, tNorm: { value: null }, tFogS: { value: null }, tLand: { value: null }, uSun2: { value: new THREE.Vector2(-1, 0) }, uUpV: { value: new THREE.Vector3(0, 1, 0) }, uRoad: { value: 0 }, uOre: { value: 0 }, uMarks: { value: 1 }, uRoadAge: { value: 4 }, uShadeH: { value: 1 }, tShade: { value: null },
-        uWindS: { value: new THREE.Vector2() }, uView: { value: new THREE.Vector2(1, 0) }, tFx: { value: null }, tAnc: { value: null }, uDark: { value: 0 }, uTone: { value: 0 }, uInks: { value: 0 }, uFxs: { value: 0 }, uFire: { value: 0 }, uUnits: { value: 0 }, tH: SH.tH, uHSize: { value: new THREE.Vector2(1, 1) }, uHScale: { value: 1 }, uSnowF: { value: 0 }, uSnowC: SH.uSnowC, uSnowLine: SH.uSnowLine, tFlow: SH.tFlow, tBrook: SH.tBrook, uFlora: SH.uFlora, uShow: SH.uShow, uShowS: SH.uShowS, uGolfC: SH.uGolfC, uCastK: SH.uCastK, uDustT: SH.uDustT, uGolf: SH.uGolf, uGolfB: SH.uGolfB, tCover: SH.tCover, uFieldK: SH.uFieldK, uFieldK2: SH.uFieldK2, uPark: SH.uPark, uBridgeKind: SH.uBridgeKind, uFog: { value: 0 }, uMist: { value: 0 }, uNight: { value: 0 },
+        uWindS: { value: new THREE.Vector2() }, uView: { value: new THREE.Vector2(1, 0) }, tFx: { value: null }, tAnc: { value: null }, uDark: { value: 0 }, uTone: { value: 0 }, uInks: { value: 0 }, uFxs: { value: 0 }, uFire: { value: 0 }, uUnits: { value: 0 }, tH: SH.tH, uHSize: { value: new THREE.Vector2(1, 1) }, uHScale: { value: 1 }, uSnowF: { value: 0 }, uSnowC: SH.uSnowC, uSnowLine: SH.uSnowLine, uIceLine: SH.uIceLine, uCapH: SH.uCapH, uCapK: SH.uCapK, tFlow: SH.tFlow, tBrook: SH.tBrook, uFlora: SH.uFlora, uShow: SH.uShow, uShowS: SH.uShowS, uGolfC: SH.uGolfC, uCastK: SH.uCastK, uDustT: SH.uDustT, uGolf: SH.uGolf, uGolfB: SH.uGolfB, tCover: SH.tCover, uFieldK: SH.uFieldK, uFieldK2: SH.uFieldK2, uPark: SH.uPark, uBridgeKind: SH.uBridgeKind, uFog: { value: 0 }, uMist: { value: 0 }, uNight: { value: 0 },
         uDayMul: { value: new THREE.Vector3(1, 1, 1) }, uDayAdd: { value: new THREE.Vector3() }, uWaterL: { value: -0.15 }, uCloudK: SH.uCloudK, tMarks: SH.tMarks, uMap: SH.uMap,
         uCloud: SH.uCloud, uCloudT: SH.uCloudT, uSunW: SH.uSunDir, uCloudA: { value: 0 }, uCloudG: { value: 0 }, uRayK: { value: 0 }, uDust: { value: new THREE.Vector4() },
         uInvVP: { value: new THREE.Matrix4() }, uW2S: { value: new THREE.Vector4(1, 0, 0, 1) }, uLev: { value: 1 }, tTerr: SH.tTerr, uBorder: SH.uBorder, uMe: { value: 0 },
         // Each side's colour as the anchor pass keeps it, its hue and how coloured it is, and its inks on either paper.
         uSideKey: { value: [...Array(8)].map(() => new THREE.Vector2()) }, uSideL: { value: [...Array(8)].map(() => new THREE.Vector3()) }, uSideD: { value: [...Array(8)].map(() => new THREE.Vector3()) }, uSideB: { value: [...Array(8)].map(() => new THREE.Vector3()) } }, vertexShader: vs, depthTest: false, depthWrite: false, fragmentShader: `
-        varying vec2 vUv; uniform sampler2D t, tSubj, tHeat, tPaper, tNorm, tFogS, tLand, tMarks; uniform float uMap; uniform vec2 res, uOff, uSun2, uWindS, uView, uHSize; uniform float uHScale, uFxs, uFire; uniform int uUnits, uInks; uniform float uDark, uTone; uniform sampler2D tH, tFx, tAnc, tFlow, tBrook, tCover, tShade; uniform vec4 uFieldK, uFieldK2; uniform vec4 uShow[8]; uniform vec2 uShowS[8]; uniform vec3 uGolfC[4]; uniform float uCastK; uniform vec2 uDustT; uniform vec4 uGolf[16]; uniform vec3 uGolfB[24]; uniform vec4 uPark[16]; uniform vec3 uUpV, uDayMul, uDayAdd; uniform float uTime, uK, uSnowF, uSnowC, uSnowLine, uFlora, uBridgeKind, uFog, uMist, uNight, uWaterL, uCloudK, uMarks, uRoadAge, uShadeH; uniform int uStyle, uRoad, uOre;
+        varying vec2 vUv; uniform sampler2D t, tSubj, tHeat, tPaper, tNorm, tFogS, tLand, tMarks; uniform float uMap; uniform vec2 res, uOff, uSun2, uWindS, uView, uHSize; uniform float uHScale, uFxs, uFire; uniform int uUnits, uInks; uniform float uDark, uTone; uniform sampler2D tH, tFx, tAnc, tFlow, tBrook, tCover, tShade; uniform vec4 uFieldK, uFieldK2; uniform vec4 uShow[8]; uniform vec2 uShowS[8]; uniform vec3 uGolfC[4]; uniform float uCastK; uniform vec2 uDustT; uniform vec4 uGolf[16]; uniform vec3 uGolfB[24]; uniform vec4 uPark[16]; uniform vec3 uUpV, uDayMul, uDayAdd; uniform float uTime, uK, uSnowF, uSnowC, uSnowLine, uIceLine, uCapH, uCapK, uFlora, uBridgeKind, uFog, uMist, uNight, uWaterL, uCloudK, uMarks, uRoadAge, uShadeH; uniform int uStyle, uRoad, uOre;
         uniform vec2 uSideKey[8]; uniform vec3 uSideL[8], uSideD[8], uSideB[8];
         uniform sampler2D tTerr; uniform float uBorder, uMe;
         uniform vec2 uCloud; uniform vec3 uSunW; uniform float uCloudT, uCloudA, uCloudG, uRayK; uniform vec4 uDust;
@@ -10826,6 +10854,24 @@ if (typeof module !== 'undefined') module.exports = Looks;
                 CONT = mix(CONT, SNOWL, cap);
               }
               gSnow = max(cap, uSnowC) * isG;
+              // A layout's glaciers lie above its ice line, short of a cliff, as the rules have them. A survey map draws
+              // a glacier so: a cold blue-white over the snow, its contours fainter, a fine blue line at its edge, and
+              // its crevasses across the fall in short blue strokes thickest in their middles, close where it falls
+              // steeply as an icefall and few where it lies flat.
+              float ice = 0.0, iceE = 0.0, crev = 0.0;
+              if (uIceLine < 98.0) {
+                float iF = lhS + (noise(Wl * 0.4 + 5.0) - 0.5) * 0.5 - uIceLine, iW = max(fwidth(iF), 1e-4);
+                float iFlat = 1.0 - smoothstep(1.0, 1.3, sSl);
+                ice = smoothstep(-iW, iW, iF) * iFlat * isG;
+                iceE = (1.0 - smoothstep(0.45 * iW * uK, 1.3 * iW * uK, abs(iF))) * iFlat * isG;
+                // The crevasses lie along the contours, every 0.45 of height, broken into lengths by a noise.
+                float cv = lhS / 0.45 + (noise(Wl * 0.5 + 9.0) - 0.5) * 0.9, cvW = max(fwidth(cv), 1e-4);
+                float thick = smoothstep(0.5, 0.75, noise(Wl * 1.7 + floor(cv) * 5.3)), cvL = cvW * uK * (0.25 + 0.75 * thick);
+                crev = (1.0 - smoothstep(0.3 * cvL, 0.9 * cvL, abs(fract(cv) - 0.5))) * smoothstep(0.0, 0.3, thick);
+                crev *= ice * smoothstep(0.2, 0.55, sSl) * smoothstep(4.0, 8.0, 1.0 / (cvW * uK));
+                tint = mix(tint, dk ? vec3(0.5, 0.56, 0.62) : vec3(0.89, 0.93, 0.95), ice);
+                contour *= 1.0 - 0.5 * ice;
+              }
               // A face too steep for soil is bare rock, in a cool grey wash with its contours dropped, as a Swiss map
               // leaves them out where the rock drawing carries the form. None by the water or on a road.
               // Its noise moves the slope by under 0.475, so it is drawn only where the slope could reach rock.
@@ -10890,6 +10936,8 @@ if (typeof module !== 'undefined') module.exports = Looks;
               base = mix(base, base * (dk ? mix(vec3(0.36, 0.37, 0.44), vec3(0.66, 0.67, 0.71), cap) : mix(vec3(0.72, 0.70, 0.68), vec3(0.8, 0.8, 0.82), cap)), rfDark * (dk ? 0.95 : 0.65) * isG);
               base = mix(base, dk ? base + vec3(0.3, 0.27, 0.21) : min(base * 1.05 + 0.03, vec3(1.0)), rfLight * (dk ? 0.85 : 0.6) * isG);
               base = mix(base, CONT, contour * isG * (1.0 - onRoad * 0.55) * (1.0 - wet));
+              // The glacier's crevasses and edge, in its blue.
+              base = mix(base, dk ? vec3(0.56, 0.68, 0.88) : vec3(0.24, 0.38, 0.66), clamp(crev * 0.9 + iceE * 0.6, 0.0, 1.0) * (1.0 - onRoad));
               // The rock's strokes run down the fall line, heavy and close on the faces away from the sun and in the
               // gullies, and few and fine on those toward it, so the rock is modelled by its strokes alone.
               if (rock * isG > 0.01) {
@@ -11462,6 +11510,29 @@ if (typeof module !== 'undefined') module.exports = Looks;
           col = mix(col, dk ? vec3(0.25, 0.25, 0.26) : vec3(0.945, 0.94, 0.925), veil);
           float fband = veil > 0.2 ? hatch(px + vec2(uTime * 5.0 * uK, 0.0), 0.0, 10.0, 0.8, 97.0, 0.6) * smoothstep(0.2, 0.55, veil) : 0.0;
           col = mix(col, dk ? vec3(0.42, 0.44, 0.5) : vec3(0.6, 0.62, 0.67), fband * 0.2);
+          // Cloud down on the heights, a layer lying at the cloud line, so it floats over the land and the land's
+          // ridges pass under it. Its extent is the land under it read broadly, so it rounds the ridges rather than
+          // tracing them, billowing as the wind carries it, and it settles from above as it comes down and rises off as
+          // it lifts. It is drawn as the other clouds are, a white wash edged with a light scalloped line, with a
+          // grey shade along its lower edge. What stands under it shows faintly.
+          if (uCapK > 0.002 && uCapH < 98.0) {
+            vec2 cq = landAt(vUv, uCapH + 1.5);
+            float hc = hCubic(cq * uHScale + 0.5);
+            if (hc > uCapH - 7.0) {
+              float hb = 0.0;
+              for (int j = 0; j < 8; j++) { float a = float(j) * 0.7854; hb += hCubic((cq + 3.5 * vec2(cos(a), sin(a))) * uHScale + 0.5); }
+              hb = 0.5 * hc + 0.5 * hb / 8.0;
+              vec2 cb = cq * 0.14 + uCloud * 4.0;
+              float bil = noise(cb) * 0.6 + noise(cb * 2.3 + 7.0) * 0.4;
+              float cF = hb - uCapH + 0.8 + (bil - 0.5) * 3.0 - (1.0 - uCapK) * 7.0, cFW = max(fwidth(cF), 1e-4);
+              float body = smoothstep(-0.4, 1.4, cF) * onMap, keepC = 1.0 - 0.45 * step(0.85, s0);
+              col = mix(col, dk ? vec3(0.62, 0.63, 0.66) : vec3(0.985, 0.985, 0.98), body * 0.88 * keepC);
+              float shade = smoothstep(-0.4, 0.4, cF) * (1.0 - smoothstep(0.4, 1.6, cF)) * onMap;
+              col = mix(col, dk ? vec3(0.46, 0.47, 0.51) : vec3(0.8, 0.82, 0.87), shade * 0.35 * keepC);
+              float rim = (1.0 - smoothstep(0.6 * uK, 1.6 * uK, abs(cF + 0.1) / cFW)) * step(0.15, noise(cq * 0.9 + 3.0)) * onMap;
+              col = mix(col, dk ? vec3(0.78, 0.79, 0.82) : vec3(0.48, 0.52, 0.6), rim * 0.8 * smoothstep(0.3, 0.7, uCapK));
+            }
+          }
           // A dust storm's wall where it stands, uDust its way, the reach of its front and its strength: thick for a
           // stretch behind the front, where the world stands its heads, thinning behind that, and clear air ahead. The
           // front sways along its line as the world's heads do, by the storm's clock and phase in uDustT.
@@ -11803,6 +11874,8 @@ const World = (() => {
       uWind: { value: new THREE.Vector2(0.3, 0.1) }, uCloud: { value: new THREE.Vector2() }, uCloudK: { value: 0.2 }, uCloudT: { value: 0.3 }, uSnowC: { value: 0 },
       // The height above which snow lies on the heights in any weather.
       uSnowLine: { value: 99 },
+      // A layout's ice line and cloud line, 99 where it has none, and how far the cloud is down, 0 to 1.
+      uIceLine: { value: 99 }, uCapH: { value: 99 }, uCapK: { value: 0 },
       // The way the rivers run, from buildFlow, and how far each point lies from a brook and whether at its ford.
       tFlow: { value: black }, tBrook: { value: farBrook },
       // The land's cover from buildFields: the beaches in red, and the farmland round the towns, its extent in green,
@@ -14781,6 +14854,9 @@ const World = (() => {
       // own dark clouds stand out from the rest.
       SH.uCloudT.value = clamp(0.2 + 0.18 * sky.cloud + 0.18 * sky.rain + 0.1 * sky.fog + 0.22 * sky.snow + 0.05 * sky.sand, 0.15, 0.55);
       SH.uSnowC.value = sky.cover;
+      // Cloud on the heights comes down and lifts over a few seconds.
+      const capW = studySky && studySky.cap !== undefined ? studySky.cap : Rules.capDown(S) ? 1 : 0;
+      SH.uCapK.value += (capW - SH.uCapK.value) * (studySky ? 1 : 1 - Math.exp(-dt * 0.5));
       waterRise.value = Math.min(1.25, sky.flood) * 0.26;
       right3.setFromMatrixColumn(camera.matrixWorld, 0);
       sky.windS = right3.x * U.x + right3.z * U.y;
@@ -14865,6 +14941,7 @@ const World = (() => {
       let over = 0;
       if (theme.snow !== undefined) for (let i = 0; i < M.h.length; i++) over += M.h[i] > theme.snow;
       SH.uSnowLine.value = over > M.h.length * 0.015 ? theme.snow : 99;
+      SH.uIceLine.value = M.iceLine ?? 99; SH.uCapH.value = M.cloudLine ?? 99; SH.uCapK.value = 0;
       SH.uFlora.value = theme.tree === 'broad' ? 1 : theme.tree === 'acacia' ? 2 : 3;
       renderer.setClearColor(theme.shroud, 1);
 
@@ -18159,6 +18236,7 @@ const Hud = (() => {
       const w = Rules.sky(s), ink = inked();
       let note = SKY_NOTE[w.kind] || (Rules.nightAt(s.tick) > 0.5 ? 'Night: sight cut short, flares light the way' : '');
       if (s.flooded) note = note ? note + '. Fords flooded' : 'Fords flooded';
+      if (Rules.capDown(s)) note = note ? note + '. Cloud on the heights' : 'Cloud on the heights hides them';
       if (w.next !== w.kind && w.left < 40 * HZ) note = (SKY_NAME[w.next] || w.next) + ' coming';
       // A newcomer's protection, counting down.
       const me = game.team >= 0 ? s.P[game.team] : null, left = me && me.shield > s.tick ? Math.ceil((me.shield - s.tick) / HZ) : 0;
