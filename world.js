@@ -4370,6 +4370,12 @@ const World = (() => {
       camera.aspect = w / h; camera.updateProjectionMatrix();
       pp.size(bw, bh, big ? cw : 0, big ? ch : 0);
     }
+    // The view's new shape alone, while a window is dragged: the camera and the overlay follow at once, and the
+    // picture keeps its buffers, stretched by the browser, until resize is called once the size holds.
+    function reshape(w, h, ovPx) {
+      world.vw = w; world.vh = h; world.ovPx = ovPx;
+      camera.aspect = w / h; camera.updateProjectionMatrix();
+    }
 
     // The sun's shadow camera over the view, snapped to its texels so the shadows hold still as the view pans.
     const SHADOW_EL = Math.atan(0.5);
@@ -4768,7 +4774,7 @@ const World = (() => {
       plate(x, y, cb, dist, raw) { plateReq = { x, y, cb, dist, raw }; },
       get look() { return style.name; },
       get style() { return style; },
-      cam, vw: 1, vh: 1, onScreen: [], load, frame, event, resize, pick, project, setGhost, cameos, renderer, camera, scene, place: placeCamera,
+      cam, vw: 1, vh: 1, onScreen: [], load, frame, event, resize, reshape, pick, project, setGhost, cameos, renderer, camera, scene, place: placeCamera,
       teamCol, THEMES,
       // A building's model key in an age, and every building model's key, for the sidebar's pictures.
       ageKey, buildingKeys: Object.keys(MODELS.buildings),

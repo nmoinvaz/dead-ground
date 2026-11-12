@@ -231,7 +231,7 @@ const Game = (() => {
 
     // A resize clears the canvas, so a size is only applied at the top of a frame, just before it is drawn, and never
     // when nothing has changed. Shown between a resize and a draw, the cleared canvas flashes.
-    let scale = 1, over = 1, overNew = true, fitDue = true, fitKey = '';
+    let scale = 1, over = 1, overNew = true, fitDue = true, fitKey = '', sizeAt = '', settleT = 0;
     const OVER_PX = 3840 * 2160;
     function fit() { fitDue = true; }
     // The canvas's own size in device pixels, as the browser lays it out. The CSS size times the pixel ratio can miss
@@ -273,8 +273,17 @@ const Game = (() => {
       if (over > 1 && overNew) { overNew = false; scale = 1 / over; }
       const k = over * scale, px = ovPx.map(v => Math.max(2, Math.round(v * k))), key = `${w}x${h}:${px}:${ovPx}`;
       if (key === fitKey) return;
-      fitKey = key;
-      world.resize(w, h, px[0] / w, scale, px, ovPx);
+      // While the view's size keeps changing, as a window is dragged, the camera follows at once and the buffers are
+      // made again only once the size has held for a moment, as making them every frame stalls a slow driver.
+      const sizeKey = `${w}x${h}:${ovPx}`;
+      if (fitKey && sizeKey !== sizeAt) {
+        sizeAt = sizeKey; world.reshape(w, h, ovPx); hud.layoutMini();
+        clearTimeout(settleT); settleT = setTimeout(fit, 180);
+        return;
+      }
+      fitKey = key; sizeAt = sizeKey;
+      // The share of full size drawn, k, tells the world a machine that gave up pixels.
+      world.resize(w, h, px[0] / w, k, px, ovPx);
       hud.layoutMini();
       $('s-pic-note').textContent = `Drawn at ${px[0]} by ${px[1]}${k > 1.01 ? `, ${k.toFixed(1)} times the screen's own pixels` : k < 0.99 ? `, ${Math.round(k * 100)}% of full size` : ', full size'}.`;
     }
