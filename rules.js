@@ -5208,9 +5208,12 @@ const Rules = (() => {
     stepTowns(S);
     stepPoints(S);
     const danger = S.tick % SCAT_EVERY === 0 && S.shots.length ? dangerOf(S) : null;
-    for (let i = 0; i < S.ents.length; i++) {
-      const e = S.ents[i];
-      if (e.hp <= 0) continue;
+    // Every other tick the units act from the last to the first, so no side's units always act first. Those made
+    // during the tick act after the rest.
+    const nE = S.ents.length;
+    for (let j = 0; j < S.ents.length; j++) {
+      const e = S.ents[S.tick & 1 && j < nE ? nE - 1 - j : j];
+      if (!e || e.hp <= 0) continue;
       if (danger && danger.length) scatter(S, e, danger);
       if (e.b) stepBuilding(S, e); else stepUnit(S, e);
     }
