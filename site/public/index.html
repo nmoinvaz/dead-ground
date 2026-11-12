@@ -665,7 +665,7 @@ body[data-look="ink"] .sheet { box-shadow: 4px 4px 0 var(--ink); }
       <div class="choice"><h2>Shadow strength</h2><div id="s-shadow"><button data-v="full">Full</button><button data-v="light">Light</button><button data-v="off">Off</button></div></div>
       <div class="choice"><h2>Edge lines</h2><div id="s-edges" class="two"><button data-v="quick">Quick</button><button data-v="exact">Exact</button></div></div>
       <div class="choice"><h2>Music</h2><div id="s-music" class="two"><button data-v="on">On</button><button data-v="off">Off</button></div></div>
-      <p id="build">Build 1015b67 2026-11-12 08:27</p>
+      <p id="build">Build 5a939d0 2026-11-12 08:35</p>
       <p id="source"><a href="https://github.com/nmoinvaz/mapmakers-war" target="_blank" rel="noopener">Source on GitHub</a></p>
     </div>
     <div id="banner" hidden></div>
@@ -11638,7 +11638,7 @@ if (typeof module !== 'undefined') module.exports = Looks;
             K.run(lumMat, lumRT);
             C.t.value = lumRT.texture;
           }
-          K.run(ink, null);
+          K.run(ink, K.out);
         },
       };
     },
@@ -11717,7 +11717,7 @@ if (typeof module !== 'undefined') module.exports = Looks;
           const C = charcoal.uniforms;
           if (!C.tPaper.value) C.tPaper.value = K.paper();
           C.t.value = K.ldr.texture; C.tSubj.value = K.mask(); C.tHeat.value = K.a0.texture; C.res.value.set(K.w, K.h); C.uTime.value = K.time; C.uK.value = K.h / 1080;
-          K.run(charcoal, null);
+          K.run(charcoal, K.out);
         },
       };
     },
@@ -12002,6 +12002,20 @@ const World = (() => {
           c += (texture2D(t, vUv + d * 1.385).rgb + texture2D(t, vUv - d * 1.385).rgb) * 0.316;
           c += (texture2D(t, vUv + d * 3.231).rgb + texture2D(t, vUv - d * 3.231).rgb) * 0.07;
           gl_FragColor = vec4(c, 1.0); }` });
+      // A picture drawn larger than the canvas, shrunk onto it along one axis by a Lanczos window of 2, stretched by
+      // the ratio k of the sizes. The browser's own shrink blurs pen lines; this keeps them sharp.
+      const shrink = new THREE.ShaderMaterial({ uniforms: { t: { value: null }, src: { value: new THREE.Vector2(1, 1) }, dir: { value: new THREE.Vector2(1, 0) }, k: { value: 1 } }, vertexShader: vs, depthTest: false, depthWrite: false, fragmentShader: `
+        varying vec2 vUv; uniform sampler2D t; uniform vec2 src, dir; uniform float k;
+        float lz(float x) { x = abs(x); if (x < 1e-3) return 1.0; if (x >= 2.0) return 0.0; float p = 3.14159265 * x; return 2.0 * sin(p) * sin(p * 0.5) / (p * p); }
+        void main(){
+          float n = dot(src, dir), p = dot(vUv, dir) * n, lo = floor(p - 2.0 * k) + 0.5;
+          vec3 c = vec3(0.0); float ws = 0.0;
+          for (int i = 0; i < 10; i++) {
+            float x = lo + float(i), wt = lz((x - p) / k);
+            if (wt == 0.0) continue;
+            c += wt * texture2D(t, mix(vUv, vec2(x / n), dir)).rgb; ws += wt;
+          }
+          gl_FragColor = vec4(c / ws, 1.0); }` });
       const grade = new THREE.ShaderMaterial({ uniforms: { t: { value: null }, b1: { value: null }, b2: { value: null }, uTime: { value: 0 }, uFlash: { value: 0 }, uBloom: { value: 0.6 }, uGlow: { value: new THREE.Vector2(-0.2, 0.9) }, uGlowC: { value: new THREE.Color(0xff9550) }, uAspect: { value: 1.6 }, uVivid: { value: 0 } }, vertexShader: vs, depthTest: false, depthWrite: false, fragmentShader: `
         varying vec2 vUv; uniform sampler2D t, b1, b2; uniform float uTime, uFlash, uBloom, uAspect, uVivid; uniform vec2 uGlow; uniform vec3 uGlowC;
         vec3 aces(vec3 x){ return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0); }
@@ -12163,11 +12177,17 @@ const World = (() => {
         }` });
       let ldr = null, maskRT = null, normRT = null, fogRT = null, landRT = null, fxRT = null, anchorRT = null, linesRT = null;
       let rt, a0, a1, b0, b1, w = 1, h = 1;
+      // A picture drawn larger than the canvas is finished in fin and shrunk through mid, at the canvas's width and
+      // the picture's height, onto the canvas, cw by ch.
+      let fin = null, mid = null, cw = 0, ch = 0;
       // Screen-sized targets a look keeps for itself, by name.
       const targets = new Map();
-      function size(wp, hp) {
-        w = wp; h = hp;
-        for (const r of [rt, a0, a1, b0, b1, ldr, maskRT, normRT, fogRT, landRT, fxRT, anchorRT, linesRT, ...targets.values()]) if (r) r.dispose();
+      function size(wp, hp, cwp = 0, chp = 0) {
+        w = wp; h = hp; cw = cwp; ch = chp;
+        for (const r of [rt, a0, a1, b0, b1, ldr, maskRT, normRT, fogRT, landRT, fxRT, anchorRT, linesRT, fin, mid, ...targets.values()]) if (r) r.dispose();
+        const big = cw > 0 && ch > 0 && (cw < w || ch < h);
+        fin = big ? new THREE.WebGLRenderTarget(w, h, { minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, depthBuffer: false }) : null;
+        mid = big ? new THREE.WebGLRenderTarget(cw, h, { type: THREE.HalfFloatType, minFilter: THREE.LinearFilter, magFilter: THREE.LinearFilter, depthBuffer: false }) : null;
         // The merged line target: the mask in bytes, filtered, as maskRT holds it, and the normals and anchors in half
         // floats, unfiltered, as normRT and anchorRT hold them.
         if (linesMat) {
@@ -12256,6 +12276,8 @@ const World = (() => {
       const K = {
         THREE, SH, vs, renderer, run, blur: pass,
         get w() { return w; }, get h() { return h; }, get ldr() { return ldr; }, get a0() { return a0; }, get a1() { return a1; },
+        // Where a look's last pass draws: the canvas, or a picture larger than it to be shrunk onto it.
+        get out() { return fin; },
         get time() { return SH.uTime.value; }, get camera() { return camera; }, get cam() { return cam; }, get sky() { return sky; },
         get theme() { return theme; }, get viewTeam() { return viewTeam; }, get center() { return [CX, CY]; }, get waterLevel() { return (M ? M.water : -0.15) + waterRise.value; },
         get opts() { return { ink: inkStyle, road: roadStyle, ore: oreStyle, hatch: shadeHatch, lum: lumPass }; },
@@ -12299,13 +12321,20 @@ const World = (() => {
         pass(b1.texture, b0, 1 / b0.width * 2, 0); pass(b0.texture, b1, 0, 1 / b0.height * 2);
         const u = grade.uniforms;
         u.t.value = rt.texture; u.b1.value = a0.texture; u.b2.value = b1.texture; u.uTime.value = SH.uTime.value;
-        if (!style.create) { run(grade, null); return; }
-        run(grade, ldr);
-        if (!painters.has(style.name)) painters.set(style.name, style.create(K));
-        painters.get(style.name).render(K);
+        if (!style.create) run(grade, fin);
+        else {
+          run(grade, ldr);
+          if (!painters.has(style.name)) painters.set(style.name, style.create(K));
+          painters.get(style.name).render(K);
+        }
+        if (fin) {
+          const u = shrink.uniforms;
+          u.t.value = fin.texture; u.src.value.set(w, h); u.dir.value.set(1, 0); u.k.value = w / cw; run(shrink, mid);
+          u.t.value = mid.texture; u.src.value.set(cw, h); u.dir.value.set(0, 1); u.k.value = h / ch; run(shrink, null);
+        }
       }
       // The buffers made again at their size, as when a look that wants multisampling takes over from one that does not.
-      const remake = () => { if (rt) size(w, h); };
+      const remake = () => { if (rt) size(w, h, cw, ch); };
       return { size, render, grade, remake };
     })();
 
@@ -16050,16 +16079,18 @@ const World = (() => {
 
     // A machine that has had to give up the most pixels it may (scale under 0.8) also gets the smaller shadow map.
     // px is the drawing's size in pixels and ovPx the overlay's, each the canvas's own device pixels where the page
-    // knows them, so a picture at full size is shown pixel for pixel and not stretched by the browser.
+    // knows them, so a picture at full size is shown pixel for pixel and not stretched by the browser. A drawing
+    // larger than the overlay is shrunk onto a canvas of the overlay's size.
     function resize(w, h, dpr, scale = 1, px = null, ovPx = null) {
       const sm = low || scale < 0.8 ? 2048 : 4096;
       if (sun.shadow.mapSize.x !== sm) { sun.shadow.mapSize.set(sm, sm); if (sun.shadow.map) { sun.shadow.map.dispose(); sun.shadow.map = null; } }
       const bw = px ? px[0] : Math.round(w * dpr), bh = px ? px[1] : Math.round(h * dpr);
+      const big = ovPx && (bw > ovPx[0] || bh > ovPx[1]), cw = big ? ovPx[0] : bw, ch = big ? ovPx[1] : bh;
       world.vw = w; world.vh = h; world.ovPx = ovPx;
       renderer.setPixelRatio(1);
-      renderer.setSize(bw, bh, false);
+      renderer.setSize(cw, ch, false);
       camera.aspect = w / h; camera.updateProjectionMatrix();
-      pp.size(bw, bh);
+      pp.size(bw, bh, big ? cw : 0, big ? ch : 0);
     }
 
     // The sun's shadow camera over the view, snapped to its texels so the shadows hold still as the view pans.
@@ -20836,7 +20867,7 @@ const Game = (() => {
       // Past a ratio of 2 the picture is drawn at 2 and stretched, as more pixels than that cost more than they show.
       const base = Math.min(dpr, 2), known = devPx && Math.abs(devPx[0] - w * dpr) < 3 && Math.abs(devPx[1] - h * dpr) < 3;
       const ovPx = known ? devPx.map(v => Math.max(2, Math.round(v * base / dpr))) : [Math.round(w * base), Math.round(h * base)];
-      // A Sharp picture on a screen of under 2 is drawn at up to 2 and shrunk by the browser, as at the screen's own
+      // A Sharp picture on a screen of under 2 is drawn at up to 2 and shrunk onto the canvas, as at the screen's own
       // pixels the pen lines and edges step. It is held to a 4K screen's pixels.
       over = picture === 'fast' ? 1 : Math.max(1, Math.min(2 / base, Math.sqrt(OVER_PX / (ovPx[0] * ovPx[1]))));
       const k = over * scale, px = ovPx.map(v => Math.max(2, Math.round(v * k))), key = `${w}x${h}:${px}:${ovPx}`;
