@@ -665,7 +665,7 @@ body[data-look="ink"] .sheet { box-shadow: 4px 4px 0 var(--ink); }
       <div class="choice"><h2>Shadow strength</h2><div id="s-shadow"><button data-v="full">Full</button><button data-v="light">Light</button><button data-v="off">Off</button></div></div>
       <div class="choice"><h2>Edge lines</h2><div id="s-edges" class="two"><button data-v="quick">Quick</button><button data-v="exact">Exact</button></div></div>
       <div class="choice"><h2>Music</h2><div id="s-music" class="two"><button data-v="on">On</button><button data-v="off">Off</button></div></div>
-      <p id="build">Build 2031340 2026-11-11 22:51</p>
+      <p id="build">Build de0e960 2026-11-11 23:24</p>
       <p id="source"><a href="https://github.com/nmoinvaz/mapmakers-war" target="_blank" rel="noopener">Source on GitHub</a></p>
     </div>
     <div id="banner" hidden></div>
@@ -6491,10 +6491,11 @@ const AI = (() => {
   }
 
   // The nearest thing of the enemy's worth going to. Its base if nothing is closer.
-  function pickTarget(S, me) {
+  // The enemy's town or building nearest `from`, its own base unless a flank gives another start.
+  function pickTarget(S, me, from) {
     const foe = foeOf(S, me);
     if (foe < 0) return null;
-    const b = S.bases[me.team], all = S.P[foe].exposed;
+    const b = from || S.bases[me.team], all = S.P[foe].exposed;
     let best = null, bd = 1e9;
     for (const t of S.towns) if (t.owner === foe) {
       const d = Math.hypot(t.x - b[0], t.y - b[1]);
@@ -6505,6 +6506,32 @@ const AI = (() => {
       if (d < bd) { bd = d; best = [e.x, e.y]; }
     }
     return best || S.bases[foe];
+  }
+
+  // A way round for a wave, once waves have twice been spent on the same ground. Across the middle of the line between
+  // the bases, on each side, the land nearest the map's edge that tracks can reach from home: on a map of lakes or
+  // ridges between the bases, the way round their ends. Of the two, the one farther from where the waves were spent.
+  function flankVia(S, me, stall, foe) {
+    const M = S.map, W = M.W, H = M.H, b = S.bases[me.team], d = Math.hypot(foe[0] - b[0], foe[1] - b[1]) || 1;
+    const mx = (b[0] + foe[0]) / 2, my = (b[1] + foe[1]) / 2, px = -(foe[1] - b[1]) / d, py = (foe[0] - b[0]) / d;
+    const land = new Uint8Array(W * H), q = [Math.floor(b[1]) * W + Math.floor(b[0]) + 4];
+    land[q[0]] = 1;
+    while (q.length) {
+      const c = q.pop(), x = c % W, y = (c - x) / W;
+      for (const [dx, dy] of [[1, 0], [-1, 0], [0, 1], [0, -1]]) {
+        const nx = x + dx, ny = y + dy, k = ny * W + nx;
+        if (nx >= 0 && ny >= 0 && nx < W && ny < H && !land[k] && !(S.gnd[k] & 1)) { land[k] = 1; q.push(k); }
+      }
+    }
+    let best = null;
+    for (const side of [1, -1]) for (let k = Math.max(W, H); k >= 12; k--) {
+      const x = mx + px * k * side, y = my + py * k * side;
+      if (x < 8 || y < 8 || x > W - 8 || y > H - 8 || !land[R.cellOf(x, y)]) continue;
+      const far = Math.hypot(x - stall[0], y - stall[1]);
+      if (far >= 20 && (!best || far > best.far)) best = { x, y, far };
+      break;
+    }
+    return best ? [best.x, best.y] : null;
   }
 
   function powers(S, me, P) {
@@ -6710,12 +6737,36 @@ const AI = (() => {
       const ws = wave.reduce((a, u) => a + (u.d.move === 'naval' ? 0 : value(u)), 0);
       // A wave ends when it has lost most of its worth, or when its raid time is up at a level that has one.
       if (ws < me.startStrength * 0.3 || !wave.length || (me.D.raid && S.tick >= me.attackUntil)) {
-        me.state = 'build'; me.waves++; me.waveIds = null;
+        // Where the wave was spent, kept while waves gain nothing there: no building razed and no town taken.
+        const land = wave.filter(u => u.d.move !== 'naval');
+        const gained = P.stats.razed > (me.razed0 || 0) || S.towns.filter(t => t.owner === team).length > (me.towns0 || 0);
+        me.stalls = gained || !land.length ? [] : (me.stalls || []).concat([[land.reduce((a, u) => a + u.x, 0) / land.length, land.reduce((a, u) => a + u.y, 0) / land.length]]).slice(-2);
+        me.state = 'build'; me.waves++; me.waveIds = null; me.via = null; me.from = null;
         const ids = wave.map(u => u.id);
         if (ids.length) R.push(S, team, { c: 'move', ids, x: me.gather[0], y: me.gather[1] });
       } else if (S.tick >= me.attackT) {
         me.attackT = S.tick + 12 * HZ;
-        me.target = pickTarget(S, me);
+        // A wave out four minutes without razing a building or taking a town goes round, away from where it stands,
+        // so each such turn goes the other way from the last.
+        const gain = P.stats.razed + S.towns.filter(t => t.owner === team).length;
+        if (gain > (me.gainN ?? gain)) { me.gainN = gain; me.gainT = S.tick; }
+        else if (!me.via && S.tick - (me.gainT ?? S.tick) > 240 * HZ) {
+          const land = wave.filter(u => u.d.move !== 'naval');
+          me.gainT = me.viaT = S.tick;
+          if (land.length) me.via = flankVia(S, me, [land.reduce((a, u) => a + u.x, 0) / land.length, land.reduce((a, u) => a + u.y, 0) / land.length], foe);
+        }
+        // A flanking wave makes for its way round first, and goes on once most of it is there, or after two minutes.
+        if (me.via) {
+          const land = wave.filter(u => u.d.move !== 'naval'), there = land.filter(u => Math.hypot(u.x - me.via[0], u.y - me.via[1]) < 12).length;
+          if (there < land.length * 0.6 && S.tick - me.viaT < 120 * HZ) {
+            const ids = land.filter(u => !u.tgt).map(u => u.id);
+            if (ids.length) R.push(S, team, { c: 'move', ids, x: me.via[0], y: me.via[1], a: true });
+            gatherAt(S, me, guard, foe);
+            return;
+          }
+          me.from = me.via; me.via = null; me.stalls = [];
+        }
+        me.target = pickTarget(S, me, me.from);
         if (!me.target) { me.state = 'build'; me.waveIds = null; return; }
         const ids = wave.filter(u => !u.tgt).map(u => u.id);
         if (ids.length) R.push(S, team, { c: 'move', ids, x: me.target[0], y: me.target[1], a: true });
@@ -6731,6 +6782,12 @@ const AI = (() => {
     if (m >= me.D.delay && strength >= need) {
       me.state = 'attack'; me.startStrength = fight.reduce((a, u) => a + (u.d.move === 'naval' ? 0 : value(u)), 0); me.attackT = S.tick; me.attackUntil = S.tick + (me.D.raid || 0) * HZ;
       me.waveIds = (me.D.pulse !== undefined ? me.D.pulse : (S.seats || S.P).length > 2) ? fight.map(u => u.id) : null;
+      me.razed0 = P.stats.razed; me.towns0 = S.towns.filter(t => t.owner === team).length;
+      me.gainN = me.razed0 + me.towns0; me.gainT = S.tick;
+      // Two waves spent on the same ground in a row send this one round.
+      const st = me.stalls || [];
+      me.via = st.length >= 2 && Math.hypot(st[0][0] - st[1][0], st[0][1] - st[1][1]) < 16 ? flankVia(S, me, st[1], foe) : null;
+      me.viaT = S.tick; me.from = null;
       S.ev.push({ t: 'wave', team, n: me.waves + 1 });
     }
   }
