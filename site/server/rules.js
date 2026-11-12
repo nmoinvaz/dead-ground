@@ -62,7 +62,8 @@ const Rules = (() => {
     hero: { r: 9.5, dmg: 42, cd: 0.45, fx: 'bullet', snd: 'rifle', air: true, vs: { inf: 1, light: 0.35, heavy: 0.1, bld: 0.1, air: 0.4 } },
     atgm: { r: 9.5, dmg: 55, cd: 2.6, fx: 'missile', snd: 'missile', speed: 14, air: true, vs: { inf: 0.25, light: 1, heavy: 1, bld: 0.5, air: 0.6 } },
     hmg: { r: 8.5, dmg: 9, cd: 0.25, fx: 'bullet', snd: 'hmg', air: true, vs: { inf: 1, light: 0.5, heavy: 0.1, bld: 0.15, air: 0.5 } },
-    auto: { r: 10, dmg: 22, cd: 0.55, fx: 'tracer', snd: 'auto', air: true, vs: { inf: 0.7, light: 1, heavy: 0.35, bld: 0.3, air: 0.7 } },
+    // Outranged by an anti-tank rocket, and of little use on a tank's armour.
+    auto: { r: 9, dmg: 22, cd: 0.55, fx: 'tracer', snd: 'auto', air: true, vs: { inf: 0.7, light: 1, heavy: 0.25, bld: 0.3, air: 0.7 } },
     cannon: { r: 11, dmg: 75, cd: 2.6, fx: 'shell', snd: 'cannon', speed: 42, splash: 1, vs: { inf: 0.4, light: 1, heavy: 1, bld: 0.7, air: 0 } },
     twin: { r: 12, dmg: 110, cd: 2.8, fx: 'shell', snd: 'cannon', speed: 42, splash: 1.3, vs: { inf: 0.45, light: 1, heavy: 1, bld: 0.8, air: 0 } },
     flak: { r: 12, dmg: 20, cd: 0.35, fx: 'tracer', snd: 'flak', air: true, vs: { inf: 0.5, light: 0.25, heavy: 0.05, bld: 0.05, air: 1.4 } },
@@ -94,10 +95,13 @@ const Rules = (() => {
     jaeger: { r: 12, dmg: 55, cd: 2.2, fx: 'bullet', snd: 'musket', smoke: true, vs: { inf: 1, light: 0.3, heavy: 0.03, bld: 0.03, air: 0 } },
     atr: { r: 8.5, dmg: 45, cd: 2.4, fx: 'bullet', snd: 'sniper', vs: { inf: 0.3, light: 1.3, heavy: 1.3, bld: 0.3, air: 0.2 } },
     // Stones, grenades and shells thrown high over what is in the way.
-    grenade: { r: 6, dmg: 34, cd: 2.6, fx: 'stone', snd: 'bow', speed: 9, splash: 0.9, vs: { inf: 1, light: 1.8, heavy: 0.9, bld: 0.3, air: 0 } },
+    // Enough against horse that grenadiers stop a charge of cuirassiers.
+    grenade: { r: 6, dmg: 34, cd: 2.6, fx: 'stone', snd: 'bow', speed: 9, splash: 0.9, vs: { inf: 1, light: 2.4, heavy: 0.9, bld: 0.3, air: 0 } },
     stone: { r: 18, min: 5, dmg: 70, cd: 6, fx: 'stone', snd: 'catapult', speed: 13, indirect: true, splash: 1.4, vs: { inf: 0.7, light: 0.7, heavy: 0.6, bld: 1.3, air: 0 } },
     trebstone: { r: 22, min: 6, dmg: 120, cd: 8, fx: 'stone', snd: 'catapult', speed: 13, indirect: true, splash: 1.6, vs: { inf: 0.6, light: 0.7, heavy: 0.7, bld: 1.4, air: 0 } },
     ball: { r: 15, dmg: 90, cd: 3, fx: 'shell', snd: 'cannon', speed: 30, splash: 1.4, vs: { inf: 0.7, light: 2, heavy: 1.2, bld: 0.8, air: 0 } },
+    // A field gun's round shot, which cannot be brought to bear on men or horse already at its wheels.
+    field: { r: 15, min: 3, dmg: 90, cd: 3, fx: 'shell', snd: 'cannon', speed: 30, splash: 1.4, vs: { inf: 0.7, light: 2, heavy: 1.2, bld: 0.8, air: 0 } },
     howitz: { r: 22, min: 6, dmg: 75, cd: 6, fx: 'stone', snd: 'cannon', speed: 20, indirect: true, splash: 1.8, vs: { inf: 1, light: 0.8, heavy: 0.5, bld: 1, air: 0 } },
     // The future's weapons: pulses of light, plasma, and rails.
     pulse: { r: 9, dmg: 12, cd: 0.45, fx: 'pulse', snd: 'pulse', air: true, vs: { inf: 1, light: 0.4, heavy: 0.15, bld: 0.2, air: 0.6 } },
@@ -192,7 +196,7 @@ const Rules = (() => {
     repairbot: ride({ name: 'Repair Drone', sym: 'sup2', cost: 450, oil: 15, time: 8, hp: 280, speed: 4, sight: 10, repair: true, note: 'Mends nearby troops and stops attrition abroad.' }),
     catapult: ride({ name: 'Catapult', sym: 'art', cost: 350, time: 9, hp: 180, speed: 1.5, sight: 8, r: 0.9, weapons: ['stone'], note: 'Hurls stones over walls. Breaks buildings.' }),
     trebuchet: ride({ name: 'Trebuchet', sym: 'art', cost: 450, time: 11, hp: 240, speed: 1.2, sight: 8, r: 1, weapons: ['trebstone'], note: 'Throws far and breaks buildings. Needs a spotter.' }),
-    cannonart: ride({ name: 'Cannon', sym: 'art', cost: 450, time: 9, hp: 260, speed: 1.8, sight: 9, r: 0.85, weapons: ['ball'], note: 'Round shot against walls and armour.' }),
+    cannonart: ride({ name: 'Cannon', sym: 'art', cost: 450, time: 9, hp: 260, speed: 1.8, sight: 9, r: 0.85, weapons: ['field'], note: 'Round shot against walls and armour.' }),
     howitzer: ride({ name: 'Howitzer', sym: 'art', cost: 600, oil: 15, time: 11, hp: 240, speed: 2.2, sight: 9, r: 0.9, weapons: ['howitz'], turret: 1.6, note: 'Shells from far behind the line. Needs a spotter.' }),
     railart: ride({ name: 'Rail Artillery', sym: 'art', cost: 1000, oil: 40, time: 14, hp: 300, speed: 2.8, sight: 9, r: 0.9, weapons: ['railart'], turret: 1.6, note: 'Rail-launched salvos from very far. Needs a spotter.' }),
     aalorry: ride({ name: 'AA Lorry', sym: 'aa', cost: 420, oil: 10, time: 9, hp: 260, speed: 3, sight: 11, r: 0.85, weapons: ['flak'], turret: 4, note: 'Flak against aircraft.' }),
