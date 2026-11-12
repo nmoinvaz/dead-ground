@@ -424,12 +424,70 @@ const AI = (() => {
     if (gen && !(gen.ord && gen.ord.t === 'shelter')) R.push(S, me.team, { c: 'shelter', ids: [gen.id], id: cap.id });
   }
 
+  // King of the Hill, where nothing is built. It recruits at the held town nearest the point it goes for next, keeps two
+  // squads on each point it holds, gathers the rest at that town and sends them at the point once there are enough,
+  // takes open towns with spare squads, answers a town being taken, and calls in what its points open.
+  const KOTH_MIX = [['inf', 4], ['at', 2], ['mount', 2], ['rec', 1], ['heavy', 1], ['siege', 1], ['ifv', 1], ['snp', 1]];
+  function kothThink(S, me, P) {
+    const team = me.team, m = (S.tick - me.startTick) / HZ / 60, mine = S.towns.filter(t => t.owner === team);
+    if (!mine.length) return;
+    const d2 = (a, x, y) => Math.hypot(a.x - x, a.y - y);
+    const hx = mine.reduce((a, t) => a + t.x, 0) / mine.length, hy = mine.reduce((a, t) => a + t.y, 0) / mine.length;
+    const goal = S.points.filter(p => p.owner !== team).sort((p, q) => d2(p, hx, hy) - d2(q, hx, hy) || p.id - q.id)[0] || null;
+    const front = goal ? mine.slice().sort((p, q) => d2(p, goal.x, goal.y) - d2(q, goal.x, goal.y) || p.id - q.id)[0] : mine[0];
+    const army = S.ents.filter(e => e.team === team && !e.b && e.hp > 0);
+    // Recruits, a few of each kind the age and the towns allow, up to the level's ramp.
+    if (army.length < Math.min(90, me.D.ramp ? me.D.ramp[0] + me.D.ramp[1] * m : 90)) for (const cat of ['inf', 'veh']) {
+      if (P.q[cat].length >= 2) continue;
+      const pool = [];
+      for (const [line, w] of KOTH_MIX) { const kind = R.formOf(line, P.tech); if (kind && UNITS[kind].cat === cat && !R.blockedReason(S, team, kind)) for (let i = 0; i < w; i++) pool.push(kind); }
+      const kind = pool.length ? pool[Math.floor(me.rand() * pool.length)] : null;
+      if (kind && P.supply > UNITS[kind].cost) R.push(S, team, { c: 'train', kind, from: front.id });
+    }
+    // A town of its own being taken calls the nearest help.
+    for (const t of mine) if (t.capTeam >= 0 && t.capTeam !== team) {
+      const help = army.filter(u => R.armed(u) && !u.tgt).sort((a, b) => d2(a, t.x, t.y) - d2(b, t.x, t.y)).slice(0, 6).map(u => u.id);
+      if (help.length) R.push(S, team, { c: 'move', ids: help, x: t.x, y: t.y, a: true });
+    }
+    const fight = towns(S, me, army.filter(u => !u.d.cargo && (R.armed(u) || u.d.men)));
+    // Holders: the two squads nearest each held point stand on it.
+    const keep = new Set();
+    for (const p of S.points) if (p.owner === team) {
+      const two = fight.filter(u => u.d.men && !keep.has(u.id)).sort((a, b) => d2(a, p.x, p.y) - d2(b, p.x, p.y)).slice(0, 2);
+      for (const u of two) keep.add(u.id);
+      const off = two.filter(u => !u.tgt && d2(u, p.x, p.y) > R.KOTH_R * 0.6).map(u => u.id);
+      if (off.length) R.push(S, team, { c: 'move', ids: off, x: p.x, y: p.y });
+    }
+    if (!goal) return;
+    // The rest gather at the front town, and set out together once enough have gathered.
+    const rest = fight.filter(u => !keep.has(u.id) && !u.tgt);
+    const out = rest.filter(u => u.ord && (u.ord.t === 'amove' || u.ord.t === 'move') && Math.hypot((u.ord.x ?? -99) - goal.x, (u.ord.y ?? -99) - goal.y) < 3);
+    const idle = rest.filter(u => !out.includes(u));
+    const near = idle.filter(u => d2(u, front.x, front.y) < 12);
+    if (near.length >= 6 || (out.length && idle.length)) {
+      const ids = (out.length ? idle : near).map(u => u.id);
+      if (ids.length) R.push(S, team, { c: 'move', ids, x: goal.x, y: goal.y, a: true });
+    } else {
+      const ids = idle.filter(u => d2(u, front.x, front.y) >= 12 && !u.ord).map(u => u.id);
+      if (ids.length) R.push(S, team, { c: 'move', ids, x: front.x, y: front.y, a: true });
+    }
+    // Calls: the levy as soon as it is ready, and a barrage on the most of the enemy seen together.
+    if (P.calls && P.calls.includes('levy') && !(P.cooldown.levy > 0)) R.push(S, team, { c: 'power', name: 'levy' });
+    if (P.calls && P.calls.includes('barrage') && !(P.cooldown.barrage > 0) && P.supply > 800 && S.tick - me.lastPower > me.D.gap * HZ) {
+      const foes = S.ents.filter(e => e.team !== team && !e.b && e.hp > 0 && R.seenBy(S, team, e));
+      let best = null, top = 0;
+      for (const f of foes) { let n = 0; for (const o of foes) if (Math.hypot(o.x - f.x, o.y - f.y) < 6) n++; if (n > top) { top = n; best = f; } }
+      if (best && top >= 4) { R.push(S, team, { c: 'power', name: 'barrage', x: best.x, y: best.y }); me.lastPower = S.tick; }
+    }
+  }
+
   function think(S, me) {
     const P = S.P[me.team], team = me.team;
     // Its clock runs from when it took the slot, so a base that starts late builds up like a new one.
     if (me.startTick < 0) me.startTick = S.tick;
     // The level's income goes through a command, so every copy of the world has it.
     if (P.income !== me.D.income) R.push(S, team, { c: 'income', v: me.D.income });
+    if (S.koth) return kothThink(S, me, P);
     buildNext(S, me, P);
     defendNext(S, me, P);
     research(S, me, P);
