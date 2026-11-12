@@ -19,13 +19,13 @@
       // 45 and 135 degrees, then flat and upright lines for the darkest, each line a little uneven with small gaps.
       // The ground's hatching is pinned to the map so it pans with it, the units' redraws a few times a second.
       const ink = new THREE.ShaderMaterial({ uniforms: { t: { value: null }, tSubj: { value: null }, tHeat: { value: null }, tPaper: { value: null }, res: { value: new THREE.Vector2(1, 1) }, uTime: { value: 0 }, uK: { value: 1 }, uOff: { value: new THREE.Vector2() }, uStyle: { value: 8 }, tNorm: { value: null }, tFogS: { value: null }, tLand: { value: null }, uSun2: { value: new THREE.Vector2(-1, 0) }, uUpV: { value: new THREE.Vector3(0, 1, 0) }, uRoad: { value: 0 }, uOre: { value: 0 }, uMarks: { value: 1 }, uRoadAge: { value: 4 }, uShadeH: { value: 1 }, tShade: { value: null },
-        uWindS: { value: new THREE.Vector2() }, uView: { value: new THREE.Vector2(1, 0) }, tFx: { value: null }, tAnc: { value: null }, uDark: { value: 0 }, uTone: { value: 0 }, uInks: { value: 0 }, uFxs: { value: 0 }, uFire: { value: 0 }, uUnits: { value: 0 }, tH: SH.tH, uHSize: { value: new THREE.Vector2(1, 1) }, uHScale: { value: 1 }, uSnowF: { value: 0 }, uSnowC: SH.uSnowC, uSnowLine: SH.uSnowLine, tFlow: SH.tFlow, tBrook: SH.tBrook, uFlora: SH.uFlora, uShow: SH.uShow, uShowS: SH.uShowS, uGolfC: SH.uGolfC, uCastK: SH.uCastK, uDustT: SH.uDustT, uGolf: SH.uGolf, uGolfB: SH.uGolfB, tCover: SH.tCover, uFieldK: SH.uFieldK, uFieldK2: SH.uFieldK2, uPark: SH.uPark, uBridgeKind: SH.uBridgeKind, uFog: { value: 0 }, uMist: { value: 0 }, uNight: { value: 0 },
+        uWindS: { value: new THREE.Vector2() }, uView: { value: new THREE.Vector2(1, 0) }, tFx: { value: null }, tAnc: { value: null }, uDark: { value: 0 }, uTone: { value: 0 }, uInks: { value: 0 }, uFxs: { value: 0 }, uFire: { value: 0 }, uUnits: { value: 0 }, tH: SH.tH, uHSize: { value: new THREE.Vector2(1, 1) }, uHScale: { value: 1 }, uSnowF: { value: 0 }, uSnowC: SH.uSnowC, uSnowLine: SH.uSnowLine, uIceLine: SH.uIceLine, uCapH: SH.uCapH, uCapK: SH.uCapK, tFlow: SH.tFlow, tBrook: SH.tBrook, uFlora: SH.uFlora, uShow: SH.uShow, uShowS: SH.uShowS, uGolfC: SH.uGolfC, uCastK: SH.uCastK, uDustT: SH.uDustT, uGolf: SH.uGolf, uGolfB: SH.uGolfB, tCover: SH.tCover, uFieldK: SH.uFieldK, uFieldK2: SH.uFieldK2, uPark: SH.uPark, uBridgeKind: SH.uBridgeKind, uFog: { value: 0 }, uMist: { value: 0 }, uNight: { value: 0 },
         uDayMul: { value: new THREE.Vector3(1, 1, 1) }, uDayAdd: { value: new THREE.Vector3() }, uWaterL: { value: -0.15 }, uCloudK: SH.uCloudK, tMarks: SH.tMarks, uMap: SH.uMap,
         uCloud: SH.uCloud, uCloudT: SH.uCloudT, uSunW: SH.uSunDir, uCloudA: { value: 0 }, uCloudG: { value: 0 }, uRayK: { value: 0 }, uDust: { value: new THREE.Vector4() },
         uInvVP: { value: new THREE.Matrix4() }, uW2S: { value: new THREE.Vector4(1, 0, 0, 1) }, uLev: { value: 1 }, tTerr: SH.tTerr, uBorder: SH.uBorder, uMe: { value: 0 },
         // Each side's colour as the anchor pass keeps it, its hue and how coloured it is, and its inks on either paper.
         uSideKey: { value: [...Array(8)].map(() => new THREE.Vector2()) }, uSideL: { value: [...Array(8)].map(() => new THREE.Vector3()) }, uSideD: { value: [...Array(8)].map(() => new THREE.Vector3()) }, uSideB: { value: [...Array(8)].map(() => new THREE.Vector3()) } }, vertexShader: vs, depthTest: false, depthWrite: false, fragmentShader: `
-        varying vec2 vUv; uniform sampler2D t, tSubj, tHeat, tPaper, tNorm, tFogS, tLand, tMarks; uniform float uMap; uniform vec2 res, uOff, uSun2, uWindS, uView, uHSize; uniform float uHScale, uFxs, uFire; uniform int uUnits, uInks; uniform float uDark, uTone; uniform sampler2D tH, tFx, tAnc, tFlow, tBrook, tCover, tShade; uniform vec4 uFieldK, uFieldK2; uniform vec4 uShow[8]; uniform vec2 uShowS[8]; uniform vec3 uGolfC[4]; uniform float uCastK; uniform vec2 uDustT; uniform vec4 uGolf[16]; uniform vec3 uGolfB[24]; uniform vec4 uPark[16]; uniform vec3 uUpV, uDayMul, uDayAdd; uniform float uTime, uK, uSnowF, uSnowC, uSnowLine, uFlora, uBridgeKind, uFog, uMist, uNight, uWaterL, uCloudK, uMarks, uRoadAge, uShadeH; uniform int uStyle, uRoad, uOre;
+        varying vec2 vUv; uniform sampler2D t, tSubj, tHeat, tPaper, tNorm, tFogS, tLand, tMarks; uniform float uMap; uniform vec2 res, uOff, uSun2, uWindS, uView, uHSize; uniform float uHScale, uFxs, uFire; uniform int uUnits, uInks; uniform float uDark, uTone; uniform sampler2D tH, tFx, tAnc, tFlow, tBrook, tCover, tShade; uniform vec4 uFieldK, uFieldK2; uniform vec4 uShow[8]; uniform vec2 uShowS[8]; uniform vec3 uGolfC[4]; uniform float uCastK; uniform vec2 uDustT; uniform vec4 uGolf[16]; uniform vec3 uGolfB[24]; uniform vec4 uPark[16]; uniform vec3 uUpV, uDayMul, uDayAdd; uniform float uTime, uK, uSnowF, uSnowC, uSnowLine, uIceLine, uCapH, uCapK, uFlora, uBridgeKind, uFog, uMist, uNight, uWaterL, uCloudK, uMarks, uRoadAge, uShadeH; uniform int uStyle, uRoad, uOre;
         uniform vec2 uSideKey[8]; uniform vec3 uSideL[8], uSideD[8], uSideB[8];
         uniform sampler2D tTerr; uniform float uBorder, uMe;
         uniform vec2 uCloud; uniform vec3 uSunW; uniform float uCloudT, uCloudA, uCloudG, uRayK; uniform vec4 uDust;
@@ -585,6 +585,24 @@
                 CONT = mix(CONT, SNOWL, cap);
               }
               gSnow = max(cap, uSnowC) * isG;
+              // A layout's glaciers lie above its ice line, short of a cliff, as the rules have them. A survey map draws
+              // a glacier so: a cold blue-white over the snow, its contours fainter, a fine blue line at its edge, and
+              // its crevasses across the fall in short blue strokes thickest in their middles, close where it falls
+              // steeply as an icefall and few where it lies flat.
+              float ice = 0.0, iceE = 0.0, crev = 0.0;
+              if (uIceLine < 98.0) {
+                float iF = lhS + (noise(Wl * 0.4 + 5.0) - 0.5) * 0.5 - uIceLine, iW = max(fwidth(iF), 1e-4);
+                float iFlat = 1.0 - smoothstep(1.0, 1.3, sSl);
+                ice = smoothstep(-iW, iW, iF) * iFlat * isG;
+                iceE = (1.0 - smoothstep(0.45 * iW * uK, 1.3 * iW * uK, abs(iF))) * iFlat * isG;
+                // The crevasses lie along the contours, every 0.45 of height, broken into lengths by a noise.
+                float cv = lhS / 0.45 + (noise(Wl * 0.5 + 9.0) - 0.5) * 0.9, cvW = max(fwidth(cv), 1e-4);
+                float thick = smoothstep(0.5, 0.75, noise(Wl * 1.7 + floor(cv) * 5.3)), cvL = cvW * uK * (0.25 + 0.75 * thick);
+                crev = (1.0 - smoothstep(0.3 * cvL, 0.9 * cvL, abs(fract(cv) - 0.5))) * smoothstep(0.0, 0.3, thick);
+                crev *= ice * smoothstep(0.2, 0.55, sSl) * smoothstep(4.0, 8.0, 1.0 / (cvW * uK));
+                tint = mix(tint, dk ? vec3(0.5, 0.56, 0.62) : vec3(0.89, 0.93, 0.95), ice);
+                contour *= 1.0 - 0.5 * ice;
+              }
               // A face too steep for soil is bare rock, in a cool grey wash with its contours dropped, as a Swiss map
               // leaves them out where the rock drawing carries the form. None by the water or on a road.
               // Its noise moves the slope by under 0.475, so it is drawn only where the slope could reach rock.
@@ -649,6 +667,8 @@
               base = mix(base, base * (dk ? mix(vec3(0.36, 0.37, 0.44), vec3(0.66, 0.67, 0.71), cap) : mix(vec3(0.72, 0.70, 0.68), vec3(0.8, 0.8, 0.82), cap)), rfDark * (dk ? 0.95 : 0.65) * isG);
               base = mix(base, dk ? base + vec3(0.3, 0.27, 0.21) : min(base * 1.05 + 0.03, vec3(1.0)), rfLight * (dk ? 0.85 : 0.6) * isG);
               base = mix(base, CONT, contour * isG * (1.0 - onRoad * 0.55) * (1.0 - wet));
+              // The glacier's crevasses and edge, in its blue.
+              base = mix(base, dk ? vec3(0.56, 0.68, 0.88) : vec3(0.24, 0.38, 0.66), clamp(crev * 0.9 + iceE * 0.6, 0.0, 1.0) * (1.0 - onRoad));
               // The rock's strokes run down the fall line, heavy and close on the faces away from the sun and in the
               // gullies, and few and fine on those toward it, so the rock is modelled by its strokes alone.
               if (rock * isG > 0.01) {
@@ -1221,6 +1241,29 @@
           col = mix(col, dk ? vec3(0.25, 0.25, 0.26) : vec3(0.945, 0.94, 0.925), veil);
           float fband = veil > 0.2 ? hatch(px + vec2(uTime * 5.0 * uK, 0.0), 0.0, 10.0, 0.8, 97.0, 0.6) * smoothstep(0.2, 0.55, veil) : 0.0;
           col = mix(col, dk ? vec3(0.42, 0.44, 0.5) : vec3(0.6, 0.62, 0.67), fband * 0.2);
+          // Cloud down on the heights, a layer lying at the cloud line, so it floats over the land and the land's
+          // ridges pass under it. Its extent is the land under it read broadly, so it rounds the ridges rather than
+          // tracing them, billowing as the wind carries it, and it settles from above as it comes down and rises off as
+          // it lifts. It is drawn as the other clouds are, a white wash edged with a light scalloped line, with a
+          // grey shade along its lower edge. What stands under it shows faintly.
+          if (uCapK > 0.002 && uCapH < 98.0) {
+            vec2 cq = landAt(vUv, uCapH + 1.5);
+            float hc = hCubic(cq * uHScale + 0.5);
+            if (hc > uCapH - 7.0) {
+              float hb = 0.0;
+              for (int j = 0; j < 8; j++) { float a = float(j) * 0.7854; hb += hCubic((cq + 3.5 * vec2(cos(a), sin(a))) * uHScale + 0.5); }
+              hb = 0.5 * hc + 0.5 * hb / 8.0;
+              vec2 cb = cq * 0.14 + uCloud * 4.0;
+              float bil = noise(cb) * 0.6 + noise(cb * 2.3 + 7.0) * 0.4;
+              float cF = hb - uCapH + 0.8 + (bil - 0.5) * 3.0 - (1.0 - uCapK) * 7.0, cFW = max(fwidth(cF), 1e-4);
+              float body = smoothstep(-0.4, 1.4, cF) * onMap, keepC = 1.0 - 0.45 * step(0.85, s0);
+              col = mix(col, dk ? vec3(0.62, 0.63, 0.66) : vec3(0.985, 0.985, 0.98), body * 0.88 * keepC);
+              float shade = smoothstep(-0.4, 0.4, cF) * (1.0 - smoothstep(0.4, 1.6, cF)) * onMap;
+              col = mix(col, dk ? vec3(0.46, 0.47, 0.51) : vec3(0.8, 0.82, 0.87), shade * 0.35 * keepC);
+              float rim = (1.0 - smoothstep(0.6 * uK, 1.6 * uK, abs(cF + 0.1) / cFW)) * step(0.15, noise(cq * 0.9 + 3.0)) * onMap;
+              col = mix(col, dk ? vec3(0.78, 0.79, 0.82) : vec3(0.48, 0.52, 0.6), rim * 0.8 * smoothstep(0.3, 0.7, uCapK));
+            }
+          }
           // A dust storm's wall where it stands, uDust its way, the reach of its front and its strength: thick for a
           // stretch behind the front, where the world stands its heads, thinning behind that, and clear air ahead. The
           // front sways along its line as the world's heads do, by the storm's clock and phase in uDustT.

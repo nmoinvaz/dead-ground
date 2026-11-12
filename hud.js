@@ -1630,6 +1630,7 @@ const Hud = (() => {
       const w = Rules.sky(s), ink = inked();
       let note = SKY_NOTE[w.kind] || (Rules.nightAt(s.tick) > 0.5 ? 'Night: sight cut short, flares light the way' : '');
       if (s.flooded) note = note ? note + '. Fords flooded' : 'Fords flooded';
+      if (Rules.capDown(s)) note = note ? note + '. Cloud on the heights' : 'Cloud on the heights hides them';
       if (w.next !== w.kind && w.left < 40 * HZ) note = (SKY_NAME[w.next] || w.next) + ' coming';
       // A newcomer's protection, counting down.
       const me = game.team >= 0 ? s.P[game.team] : null, left = me && me.shield > s.tick ? Math.ceil((me.shield - s.tick) / HZ) : 0;

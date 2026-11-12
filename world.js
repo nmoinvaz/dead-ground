@@ -75,6 +75,8 @@ const World = (() => {
       uWind: { value: new THREE.Vector2(0.3, 0.1) }, uCloud: { value: new THREE.Vector2() }, uCloudK: { value: 0.2 }, uCloudT: { value: 0.3 }, uSnowC: { value: 0 },
       // The height above which snow lies on the heights in any weather.
       uSnowLine: { value: 99 },
+      // A layout's ice line and cloud line, 99 where it has none, and how far the cloud is down, 0 to 1.
+      uIceLine: { value: 99 }, uCapH: { value: 99 }, uCapK: { value: 0 },
       // The way the rivers run, from buildFlow, and how far each point lies from a brook and whether at its ford.
       tFlow: { value: black }, tBrook: { value: farBrook },
       // The land's cover from buildFields: the beaches in red, and the farmland round the towns, its extent in green,
@@ -3053,6 +3055,9 @@ const World = (() => {
       // own dark clouds stand out from the rest.
       SH.uCloudT.value = clamp(0.2 + 0.18 * sky.cloud + 0.18 * sky.rain + 0.1 * sky.fog + 0.22 * sky.snow + 0.05 * sky.sand, 0.15, 0.55);
       SH.uSnowC.value = sky.cover;
+      // Cloud on the heights comes down and lifts over a few seconds.
+      const capW = studySky && studySky.cap !== undefined ? studySky.cap : Rules.capDown(S) ? 1 : 0;
+      SH.uCapK.value += (capW - SH.uCapK.value) * (studySky ? 1 : 1 - Math.exp(-dt * 0.5));
       waterRise.value = Math.min(1.25, sky.flood) * 0.26;
       right3.setFromMatrixColumn(camera.matrixWorld, 0);
       sky.windS = right3.x * U.x + right3.z * U.y;
@@ -3137,6 +3142,7 @@ const World = (() => {
       let over = 0;
       if (theme.snow !== undefined) for (let i = 0; i < M.h.length; i++) over += M.h[i] > theme.snow;
       SH.uSnowLine.value = over > M.h.length * 0.015 ? theme.snow : 99;
+      SH.uIceLine.value = M.iceLine ?? 99; SH.uCapH.value = M.cloudLine ?? 99; SH.uCapK.value = 0;
       SH.uFlora.value = theme.tree === 'broad' ? 1 : theme.tree === 'acacia' ? 2 : 3;
       renderer.setClearColor(theme.shroud, 1);
 
