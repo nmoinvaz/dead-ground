@@ -354,8 +354,10 @@ const Rules = (() => {
     levy: { name: 'Levy', sym: 'levy', cost: 0, cd: 300, tech: 1, need: 'capitol', now: true, names: ['Tribute', 'Levy', 'Levy', 'War Bonds', 'War Bonds', 'Levy'], note: 'Every town you hold pays two minutes of its dues at once, then half its dues for four minutes.' },
   };
   // The building a call needs standing, and whether the side may make it now for want of that building or of power.
+  for (const k in POWERS) POWERS[k].key = k;
   const callNeed = d => d.free ? null : d.need || 'radar';
-  const callOff = (P, d) => { const n = callNeed(d); return !!n && (!P.counts[n] || (n === 'radar' && !!P.low)); };
+  // In King of the Hill a side's calls are the ones its held points open.
+  const callOff = (P, d) => { if (P.calls) return !P.calls.includes(d.key); const n = callNeed(d); return !!n && (!P.counts[n] || (n === 'radar' && !!P.low)); };
 
   // Upgrades, researched at a building and kept by the side. Each has three tiers, which the Ancient, Gunpowder and
   // Modern ages open, and each tier adds k again. at names the building, or 'def' for every defence. s scales the
@@ -514,23 +516,23 @@ const Rules = (() => {
     quad: { name: 'Four Quarters', layout: 'quad', seats: 4, about: 'Four corners parted by two crossing rivers.' },
     world: { name: 'Crossed Rivers', layout: 'world', seats: 8, about: 'Eight bases round a ring, two to each quarter.' },
     gulf: { name: 'The Gulf', layout: 'gulf', seats: 2, about: 'Two bases either side of a long gulf, with land round both ends. Docks and ships hold the water.' },
-    pass: { name: 'High Pass', layout: 'pass', seats: 2, about: 'A steep ridge between two bases, crossed only at three passes.' },
+    pass: { name: 'High Pass', layout: 'pass', seats: 2, koth: 3, about: 'A steep ridge between two bases, crossed only at three passes.' },
     lakes: { name: 'Lake Country', layout: 'lakes', seats: 4, about: 'Four corners round a great lake, a road all the way round its shore.' },
     greenwood: { name: 'Greenwood', layout: 'greenwood', seats: 2, about: 'Two bases in deep woods, with roads cut through and clearings round the towns. Tanks keep to the roads.' },
     oldforest: { name: 'Old Forest', layout: 'oldforest', seats: 4, about: 'Four corners in an old forest, joined by woodland roads and a ring of towns.' },
-    twinlakes: { name: 'Twin Lakes', layout: 'twinlakes', seats: 2, about: 'Two lakes between the bases, a road between them and one round each end. Docks hold the lakes.' },
+    twinlakes: { name: 'Twin Lakes', layout: 'twinlakes', seats: 2, koth: 3, about: 'Two lakes between the bases, a road between them and one round each end. Docks hold the lakes.' },
     ponds: { name: 'Thousand Lakes', layout: 'ponds', seats: 4, about: 'Four corners in a country of small lakes and ponds that break up every line of march.' },
     seas: { name: 'Two Seas', layout: 'seas', seats: 2, about: 'A broad land between two seas, each base near a coast. Ships can strike the flanks.' },
     isles: { name: 'Archipelago', layout: 'isles', seats: 4, about: 'Four islands round a great middle one, joined by long bridges. Ships hold the water between.' },
-    peaks: { name: 'Twin Peaks', layout: 'peaks', seats: 2, about: 'Two mountains between the bases, a valley through the middle and a way round each end.' },
-    highlands: { name: 'Highlands', layout: 'highlands', seats: 4, about: 'Ridges part four corners, crossed by passes, round a plateau each side can climb to.' },
+    peaks: { name: 'Twin Peaks', layout: 'peaks', seats: 2, koth: 2, about: 'Two mountains between the bases, a valley through the middle and a way round each end.' },
+    highlands: { name: 'Highlands', layout: 'highlands', seats: 4, koth: 5, about: 'Ridges part four corners, crossed by passes, round a plateau each side can climb to.' },
     rivers3: { name: 'Three Rivers', layout: 'rivers3', seats: 2, about: 'Three rivers between two bases, each with its bridges and a ford. Lines to hold.' },
-    crater: { name: 'Crater Lake', layout: 'crater', seats: 4, about: 'A lake inside a ring of mountains, entered through four gaps, with a base in each corner outside.' },
+    crater: { name: 'Crater Lake', layout: 'crater', seats: 4, koth: 5, about: 'A lake inside a ring of mountains, entered through four gaps, with a base in each corner outside.' },
     // A map may fix its theatre, and draw its woods as other plants.
     nile: { name: 'The Nile', layout: 'nile', seats: 2, theatre: 'desert', flora: 'palm', names: { river: ['The Nile'] }, about: 'The great river runs between the two sides through the desert, a green strip of fields and palms along its banks, crossed by three long bridges. Pyramids, a temple and its obelisks stand on the sand.' },
     atlantis: { name: 'Atlantis', layout: 'atlantis', seats: 4, ruins: true, about: 'A great island of rings of land and water round a central citadel, joined by bridges, with canals cut in from the sea. Ships can sail the rings.' },
     falls: { name: 'The Falls', layout: 'falls', seats: 2, about: 'A broad river drops over a great horseshoe fall, as at Niagara, into a deep gorge between the two sides. Bridges and a ford cross above the falls, an island town stands between them, and only a high bridge spans the gorge. Docks hold each reach.' },
-    mesa: { name: 'Mesa Country', layout: 'mesa', seats: 2, theatre: 'desert', flora: 'cactus', about: 'Open desert of dunes and sheer-sided mesas, with stands of cactus. The mesas wall off the lines of march.' },
+    mesa: { name: 'Mesa Country', layout: 'mesa', seats: 2, koth: 3, theatre: 'desert', flora: 'cactus', about: 'Open desert of dunes and sheer-sided mesas, with stands of cactus. The mesas wall off the lines of march.' },
   };
   // The theatre a game on a map is fought in: the map's own, if it fixes one, or the one chosen.
   const theatreOf = (map, chosen) => (MAPS[map] && MAPS[map].theatre) || chosen;
@@ -2016,6 +2018,8 @@ const Rules = (() => {
       free: !!o.free,
       // Regicide: each side has a general from the start, and a side whose general falls is out.
       regicide: !!o.regicide,
+      // King of the Hill: no building, towns raise the soldiers, and the high points are fought for.
+      koth: !!o.koth,
       // The ground as it now is, which woods, bridges and fords change, and what has happened to the trees,
       // bridges and houses.
       gnd: new Uint8Array(M.ground), gndVer: 0, wood: new Uint8Array(N), woodVer: 0, burn: [], crush: [],
@@ -2032,7 +2036,13 @@ const Rules = (() => {
     S.hist = freshHist(S);
     for (const m of M.towns) m.owner = -1;
     S.towns = M.towns.map(t => Object.assign({}, t));
-    if (!o.empty) for (const t of seats) spawnBase(S, t);
+    if (S.koth) {
+      // No ore is dug, so the fields are left as ground.
+      S.ore.fill(0);
+      S.points = kothPoints(S, kothCount(S));
+      S.score = S.P.map(() => KOTH_SCORE);
+      if (!o.empty) for (const t of seats) spawnHome(S, t);
+    } else if (!o.empty) for (const t of seats) spawnBase(S, t);
     territory(S);
     recount(S);
     vision(S);
@@ -2069,7 +2079,8 @@ const Rules = (() => {
     h.P.forEach((a, t) => {
       if (!a) return;
       const s = S.P[t].stats, sc = scoreOf(S, t, land[t]);
-      a.sc.push(sc.total); a.ar.push(Math.round(ar[t])); a.un.push(un[t]); a.bl.push(bl[t]); a.ld.push(sc.land);
+      // In King of the Hill the score is the hill score, which the report charts over the game.
+      a.sc.push(S.koth ? S.score[t] : sc.total); a.ar.push(Math.round(ar[t])); a.un.push(un[t]); a.bl.push(bl[t]); a.ld.push(sc.land);
       a.su.push(Math.round(s.mined + s.townIn)); a.oi.push(Math.round(s.oilIn)); a.tw.push(sc.towns); a.kv.push(Math.round(s.killV));
     });
     const war = [];
@@ -2186,14 +2197,16 @@ const Rules = (() => {
       // The ground and the trees as pairs of cell and value, only where they differ from the map's start.
       gnd: diffs(S.gnd, S.map.ground), wood: diffs(S.wood, null), gndVer: S.gndVer, woodVer: S.woodVer, burn: S.burn, bridges: S.bridges, hh: S.hh, hr: S.hr, flooded: S.flooded,
       trail: b64.en(S.trail), trailSum: S.trailSum, hist: S.hist,
+      koth: S.koth, points: S.points, score: S.score,
     };
   }
   function diffs(a, base) { const o = []; for (let c = 0; c < a.length; c++) if (a[c] !== (base ? base[c] : 0)) o.push(c, a[c]); return o; }
   function load(o) {
-    const S = newGame({ seed: o.seed, layout: o.layout, seats: o.seats, pos: o.pos, age: o.age0 || 5, theatre: o.theatre, weather: o.weather, free: o.free, regicide: o.regicide, empty: true });
+    const S = newGame({ seed: o.seed, layout: o.layout, seats: o.seats, pos: o.pos, age: o.age0 || 5, theatre: o.theatre, weather: o.weather, free: o.free, regicide: o.regicide, koth: o.koth, empty: true });
     if (S.seed !== o.seed) throw new Error('map seed mismatch');
     Object.assign(S, { tick: o.tick, rs: o.rs, next: o.next, occVer: o.occVer, oreVer: o.oreVer, terrVer: o.terrVer, dirty: o.dirty, over: o.over, shots: o.shots, sweeps: o.sweeps, flights: o.flights, occLog: o.occLog || [] });
     S.towns = o.towns.map(t => Object.assign({}, t));
+    if (S.koth && o.points) { S.points = o.points.map(p => Object.assign({}, p)); S.score = o.score.slice(); }
     S.ore = new Uint16Array(b64.de(o.ore).buffer);
     S.fields = new Map(o.fields.map(([k, v, u, m, r, q]) => [k, { ver: v, used: u, made: m, reach: r, wq: q ?? 20 }]));
     S.P = o.P.map(p => {
@@ -4198,7 +4211,8 @@ const Rules = (() => {
       if (t.owner === team) { t.cap = Math.max(0, t.cap - 0.1); if (t.cap === 0) t.capTeam = -1; continue; }
       if (t.capTeam !== team && t.cap > 0) { t.cap = Math.max(0, t.cap - 0.05 * Math.min(here[team], 3)); if (t.cap === 0) t.capTeam = team; continue; }
       t.capTeam = team;
-      t.cap += 0.05 * Math.min(here[team], 3) / (t.owner >= 0 ? 1.3 : 1) * 0.5;
+      // A King of the Hill side's home town, still held by it, takes three times as long.
+      t.cap += 0.05 * Math.min(here[team], 3) / (t.owner >= 0 ? 1.3 : 1) * 0.5 / (t.home !== undefined && t.home === t.owner ? 3 : 1);
       if (t.cap >= 1) {
         const from = t.owner;
         t.owner = team; t.cap = 0; t.capTeam = -1; changed = true;
@@ -4208,6 +4222,142 @@ const Rules = (() => {
       }
     }
     if (changed) territory(S);
+  }
+
+  // King of the Hill. There is no building: each side starts with a home town and a few squads, its towns raise its
+  // soldiers, and the war is for the map's high points. Every KOTH_EVERY a side holding more points than another
+  // takes KOTH_BLEED from that side's score for each point of the difference. A side at 0, or with no town, is out.
+  const KOTH_SCORE = 500, KOTH_BLEED = 5, KOTH_EVERY = 10 * HZ, KOTH_R = 4.5;
+  // The high points, found from the map's terrain. A summit is scored by its prominence, how far it stands above the
+  // highest saddle joining it to higher ground. A point goes on the highest cell within six of its summit that a man
+  // can stand on, off water, clear of the bases and away from the map's edges. The points come in the map's own
+  // turns, so every side is as near the high ground as every other: an odd one at the very middle, when there is
+  // footing there, and the rest in sets, one to each turn, whose ends stand within a cell's height of each other.
+  function kothPoints(S, n) {
+    const M = S.map, h = new Float32Array(N);
+    for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) h[y * W + x] = terrainAt(M, x + 0.5, y + 0.5);
+    const firm = c => !(M.ground[c] & 2) && h[c] >= waterLevel(M, c % W + 0.5, (c / W | 0) + 0.5);
+    const ord = Array.from({ length: N }, (_, c) => c).sort((a, b) => h[b] - h[a] || a - b);
+    const par = new Int32Array(N).fill(-1), top = new Int32Array(N), prom = new Map();
+    const find = a => { while (par[a] !== a) { par[a] = par[par[a]]; a = par[a]; } return a; };
+    for (const c of ord) {
+      par[c] = c; top[c] = c;
+      const x = c % W, y = (c - x) / W;
+      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) {
+        const nx = x + dx, ny = y + dy;
+        if ((!dx && !dy) || nx < 0 || ny < 0 || nx >= W || ny >= H || par[ny * W + nx] < 0) continue;
+        const a = find(c), b = find(ny * W + nx);
+        if (a === b) continue;
+        // The lower of the two summits ends here, at this cell's height.
+        const hi = h[top[a]] >= h[top[b]] ? a : b, lo = hi === a ? b : a;
+        prom.set(top[lo], h[top[lo]] - h[c]);
+        par[lo] = hi;
+      }
+    }
+    prom.set(top[find(ord[0])], h[ord[0]] - h[ord[N - 1]]);
+    const clear = (x, y) => x >= 8 && y >= 8 && x < W - 8 && y < H - 8 && S.bases.every(b => mhypot(b[0] - x, b[1] - y) > 24);
+    const footing = (x0, y0) => {
+      let best = -1;
+      for (let dy = -6; dy <= 6; dy++) for (let dx = -6; dx <= 6; dx++) {
+        const x = Math.floor(x0) + dx, y = Math.floor(y0) + dy;
+        if (dx * dx + dy * dy > 36 || !clear(x + 0.5, y + 0.5)) continue;
+        const c = y * W + x;
+        if (firm(c) && (best < 0 || h[c] > h[best])) best = c;
+      }
+      return best;
+    };
+    const out = [];
+    if (n % 2 === 1) {
+      const c = Math.floor(CY) * W + Math.floor(CX);
+      if (firm(c) && firm(c - 1) && firm(c - W) && firm(c - W - 1)) out.push({ x: CX, y: CY, z: terrainAt(M, CX, CY) });
+    }
+    const turns = S.bases.length <= 2 ? [[1, 0], [-1, 0]] : [[1, 0], [0, 1], [-1, 0], [0, -1]];
+    const summits = [...prom].filter(([c, p]) => p >= 0.8).sort((a, b) => b[1] - a[1] || a[0] - b[0]);
+    for (const [c0] of summits) {
+      if (out.length + turns.length > n) break;
+      const c = footing(c0 % W + 0.5, (c0 / W | 0) + 0.5);
+      if (c < 0) continue;
+      const x = c % W + 0.5, y = (c / W | 0) + 0.5, set = turns.map(([k, s]) => ({ x: CX + (x - CX) * k - (y - CY) * s, y: CY + (x - CX) * s + (y - CY) * k }));
+      if (set.some(q => { const m = cellOf(q.x, q.y); return !clear(q.x, q.y) || !firm(m) || Math.abs(h[m] - h[c]) > 1; })) continue;
+      if (set.some(q => out.some(o => mhypot(o.x - q.x, o.y - q.y) < 16)) || mhypot(set[0].x - set[1].x, set[0].y - set[1].y) < 16) continue;
+      for (const q of set) out.push({ x: q.x, y: q.y, z: terrainAt(M, q.x, q.y) });
+    }
+    return out.map((p, i) => Object.assign(p, { id: i, owner: -1, cap: 0, capTeam: -1 }));
+  }
+  // The points a map takes: its own number, or three on two seats, five on four and seven on eight.
+  const kothCount = S => { const m = Object.values(MAPS).find(e => e.layout === S.layout); return m && m.koth || (S.bases.length <= 2 ? 3 : S.bases.length <= 4 ? 5 : 7); };
+  // A side's home town, the one nearest its place that nobody holds, and a second where the map has three towns or more
+  // to a side, and the squads it starts with in the first. Home towns are slower to take while their side holds them.
+  function spawnHome(S, team) {
+    const b = S.bases[team], two = S.towns.length >= 3 * S.seats.length;
+    let home = null;
+    for (let k = two ? 2 : 1; k > 0; k--) {
+      let t0 = null;
+      for (const t of S.towns) if (t.owner < 0 && (!t0 || mhypot(t.x - b[0], t.y - b[1]) < mhypot(t0.x - b[0], t0.y - b[1]))) t0 = t;
+      if (!t0) break;
+      t0.owner = team; t0.home = team;
+      home = home || t0;
+    }
+    if (!home) return;
+    const age = S.P[team].tech, a = matan2(CY - home.y, CX - home.x), f = [mcos(a), msin(a)], s = [-f[1], f[0]];
+    const at = (fw, sd) => [home.x + f[0] * fw + s[0] * sd, home.y + f[1] * fw + s[1] * sd];
+    for (const [k, fw, sd] of [['inf', 5, -2.5], ['inf', 5, 2.5], ['at', 3.5, 0], ['rec', 7, 0]]) { const kind = formOf(k, age); if (kind) spawn(S, kind, team, ...at(fw, sd)); }
+  }
+  // Points are taken as towns are, by men standing on them, and the score bleeds. A side's held points open its calls,
+  // one for each point, in the order the ages bring them.
+  const KOTH_CALLS = ['flare', 'barrage', 'uav', 'para', 'sat'];
+  function stepPoints(S) {
+    if (!S.koth) return;
+    if (S.tick % 5 === 0) for (const p of S.points) {
+      const here = new Array(S.P.length).fill(0);
+      near(S, p.x, p.y, KOTH_R, u => { if (!u.b && u.hp > 0 && u.d.men && u.drop <= 0 && mhypot(u.x - p.x, u.y - p.y) < KOTH_R) here[u.team]++; });
+      let team = -1, sides = 0;
+      for (let k = 0; k < here.length; k++) if (here[k]) { sides++; team = k; }
+      if (sides > 1) continue;
+      if (team < 0 || p.owner === team) { p.cap = Math.max(0, p.cap - 0.05); if (p.cap === 0) p.capTeam = -1; continue; }
+      if (p.capTeam !== team && p.cap > 0) { p.cap = Math.max(0, p.cap - 0.05 * Math.min(here[team], 3)); if (p.cap === 0) p.capTeam = team; continue; }
+      p.capTeam = team;
+      p.cap += 0.05 * Math.min(here[team], 3) / (p.owner >= 0 ? 1.3 : 1) * 0.5;
+      if (p.cap >= 1) {
+        const from = p.owner;
+        p.owner = team; p.cap = 0; p.capTeam = -1;
+        ownEvent(S, team, 'towntaken');
+        if (from >= 0) ownEvent(S, from, 'townlost');
+        S.ev.push({ t: 'point', id: p.id, team, from, x: p.x, y: p.y });
+      }
+    }
+    const held = S.P.map(P => S.points.filter(p => p.owner === P.team).length);
+    for (const P of S.P) {
+      P.calls = KOTH_CALLS.filter(k => POWERS[k].tech <= P.tech).slice(0, held[P.team]);
+      // The levy is called once two towns are held, with no capitol to call it from.
+      if (S.towns.filter(t => t.owner === P.team).length >= 2) P.calls.push('levy');
+    }
+    if (S.tick % KOTH_EVERY === 0 && S.tick > 0) for (const P of S.P) if (P.alive) {
+      let loss = 0;
+      for (const O of S.P) if (O !== P && O.alive) loss += Math.max(0, held[O.team] - held[P.team]) * KOTH_BLEED;
+      if (loss) { S.score[P.team] = Math.max(0, S.score[P.team] - loss); S.ev.push({ t: 'bleed', team: P.team, n: loss, score: S.score[P.team] }); }
+    }
+  }
+  // What a held town raises, by its size: a hamlet foot, a village horse and light vehicles too, and a town guns and
+  // armour as well, and how many it trains at once. Each town held lets a side keep so many units by its size, and two
+  // more for each of its houses standing, so a ruined town keeps fewer.
+  const KOTH_RAISE = { hamlet: ['inf', 'at', 'snp', 'eng'], village: ['inf', 'at', 'snp', 'eng', 'hero', 'rec', 'mount', 'ifv', 'sup'], town: ['inf', 'at', 'snp', 'eng', 'hero', 'rec', 'mount', 'ifv', 'sup', 'aa', 'siege', 'heavy'] };
+  const KOTH_SLOTS = { hamlet: 1, village: 2, town: 3 }, KOTH_BASE = { hamlet: 6, village: 10, town: 14 }, KOTH_PER_HOUSE = 2;
+  function kothTowns(S, team) {
+    const out = [];
+    for (const t of S.towns) if (t.owner === team) { const p = townPay(S, t.id, team); out.push({ t, kind: p.kind, standing: p.standing }); }
+    return out;
+  }
+  const kothCap = (S, team) => kothTowns(S, team).reduce((n, k) => n + KOTH_BASE[k.kind] + k.standing * KOTH_PER_HOUSE, 0);
+  // A side's towns as trainers: one for each place in each town's queue, with the lines that town raises, the side's
+  // chosen town first. A unit comes out at the edge of its town facing the middle of the map.
+  function kothSlots(S, team) {
+    const P = S.P[team], out = [];
+    for (const k of kothTowns(S, team)) {
+      const e = { x: k.t.x, y: k.t.y, cx: Math.round(k.t.x) - 1, cy: Math.round(k.t.y) - 1, w: 2, h: 2, town: k.t.id, raise: KOTH_RAISE[k.kind], rally: P.townRally && P.townRally[k.t.id] };
+      for (let i = 0; i < KOTH_SLOTS[k.kind]; i++) if (P.townPick === k.t.id) out.unshift(e); else out.push(e);
+    }
+    return out;
   }
 
   // Trade. A caravan runs goods between its side's posts, the headquarters and the towns it holds, always on to the
@@ -4408,20 +4558,25 @@ const Rules = (() => {
   // the queue, the side's chosen building the first, and the unit comes out of the building that made it. A unit held
   // gives its place to the next. Each takes its own time and is paid for as it goes, as one at a time would be.
   function trainTick(S, P, cat, q) {
-    const halls = trainersOf(S, P.team, TRAINER_OF[cat]);
+    // In King of the Hill the side's towns train, each only what its size raises.
+    const halls = S.koth ? kothSlots(S, P.team) : trainersOf(S, P.team, TRAINER_OF[cat]);
+    const fit = (e, line) => !S.koth || e.raise.includes(line);
     // A line set to repeat keeps one of its units queued for each building that trains it, so each stays busy.
     if (P.repeat && halls.length) for (const line in P.repeat) {
       const kind = formOf(line, P.tech);
       if (!kind || UNITS[kind].cat !== cat || q.length >= 9) continue;
-      if (q.filter(i => UNITS[i.kind] && UNITS[i.kind].line === line).length >= halls.length) continue;
+      if (q.filter(i => UNITS[i.kind] && UNITS[i.kind].line === line).length >= halls.filter(e => fit(e, line)).length) continue;
       if (blockedReason(S, P.team, kind)) continue;
       q.push({ kind, cost: UNITS[kind], prog: 0, paid: 0, paidOil: 0, hold: false });
     }
-    let slot = 0;
-    for (let i = 0; i < q.length && slot < halls.length; i++) {
+    const used = new Set();
+    for (let i = 0; i < q.length && used.size < halls.length; i++) {
       const item = q[i];
       if (item.hold) continue;
-      const by = halls[slot++];
+      const k = S.koth ? halls.findIndex((e, j) => !used.has(j) && fit(e, UNITS[item.kind].line)) : used.size;
+      if (k < 0) continue;
+      used.add(k);
+      const by = halls[k];
       if (item.prog >= 1) { finish(S, P, cat, item, by); q.splice(i, 1); i--; continue; }
       const d = item.cost, rate = DT / d.time * (P.low ? 0.5 : 1) * (cat === 'inf' ? upK(S, P.team, 'drill') : 1);
       const pay = (d.cost || 0) * rate, payOil = (d.oil || 0) * rate;
@@ -4652,7 +4807,12 @@ const Rules = (() => {
       const now = formOf(d.line, P.tech);
       if (now !== kind) return d.age > P.tech || !now ? 'Needs the ' + AGES[d.age].name + ' Age' : 'Now ' + UNITS[now].name;
     } else if ((d.tech || 1) > P.tech) return 'Needs the ' + AGES[d.tech].name + ' Age';
-    if (d.need && !P.counts[d.need]) return 'Needs ' + nameOf(d.need, P.tech);
+    // In King of the Hill a held town of the size for it raises a unit, up to the cap its standing houses allow.
+    if (S.koth && UNITS[kind]) {
+      if (!kothSlots(S, team).some(e => e.raise.includes(d.line))) return !KOTH_RAISE.town.includes(d.line) ? 'Not raised in this mode' : 'Needs a ' + (KOTH_RAISE.village.includes(d.line) ? 'village' : 'town');
+      const army = S.ents.reduce((n, e) => n + (e.team === team && !e.b && e.hp > 0 ? 1 : 0), 0) + P.q.inf.length + P.q.veh.length;
+      if (army >= kothCap(S, team)) return 'Army at its cap';
+    } else if (d.need && !P.counts[d.need]) return 'Needs ' + nameOf(d.need, P.tech);
     if (d.shore && !S.map.seaCells) return 'Needs open water on the map';
     if (d.fish && !(S.map.fish || []).length) return 'No fishing grounds on this map';
     if (BUILDINGS[kind] && !(P.counts.hq || P.counts.fob)) return 'Needs Headquarters';
@@ -4805,6 +4965,8 @@ const Rules = (() => {
       // A unit is ordered by its line and comes in the form of the side's age.
       const kind = c.c === 'train' && UNITS[c.kind] ? formOf(UNITS[c.kind].line, P.tech) || c.kind : c.kind;
       const d = UNITS[kind] || BUILDINGS[kind];
+      // In King of the Hill a unit may be ordered from one town, which trains first from then on.
+      if (S.koth && c.from >= 0 && S.towns[c.from] && S.towns[c.from].owner === team) P.townPick = c.from;
       if (!d || blockedReason(S, team, kind)) return;
       const cat = d.cat, q = P.q[cat];
       if (c.c === 'build' && q.length) return;
@@ -5042,6 +5204,7 @@ const Rules = (() => {
     stepIntel(S);
     stepSat(S);
     stepTowns(S);
+    stepPoints(S);
     const danger = S.tick % SCAT_EVERY === 0 && S.shots.length ? dangerOf(S) : null;
     for (let i = 0; i < S.ents.length; i++) {
       const e = S.ents[i];
@@ -5077,7 +5240,8 @@ const Rules = (() => {
     // A side whose last building falls is out, and what it had left goes with it. The last side standing wins.
     if (!S.over && S.tick % HZ === 0) {
       for (const P of S.P) if (P.alive) {
-        const noBase = !S.ents.some(e => e.b && e.team === P.team && e.hp > 0), noGen = S.regicide && !S.ents.some(e => e.team === P.team && e.hp > 0 && (e.b ? !!e.held && !!UNITS[e.held.kind].general : e.d.general));
+        // In King of the Hill a side's base is its towns, and its score too must last.
+        const noBase = S.koth ? !S.towns.some(t => t.owner === P.team) || S.score[P.team] <= 0 : !S.ents.some(e => e.b && e.team === P.team && e.hp > 0), noGen = S.regicide && !S.ents.some(e => e.team === P.team && e.hp > 0 && (e.b ? !!e.held && !!UNITS[e.held.kind].general : e.d.general));
         if (!noBase && !noGen) continue;
         P.alive = false;
         razeSlot(S, P.team);
@@ -5138,6 +5302,7 @@ const Rules = (() => {
     HZ, DT, RES, UNITS, BUILDINGS, WEAPONS, TECH, POWERS, DIFFICULTY, LAYOUT, SIZES, MAPS, spread, use,
     AGES, MAX_AGE, POWER_AGE, LINES, LINE_ORDER, formOf, lineCount, nameOf, armOf,
     get W() { return W; }, get H() { return H; }, get VW() { return VW; }, get VH() { return VH; },
+    KOTH_SCORE, KOTH_BLEED, KOTH_EVERY, KOTH_R, KOTH_RAISE, KOTH_SLOTS, KOTH_CALLS, kothTowns, kothCap, kothSlots,
     ORE_KINDS, fishWater, dustWall, dustAt, groundedAt, dataOn, satUp, satPass, newGame, step, push, spawn, addBuilding, scoreOf, worth, SERIES, pickFrom, fits, spotFor, roomy, blockedReason, near, rehash, seenBy, terrainAt, heightAt, waterLevel, townPay, townShare, callNeed, callOff, CIVIC_PAY, CIVIC_REACH, LEVY_NOW, LEVY_FOR, placeCheck, trainersOf, TRAINER_OF, los, isAir, armed, cellOf, summary, exitOf,
     mulberry, noiser, clamp, lerp, smooth, angleTo, toXY, toUV, gap, setSize, save, load, hashOf, restartSlot, razeSlot, makeMap, mapFor, layoutFor,
     msin, mcos, matan2, mhypot,
