@@ -577,7 +577,7 @@ const Hud = (() => {
         return;
       }
       if (us.every(u => u.d.cargo) && s.ore[Rules.cellOf(g.x, g.y)]) { game.order(s, t, { c: 'harvest', ids, cell: Rules.cellOf(g.x, g.y) }); marker(g.x, g.y, '#ffd34d'); game.audio.ack(us[0]); return; }
-      if (e && e.kind === 'refinery' && us.some(u => u.d.cargo)) { game.order(s, t, { c: 'harvest', ids, cell: -1 }); return; }
+      if (e && e.kind === 'refinery' && us.some(u => u.d.cargo)) { game.order(s, t, { c: 'harvest', ids, cell: -1, ref: e.id }); return; }
       // Infantry sent near a cover point go to the point itself.
       const snap = us.some(u => u.d.men) ? tacSnap(s, g.x, g.y) : null;
       if (snap) { g.x = snap.x; g.y = snap.y; }
