@@ -29,7 +29,7 @@ kbd { font: 11px var(--mono); color: var(--dim); }
 #app { position: fixed; inset: 0; display: flex; padding-top: 0; }
 #view { position: relative; flex: 1 1 auto; min-width: 0; overflow: hidden; background: #000; touch-action: none; }
 /* Before the battle behind the title has caught up, plain paper, and the battle fades in over it. */
-#view canvas { transition: opacity 1.2s ease; }
+#view canvas { transition: opacity .6s ease; }
 #view.dawn { background: var(--paper, #ece4d2); }
 #view.dawn canvas { opacity: 0; transition: none; }
 #gl, #ov { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
@@ -667,7 +667,7 @@ body[data-look="ink"] .sheet { box-shadow: 4px 4px 0 var(--ink); }
       <div class="choice"><h2>Shadow strength</h2><div id="s-shadow"><button data-v="full">Full</button><button data-v="light">Light</button><button data-v="off">Off</button></div></div>
       <div class="choice"><h2>Edge lines</h2><div id="s-edges" class="two"><button data-v="quick">Quick</button><button data-v="exact">Exact</button></div></div>
       <div class="choice"><h2>Music</h2><div id="s-music" class="two"><button data-v="on">On</button><button data-v="off">Off</button></div></div>
-      <p id="build">Build 6dc93c0 2026-11-12 12:49</p>
+      <p id="build">Build 8b3c3bf 2026-11-12 15:53</p>
       <p id="source"><a href="https://github.com/nmoinvaz/mapmakers-war" target="_blank" rel="noopener">Source on GitHub</a></p>
     </div>
     <div id="banner" hidden></div>
@@ -16482,12 +16482,13 @@ const World = (() => {
       const sc = new THREE.Scene(), cm = new THREE.PerspectiveCamera(24, w / h, 0.1, 100);
       // The light the hatching follows, from the upper left as the card is seen.
       const lampDir = new THREE.Vector3(-3, 5, 4).normalize();
-      const out = {}, was = SH.uFogOn.value, oldTarget = renderer.getRenderTarget(), pix = new Uint8Array(W * H * 4);
+      const out = {}, jobs = [], was = SH.uFogOn.value, oldTarget = renderer.getRenderTarget();
       SH.uFogOn.value = 0;
+      // The pictures are put together on canvases kept in memory, not on the GPU, so encoding them never waits on it.
       const big = document.createElement('canvas'); big.width = W; big.height = H;
-      const bg = big.getContext('2d');
+      const bg = big.getContext('2d', { willReadFrequently: true });
       const oc = document.createElement('canvas'); oc.width = w * 2; oc.height = h * 2;
-      const og = oc.getContext('2d'); og.imageSmoothingQuality = 'high';
+      const og = oc.getContext('2d', { willReadFrequently: true }); og.imageSmoothingQuality = 'high';
       for (const it of list) {
         const group = new THREE.Group(), meshes = [];
         const parts = it.man ? MODELS.man[it.kind] : it.b ? MODELS.buildings[it.kind] : MODELS.units[it.kind];
@@ -16528,19 +16529,51 @@ const World = (() => {
         for (const [scheme, pal] of Object.entries(CAMEO_PAPER)) {
           K.ink.uniforms.uInk.value.set(...pal.ink); K.ink.uniforms.uPaper.value.set(...pal.paper); K.ink.uniforms.uDim.value = pal.dim; K.ink.uniforms.uWash.value = pal.wash;
           renderer.setRenderTarget(iRT); renderer.setClearColor(0x000000, 0); renderer.clear(); renderer.render(K.qs, K.qc);
-          renderer.readRenderTargetPixels(iRT, 0, 0, W, H, pix);
-          const im = bg.createImageData(W, H);
-          for (let y = 0; y < H; y++) im.data.set(pix.subarray((H - 1 - y) * W * 4, (H - y) * W * 4), y * W * 4);
-          bg.putImageData(im, 0, 0);
-          og.clearRect(0, 0, oc.width, oc.height); og.drawImage(big, 0, 0, oc.width, oc.height);
-          out[scheme === 'light' ? it.kind : it.kind + '|dark'] = oc.toDataURL('image/png');
+          jobs.push([scheme === 'light' ? it.kind : it.kind + '|dark', readLater(iRT, W, H)]);
         }
         sc.remove(group);
         for (const m of meshes) m.dispose();
       }
       renderer.setClearColor(0x000000, 1); renderer.setRenderTarget(oldTarget);
       SH.uFogOn.value = was; cRT.dispose(); nRT.dispose(); iRT.dispose();
-      return out;
+      // Each picture, once its pixels are back, turned upright, drawn down to the card's size, and encoded off the
+      // page's own thread.
+      return (async () => {
+        for (const [key, read] of jobs) {
+          const pix = await read;
+          if (!pix) continue;
+          const im = bg.createImageData(W, H);
+          for (let y = 0; y < H; y++) im.data.set(pix.subarray((H - 1 - y) * W * 4, (H - y) * W * 4), y * W * 4);
+          bg.putImageData(im, 0, 0);
+          og.clearRect(0, 0, oc.width, oc.height); og.drawImage(big, 0, 0, oc.width, oc.height);
+          const blob = await new Promise(r => oc.toBlob(r, 'image/png'));
+          if (blob) out[key] = URL.createObjectURL(blob);
+        }
+        return out;
+      })();
+    }
+    // A target's pixels read back without stalling on the GPU: read into a pixel buffer behind a fence, and copied out
+    // on a later turn once the fence has passed. A lost context gives none.
+    function readLater(target, W, H) {
+      const gl = renderer.getContext(), n = W * H * 4, buf = gl.createBuffer();
+      renderer.setRenderTarget(target);
+      gl.bindBuffer(gl.PIXEL_PACK_BUFFER, buf); gl.bufferData(gl.PIXEL_PACK_BUFFER, n, gl.STREAM_READ);
+      gl.readPixels(0, 0, W, H, gl.RGBA, gl.UNSIGNED_BYTE, 0);
+      gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
+      const sync = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
+      gl.flush();
+      return new Promise(res => {
+        const poll = () => {
+          if (gl.isContextLost() || !sync) return res(null);
+          if (gl.getSyncParameter(sync, gl.SYNC_STATUS) !== gl.SIGNALED) return setTimeout(poll, 4);
+          gl.deleteSync(sync);
+          const px = new Uint8Array(n);
+          gl.bindBuffer(gl.PIXEL_PACK_BUFFER, buf); gl.getBufferSubData(gl.PIXEL_PACK_BUFFER, 0, px); gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
+          gl.deleteBuffer(buf);
+          res(px);
+        };
+        poll();
+      });
     }
 
     // The units and buildings alone, white on clear, as a canvas the size of the picture. For style studies.
@@ -21031,8 +21064,8 @@ const Game = (() => {
     }
 
     // The battle behind the title is two commanders fighting from the fourth minute on.
-    // It is played forward in slices of a frame's time, so the title is up at once and stays answering; the battle
-    // shows when it has caught up, fading in over the paper the first time.
+    // It is played forward in slices of a frame's time, longer while nothing is drawn, so the title is up at once and
+    // stays answering; the battle shows when it has caught up, fading in over the paper the first time.
     const AHEAD = 20 * 60 * 4.5;
     let ahead = null;
     function attract() {
@@ -21043,8 +21076,8 @@ const Game = (() => {
     function attractAhead() {
       if (!ahead) return;
       if (G.playing) { ahead = null; return; }
-      const S = ahead.S, t0 = performance.now();
-      while (ahead.n < AHEAD && performance.now() - t0 < 14) { Rules.step(S); S.ev.length = 0; ahead.n++; }
+      const S = ahead.S, t0 = performance.now(), slice = G.S ? 14 : 30;
+      while (ahead.n < AHEAD && performance.now() - t0 < slice) { Rules.step(S); S.ev.length = 0; ahead.n++; }
       if (ahead.n < AHEAD) return;
       ahead = null;
       const first = !G.S;
@@ -21059,7 +21092,7 @@ const Game = (() => {
       $('title').hidden = true; $('end').hidden = true; $('veil').hidden = true;
       $('view').classList.remove('dawn');
       begin(S, theme, team);
-      cameos();
+      cameoDue = true; cameos();
       pictures();
       hud.reset();
       G.playing = true; G.paused = false; G.outcome = null; G.falls = {}; G.plate = null;
@@ -21371,16 +21404,20 @@ const Game = (() => {
     // The sidebar's pictures: the buildings as the engine renders them, the units as axonometric line drawings in
     // the look's own inks, with the player's side on their markings.
     // A building's card shows it in the player's age, and G.picAge says which age that was.
-    let renders = null, cameoList = null, cameoPart = null, cameoN = 0, cameoDue = false;
+    let renders = null, cameoList = null, cameoPart = null, cameoN = 0, cameoDue = false, cameoBusy = false;
     // The engine's pictures are drawn once a world is loaded: a few a frame after the title is up, and any left all
-    // at once as a game begins.
+    // at once as a game begins. Their pixels come back a frame or two after they are drawn, so one batch is out at a
+    // time, and the cards take them when all are in.
     function cameos(n = Infinity) {
-      if (renders || !G.S || !cameoList) return;
+      if (renders || !G.S || !cameoList || cameoBusy) return;
       cameoPart = cameoPart || {};
-      const end = Math.min(cameoList.length, cameoN + n);
-      Object.assign(cameoPart, world.cameos(cameoList.slice(cameoN, end), 0));
-      cameoN = end;
-      if (cameoN >= cameoList.length) { renders = cameoPart; cameoPart = null; pictures(); }
+      const end = Math.min(cameoList.length, cameoN + n), batch = cameoList.slice(cameoN, end);
+      cameoN = end; cameoBusy = true;
+      world.cameos(batch, 0).then(o => {
+        cameoBusy = false;
+        Object.assign(cameoPart, o);
+        if (cameoN >= cameoList.length) { renders = cameoPart; cameoPart = null; pictures(); }
+      });
     }
     function pictures() {
       if (!renders) return;
