@@ -510,7 +510,7 @@ const Rules = (() => {
   };
   const SIZES = {
     duel: 128, quad: 192, world: 256, gulf: 128, pass: 128, lakes: 192,
-    greenwood: 128, oldforest: 192, twinlakes: 128, ponds: 192, seas: 128, isles: 192, peaks: 128, highlands: 192, rivers3: 128, crater: 192, mesa: 128, nile: 128, atlantis: 192, falls: 128, summit: 128, junction: 128,
+    greenwood: 128, oldforest: 192, twinlakes: 128, ponds: 192, seas: 128, isles: 192, peaks: 128, highlands: 192, rivers3: 128, crater: 192, mesa: 128, nile: 128, atlantis: 192, falls: 128, summit: 128, junction: 128, dam: 128,
   };
   // The maps a game may be set on, each a layout and the most sides it seats.
   const MAPS = {
@@ -537,6 +537,7 @@ const Rules = (() => {
     mesa: { name: 'Mesa Country', layout: 'mesa', seats: 2, koth: 3, theatre: 'desert', flora: 'cactus', about: 'Open desert of dunes and sheer-sided mesas, with stands of cactus. The mesas wall off the lines of march.' },
     summit: { name: 'The Summit', layout: 'summit', seats: 2, koth: 3, about: 'One great mountain between the bases, its top far above the land, climbed on foot by four ridges, with a camp partway up each base\'s. Glaciers above the camps slow the climb, and at times cloud comes down over the top and hides it. Roads run round its foot.' },
     junction: { name: 'The Junction', layout: 'junction', seats: 2, about: 'A railway crosses the field between the bases on embankments and through cuttings. Vehicles cross it only where the roads do; men climb its banks. From the Industrial Age trains run along it.' },
+    dam: { name: 'The Dam', layout: 'dam', seats: 2, about: 'A river runs between the two sides, held back by a great dam into a reservoir above. Below the dam two bridges and a ford cross it. Break the dam and the valley below floods: the ford closes, the bridges are swept away, and the water falls back over a few minutes.' },
   };
   // The theatre a game on a map is fought in: the map's own, if it fixes one, or the one chosen.
   const theatreOf = (map, chosen) => (MAPS[map] && MAPS[map].theatre) || chosen;
@@ -726,7 +727,7 @@ const Rules = (() => {
   }
 
   // ---- The second set of maps: woods, lakes, seas, islands, mountains and rivers ----
-  const MORE = new Set(['greenwood', 'oldforest', 'twinlakes', 'ponds', 'seas', 'isles', 'peaks', 'highlands', 'rivers3', 'crater', 'mesa', 'nile', 'atlantis', 'falls', 'summit', 'junction']);
+  const MORE = new Set(['greenwood', 'oldforest', 'twinlakes', 'ponds', 'seas', 'isles', 'peaks', 'highlands', 'rivers3', 'crater', 'mesa', 'nile', 'atlantis', 'falls', 'summit', 'junction', 'dam']);
   // The layouts with marsh by their water, each with the share of the low, gentle ground near its water that is
   // marsh; how far from the water, in cells, marsh may lie; and how high above the water and how steep its ground
   // may be.
@@ -996,6 +997,35 @@ const Rules = (() => {
       [[-34, 30, 5.5], [-34, -30, 5.5], [0, 46, 5]].forEach(o => all(L.ore, uvp(o[0], o[1]), [o[2]]));
       [[-26, 46], [-26, -46], [-44, -14]].forEach(o => all(L.wells, uvp(o[0], o[1])));
       R(hub, tN, 3); R(hub, tS, 3); R(hub, tC, 2); R(tN, mirror(tS), 2.5);
+    } else if (kind === 'dam') {
+      // The Dam: a river down the middle between the two sides, held back by a dam across it into a broad reservoir
+      // upstream. Below it the river runs narrow, crossed by two bridges and a ford. The banks are each other's
+      // reflection across the river, laid square to the map as The Falls is, so the dam stands the same to both
+      // sides. u is across the river, v along it, upstream positive. The dam is the map's first bridge, and the
+      // bridges below it are swept away when it breaks.
+      const fp = (u, v) => [CX + u, CY - v], fuv = (x, y) => [x - CX, CY - y], reflect = ([x, y]) => [W - x, y];
+      L.syms = [p => [p[0], p[1]], reflect];
+      L.domain = (x, y) => x + 0.5 < CX;
+      const VD = 22, DW = 10;
+      // The river's width: the reservoir broadening above the dam, a narrow throat at the dam, the river below.
+      const width = v => v > VD ? lerp(6, 18, smooth(VD + 1, VD + 12, v)) : 5;
+      L.river = (x, y) => { const [u, v] = fuv(x, y); return [Math.abs(u), width(v)]; };
+      L.lake = true;
+      // The dam's abutments: the banks raised to its crest at either end.
+      L.wall = (x, y) => { const [u, v] = fuv(x, y); let z = 0; for (const s of [-1, 1]) z = Math.max(z, 1.2 * (1 - smooth(2, 8, mhypot(u - s * (DW + 2), v - VD)))); return z; };
+      L.bases.push(fp(-50, 0), reflect(fp(-50, 0)));
+      const tU = fp(-30, 44), tM = fp(-20, -4), tL = fp(-30, -34), hub = fp(-42, 0);
+      for (const t of [tU, tM, tL]) all(L.towns, t);
+      all(L.ore, fp(-44, 18), [7]); all(L.ore, fp(-43, -19), [6.5]); all(L.wells, fp(-55, -16)); all(L.wells, fp(-55, 16));
+      all(L.ore, fp(-22, 28), [5.5]); all(L.ore, fp(-20, -50), [5.5]); all(L.wells, fp(-12, -18)); all(L.wells, fp(-36, 54));
+      const dA = fp(-DW, VD), dB = fp(DW, VD), b1A = fp(-8.5, -12), b1B = fp(8.5, -12), b2A = fp(-8.5, -42), b2B = fp(8.5, -42);
+      L.bridges.push([dA, dB, 1.6], [b1A, b1B], [b2A, b2B]);
+      L.dam = 0; L.damCuts = [1, 2];
+      R(hub, tU, 2.5); R(hub, tM, 2); R(hub, tL, 2.5); R(tU, fp(-DW - 2, VD), 1.5); R(dA, dB, 0, false);
+      R(tM, b1A, 1); R(b1A, b1B, 0, false); R(tL, b2A, 1.5); R(b2A, b2B, 0, false);
+      // The ford is its own reflection, so it is laid once.
+      const fa = fp(0, -26); L.fords.push([fa[0], fa[1], 0, -1]);
+      L.fish = [fp(0, 44), fp(0, -50)];
     } else if (kind === 'junction') {
       // A railway across the field between the bases, winding a little, on its own graded bed: embankments where the
       // land is low and cuttings where it is high, crossed by the roads at level crossings. The line is odd in v, so it
@@ -1791,7 +1821,7 @@ const Rules = (() => {
     const fish = (L.fish || []).map(p => ({ x: p[0], y: p[1] }));
     let seaCells = 0;
     for (let c = 0; c < N; c++) seaCells += sea[c];
-    return { W, H, seed, kind, h, deck, water, ground, ore: oreCells, oreKind, oreFields, wells, towns, roads, roadDist, bridges, scatter, houses, oreRich, bases: L.bases, faces, fords: L.fords, fordCells, wadeCells, brooks, brookFords, brookDist: bD, brookFord: bF, falls, wl, cascades: L.cascades || [], sea, fish, seaCells, monuments: (L.monuments || []).map(([k, x, y, r, a]) => ({ k, x, y, r, a })), highs: L.highs || null, iceLine: L.iceLine ?? null, cloudLine: L.cloudLine ?? null, marsh, trenches, rail: L.rail || null };
+    return { W, H, seed, kind, h, deck, water, ground, ore: oreCells, oreKind, oreFields, wells, towns, roads, roadDist, bridges, scatter, houses, oreRich, bases: L.bases, faces, fords: L.fords, fordCells, wadeCells, brooks, brookFords, brookDist: bD, brookFord: bF, falls, wl, cascades: L.cascades || [], sea, fish, seaCells, monuments: (L.monuments || []).map(([k, x, y, r, a]) => ({ k, x, y, r, a })), highs: L.highs || null, iceLine: L.iceLine ?? null, cloudLine: L.cloudLine ?? null, marsh, trenches, rail: L.rail || null, dam: L.dam ?? -1, damCuts: L.damCuts || [] };
   }
 
   // A map is kept only if vehicles can get from the first base to every other base, town and well.
@@ -2582,7 +2612,7 @@ const Rules = (() => {
       // The ground and the trees as pairs of cell and value, only where they differ from the map's start.
       gnd: diffs(S.gnd, S.map.ground), wood: diffs(S.wood, null), gndVer: S.gndVer, woodVer: S.woodVer, burn: S.burn, bridges: S.bridges, hh: S.hh, hr: S.hr, flooded: S.flooded,
       trail: b64.en(S.trail), trailSum: S.trailSum, hist: S.hist,
-      koth: S.koth, points: S.points, score: S.score, field: S.field, iceR: S.iceR || 0, iceVer: S.iceVer || 0, quarries: S.quarries || [],
+      koth: S.koth, points: S.points, score: S.score, field: S.field, iceR: S.iceR || 0, iceVer: S.iceVer || 0, quarries: S.quarries || [], damBroke: S.damBroke ?? -1,
     };
   }
   function diffs(a, base) { const o = []; for (let c = 0; c < a.length; c++) if (a[c] !== (base ? base[c] : 0)) o.push(c, a[c]); return o; }
@@ -2611,7 +2641,7 @@ const Rules = (() => {
     const gd = o.gnd || [], wd = o.wood || [];
     for (let i = 0; i < gd.length; i += 2) S.gnd[gd[i]] = gd[i + 1];
     for (let i = 0; i < wd.length; i += 2) S.wood[wd[i]] = wd[i + 1];
-    S.gndVer = o.gndVer || 0; S.woodVer = o.woodVer || 0; S.burn = o.burn || []; S.flooded = !!o.flooded; S.iceR = o.iceR || 0; S.iceVer = o.iceVer || 0; S.quarries = (o.quarries || []).slice();
+    S.gndVer = o.gndVer || 0; S.woodVer = o.woodVer || 0; S.burn = o.burn || []; S.flooded = !!o.flooded; S.iceR = o.iceR || 0; S.iceVer = o.iceVer || 0; S.quarries = (o.quarries || []).slice(); S.damBroke = o.damBroke ?? -1;
     if (o.trail) S.trail = new Uint8Array(b64.de(o.trail)); S.trailSum = o.trailSum || 0;
     // A game saved before the record was kept starts its record now.
     if (o.hist) S.hist = o.hist;
@@ -3682,7 +3712,17 @@ const Rules = (() => {
     const on = new Set(m.cells);
     for (const u of S.ents) if (!u.b && u.hp > 0 && !isAir(u) && !(u.drop > 0) && on.has(cellOf(u.x, u.y)) && blocked(S, clsOf(u), cellOf(u.x, u.y))) hurt(S, u, 1e6, -1, 0);
     S.ev.push({ t: 'bridge', i, down: true, x: (m.x0 + m.x1) / 2, y: (m.y0 + m.y1) / 2 });
+    // A dam that breaks lets its reservoir down the valley: the bridges below it are swept away and the river floods
+    // for DAM_FLOOD.
+    if (i === S.map.dam) {
+      S.damBroke = S.tick;
+      S.ev.push({ t: 'dambreak', x: (m.x0 + m.x1) / 2, y: (m.y0 + m.y1) / 2 });
+      for (const j of S.map.damCuts) if (S.bridges[j].hp > 0) dropBridge(S, j);
+    }
   }
+  // A dam's flood, from 0 to 1: up in the first seconds after it breaks, holding, then falling back over its last third.
+  const DAM_FLOOD = 180 * HZ;
+  const damFlood = S => S.damBroke >= 0 && S.tick - S.damBroke < DAM_FLOOD ? Math.min(1, (S.tick - S.damBroke) / (8 * HZ), 3 * (1 - (S.tick - S.damBroke) / DAM_FLOOD)) : 0;
   function raiseBridge(S, i) {
     const b = S.bridges[i], m = S.map.bridges[i];
     b.hp = BRIDGE_HP; b.fix = 0;
@@ -5644,7 +5684,7 @@ const Rules = (() => {
     }
     // After enough rain the rivers rise over the fords, and they open again as the water goes down.
     if (S.tick % 20 === 0) {
-      const w = sky(S), want = S.flooded ? w.flood > 0.65 : w.flood > 0.9;
+      const w = sky(S), want = (S.flooded ? w.flood > 0.65 : w.flood > 0.9) || damFlood(S) > 0.3;
       if (want !== S.flooded) {
         S.flooded = want;
         const fc = S.map.fordCells, wc = S.map.wadeCells || [];
@@ -5796,7 +5836,7 @@ const Rules = (() => {
     msin, mcos, matan2, mhypot,
     BRIDGE_HP, SPELL, SKIES, WEATHERS, nightAt, skyOf, offGoing, route, weatherAt, sky, dayAt, spellOf, bridgeAt, clsOf, houseHp, hurtBridge, ignite, shielded,
     coverPoints, coverNear, COVER_R, COVER_ARC, FORMS, formOfGroup, STANCES,
-    FB_AT, PIN, TRAINERS, producerOf, canExplore, nameFor, townName, theatreOf, UPGRADES, UP_AGE, upCost, upNote, upsAt, upK, upBlocked, hpOf, rangeOf, capOf, showersAt, showerAt, capDown, iceThaw, setIce, ICE_MAX, geyserOn, GEY_R, QUARRY_K, stepQuarries,
+    FB_AT, PIN, TRAINERS, producerOf, canExplore, nameFor, townName, theatreOf, UPGRADES, UP_AGE, upCost, upNote, upsAt, upK, upBlocked, hpOf, rangeOf, capOf, showersAt, showerAt, capDown, iceThaw, setIce, ICE_MAX, geyserOn, GEY_R, QUARRY_K, stepQuarries, damFlood, dropBridge,
   };
 })();
 if (typeof module !== 'undefined') module.exports = Rules;
