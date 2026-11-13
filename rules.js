@@ -730,6 +730,8 @@ const Rules = (() => {
   // marsh; how far from the water, in cells, marsh may lie; and how high above the water and how steep its ground
   // may be.
   const MARSHY = { duel: 0.35, rivers3: 0.2, ponds: 0.15, nile: 0.35, twinlakes: 0.35 }, MARSH_REACH = 6, MARSH_UP = 1.3, MARSH_SLOPE = 0.6;
+  // The duel layouts with old trenches across their open fields, and the shortest run of trench kept, in cells.
+  const TRENCHED = new Set(['duel', 'pass', 'peaks', 'twinlakes', 'rivers3']), TRENCH_MIN = 6;
   function moreLayout(kind, L, all, fordAt, R) {
     const dry = () => [99, 0];
     // Two sides on the River Duel's frame, mirrored through the middle.
@@ -1690,6 +1692,49 @@ const Rules = (() => {
       for (const [c] of can.slice(0, Math.round(can.length * marshK))) { was.push(c, ground[c]); ground[c] = 1 | 4 | 16; marsh[c] = 1; }
       if (!reachable(ground, L, towns, wells)) { for (let j = 0; j < was.length; j += 2) ground[was[j]] = was[j + 1]; marsh.fill(0); }
     }
+    // Old trenches across the open fields of the duel maps that have them: two lines in each side's half, across the
+    // way between the bases, each a crenellated line of fire bays and traverses broken where the ground is not open
+    // and flat, at roads, towns, water, woods and ore. They give infantry cover and nothing else. Laid in the first
+    // base's half and copied by the map's turns. Each is a list of points, its bays bent forward a little.
+    const trenches = [];
+    if (TRENCHED.has(kind) && L.bases.length === 2) {
+      const [bx, by] = L.bases[0], ax = (CX - bx) / mhypot(CX - bx, CY - by), ay = (CY - by) / mhypot(CX - bx, CY - by), px = -ay, py = ax;
+      const open = (x, y) => {
+        if (x < 3 || y < 3 || x > W - 3 || y > H - 3) return false;
+        const c = (y | 0) * W + (x | 0);
+        if ((ground[c] & ~4) || oreCells[c] || marsh[c] || hAt(x, y) < wlAt(x, y) + 0.4) return false;
+        if (roadDist[Math.round(y * RES) * VW + Math.round(x * RES)] < 1.8 || bD[Math.round(y * RES) * VW + Math.round(x * RES)] < 1.5) return false;
+        let hi = -99, lo = 99;
+        for (let b = 0; b <= 2; b++) for (let a = 0; a <= 2; a++) { const z = hAt((x | 0) + a / 2, (y | 0) + b / 2); hi = Math.max(hi, z); lo = Math.min(lo, z); }
+        return hi - lo < 0.5 && !towns.some(t => mhypot(t.x - x, t.y - y) < 7);
+      };
+      // Each line at a share of the way from the middle to the base, its open runs of at least TRENCH_MIN cells.
+      const D = mhypot(CX - bx, CY - by), lines = [];
+      for (let f = 0.22; f <= 0.62; f += 0.04) {
+        const ox = CX - ax * D * f, oy = CY - ay * D * f, runs = [];
+        let run = null;
+        for (let v = -W * 0.48; v <= W * 0.48; v += 0.5) {
+          const x = ox + px * v, y = oy + py * v;
+          if (open(x, y) && open(x - ax * 0.8, y - ay * 0.8)) { if (!run) runs.push(run = [v, v]); else run[1] = v; } else run = null;
+        }
+        const kept = runs.filter(r => r[1] - r[0] >= TRENCH_MIN);
+        lines.push({ f, ox, oy, kept, len: kept.reduce((s, r) => s + r[1] - r[0], 0) });
+      }
+      // The longest line, and the longest at least eight cells from it.
+      lines.sort((a, b) => b.len - a.len || a.f - b.f);
+      const pick = lines.length ? [lines[0], ...lines.filter(l => Math.abs(l.f - lines[0].f) * D >= 8).slice(0, 1)] : [];
+      for (const l of pick) for (const [v0, v1] of l.kept) {
+        const pts = [];
+        // Bays two cells long, set forward toward the other side by 0.7 at every other one, joined by traverses.
+        for (let v = v0, k = 0; v <= v1 + 1e-6; v += 2, k++) {
+          const fw = k % 2 ? 0.7 : 0, x = l.ox + px * v + ax * fw, y = l.oy + py * v + ay * fw;
+          pts.push([x, y]);
+          const v2 = Math.min(v + 2, v1);
+          pts.push([l.ox + px * v2 + ax * fw, l.oy + py * v2 + ay * fw]);
+        }
+        for (const T of L.syms) trenches.push(pts.map(p => T(p)));
+      }
+    }
     // Open water deep enough for a ship: every corner of the cell well under the surface. Bridges stand high
     // enough for ships to pass beneath. Shoals where fishing boats fish lie in it.
     const sea = new Uint8Array(N);
@@ -1701,7 +1746,7 @@ const Rules = (() => {
     const fish = (L.fish || []).map(p => ({ x: p[0], y: p[1] }));
     let seaCells = 0;
     for (let c = 0; c < N; c++) seaCells += sea[c];
-    return { W, H, seed, kind, h, deck, water, ground, ore: oreCells, oreKind, oreFields, wells, towns, roads, roadDist, bridges, scatter, houses, oreRich, bases: L.bases, faces, fords: L.fords, fordCells, wadeCells, brooks, brookFords, brookDist: bD, brookFord: bF, falls, wl, cascades: L.cascades || [], sea, fish, seaCells, monuments: (L.monuments || []).map(([k, x, y, r, a]) => ({ k, x, y, r, a })), highs: L.highs || null, iceLine: L.iceLine ?? null, cloudLine: L.cloudLine ?? null, marsh };
+    return { W, H, seed, kind, h, deck, water, ground, ore: oreCells, oreKind, oreFields, wells, towns, roads, roadDist, bridges, scatter, houses, oreRich, bases: L.bases, faces, fords: L.fords, fordCells, wadeCells, brooks, brookFords, brookDist: bD, brookFord: bF, falls, wl, cascades: L.cascades || [], sea, fish, seaCells, monuments: (L.monuments || []).map(([k, x, y, r, a]) => ({ k, x, y, r, a })), highs: L.highs || null, iceLine: L.iceLine ?? null, cloudLine: L.cloudLine ?? null, marsh, trenches };
   }
 
   // A map is kept only if vehicles can get from the first base to every other base, town and well.
@@ -1800,6 +1845,12 @@ const Rules = (() => {
       if (n < 1 || n > 4 || edge.some(e => mhypot(e.x - t.x, e.y - t.y) < 3.5)) continue;
       const a = matan2(-sy, -sx);
       edge.push(t); put(t.x + mcos(a) * 1.4, t.y + msin(a) * 1.4, 'wood', a);
+    }
+    // Old trenches: the middle of each bay, a man in it facing either way across the line.
+    for (const t of M.trenches || []) for (let i = 0; i + 1 < t.length; i += 2) {
+      const [x0, y0] = t[i], [x1, y1] = t[i + 1], a = matan2(y1 - y0, x1 - x0);
+      if (mhypot(x1 - x0, y1 - y0) < 1) continue;
+      for (const s of [1, -1]) put((x0 + x1) / 2, (y0 + y1) / 2, 'trench', a + s * PI / 2);
     }
     // Large rocks, with the man crouched on the far side and firing over the rock.
     for (const r of M.scatter) if (r.k === 'rock' && r.s > 0.9) put(r.x + 1.2, r.y + 1.0, 'rock', matan2(-1.0, -1.2));

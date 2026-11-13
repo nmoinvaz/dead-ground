@@ -1661,6 +1661,19 @@ const World = (() => {
       }
       const rc = new THREE.Color(th.rock);
       tiled(sc.rock, plainTint, rocks.map(t => ({ x: t.x, y: terrainAt(M, t.x, t.y) - 0.06, z: t.y, s: t.s * 1.2, a: t.a, c: colA.copy(rc).multiplyScalar(0.62 + rand() * 0.3).getHex() })));
+      // Old trenches: each bay and traverse a dark ribbon of dug earth sunk in the ground, with a pale parapet of
+      // thrown-up spoil along its forward side, so the ink draws the line of fire bays as a trench map does.
+      const tr = [], par = [];
+      for (const t of M.trenches || []) for (let i = 0; i + 1 < t.length; i++) {
+        const [x0, y0] = t[i], [x1, y1] = t[i + 1], len = Math.hypot(x1 - x0, y1 - y0);
+        if (len < 0.05) continue;
+        const mx = (x0 + x1) / 2, my = (y0 + y1) / 2, a = -Math.atan2(y1 - y0, x1 - x0), g = terrainAt(M, mx, my);
+        tr.push({ x: mx, y: g + 0.02, z: my, sx: len + 0.3, sy: 0.05, sz: 0.32, a, c: 0x5b4a3a });
+        // The parapet on the bay's forward side, the side away from its own base.
+        if (i % 2 === 0) { const nx = -(y1 - y0) / len, ny = (x1 - x0) / len, b = S.bases[0], s = (mx - b[0]) * nx + (my - b[1]) * ny > 0 ? 1 : -1, near = Math.hypot(mx - S.bases[0][0], my - S.bases[0][1]) < Math.hypot(mx - S.bases[1][0], my - S.bases[1][1]) ? s : -s;
+          par.push({ x: mx + nx * 0.36 * near, y: g + 0.05, z: my + ny * 0.36 * near, sx: len + 0.1, sy: 0.1, sz: 0.24, a, c: 0xc8b896 }); }
+      }
+      if (tr.length) { instanced(sc.block, plainTint, tr, false); instanced(sc.block, plainTint, par, false); }
       // Each geyser's vent: a ring of pale sinter stones round its mouth.
       const vents = (S.geysers || []).flatMap(g => [...Array(7).keys()].map(k => { const a = k / 7 * 6.283 + g.x, d = 0.75 + (k % 2) * 0.35, x = g.x + Math.cos(a) * d, y = g.y + Math.sin(a) * d; return { x, y: terrainAt(M, x, y) - 0.08, z: y, s: 0.38 + (k % 3) * 0.1, a: a * 2, c: 0xdedad0 }; }));
       if (vents.length) instanced(sc.rock, plainTint, vents);
