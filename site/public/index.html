@@ -644,7 +644,7 @@ body[data-look="ink"] .sheet { box-shadow: 4px 4px 0 var(--ink); }
       <div class="gauge"><label>Ore</label><span class="led" id="sup">0</span></div>
       <div class="gauge"><label>Oil</label><span class="led" id="oil">0</span></div>
       <div class="gauge grow"><label>Pwr</label><div id="pwrtrack"><i id="pwrbar"></i></div><span class="led small" id="pwr">0/0</span></div><span id="pwrwarn" hidden>Low power</span>
-      <div class="gauge" id="kgauge" hidden title="Every 10 seconds a side holding more hills than another takes 5 from its score for each hill more. A side at 0, or with no town, is out."><label>Hill</label><span class="led" id="kscore"></span><span class="led small" id="kheld"></span></div>
+      <div class="gauge" id="kgauge" hidden title="Every 10 seconds a side holding more hills than another takes 5 from its score for each hill more. A side at 0, or with no town, is out. A side holding every hill and every town but the keeps for a minute wins, and the seconds left show here."><label>Hill</label><span class="led" id="kscore"></span><span class="led small" id="kheld"></span></div>
       <div class="spacer"></div>
       <div class="tools">
         <button id="b-speed" title="Game speed"><span id="speed">1x</span></button>
@@ -667,7 +667,7 @@ body[data-look="ink"] .sheet { box-shadow: 4px 4px 0 var(--ink); }
       <div class="choice"><h2>Shadow strength</h2><div id="s-shadow"><button data-v="full">Full</button><button data-v="light">Light</button><button data-v="off">Off</button></div></div>
       <div class="choice"><h2>Edge lines</h2><div id="s-edges" class="two"><button data-v="quick">Quick</button><button data-v="exact">Exact</button></div></div>
       <div class="choice"><h2>Music</h2><div id="s-music" class="two"><button data-v="on">On</button><button data-v="off">Off</button></div></div>
-      <p id="build">Build 8b3c3bf 2026-11-12 15:53</p>
+      <p id="build">Build 1401ab6 2026-11-12 15:59</p>
       <p id="source"><a href="https://github.com/nmoinvaz/mapmakers-war" target="_blank" rel="noopener">Source on GitHub</a></p>
     </div>
     <div id="banner" hidden></div>
@@ -2906,6 +2906,7 @@ const Rules = (() => {
       S.points = kothPoints(S, kothCount(S));
       S.tracks = kothTracks(S);
       S.score = S.P.map(() => KOTH_SCORE);
+      S.field = null;
       if (!o.empty) for (const t of seats) spawnHome(S, t);
     } else if (!o.empty) for (const t of seats) spawnBase(S, t);
     territory(S);
@@ -3062,7 +3063,7 @@ const Rules = (() => {
       // The ground and the trees as pairs of cell and value, only where they differ from the map's start.
       gnd: diffs(S.gnd, S.map.ground), wood: diffs(S.wood, null), gndVer: S.gndVer, woodVer: S.woodVer, burn: S.burn, bridges: S.bridges, hh: S.hh, hr: S.hr, flooded: S.flooded,
       trail: b64.en(S.trail), trailSum: S.trailSum, hist: S.hist,
-      koth: S.koth, points: S.points, score: S.score,
+      koth: S.koth, points: S.points, score: S.score, field: S.field,
     };
   }
   function diffs(a, base) { const o = []; for (let c = 0; c < a.length; c++) if (a[c] !== (base ? base[c] : 0)) o.push(c, a[c]); return o; }
@@ -3071,7 +3072,7 @@ const Rules = (() => {
     if (S.seed !== o.seed) throw new Error('map seed mismatch');
     Object.assign(S, { tick: o.tick, rs: o.rs, next: o.next, occVer: o.occVer, oreVer: o.oreVer, terrVer: o.terrVer, dirty: o.dirty, over: o.over, shots: o.shots, sweeps: o.sweeps, flights: o.flights, occLog: o.occLog || [] });
     S.towns = o.towns.map(t => Object.assign({}, t));
-    if (S.koth && o.points) { S.points = o.points.map(p => Object.assign({}, p)); S.score = o.score.slice(); }
+    if (S.koth && o.points) { S.points = o.points.map(p => Object.assign({}, p)); S.score = o.score.slice(); S.field = o.field ? Object.assign({}, o.field) : null; }
     S.ore = new Uint16Array(b64.de(o.ore).buffer);
     S.fields = new Map(o.fields.map(([k, v, u, m, r, q]) => [k, { ver: v, used: u, made: m, reach: r, wq: q ?? 20 }]));
     S.P = o.P.map(p => {
@@ -5098,8 +5099,9 @@ const Rules = (() => {
   // King of the Hill. There is no building: each side starts with a home town and a few squads, its towns raise its
   // soldiers, and the war is for the map's high points. Every KOTH_EVERY a side holding more points than another
   // takes KOTH_BLEED from that side's score for each point of the difference. A side at 0, or with no town, is out,
-  // though its keep is never taken.
-  const KOTH_SCORE = 750, KOTH_BLEED = 5, KOTH_EVERY = 10 * HZ, KOTH_R = 4.5;
+  // though its keep is never taken. A side holding every point and every town but the others' keeps for KOTH_HOLD
+  // has the field, and the others yield.
+  const KOTH_SCORE = 750, KOTH_BLEED = 5, KOTH_EVERY = 10 * HZ, KOTH_R = 4.5, KOTH_HOLD = 60 * HZ;
   // The high points, found from the map's terrain. A summit is scored by its prominence, how far it stands above the
   // highest saddle joining it to higher ground. A point goes on the highest cell within six of its summit that a man
   // can stand on, off water, clear of the bases and away from the map's edges. The points come in the map's own
@@ -5271,6 +5273,19 @@ const Rules = (() => {
       let loss = 0;
       for (const O of S.P) if (O !== P && O.alive) loss += Math.max(0, held[O.team] - held[P.team]) * KOTH_BLEED;
       if (loss) { S.score[P.team] = Math.max(0, S.score[P.team] - loss); S.ev.push({ t: 'bleed', team: P.team, n: loss, score: S.score[P.team] }); }
+    }
+    // The whole field: every point and every town held by one side, but the keeps of the others, which it cannot
+    // take. Held for KOTH_HOLD, the others' scores fall to 0 and they are out. S.field is the side holding it and
+    // since when, or null.
+    if (S.tick % HZ === 0) {
+      let side = -1;
+      for (const P of S.P) {
+        if (!P.alive || held[P.team] < S.points.length || !S.P.some(O => O !== P && O.alive)) continue;
+        if (S.towns.every(t => t.owner === P.team || (t.keep !== undefined && t.keep === t.owner))) side = P.team;
+      }
+      if (side < 0) S.field = null;
+      else if (!S.field || S.field.team !== side) { S.field = { team: side, since: S.tick }; S.ev.push({ t: 'field', team: side }); }
+      else if (S.tick - S.field.since >= KOTH_HOLD) for (const P of S.P) if (P.alive && P.team !== side) { S.score[P.team] = 0; S.ev.push({ t: 'yield', team: P.team, to: side }); }
     }
   }
   // What a held town raises, by its size: a hamlet foot, a village horse and light vehicles too, and a town guns and
@@ -6240,7 +6255,7 @@ const Rules = (() => {
     HZ, DT, RES, UNITS, BUILDINGS, WEAPONS, TECH, POWERS, DIFFICULTY, LAYOUT, SIZES, MAPS, spread, use,
     AGES, MAX_AGE, POWER_AGE, LINES, LINE_ORDER, formOf, lineCount, nameOf, armOf,
     get W() { return W; }, get H() { return H; }, get VW() { return VW; }, get VH() { return VH; },
-    KOTH_SCORE, KOTH_BLEED, KOTH_EVERY, KOTH_R, KOTH_RAISE, KOTH_SLOTS, KOTH_CALLS, kothTowns, kothCap, kothSlots,
+    KOTH_SCORE, KOTH_BLEED, KOTH_EVERY, KOTH_R, KOTH_HOLD, KOTH_RAISE, KOTH_SLOTS, KOTH_CALLS, kothTowns, kothCap, kothSlots,
     ORE_KINDS, fishWater, dustWall, dustAt, groundedAt, dataOn, satUp, satPass, newGame, step, push, spawn, addBuilding, scoreOf, worth, SERIES, pickFrom, fits, spotFor, roomy, blockedReason, near, rehash, seenBy, terrainAt, heightAt, waterLevel, townPay, townShare, callNeed, callOff, CIVIC_PAY, CIVIC_REACH, LEVY_NOW, LEVY_FOR, placeCheck, trainersOf, TRAINER_OF, los, isAir, armed, cellOf, summary, exitOf,
     mulberry, noiser, clamp, lerp, smooth, angleTo, toXY, toUV, gap, setSize, save, load, hashOf, restartSlot, razeSlot, makeMap, mapFor, layoutFor,
     msin, mcos, matan2, mhypot,
@@ -18898,7 +18913,9 @@ const Hud = (() => {
           const box = $('kscore'); box.textContent = '';
           order.forEach((k, i) => { if (i) box.append(' · '); const b = document.createElement('b'); b.style.color = SLOT_CSS[k]; b.textContent = s.score[k]; box.append(b); });
         }
-        const held = me >= 0 ? s.points.filter(q => q.owner === me).length : 0, ht = `${held}/${s.points.length}`;
+        // While a side holds the whole field, the seconds left before the others yield.
+        const fl = s.field ? Math.max(0, Math.ceil((Rules.KOTH_HOLD - (s.tick - s.field.since)) / Rules.HZ)) : -1;
+        const held = me >= 0 ? s.points.filter(q => q.owner === me).length : 0, ht = `${held}/${s.points.length}${fl >= 0 ? ` · ${fl}s` : ''}`;
         if ($('kheld').textContent !== ht) $('kheld').textContent = ht;
         if (me >= 0) {
           const towns = s.towns.filter(n => n.owner === me), pick = towns.find(n => n.id === state.townPick) || towns.find(n => n.id === p.townPick) || towns[0];
@@ -20794,7 +20811,7 @@ const Game = (() => {
   const WEATHER_OF = { random: 'In their usual measure.', mild: 'Mostly fair, with no storms of any kind.', harsh: 'Often, and the storms come hard.' };
   // What each choice of resources means, for the set-up.
   const WIN_NOTE = { conquest: 'A side is out when its last building falls.', regicide: 'Each side starts with a general. A side is out when its general falls, or its last building.',
-    koth: `Nothing is built. Each side starts with a home town, its keep, which is never taken, and the towns it holds raise its soldiers. Footpaths climb to hills walled by cliffs. Each side starts with ${Rules.KOTH_SCORE}, and every 10 seconds a side holding more hills than another takes 5 from its score for each hill more. A side at 0 is out. Played on ${Object.values(Rules.MAPS).filter(m => m.koth).map(m => m.name).join(', ')}.` };
+    koth: `Nothing is built. Each side starts with a home town, its keep, which is never taken, and the towns it holds raise its soldiers. Footpaths climb to hills walled by cliffs. Each side starts with ${Rules.KOTH_SCORE}, and every 10 seconds a side holding more hills than another takes 5 from its score for each hill more. A side at 0 is out. A side holding every hill and every town but the others' keeps for ${Rules.KOTH_HOLD / Rules.HZ} seconds wins. Played on ${Object.values(Rules.MAPS).filter(m => m.koth).map(m => m.name).join(', ')}.` };
   const RES_NOTE = { std: 'Ore, oil and power are dug, pumped and built for, and everything costs.', free: 'Nothing costs a thing and power never runs short. Only build times and the fighting count.' };
   const weatherNote = (theme, w) => w === 'off' ? 'Fair skies all game.' : `${SKY_OF[theme] || ''} ${WEATHER_OF[w] || ''}`;
 
@@ -21259,6 +21276,10 @@ const Game = (() => {
             }
             break;
           case 'hint': if (G.playing && e.team === G.team && e.hint === 'attrition') hud.say('Attrition: troops wear down abroad. A Support Truck stops it.', 'bad'); break;
+          // King of the Hill: a side holds every hill and every town but the keeps, and the others yield in a minute.
+          case 'field':
+            if (G.playing && G.team >= 0) hud.say(e.team === G.team ? `You hold the whole field. Keep it ${Rules.KOTH_HOLD / Rules.HZ} seconds and the enemy yields.` : `${G.names[e.team] || 'The enemy'} holds the whole field. Take a hill or a town back within ${Rules.KOTH_HOLD / Rules.HZ} seconds.`, e.team === G.team ? 'good' : 'bad');
+            break;
           case 'launch': if (G.playing && e.team === G.team) audio.play('launch', { gain: 0.9 }); break;
           case 'placed': if (G.playing && e.team === G.team) audio.at('place', e.x, e.y, { gain: 0.8 }); break;
           case 'over': if (G.playing) setTimeout(outcome, 1800); drawRoster(); break;
