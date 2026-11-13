@@ -657,7 +657,24 @@
                 float fq = (hash(fid + 9.3) < 0.5 ? fU.y : fU.x) / (5.0 / 80.0 * exp2(gLm)), fqw = max(fwidth(fq), 1e-4);
                 float fl = mix(1.0 - smoothstep(0.35 * uK, 0.35 * uK + 1.0, min(fract(fq), 1.0 - fract(fq)) / fqw),
                   1.0 - smoothstep(0.35 * uK, 0.35 * uK + 1.0, min(fract(fq * 0.5), 1.0 - fract(fq * 0.5)) / (fqw * 0.5)), gLf);
-                tint = mix(tint, dk ? fCol * 1.35 : fCol * 0.8, fl * isPl * fIn * 0.45 * mix(1.0, 0.5, zo));
+                // A vineyard on a sloping plot where vines grow, the steppe and the salt flats: a pale leaf green with
+                // its vines in rows along the contours, each stock a dot on a faint trellis line, and on the steeper
+                // plots every other row on a terrace whose edge drops in a heavier line.
+                float isVn = step(0.22, sSl) * step(hash(fid + 2.9), 0.7) * (1.0 - isOr) * step(uFlora, 2.5);
+                tint = mix(tint, dk ? fCol * 1.35 : fCol * 0.8, fl * isPl * (1.0 - isVn) * fIn * 0.45 * mix(1.0, 0.5, zo));
+                if (isVn * fIn > 0.01) {
+                  float vr = lhS / 0.16, vrW = max(fwidth(vr), 1e-4), vf = min(fract(vr), 1.0 - fract(vr));
+                  float va = dot(Wl, normalize(vec2(-sG.y, sG.x) + 1e-6)) / 0.32, vd = min(fract(va), 1.0 - fract(va));
+                  float stock = (1.0 - smoothstep(1.1 * uK * vrW, 2.3 * uK * vrW, vf)) * (1.0 - smoothstep(0.22, 0.34, vd));
+                  float trell = 1.0 - smoothstep(0.3 * uK * vrW, 0.9 * uK * vrW, vf);
+                  float tr = lhS / 0.32, trW = max(fwidth(tr), 1e-4), tf = min(fract(tr + 0.25), 1.0 - fract(tr + 0.25));
+                  float terr = (1.0 - smoothstep(0.5 * uK * trW, 1.4 * uK * trW, tf)) * smoothstep(0.38, 0.48, sSl);
+                  float vK = isVn * fIn * (1.0 - zo * 0.7);
+                  tint = mix(tint, dk ? vec3(0.3, 0.36, 0.22) : vec3(0.86, 0.88, 0.7), vK * 0.6);
+                  tint = mix(tint, dk ? vec3(0.45, 0.55, 0.35) : vec3(0.55, 0.62, 0.4), trell * vK * 0.4);
+                  tint = mix(tint, dk ? vec3(0.58, 0.72, 0.44) : vec3(0.24, 0.34, 0.17), stock * vK * 0.95);
+                  tint = mix(tint, dk ? vec3(0.6, 0.52, 0.4) : vec3(0.45, 0.36, 0.26), terr * vK * 0.7);
+                }
                 // An orchard's trees in rows, each a small round crown ringed in green, as a map's symbol for one.
                 float orr = length(fract(fU / 0.75) - 0.5) * 0.75, ow = max(fwidth(orr), 1e-4), oK = isOr * fIn * (1.0 - zo * 0.8);
                 tint = mix(tint, dk ? vec3(0.3, 0.42, 0.26) : vec3(0.64, 0.76, 0.54), (1.0 - smoothstep(0.19 - ow, 0.19 + ow, orr)) * oK * 0.7);
