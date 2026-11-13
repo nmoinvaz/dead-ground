@@ -668,7 +668,7 @@ body[data-look="ink"] .sheet { box-shadow: 4px 4px 0 var(--ink); }
       <div class="choice"><h2>Shadow strength</h2><div id="s-shadow"><button data-v="full">Full</button><button data-v="light">Light</button><button data-v="off">Off</button></div></div>
       <div class="choice"><h2>Edge lines</h2><div id="s-edges" class="two"><button data-v="quick">Quick</button><button data-v="exact">Exact</button></div></div>
       <div class="choice"><h2>Music</h2><div id="s-music" class="two"><button data-v="on">On</button><button data-v="off">Off</button></div></div>
-      <p id="build">Build b706a19 2026-11-12 17:07</p>
+      <p id="build">Build 85c7db0 2026-11-12 17:21</p>
       <p id="source"><a href="https://github.com/nmoinvaz/mapmakers-war" target="_blank" rel="noopener">Source on GitHub</a></p>
     </div>
     <div id="banner" hidden></div>
@@ -1521,6 +1521,10 @@ const Rules = (() => {
 
   // ---- The second set of maps: woods, lakes, seas, islands, mountains and rivers ----
   const MORE = new Set(['greenwood', 'oldforest', 'twinlakes', 'ponds', 'seas', 'isles', 'peaks', 'highlands', 'rivers3', 'crater', 'mesa', 'nile', 'atlantis', 'falls', 'summit']);
+  // The layouts with marsh by their water, each with the share of the low, gentle ground near its water that is
+  // marsh; how far from the water, in cells, marsh may lie; and how high above the water and how steep its ground
+  // may be.
+  const MARSHY = { duel: 0.35, rivers3: 0.2, ponds: 0.15, nile: 0.35, twinlakes: 0.35 }, MARSH_REACH = 6, MARSH_UP = 1.3, MARSH_SLOPE = 0.6;
   function moreLayout(kind, L, all, fordAt, R) {
     const dry = () => [99, 0];
     // Two sides on the River Duel's frame, mirrored through the middle.
@@ -2435,6 +2439,38 @@ const Rules = (() => {
     }
     const faces = L.bases.map(b => matan2(CY - b[1], CX - b[0]));
     for (const s of scatter) s.c = clamp(s.y | 0, 0, H - 1) * W + clamp(s.x | 0, 0, W - 1);
+    // Marsh: low, flat, open land within a few cells of water, on the maps that have it, in patches by the map's own
+    // symmetric noise. Men wade it slowly and no vehicle crosses it, as a brook, nothing is built on it, and what
+    // stands in it is hidden from all but those close by. It keeps clear of the roads, towns, bases, ore, wells and
+    // trees, and is taken up again if it shuts off a base, a town or a well.
+    const marsh = new Uint8Array(N), marshK = MARSHY[kind];
+    if (marshK !== undefined) {
+      const isWater = c => (ground[c] & 2) && hAt(c % W + 0.5, (c / W | 0) + 0.5) < wlAt(c % W + 0.5, (c / W | 0) + 0.5);
+      const near = new Uint8Array(N), q = [];
+      for (let c = 0; c < N; c++) if (isWater(c)) { near[c] = 1; q.push(c); }
+      for (let i = 0; i < q.length; i++) {
+        const c = q[i], x = c % W, y = c / W | 0;
+        if (near[c] > MARSH_REACH) continue;
+        for (const n of [x > 0 ? c - 1 : -1, x < W - 1 ? c + 1 : -1, y > 0 ? c - W : -1, y < H - 1 ? c + W : -1]) if (n >= 0 && !near[n]) { near[n] = near[c] + 1; q.push(n); }
+      }
+      // The open, low, gentle ground in reach, then its share with the most of the noise, so every seed has about
+      // as much.
+      const busy = new Set(scatter.map(s => s.c)), was = [], can = [];
+      for (let c = 0; c < N; c++) {
+        if (ground[c] & ~4 || !near[c] || near[c] < 2 || oreCells[c] || busy.has(c)) continue;
+        const x = c % W, y = c / W | 0, cx = x + 0.5, cy = y + 0.5;
+        const up = hAt(cx, cy) - wlAt(cx, cy);
+        if (up < 0.02 || up > MARSH_UP || roadDist[(y * RES) * VW + x * RES] < 2.5) continue;
+        let hi = -99, lo = 99;
+        for (let b = 0; b <= 2; b++) for (let a = 0; a <= 2; a++) { const z = hAt(x + a / 2, y + b / 2); hi = Math.max(hi, z); lo = Math.min(lo, z); }
+        if (hi - lo > MARSH_SLOPE) continue;
+        if (towns.some(t => mhypot(t.x - cx, t.y - cy) < 7) || L.bases.some(b => mhypot(b[0] - cx, b[1] - cy) < 16) || wells.some(w => mhypot(w.x + 0.5 - cx, w.y + 0.5 - cy) < 3)) continue;
+        can.push([c, sym(cx, cy, 0.13, 2)]);
+      }
+      can.sort((a, b) => b[1] - a[1] || a[0] - b[0]);
+      for (const [c] of can.slice(0, Math.round(can.length * marshK))) { was.push(c, ground[c]); ground[c] = 1 | 4 | 16; marsh[c] = 1; }
+      if (!reachable(ground, L, towns, wells)) { for (let j = 0; j < was.length; j += 2) ground[was[j]] = was[j + 1]; marsh.fill(0); }
+    }
     // Open water deep enough for a ship: every corner of the cell well under the surface. Bridges stand high
     // enough for ships to pass beneath. Shoals where fishing boats fish lie in it.
     const sea = new Uint8Array(N);
@@ -2446,7 +2482,7 @@ const Rules = (() => {
     const fish = (L.fish || []).map(p => ({ x: p[0], y: p[1] }));
     let seaCells = 0;
     for (let c = 0; c < N; c++) seaCells += sea[c];
-    return { W, H, seed, kind, h, deck, water, ground, ore: oreCells, oreKind, oreFields, wells, towns, roads, roadDist, bridges, scatter, houses, oreRich, bases: L.bases, faces, fords: L.fords, fordCells, wadeCells, brooks, brookFords, brookDist: bD, brookFord: bF, falls, wl, cascades: L.cascades || [], sea, fish, seaCells, monuments: (L.monuments || []).map(([k, x, y, r, a]) => ({ k, x, y, r, a })), highs: L.highs || null, iceLine: L.iceLine ?? null, cloudLine: L.cloudLine ?? null };
+    return { W, H, seed, kind, h, deck, water, ground, ore: oreCells, oreKind, oreFields, wells, towns, roads, roadDist, bridges, scatter, houses, oreRich, bases: L.bases, faces, fords: L.fords, fordCells, wadeCells, brooks, brookFords, brookDist: bD, brookFord: bF, falls, wl, cascades: L.cascades || [], sea, fish, seaCells, monuments: (L.monuments || []).map(([k, x, y, r, a]) => ({ k, x, y, r, a })), highs: L.highs || null, iceLine: L.iceLine ?? null, cloudLine: L.cloudLine ?? null, marsh };
   }
 
   // A map is kept only if vehicles can get from the first base to every other base, town and well.
@@ -3432,8 +3468,14 @@ const Rules = (() => {
         L = { x: ox, y: oy, z0, R, RW, M, cells: Int32Array.from(cells), far: Uint8Array.from(far) };
         if (who) sightOf.set(who, L);
       }
-      const cs = L.cells, fs = L.far;
-      for (let i = 0; i < cs.length; i++) { const c = cs[i]; if (!(shMask && shMask[c] && fs[i])) { vis[c] = 1; seen[c] = 1; } }
+      // Marsh hides what stands in it from all but those close by, though the marsh itself is seen.
+      const cs = L.cells, fs = L.far, mm = M.marsh;
+      for (let i = 0; i < cs.length; i++) {
+        const c = cs[i];
+        if (shMask && shMask[c] && fs[i]) continue;
+        seen[c] = 1;
+        if (!(mm[c] && fs[i])) vis[c] = 1;
+      }
     };
     // Fog shortens everyone's sight, and blown sand the sight of what stands in a dust storm's dust. Radar sweeps and
     // flares see through them. By night a unit sees two fifths less, a building a little less by its lamps, and a
@@ -10963,6 +11005,10 @@ if (typeof module !== 'undefined') module.exports = Looks;
               // A beach by still water: sand on the steppe and the salt flats, grey shingle in the snowy pass, its
               // contours faint, wet and darker along the water's edge.
               vec4 cov = texture2D(tCover, Wl / uMap);
+              // Marsh, as a survey map draws it: a faint blue-green wash over the low wet ground, with rows of short
+              // blue dashes for its standing water and a few upright strokes of reed above them, drawn further on.
+              float msh = smoothstep(0.2, 0.42, LW.a) * (1.0 - smoothstep(0.8, 0.95, LW.a)) * isG * (1.0 - onRoad);
+              tint = mix(tint, dk ? vec3(0.3, 0.37, 0.35) : vec3(0.83, 0.87, 0.82), msh * 0.6);
               float bch = cov.r * (1.0 - cap);
               // A beach's own slope is gentle, so its relief shading is light.
               rfDark *= 1.0 - 0.6 * smoothstep(0.1, 0.45, bch);
@@ -11019,6 +11065,13 @@ if (typeof module !== 'undefined') module.exports = Looks;
               base = mix(base, CONT, contour * isG * (1.0 - onRoad * 0.55) * (1.0 - wet));
               // The glacier's crevasses and edge, in its blue.
               base = mix(base, dk ? vec3(0.56, 0.68, 0.88) : vec3(0.24, 0.38, 0.66), clamp(crev * 0.9 + iceE * 0.6, 0.0, 1.0) * (1.0 - onRoad));
+              // The marsh's dashes, level across the sheet, and its reeds in the band above each row.
+              if (msh > 0.01) {
+                float mRow = fract(p.y / (7.0 * uK)), mDash = hatch(p, 0.0, 7.0, 0.9, 71.0, 0.5);
+                float mReed = hatch(p, 90.0, 3.2, 0.75, 73.0, 0.72) * step(0.12, mRow) * step(mRow, 0.42);
+                base = mix(base, dk ? vec3(0.55, 0.66, 0.86) : vec3(0.32, 0.44, 0.68), mDash * msh * 0.75);
+                base = mix(base, dk ? vec3(0.5, 0.62, 0.45) : vec3(0.32, 0.42, 0.3), mReed * msh * 0.7);
+              }
               // The rock's strokes run down the fall line, heavy and close on the faces away from the sun and in the
               // gullies, and few and fine on those toward it, so the rock is modelled by its strokes alone.
               if (rock * isG > 0.01) {
@@ -11200,7 +11253,7 @@ if (typeof module !== 'undefined') module.exports = Looks;
               // there by a fine meandering crack, with drifts of snow lying on it. Brooks, which men wade in any case,
               // freeze as soon as any water does.
               if (uIceOn > 0.5 && isW > 0.0) {
-                float iceK = max(LW.a, 1.0 - smoothstep(bkHW, bkHW + 0.3, bkD)) * isW;
+                float iceK = max(smoothstep(0.6, 0.95, LW.a), 1.0 - smoothstep(bkHW, bkHW + 0.3, bkD)) * isW;
                 if (iceK > 0.01) {
                   float ck = abs(noise(Wl * 0.8 + 17.0) - 0.5), ckW = max(fwidth(ck), 1e-4);
                   float crack = (1.0 - smoothstep(0.4 * ckW * uK, 1.2 * ckW * uK, ck)) * smoothstep(0.45, 0.6, noise(Wl * 0.23 + 9.0));
@@ -12743,16 +12796,17 @@ const World = (() => {
       if (!S || !S.iceR) return h;
       return S.gnd[clamp(y | 0, 0, Mp.H - 1) * Mp.W + clamp(x | 0, 0, Mp.W - 1)] & 128 ? Math.max(h, Rules.waterLevel(Mp, x, y)) : h;
     };
-    // The frozen water for the ink to draw ice on, in the heights texture's alpha on the heights' grid, each point
-    // frozen where its cell is. Written again when the ice changes.
+    // The frozen water and the marsh for the ink to draw, in the heights texture's alpha on the heights' grid, 1 for
+    // ice and a half for marsh, each point as its cell is. Written when a world is loaded and again when the ice
+    // changes.
     let iceSeen = -1;
     function updateIce() {
       if (!S || !hTex || (S.iceVer || 0) === iceSeen) return;
       iceSeen = S.iceVer || 0;
-      const d = hTex.image.data, one = toHalf(1), zero = toHalf(0), R = Rules.RES;
+      const d = hTex.image.data, one = toHalf(1), half = toHalf(0.5), zero = toHalf(0), R = Rules.RES;
       for (let j = 0; j < VH; j++) for (let i = 0; i < VW; i++) {
         const c = Math.min(M.H - 1, j / R | 0) * M.W + Math.min(M.W - 1, i / R | 0);
-        d[(j * VW + i) * 4 + 3] = (S.gnd[c] & 128) && (M.ground[c] & 2) ? one : zero;
+        d[(j * VW + i) * 4 + 3] = (S.gnd[c] & 128) && (M.ground[c] & 2) ? one : M.marsh && M.marsh[c] ? half : zero;
       }
       hTex.needsUpdate = true;
       SH.uIceOn.value = S.iceR > 0 ? 1 : 0;

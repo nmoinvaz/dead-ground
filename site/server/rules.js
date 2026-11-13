@@ -726,6 +726,10 @@ const Rules = (() => {
 
   // ---- The second set of maps: woods, lakes, seas, islands, mountains and rivers ----
   const MORE = new Set(['greenwood', 'oldforest', 'twinlakes', 'ponds', 'seas', 'isles', 'peaks', 'highlands', 'rivers3', 'crater', 'mesa', 'nile', 'atlantis', 'falls', 'summit']);
+  // The layouts with marsh by their water, each with the share of the low, gentle ground near its water that is
+  // marsh; how far from the water, in cells, marsh may lie; and how high above the water and how steep its ground
+  // may be.
+  const MARSHY = { duel: 0.35, rivers3: 0.2, ponds: 0.15, nile: 0.35, twinlakes: 0.35 }, MARSH_REACH = 6, MARSH_UP = 1.3, MARSH_SLOPE = 0.6;
   function moreLayout(kind, L, all, fordAt, R) {
     const dry = () => [99, 0];
     // Two sides on the River Duel's frame, mirrored through the middle.
@@ -1640,6 +1644,38 @@ const Rules = (() => {
     }
     const faces = L.bases.map(b => matan2(CY - b[1], CX - b[0]));
     for (const s of scatter) s.c = clamp(s.y | 0, 0, H - 1) * W + clamp(s.x | 0, 0, W - 1);
+    // Marsh: low, flat, open land within a few cells of water, on the maps that have it, in patches by the map's own
+    // symmetric noise. Men wade it slowly and no vehicle crosses it, as a brook, nothing is built on it, and what
+    // stands in it is hidden from all but those close by. It keeps clear of the roads, towns, bases, ore, wells and
+    // trees, and is taken up again if it shuts off a base, a town or a well.
+    const marsh = new Uint8Array(N), marshK = MARSHY[kind];
+    if (marshK !== undefined) {
+      const isWater = c => (ground[c] & 2) && hAt(c % W + 0.5, (c / W | 0) + 0.5) < wlAt(c % W + 0.5, (c / W | 0) + 0.5);
+      const near = new Uint8Array(N), q = [];
+      for (let c = 0; c < N; c++) if (isWater(c)) { near[c] = 1; q.push(c); }
+      for (let i = 0; i < q.length; i++) {
+        const c = q[i], x = c % W, y = c / W | 0;
+        if (near[c] > MARSH_REACH) continue;
+        for (const n of [x > 0 ? c - 1 : -1, x < W - 1 ? c + 1 : -1, y > 0 ? c - W : -1, y < H - 1 ? c + W : -1]) if (n >= 0 && !near[n]) { near[n] = near[c] + 1; q.push(n); }
+      }
+      // The open, low, gentle ground in reach, then its share with the most of the noise, so every seed has about
+      // as much.
+      const busy = new Set(scatter.map(s => s.c)), was = [], can = [];
+      for (let c = 0; c < N; c++) {
+        if (ground[c] & ~4 || !near[c] || near[c] < 2 || oreCells[c] || busy.has(c)) continue;
+        const x = c % W, y = c / W | 0, cx = x + 0.5, cy = y + 0.5;
+        const up = hAt(cx, cy) - wlAt(cx, cy);
+        if (up < 0.02 || up > MARSH_UP || roadDist[(y * RES) * VW + x * RES] < 2.5) continue;
+        let hi = -99, lo = 99;
+        for (let b = 0; b <= 2; b++) for (let a = 0; a <= 2; a++) { const z = hAt(x + a / 2, y + b / 2); hi = Math.max(hi, z); lo = Math.min(lo, z); }
+        if (hi - lo > MARSH_SLOPE) continue;
+        if (towns.some(t => mhypot(t.x - cx, t.y - cy) < 7) || L.bases.some(b => mhypot(b[0] - cx, b[1] - cy) < 16) || wells.some(w => mhypot(w.x + 0.5 - cx, w.y + 0.5 - cy) < 3)) continue;
+        can.push([c, sym(cx, cy, 0.13, 2)]);
+      }
+      can.sort((a, b) => b[1] - a[1] || a[0] - b[0]);
+      for (const [c] of can.slice(0, Math.round(can.length * marshK))) { was.push(c, ground[c]); ground[c] = 1 | 4 | 16; marsh[c] = 1; }
+      if (!reachable(ground, L, towns, wells)) { for (let j = 0; j < was.length; j += 2) ground[was[j]] = was[j + 1]; marsh.fill(0); }
+    }
     // Open water deep enough for a ship: every corner of the cell well under the surface. Bridges stand high
     // enough for ships to pass beneath. Shoals where fishing boats fish lie in it.
     const sea = new Uint8Array(N);
@@ -1651,7 +1687,7 @@ const Rules = (() => {
     const fish = (L.fish || []).map(p => ({ x: p[0], y: p[1] }));
     let seaCells = 0;
     for (let c = 0; c < N; c++) seaCells += sea[c];
-    return { W, H, seed, kind, h, deck, water, ground, ore: oreCells, oreKind, oreFields, wells, towns, roads, roadDist, bridges, scatter, houses, oreRich, bases: L.bases, faces, fords: L.fords, fordCells, wadeCells, brooks, brookFords, brookDist: bD, brookFord: bF, falls, wl, cascades: L.cascades || [], sea, fish, seaCells, monuments: (L.monuments || []).map(([k, x, y, r, a]) => ({ k, x, y, r, a })), highs: L.highs || null, iceLine: L.iceLine ?? null, cloudLine: L.cloudLine ?? null };
+    return { W, H, seed, kind, h, deck, water, ground, ore: oreCells, oreKind, oreFields, wells, towns, roads, roadDist, bridges, scatter, houses, oreRich, bases: L.bases, faces, fords: L.fords, fordCells, wadeCells, brooks, brookFords, brookDist: bD, brookFord: bF, falls, wl, cascades: L.cascades || [], sea, fish, seaCells, monuments: (L.monuments || []).map(([k, x, y, r, a]) => ({ k, x, y, r, a })), highs: L.highs || null, iceLine: L.iceLine ?? null, cloudLine: L.cloudLine ?? null, marsh };
   }
 
   // A map is kept only if vehicles can get from the first base to every other base, town and well.
@@ -2637,8 +2673,14 @@ const Rules = (() => {
         L = { x: ox, y: oy, z0, R, RW, M, cells: Int32Array.from(cells), far: Uint8Array.from(far) };
         if (who) sightOf.set(who, L);
       }
-      const cs = L.cells, fs = L.far;
-      for (let i = 0; i < cs.length; i++) { const c = cs[i]; if (!(shMask && shMask[c] && fs[i])) { vis[c] = 1; seen[c] = 1; } }
+      // Marsh hides what stands in it from all but those close by, though the marsh itself is seen.
+      const cs = L.cells, fs = L.far, mm = M.marsh;
+      for (let i = 0; i < cs.length; i++) {
+        const c = cs[i];
+        if (shMask && shMask[c] && fs[i]) continue;
+        seen[c] = 1;
+        if (!(mm[c] && fs[i])) vis[c] = 1;
+      }
     };
     // Fog shortens everyone's sight, and blown sand the sight of what stands in a dust storm's dust. Radar sweeps and
     // flares see through them. By night a unit sees two fifths less, a building a little less by its lamps, and a
