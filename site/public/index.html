@@ -668,7 +668,7 @@ body[data-look="ink"] .sheet { box-shadow: 4px 4px 0 var(--ink); }
       <div class="choice"><h2>Shadow strength</h2><div id="s-shadow"><button data-v="full">Full</button><button data-v="light">Light</button><button data-v="off">Off</button></div></div>
       <div class="choice"><h2>Edge lines</h2><div id="s-edges" class="two"><button data-v="quick">Quick</button><button data-v="exact">Exact</button></div></div>
       <div class="choice"><h2>Music</h2><div id="s-music" class="two"><button data-v="on">On</button><button data-v="off">Off</button></div></div>
-      <p id="build">Build 86504e0 2026-11-12 17:46</p>
+      <p id="build">Build 45a33a1 2026-11-12 17:57</p>
       <p id="source"><a href="https://github.com/nmoinvaz/mapmakers-war" target="_blank" rel="noopener">Source on GitHub</a></p>
     </div>
     <div id="banner" hidden></div>
@@ -2829,6 +2829,38 @@ const Rules = (() => {
     can.sort((a, b) => a[1] - b[1] || a[0] - b[0]);
     for (const [c] of can.slice(0, Math.round(can.length * PAN_SHARE))) { pan[c] = 1; S.gnd[c] = (S.gnd[c] & ~96) | 96; }
   }
+  // Geysers in the White Pass: two for each side, at the same places about its base, each blowing for GEY_ON every
+  // fifty to eighty seconds by the seed, its steam hiding what stands within GEY_R of it, as a shower does. A geyser
+  // and its fellows about the other bases blow together, so no side is better served. Found when a game begins, so
+  // nothing about them is saved.
+  const GEY_ON = 10 * HZ, GEY_R = 3.5, GEY_SITES = [[0.42, 0.55], [0.6, -0.5]];
+  function geysers(S) {
+    const M = S.map, out = S.geysers = [];
+    if (S.theatre !== 'winter') return;
+    const ok = (x, y) => {
+      if (x < 3 || y < 3 || x > W - 3 || y > H - 3) return false;
+      const c = (y | 0) * W + (x | 0);
+      if ((M.ground[c] & ~4) || M.ore[c] || M.roadDist[Math.round(y * RES) * VW + Math.round(x * RES)] < 3) return false;
+      if (M.towns.some(t => mhypot(t.x - x, t.y - y) < 8) || M.bases.some(b => mhypot(b[0] - x, b[1] - y) < 14)) return false;
+      let hi = -99, lo = 99;
+      for (let b = 0; b <= 2; b++) for (let a = 0; a <= 2; a++) { const z = terrainAt(M, (x | 0) + a / 2, (y | 0) + b / 2); hi = Math.max(hi, z); lo = Math.min(lo, z); }
+      return hi - lo < 0.4;
+    };
+    GEY_SITES.forEach(([f, turn], k) => {
+      const period = 50 + spellHash(S.seed + 3, k) % 31, phase = spellHash(S.seed + 5, k) % period;
+      for (const b of M.bases) {
+        // The nearest good place to the site, sought in the base's own frame, so every side's is found alike.
+        const a = matan2(CY - b[1], CX - b[0]) + turn, d = mhypot(CX - b[0], CY - b[1]) * f, tx = b[0] + mcos(a) * d, ty = b[1] + msin(a) * d;
+        let at = null;
+        for (let r = 0; r <= 10 && !at; r++) {
+          const n = Math.max(1, 8 * r);
+          for (let i = 0; i < n && !at; i++) { const x = tx + mcos(a + i / n * TAU) * r, y = ty + msin(a + i / n * TAU) * r; if (ok(x, y)) at = [x, y]; }
+        }
+        if (at) out.push({ x: at[0], y: at[1], k, period: period * HZ, phase: phase * HZ });
+      }
+    });
+  }
+  const geyserOn = (S, g) => (S.tick + g.phase) % g.period < GEY_ON;
   // Whether the frost is going: ice lies and the snow that keeps it is melting.
   const iceThaw = S => (S.iceR || 0) > 0 && sky(S).cover < 0.3;
   // The cells the cloud covers when it is down, worked out once for the map.
@@ -3031,6 +3063,7 @@ const Rules = (() => {
     for (const m of M.towns) m.owner = -1;
     S.towns = M.towns.map(t => Object.assign({}, t));
     saltPans(S);
+    geysers(S);
     if (S.koth) {
       // No ore is dug, so the fields are left as ground.
       S.ore.fill(0);
@@ -3527,7 +3560,10 @@ const Rules = (() => {
     const nu = 1 - 0.4 * n, nb = 1 - 0.15 * n;
     // Under a shower or a rain cloud sight is cut short: what stands inside one is seen only from close by, and what
     // stands in one sees a third less itself.
-    const shw = showersAt(S), cap = capDown(S), mask = shw.length || cap ? (S._shMask && S._shMask.length === N ? S._shMask.fill(0) : (S._shMask = new Uint8Array(N))) : null;
+    const shw = showersAt(S), cap = capDown(S), gey = S.geysers ? S.geysers.filter(g => geyserOn(S, g)) : [];
+    const mask = shw.length || cap || gey.length ? (S._shMask && S._shMask.length === N ? S._shMask.fill(0) : (S._shMask = new Uint8Array(N))) : null;
+    // A geyser's steam hides what stands in it as a shower does.
+    for (const g of gey) for (let cy = Math.max(0, Math.floor(g.y - GEY_R)); cy <= Math.min(H - 1, Math.ceil(g.y + GEY_R)); cy++) for (let cx = Math.max(0, Math.floor(g.x - GEY_R)); cx <= Math.min(W - 1, Math.ceil(g.x + GEY_R)); cx++) if (mhypot(cx + 0.5 - g.x, cy + 0.5 - g.y) < GEY_R) mask[cy * W + cx] = 1;
     if (mask) for (const s of shw) {
       const rr = s.r * 0.8 * s.k;
       if (rr < 2) continue;
@@ -6402,7 +6438,7 @@ const Rules = (() => {
     msin, mcos, matan2, mhypot,
     BRIDGE_HP, SPELL, SKIES, WEATHERS, nightAt, skyOf, offGoing, route, weatherAt, sky, dayAt, spellOf, bridgeAt, clsOf, houseHp, hurtBridge, ignite, shielded,
     coverPoints, coverNear, COVER_R, COVER_ARC, FORMS, formOfGroup, STANCES,
-    FB_AT, PIN, TRAINERS, producerOf, canExplore, nameFor, townName, theatreOf, UPGRADES, UP_AGE, upCost, upNote, upsAt, upK, upBlocked, hpOf, rangeOf, capOf, showersAt, showerAt, capDown, iceThaw, setIce, ICE_MAX,
+    FB_AT, PIN, TRAINERS, producerOf, canExplore, nameFor, townName, theatreOf, UPGRADES, UP_AGE, upCost, upNote, upsAt, upK, upBlocked, hpOf, rangeOf, capOf, showersAt, showerAt, capDown, iceThaw, setIce, ICE_MAX, geyserOn, GEY_R,
   };
 })();
 if (typeof module !== 'undefined') module.exports = Rules;
@@ -10680,6 +10716,9 @@ if (typeof module !== 'undefined') module.exports = Looks;
             // Fire and smoke, from their own buffer. Drawn as wash (uFxs 1) or as hatched tone (2), they take no outline.
             vec4 FX = texture2D(tFx, vUv);
             float fxHeat = smoothstep(0.25, 0.9, max(FX.r, max(FX.g, FX.b))), fxSmk = smoothstep(0.03, 0.35, FX.a) * (1.0 - fxHeat);
+            // Steam is the blue in the effects, drawn white in place of smoke's grey.
+            float fxStm = fxSmk * smoothstep(0.35, 0.55, (FX.b - FX.r) / max(FX.b, 1e-3));
+            fxSmk -= fxStm;
             if (uFxs > 0.5) edge *= 1.0 - max(fxHeat, smoothstep(0.01, 0.1, FX.a));
             vec2 e3 = vec2(L(uv + k * vec2(1, 0)) - L(uv - k * vec2(1, 0)), L(uv + k * vec2(0, 1)) - L(uv - k * vec2(0, 1)));
             float inner = smoothstep(0.05, 0.14, length(e3)) * s0;
@@ -11521,6 +11560,12 @@ if (typeof module !== 'undefined') module.exports = Looks;
               col = mix(col, vec3(0.56, 0.53, 0.49), fxSmk * 0.5);
               col = mix(col, vec3(1.0, 0.82, 0.52), fxHeat * (1.0 - smoothstep(0.6, 0.95, fxHeat)) * 0.7);
               col = mix(col, flashC, smoothstep(0.6, 0.95, fxHeat));
+            }
+            // Steam, however the effects are drawn, as a cloud is: a white wash edged with a light scalloped line.
+            if (uFxs > 0.5 && fxStm > 0.001) {
+              float sw = max(fwidth(FX.a), 1e-4), sRim = (1.0 - smoothstep(0.6 * uK, 1.6 * uK, abs(FX.a - 0.1) / sw)) * step(0.15, noise(p * 0.05 / uK + 3.0));
+              col = mix(col, dk ? vec3(0.66, 0.67, 0.7) : vec3(0.985, 0.985, 0.98), fxStm * 0.85);
+              col = mix(col, dk ? vec3(0.8, 0.82, 0.86) : vec3(0.5, 0.54, 0.62), sRim * smoothstep(0.03, 0.1, FX.a) * 0.6);
             }
             col = mix(col, dk ? vec3(0.78, 0.6, 0.3) : vec3(0.42, 0.29, 0.12), clamp(oreL, 0.0, 1.0) * 0.85);
             // Colour in the shade: a cool violet wash under the ink where the sun does not reach, warm paper in the light.
@@ -13685,6 +13730,9 @@ const World = (() => {
       }
       const rc = new THREE.Color(th.rock);
       tiled(sc.rock, plainTint, rocks.map(t => ({ x: t.x, y: terrainAt(M, t.x, t.y) - 0.06, z: t.y, s: t.s * 1.2, a: t.a, c: colA.copy(rc).multiplyScalar(0.62 + rand() * 0.3).getHex() })));
+      // Each geyser's vent: a ring of pale sinter stones round its mouth.
+      const vents = (S.geysers || []).flatMap(g => [...Array(7).keys()].map(k => { const a = k / 7 * 6.283 + g.x, d = 0.75 + (k % 2) * 0.35, x = g.x + Math.cos(a) * d, y = g.y + Math.sin(a) * d; return { x, y: terrainAt(M, x, y) - 0.08, z: y, s: 0.38 + (k % 3) * 0.1, a: a * 2, c: 0xdedad0 }; }));
+      if (vents.length) instanced(sc.rock, plainTint, vents);
 
       // Houses, and in each town its other buildings: the biggest a church, a long one a barn, a square one a hall
       // and a small one a mill. What a building is comes of the map alone, so every player sees the same town; the
@@ -14454,6 +14502,22 @@ const World = (() => {
       // Lit at 0.62 of their colour, so a sunlit crown stays under the glow the looks take for fire; the ink washes
       // them at full strength from the mask.
       for (let i = 0; i <= 16; i++) wallC[i] = lo.clone().lerp(hi, i / 16).multiplyScalar(0.62);
+    }
+    // The geysers' steam: a thin wisp from each vent at rest, and while one blows a column of white steam billowing up
+    // and drifting on the wind, wide as the ground it hides. Steam is a dim blue in the effects, which the ink knows
+    // from fire, bright, and from smoke, grey, and draws white.
+    const STEAM = [0.06, 0.11, 0.2];
+    function updateGeysers(dt) {
+      if (!S || !S.geysers || !S.geysers.length || !dt) return;
+      const U = SH.uWind.value;
+      for (const g of S.geysers) {
+        const on = Rules.geyserOn(S, g), z = terrainAt(M, g.x, g.y) + 0.1, rate = on ? 26 : 1.2;
+        for (let n = Math.floor(dt * rate + Math.random()); n > 0; n--) {
+          const r = Math.random(), a = Math.random() * 6.283, sp = on ? 0.25 : 0.05;
+          smoke.add(g.x + Math.cos(a) * sp, z, g.y + Math.sin(a) * sp, U.x * 0.6 + (Math.random() - 0.5) * 0.5, on ? 2.6 + r * 1.6 : 0.6, U.y * 0.6 + (Math.random() - 0.5) * 0.5,
+            on ? 3.2 : 2, on ? 0.8 : 0.3, on ? Rules.GEY_R * 1.1 : 0.9, STEAM.concat(on ? 0.6 : 0.35), STEAM.concat(0), Math.random() * 4 | 0, { drag: 0.6 });
+        }
+      }
     }
     function updateDust(alpha) {
       const w = sky.dust;
@@ -16572,6 +16636,7 @@ const World = (() => {
       if (SH.uSubjK.value < drawTo.subj) SH.uSubjK.value = Math.min(drawTo.subj, SH.uSubjK.value + dt * 2.5);
       SH.uShadowK.value = shadowK * SH.uSubjK.value;
       updateIce();
+      updateGeysers(dt);
       updateSky(dt);
       updateDust(alpha);
       updateMist(alpha);

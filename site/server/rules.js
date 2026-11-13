@@ -2034,6 +2034,38 @@ const Rules = (() => {
     can.sort((a, b) => a[1] - b[1] || a[0] - b[0]);
     for (const [c] of can.slice(0, Math.round(can.length * PAN_SHARE))) { pan[c] = 1; S.gnd[c] = (S.gnd[c] & ~96) | 96; }
   }
+  // Geysers in the White Pass: two for each side, at the same places about its base, each blowing for GEY_ON every
+  // fifty to eighty seconds by the seed, its steam hiding what stands within GEY_R of it, as a shower does. A geyser
+  // and its fellows about the other bases blow together, so no side is better served. Found when a game begins, so
+  // nothing about them is saved.
+  const GEY_ON = 10 * HZ, GEY_R = 3.5, GEY_SITES = [[0.42, 0.55], [0.6, -0.5]];
+  function geysers(S) {
+    const M = S.map, out = S.geysers = [];
+    if (S.theatre !== 'winter') return;
+    const ok = (x, y) => {
+      if (x < 3 || y < 3 || x > W - 3 || y > H - 3) return false;
+      const c = (y | 0) * W + (x | 0);
+      if ((M.ground[c] & ~4) || M.ore[c] || M.roadDist[Math.round(y * RES) * VW + Math.round(x * RES)] < 3) return false;
+      if (M.towns.some(t => mhypot(t.x - x, t.y - y) < 8) || M.bases.some(b => mhypot(b[0] - x, b[1] - y) < 14)) return false;
+      let hi = -99, lo = 99;
+      for (let b = 0; b <= 2; b++) for (let a = 0; a <= 2; a++) { const z = terrainAt(M, (x | 0) + a / 2, (y | 0) + b / 2); hi = Math.max(hi, z); lo = Math.min(lo, z); }
+      return hi - lo < 0.4;
+    };
+    GEY_SITES.forEach(([f, turn], k) => {
+      const period = 50 + spellHash(S.seed + 3, k) % 31, phase = spellHash(S.seed + 5, k) % period;
+      for (const b of M.bases) {
+        // The nearest good place to the site, sought in the base's own frame, so every side's is found alike.
+        const a = matan2(CY - b[1], CX - b[0]) + turn, d = mhypot(CX - b[0], CY - b[1]) * f, tx = b[0] + mcos(a) * d, ty = b[1] + msin(a) * d;
+        let at = null;
+        for (let r = 0; r <= 10 && !at; r++) {
+          const n = Math.max(1, 8 * r);
+          for (let i = 0; i < n && !at; i++) { const x = tx + mcos(a + i / n * TAU) * r, y = ty + msin(a + i / n * TAU) * r; if (ok(x, y)) at = [x, y]; }
+        }
+        if (at) out.push({ x: at[0], y: at[1], k, period: period * HZ, phase: phase * HZ });
+      }
+    });
+  }
+  const geyserOn = (S, g) => (S.tick + g.phase) % g.period < GEY_ON;
   // Whether the frost is going: ice lies and the snow that keeps it is melting.
   const iceThaw = S => (S.iceR || 0) > 0 && sky(S).cover < 0.3;
   // The cells the cloud covers when it is down, worked out once for the map.
@@ -2236,6 +2268,7 @@ const Rules = (() => {
     for (const m of M.towns) m.owner = -1;
     S.towns = M.towns.map(t => Object.assign({}, t));
     saltPans(S);
+    geysers(S);
     if (S.koth) {
       // No ore is dug, so the fields are left as ground.
       S.ore.fill(0);
@@ -2732,7 +2765,10 @@ const Rules = (() => {
     const nu = 1 - 0.4 * n, nb = 1 - 0.15 * n;
     // Under a shower or a rain cloud sight is cut short: what stands inside one is seen only from close by, and what
     // stands in one sees a third less itself.
-    const shw = showersAt(S), cap = capDown(S), mask = shw.length || cap ? (S._shMask && S._shMask.length === N ? S._shMask.fill(0) : (S._shMask = new Uint8Array(N))) : null;
+    const shw = showersAt(S), cap = capDown(S), gey = S.geysers ? S.geysers.filter(g => geyserOn(S, g)) : [];
+    const mask = shw.length || cap || gey.length ? (S._shMask && S._shMask.length === N ? S._shMask.fill(0) : (S._shMask = new Uint8Array(N))) : null;
+    // A geyser's steam hides what stands in it as a shower does.
+    for (const g of gey) for (let cy = Math.max(0, Math.floor(g.y - GEY_R)); cy <= Math.min(H - 1, Math.ceil(g.y + GEY_R)); cy++) for (let cx = Math.max(0, Math.floor(g.x - GEY_R)); cx <= Math.min(W - 1, Math.ceil(g.x + GEY_R)); cx++) if (mhypot(cx + 0.5 - g.x, cy + 0.5 - g.y) < GEY_R) mask[cy * W + cx] = 1;
     if (mask) for (const s of shw) {
       const rr = s.r * 0.8 * s.k;
       if (rr < 2) continue;
@@ -5607,7 +5643,7 @@ const Rules = (() => {
     msin, mcos, matan2, mhypot,
     BRIDGE_HP, SPELL, SKIES, WEATHERS, nightAt, skyOf, offGoing, route, weatherAt, sky, dayAt, spellOf, bridgeAt, clsOf, houseHp, hurtBridge, ignite, shielded,
     coverPoints, coverNear, COVER_R, COVER_ARC, FORMS, formOfGroup, STANCES,
-    FB_AT, PIN, TRAINERS, producerOf, canExplore, nameFor, townName, theatreOf, UPGRADES, UP_AGE, upCost, upNote, upsAt, upK, upBlocked, hpOf, rangeOf, capOf, showersAt, showerAt, capDown, iceThaw, setIce, ICE_MAX,
+    FB_AT, PIN, TRAINERS, producerOf, canExplore, nameFor, townName, theatreOf, UPGRADES, UP_AGE, upCost, upNote, upsAt, upK, upBlocked, hpOf, rangeOf, capOf, showersAt, showerAt, capDown, iceThaw, setIce, ICE_MAX, geyserOn, GEY_R,
   };
 })();
 if (typeof module !== 'undefined') module.exports = Rules;
