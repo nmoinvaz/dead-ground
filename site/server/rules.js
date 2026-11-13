@@ -748,7 +748,7 @@ const Rules = (() => {
     const segD = (p, a, b) => { const dx = b[0] - a[0], dy = b[1] - a[1], t = clamp(((p[0] - a[0]) * dx + (p[1] - a[1]) * dy) / (dx * dx + dy * dy || 1), 0, 1); return mhypot(p[0] - a[0] - dx * t, p[1] - a[1] - dy * t); };
     let segs = null, keepOut = null;
     const clearK = (x, y, s = 1) => {
-      if (!segs) { segs = L.roads.flatMap(r => L.syms.map(T => [T(r.a), T(r.b), r.wig])); keepOut = [...L.bases.map(b => [b[0], b[1], 26]), ...L.towns.map(t => [t[0], t[1], 12]), ...L.ore.map(o => [o[0], o[1], o[2] + 4]), ...L.wells.map(w => [w[0], w[1], 6])]; }
+      if (!segs) { segs = L.roads.flatMap(r => L.syms.map(T => [T(r.a), T(r.b), r.wig])); keepOut = [...L.bases.map(b => [b[0], b[1], 26]), ...L.towns.map(t => [t[0], t[1], 12]), ...L.ore.map(o => [o[0], o[1], o[2] + 4]), ...L.wells.map(w => [w[0], w[1], 6]), ...(L.oases || []).map(o => [o[0], o[1], o[2] + 5])]; }
       let k = 1;
       for (const o of keepOut) k = Math.min(k, smooth(o[2] * s, (o[2] + 6) * s, mhypot(x - o[0], y - o[1])));
       for (const [a, b, w] of segs) k = Math.min(k, smooth(w + 4 * s, w + 9 * s, segD([x, y], a, b)));
@@ -1001,6 +1001,13 @@ const Rules = (() => {
       [[-34, 22, 5.5], [-32, -24, 5.5], [-6, -14, 5]].forEach(o => all(L.ore, uvp(o[0], o[1]), [o[2]]));
       [[-24, 50], [-26, -52], [-16, -4]].forEach(o => all(L.wells, uvp(o[0], o[1])));
       R(hub, tN, 2.5); R(hub, tS, 2.5); R(hub, tC, 2); R(tN, mirror(tS), 3); R(tC, [CX, CY], 1);
+      // Two oases, each a spring-fed pool ringed with palms, in the open between the roads.
+      // A pool's water reaches about 6 cells past its radius, and its palms stand just beyond that.
+      const oa = uvp(-14, -24), ob = mirror(oa), OR = 0.5;
+      L.oases = [[oa[0], oa[1], OR], [ob[0], ob[1], OR]];
+      L.river = pools(L.oases); L.lake = true;
+      const ring = [...Array(12).keys()].map(k => { const a = k / 12 * TAU + 0.3, d = OR + 7.2 + (k % 3) * 0.8; return [oa[0] + mcos(a) * d, oa[1] + msin(a) * d]; });
+      L.palms = [...ring, ...ring.map(p => mirror(p))];
       // The mesas, each a middle, a radius, a height and a turn of its ragged rim. They are laid in one half, and
       // the other half is read from its image there, so the map stays exactly the same under its half turn. Each
       // stands wherever a whole one fits on the map clear of what must stay open, tried in a fixed shuffled order.
@@ -1644,6 +1651,13 @@ const Rules = (() => {
     }
     const faces = L.bases.map(b => matan2(CY - b[1], CX - b[0]));
     for (const s of scatter) s.c = clamp(s.y | 0, 0, H - 1) * W + clamp(s.x | 0, 0, W - 1);
+    // A layout's palms, as round an oasis's pool: trees drawn as palms in any country.
+    for (const [x, y] of L.palms || []) {
+      const c = clamp(y | 0, 0, H - 1) * W + clamp(x | 0, 0, W - 1);
+      if ((ground[c] & 3) || roadDist[clamp(Math.round(y * RES), 0, VH - 1) * VW + clamp(Math.round(x * RES), 0, VW - 1)] < 1.5) continue;
+      scatter.push({ k: 'tree', palm: true, x, y, s: 1, a: mcos(x * 3.1 + y) * PI, c });
+      ground[c] |= 4 | 8;
+    }
     // Marsh: low, flat, open land within a few cells of water, on the maps that have it, in patches by the map's own
     // symmetric noise. Men wade it slowly and no vehicle crosses it, as a brook, nothing is built on it, and what
     // stands in it is hidden from all but those close by. It keeps clear of the roads, towns, bases, ore, wells and
@@ -1993,6 +2007,33 @@ const Rules = (() => {
     }
     S.ev.push({ t: 'ice', r, was });
   }
+  // Salt pans in the desert: the map's lowest flat dry ground, crusted white and as hard as ground worn into a track,
+  // so it is quick going for all and open. Found from the map's own heights when a game in the Salt Flats begins, so
+  // nothing about them is saved: the open flat ground at least PAN_DRY cells from water, its lowest PAN_SHARE. S.pan
+  // marks their cells; their hardness never wears off.
+  const PAN_SHARE = 0.06, PAN_DRY = 6, PAN_SLOPE = 0.25;
+  function saltPans(S) {
+    const M = S.map, pan = S.pan = new Uint8Array(W * H);
+    if (S.theatre !== 'desert') return;
+    const dry = new Uint8Array(W * H).fill(255), q = [];
+    for (let c = 0; c < W * H; c++) if ((M.ground[c] & 2) && terrainAt(M, c % W + 0.5, (c / W | 0) + 0.5) < waterLevel(M, c % W + 0.5, (c / W | 0) + 0.5)) { dry[c] = 0; q.push(c); }
+    for (let i = 0; i < q.length; i++) {
+      const c = q[i], x = c % W, y = c / W | 0;
+      if (dry[c] >= PAN_DRY) continue;
+      for (const n of [x > 0 ? c - 1 : -1, x < W - 1 ? c + 1 : -1, y > 0 ? c - W : -1, y < H - 1 ? c + W : -1]) if (n >= 0 && dry[n] === 255) { dry[n] = dry[c] + 1; q.push(n); }
+    }
+    // Nor on a bridge's cells, whose ground a bridge's fall and rising set again.
+    const can = [], decks = new Set(M.bridges.flatMap(b => b.cells));
+    for (let c = 0; c < W * H; c++) {
+      if ((M.ground[c] & ~4) || M.ore[c] || dry[c] < PAN_DRY || decks.has(c)) continue;
+      const x = c % W, y = c / W | 0;
+      let hi = -99, lo = 99;
+      for (let b = 0; b <= 2; b++) for (let a = 0; a <= 2; a++) { const z = terrainAt(M, x + a / 2, y + b / 2); hi = Math.max(hi, z); lo = Math.min(lo, z); }
+      if (hi - lo < PAN_SLOPE) can.push([c, terrainAt(M, x + 0.5, y + 0.5)]);
+    }
+    can.sort((a, b) => a[1] - b[1] || a[0] - b[0]);
+    for (const [c] of can.slice(0, Math.round(can.length * PAN_SHARE))) { pan[c] = 1; S.gnd[c] = (S.gnd[c] & ~96) | 96; }
+  }
   // Whether the frost is going: ice lies and the snow that keeps it is melting.
   const iceThaw = S => (S.iceR || 0) > 0 && sky(S).cover < 0.3;
   // The cells the cloud covers when it is down, worked out once for the map.
@@ -2194,6 +2235,7 @@ const Rules = (() => {
     S.hist = freshHist(S);
     for (const m of M.towns) m.owner = -1;
     S.towns = M.towns.map(t => Object.assign({}, t));
+    saltPans(S);
     if (S.koth) {
       // No ore is dug, so the fields are left as ground.
       S.ore.fill(0);
@@ -5405,6 +5447,8 @@ const Rules = (() => {
         if (!v && !lv) continue;
         if (v) T[c] = v = Math.max(0, v - 2);
         sum = (sum + v) | 0;
+        // A salt pan keeps its hardness.
+        if (S.pan && S.pan[c]) continue;
         const nl = lv < 3 && v >= TRACK_AT[lv] ? lv + 1 : lv > 0 && v < TRACK_AT[lv - 1] * 0.6 ? lv - 1 : lv;
         if (nl !== lv) { cells.push(c); bits.push((G[c] & ~96) | (nl << 5)); }
       }
