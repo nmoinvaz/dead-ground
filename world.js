@@ -1674,6 +1674,24 @@ const World = (() => {
           par.push({ x: mx + nx * 0.36 * near, y: g + 0.05, z: my + ny * 0.36 * near, sx: len + 0.1, sy: 0.1, sz: 0.24, a, c: 0xc8b896 }); }
       }
       if (tr.length) { instanced(sc.block, plainTint, tr, false); instanced(sc.block, plainTint, par, false); }
+      // Old castles' ruins: a square of curtain wall broken into stretches of uneven height with gaps where it has
+      // fallen, stumps of its four corner towers, a fallen keep in the middle and rubble about, in a weathered stone,
+      // each piece standing on the hill's slope below it.
+      const rw = [], rrub = [];
+      for (const [ri, r] of (M.ruins || []).entries()) {
+        const h = (k, s) => { const v = Math.sin((ri + 1) * 91.7 + k * 12.9898 + s) * 43758.5453; return v - Math.floor(v); };
+        const ca = Math.cos(r.a), sa = Math.sin(r.a), at = (u, v) => [r.x + u * ca - v * sa, r.y + u * sa + v * ca], R0 = r.r - 0.3;
+        const piece = (u, v, len, ht, th, rot, c) => { const [x, z] = at(u, v), g = terrainAt(M, x, z); rw.push({ x, y: g + ht / 2 - 0.15, z, sx: len, sy: ht + 0.3, sz: th, a: -(r.a + rot), c }); };
+        for (let side = 0; side < 4; side++) for (let k = -3; k < 3; k++) {
+          if (h(side * 8 + k, 1) < 0.28) continue;
+          const t = k + 0.5, ht = 0.18 + h(side * 8 + k, 2) * 0.4, rot = side * Math.PI / 2, u = Math.cos(rot) * R0 - Math.sin(rot) * t * R0 / 3, v = Math.sin(rot) * R0 + Math.cos(rot) * t * R0 / 3;
+          piece(u, v, 0.3, ht, R0 / 3 + 0.05, rot, 0xc4bcaa);
+        }
+        for (let c = 0; c < 4; c++) { const rot = c * Math.PI / 2 + Math.PI / 4, d = R0 * Math.SQRT2; piece(Math.cos(rot) * d, Math.sin(rot) * d, 0.85, 0.35 + h(c, 3) * 0.55, 0.85, rot, 0xbab19c); }
+        piece(0, 0, 1.5, 0.45 + h(9, 4) * 0.35, 1.3, 0.2, 0xb2a892);
+        for (let k = 0; k < 6; k++) { const [x, z] = at((h(k, 5) - 0.5) * R0 * 1.4, (h(k, 6) - 0.5) * R0 * 1.4); rrub.push({ x, y: terrainAt(M, x, z) + 0.02, z, s: 0.6 + h(k, 7) * 0.5, a: h(k, 8) * 6.28, c: 0xb8ae98 }); }
+      }
+      if (rw.length) { instanced(sc.block, plainTint, rw); instanced(sc.rubble, plainTint, rrub); }
       // Each geyser's vent: a ring of pale sinter stones round its mouth.
       const vents = (S.geysers || []).flatMap(g => [...Array(7).keys()].map(k => { const a = k / 7 * 6.283 + g.x, d = 0.75 + (k % 2) * 0.35, x = g.x + Math.cos(a) * d, y = g.y + Math.sin(a) * d; return { x, y: terrainAt(M, x, y) - 0.08, z: y, s: 0.38 + (k % 3) * 0.1, a: a * 2, c: 0xdedad0 }; }));
       if (vents.length) instanced(sc.rock, plainTint, vents);

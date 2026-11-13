@@ -1808,6 +1808,22 @@ const Rules = (() => {
     return d > 0 ? Math.max(d, t) : t;
   }
 
+  // Old castles' ruins on the hilltops of the maps whose hills are fought for: one on each of the map's high points,
+  // found as King of the Hill finds its points, so in that mode each point is a ruined castle. A ruin is a square of
+  // broken curtain wall RUIN_R from its middle round a fallen keep. Its walls are cover, one inside sees RUIN_SIGHT
+  // as far, and nothing is built in it. Found from the map when a game begins.
+  const RUIN_R = 3.4, RUIN_SIGHT = 1.25, RUINED = new Set(['pass', 'twinlakes', 'peaks', 'highlands', 'crater', 'mesa']);
+  function ruinsOf(M) {
+    if (M.ruins) return M.ruins;
+    M.ruins = [];
+    if (!RUINED.has(M.kind)) return M.ruins;
+    const m = Object.values(MAPS).find(e => e.layout === M.kind), n = m && m.koth || 3;
+    for (const p of kothPoints({ map: M, bases: M.bases }, n)) {
+      M.ruins.push({ x: p.x, y: p.y, r: RUIN_R, a: matan2(CY - p.y, CX - p.x) + PI / 4 });
+      for (let y = Math.max(0, Math.floor(p.y - RUIN_R - 1)); y <= Math.min(H - 1, Math.ceil(p.y + RUIN_R + 1)); y++) for (let x = Math.max(0, Math.floor(p.x - RUIN_R - 1)); x <= Math.min(W - 1, Math.ceil(p.x + RUIN_R + 1)); x++) if (mhypot(x + 0.5 - p.x, y + 0.5 - p.y) < RUIN_R + 1) M.ground[y * W + x] |= 4;
+    }
+    return M.ruins;
+  }
   // Cover. Fixed points on the land a squad is sent to hold, after Rainbow Six's team orders: the kind of place
   // says what the team does there. Found once from the map and kept on it, each with the way it faces. A squad
   // stopped within COVER_R of one is in cover, and a shot from within COVER_ARC of its facing is softened.
@@ -1846,6 +1862,8 @@ const Rules = (() => {
       const a = matan2(-sy, -sx);
       edge.push(t); put(t.x + mcos(a) * 1.4, t.y + msin(a) * 1.4, 'wood', a);
     }
+    // An old castle's ruin: its walls' inner faces, a man behind each facing out.
+    for (const r of M.ruins || []) for (let k = 0; k < 8; k++) { const a = r.a + k / 8 * TAU; put(r.x + mcos(a) * (r.r - 0.9), r.y + msin(a) * (r.r - 0.9), 'wall', a); }
     // Old trenches: the middle of each bay, a man in it facing either way across the line.
     for (const t of M.trenches || []) for (let i = 0; i + 1 < t.length; i += 2) {
       const [x0, y0] = t[i], [x1, y1] = t[i + 1], a = matan2(y1 - y0, x1 - x0);
@@ -2284,6 +2302,7 @@ const Rules = (() => {
   // supply the later it starts. The game is over when one side is left.
   function newGame(o = {}) {
     const kind = o.layout || 'duel', M = mapFor(o.seed || 1, kind, o.debug), seed = M.seed;
+    ruinsOf(M);
     coverPoints(M);
     const n = M.bases.length;
     const seats = (o.seats || [...Array(n).keys()]).filter(t => t >= 0 && t < n);
@@ -2839,7 +2858,8 @@ const Rules = (() => {
       else if (e.d.move === 'air' || e.d.move === 'jet') light(P, e.x, e.y, e.d.sight * (up ? 1 : faAt(e) * (1 - 0.3 * n) * inSh(e)), 0, true);
       // A ground unit sees a half again as far across open water, and a scout two and a half times as far. A ship's
       // sight is its own.
-      else light(P, e.x, e.y, e.d.sight * (up ? 1 : fkAt(e) * nu * inSh(e)) * (e.cov >= 0 ? 1.2 : 1), 1.1, false, e.d.move === 'naval' ? 1 : canExplore(e) ? 2.5 : 1.5, e);
+      // One standing in an old castle's ruin sees a quarter farther from its walls.
+      else light(P, e.x, e.y, e.d.sight * (up ? 1 : fkAt(e) * nu * inSh(e)) * (e.cov >= 0 ? 1.2 : 1) * (M.ruins && M.ruins.length && M.ruins.some(r => mhypot(r.x - e.x, r.y - e.y) < r.r) ? RUIN_SIGHT : 1), 1.1, false, e.d.move === 'naval' ? 1 : canExplore(e) ? 2.5 : 1.5, e);
     }
     for (const t of S.towns) if (t.owner >= 0 && mine(t.owner)) light(S.P[t.owner], t.x, t.y, 9 * fkAt(t) * (1 - 0.25 * n), 2, false, 1, t);
     for (const s of S.sweeps) if (s.until > S.tick && mine(s.team)) light(S.P[s.team], s.x, s.y, s.r, 0, true);
