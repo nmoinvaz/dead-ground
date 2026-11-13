@@ -253,6 +253,9 @@
             // Fire and smoke, from their own buffer. Drawn as wash (uFxs 1) or as hatched tone (2), they take no outline.
             vec4 FX = texture2D(tFx, vUv);
             float fxHeat = smoothstep(0.25, 0.9, max(FX.r, max(FX.g, FX.b))), fxSmk = smoothstep(0.03, 0.35, FX.a) * (1.0 - fxHeat);
+            // Steam is the blue in the effects, drawn white in place of smoke's grey.
+            float fxStm = fxSmk * smoothstep(0.35, 0.55, (FX.b - FX.r) / max(FX.b, 1e-3));
+            fxSmk -= fxStm;
             if (uFxs > 0.5) edge *= 1.0 - max(fxHeat, smoothstep(0.01, 0.1, FX.a));
             vec2 e3 = vec2(L(uv + k * vec2(1, 0)) - L(uv - k * vec2(1, 0)), L(uv + k * vec2(0, 1)) - L(uv - k * vec2(0, 1)));
             float inner = smoothstep(0.05, 0.14, length(e3)) * s0;
@@ -1094,6 +1097,12 @@
               col = mix(col, vec3(0.56, 0.53, 0.49), fxSmk * 0.5);
               col = mix(col, vec3(1.0, 0.82, 0.52), fxHeat * (1.0 - smoothstep(0.6, 0.95, fxHeat)) * 0.7);
               col = mix(col, flashC, smoothstep(0.6, 0.95, fxHeat));
+            }
+            // Steam, however the effects are drawn, as a cloud is: a white wash edged with a light scalloped line.
+            if (uFxs > 0.5 && fxStm > 0.001) {
+              float sw = max(fwidth(FX.a), 1e-4), sRim = (1.0 - smoothstep(0.6 * uK, 1.6 * uK, abs(FX.a - 0.1) / sw)) * step(0.15, noise(p * 0.05 / uK + 3.0));
+              col = mix(col, dk ? vec3(0.66, 0.67, 0.7) : vec3(0.985, 0.985, 0.98), fxStm * 0.85);
+              col = mix(col, dk ? vec3(0.8, 0.82, 0.86) : vec3(0.5, 0.54, 0.62), sRim * smoothstep(0.03, 0.1, FX.a) * 0.6);
             }
             col = mix(col, dk ? vec3(0.78, 0.6, 0.3) : vec3(0.42, 0.29, 0.12), clamp(oreL, 0.0, 1.0) * 0.85);
             // Colour in the shade: a cool violet wash under the ink where the sun does not reach, warm paper in the light.

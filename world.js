@@ -1661,6 +1661,9 @@ const World = (() => {
       }
       const rc = new THREE.Color(th.rock);
       tiled(sc.rock, plainTint, rocks.map(t => ({ x: t.x, y: terrainAt(M, t.x, t.y) - 0.06, z: t.y, s: t.s * 1.2, a: t.a, c: colA.copy(rc).multiplyScalar(0.62 + rand() * 0.3).getHex() })));
+      // Each geyser's vent: a ring of pale sinter stones round its mouth.
+      const vents = (S.geysers || []).flatMap(g => [...Array(7).keys()].map(k => { const a = k / 7 * 6.283 + g.x, d = 0.75 + (k % 2) * 0.35, x = g.x + Math.cos(a) * d, y = g.y + Math.sin(a) * d; return { x, y: terrainAt(M, x, y) - 0.08, z: y, s: 0.38 + (k % 3) * 0.1, a: a * 2, c: 0xdedad0 }; }));
+      if (vents.length) instanced(sc.rock, plainTint, vents);
 
       // Houses, and in each town its other buildings: the biggest a church, a long one a barn, a square one a hall
       // and a small one a mill. What a building is comes of the map alone, so every player sees the same town; the
@@ -2430,6 +2433,22 @@ const World = (() => {
       // Lit at 0.62 of their colour, so a sunlit crown stays under the glow the looks take for fire; the ink washes
       // them at full strength from the mask.
       for (let i = 0; i <= 16; i++) wallC[i] = lo.clone().lerp(hi, i / 16).multiplyScalar(0.62);
+    }
+    // The geysers' steam: a thin wisp from each vent at rest, and while one blows a column of white steam billowing up
+    // and drifting on the wind, wide as the ground it hides. Steam is a dim blue in the effects, which the ink knows
+    // from fire, bright, and from smoke, grey, and draws white.
+    const STEAM = [0.06, 0.11, 0.2];
+    function updateGeysers(dt) {
+      if (!S || !S.geysers || !S.geysers.length || !dt) return;
+      const U = SH.uWind.value;
+      for (const g of S.geysers) {
+        const on = Rules.geyserOn(S, g), z = terrainAt(M, g.x, g.y) + 0.1, rate = on ? 26 : 1.2;
+        for (let n = Math.floor(dt * rate + Math.random()); n > 0; n--) {
+          const r = Math.random(), a = Math.random() * 6.283, sp = on ? 0.25 : 0.05;
+          smoke.add(g.x + Math.cos(a) * sp, z, g.y + Math.sin(a) * sp, U.x * 0.6 + (Math.random() - 0.5) * 0.5, on ? 2.6 + r * 1.6 : 0.6, U.y * 0.6 + (Math.random() - 0.5) * 0.5,
+            on ? 3.2 : 2, on ? 0.8 : 0.3, on ? Rules.GEY_R * 1.1 : 0.9, STEAM.concat(on ? 0.6 : 0.35), STEAM.concat(0), Math.random() * 4 | 0, { drag: 0.6 });
+        }
+      }
     }
     function updateDust(alpha) {
       const w = sky.dust;
@@ -4548,6 +4567,7 @@ const World = (() => {
       if (SH.uSubjK.value < drawTo.subj) SH.uSubjK.value = Math.min(drawTo.subj, SH.uSubjK.value + dt * 2.5);
       SH.uShadowK.value = shadowK * SH.uSubjK.value;
       updateIce();
+      updateGeysers(dt);
       updateSky(dt);
       updateDust(alpha);
       updateMist(alpha);
