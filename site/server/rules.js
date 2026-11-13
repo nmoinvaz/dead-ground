@@ -510,7 +510,7 @@ const Rules = (() => {
   };
   const SIZES = {
     duel: 128, quad: 192, world: 256, gulf: 128, pass: 128, lakes: 192,
-    greenwood: 128, oldforest: 192, twinlakes: 128, ponds: 192, seas: 128, isles: 192, peaks: 128, highlands: 192, rivers3: 128, crater: 192, mesa: 128, nile: 128, atlantis: 192, falls: 128, summit: 128,
+    greenwood: 128, oldforest: 192, twinlakes: 128, ponds: 192, seas: 128, isles: 192, peaks: 128, highlands: 192, rivers3: 128, crater: 192, mesa: 128, nile: 128, atlantis: 192, falls: 128, summit: 128, junction: 128,
   };
   // The maps a game may be set on, each a layout and the most sides it seats.
   const MAPS = {
@@ -536,6 +536,7 @@ const Rules = (() => {
     falls: { name: 'The Falls', layout: 'falls', seats: 2, about: 'A broad river drops over a great horseshoe fall, as at Niagara, into a deep gorge between the two sides. Bridges and a ford cross above the falls, an island town stands between them, and only a high bridge spans the gorge. Docks hold each reach.' },
     mesa: { name: 'Mesa Country', layout: 'mesa', seats: 2, koth: 3, theatre: 'desert', flora: 'cactus', about: 'Open desert of dunes and sheer-sided mesas, with stands of cactus. The mesas wall off the lines of march.' },
     summit: { name: 'The Summit', layout: 'summit', seats: 2, koth: 3, about: 'One great mountain between the bases, its top far above the land, climbed on foot by four ridges, with a camp partway up each base\'s. Glaciers above the camps slow the climb, and at times cloud comes down over the top and hides it. Roads run round its foot.' },
+    junction: { name: 'The Junction', layout: 'junction', seats: 2, about: 'A railway crosses the field between the bases on embankments and through cuttings. Vehicles cross it only where the roads do; men climb its banks. From the Industrial Age trains run along it.' },
   };
   // The theatre a game on a map is fought in: the map's own, if it fixes one, or the one chosen.
   const theatreOf = (map, chosen) => (MAPS[map] && MAPS[map].theatre) || chosen;
@@ -725,11 +726,14 @@ const Rules = (() => {
   }
 
   // ---- The second set of maps: woods, lakes, seas, islands, mountains and rivers ----
-  const MORE = new Set(['greenwood', 'oldforest', 'twinlakes', 'ponds', 'seas', 'isles', 'peaks', 'highlands', 'rivers3', 'crater', 'mesa', 'nile', 'atlantis', 'falls', 'summit']);
+  const MORE = new Set(['greenwood', 'oldforest', 'twinlakes', 'ponds', 'seas', 'isles', 'peaks', 'highlands', 'rivers3', 'crater', 'mesa', 'nile', 'atlantis', 'falls', 'summit', 'junction']);
   // The layouts with marsh by their water, each with the share of the low, gentle ground near its water that is
   // marsh; how far from the water, in cells, marsh may lie; and how high above the water and how steep its ground
   // may be.
   const MARSHY = { duel: 0.35, rivers3: 0.2, ponds: 0.15, nile: 0.35, twinlakes: 0.35 }, MARSH_REACH = 6, MARSH_UP = 1.3, MARSH_SLOPE = 0.6;
+  // A railway's bed: the cells along which the land's height is smoothed for it, how far it rides above that, and how
+  // far from its line its bed and banks stop vehicles.
+  const RAIL_SMOOTH = 8, RAIL_RISE = 0.5, RAIL_BANK = 1.7, RAIL_CLIMB = 3.2;
   // The duel layouts with old trenches across their open fields, and the shortest run of trench kept, in cells.
   const TRENCHED = new Set(['duel', 'pass', 'peaks', 'twinlakes', 'rivers3']), TRENCH_MIN = 6;
   function moreLayout(kind, L, all, fordAt, R) {
@@ -992,6 +996,21 @@ const Rules = (() => {
       [[-34, 30, 5.5], [-34, -30, 5.5], [0, 46, 5]].forEach(o => all(L.ore, uvp(o[0], o[1]), [o[2]]));
       [[-26, 46], [-26, -46], [-44, -14]].forEach(o => all(L.wells, uvp(o[0], o[1])));
       R(hub, tN, 3); R(hub, tS, 3); R(hub, tC, 2); R(tN, mirror(tS), 2.5);
+    } else if (kind === 'junction') {
+      // A railway across the field between the bases, winding a little, on its own graded bed: embankments where the
+      // land is low and cuttings where it is high, crossed by the roads at level crossings. The line is odd in v, so it
+      // is its own image under the map's half turn.
+      duel(); L.river = dry;
+      L.bases.push(uvp(-54, 0), mirror(uvp(-54, 0)));
+      const tN = uvp(-20, 40), tS = uvp(-22, -38), tC = uvp(-12, 8), hub = uvp(-44, 0);
+      for (const t of [tN, tS, tC]) all(L.towns, t);
+      duelKit(-54, 0);
+      [[-32, 24, 5.5], [-30, -26, 5.5], [-16, -24, 5]].forEach(o => all(L.ore, uvp(o[0], o[1]), [o[2]]));
+      [[-24, 52], [-26, -54], [-17, -8]].forEach(o => all(L.wells, uvp(o[0], o[1])));
+      R(hub, tN, 2.5); R(hub, tS, 2.5); R(hub, tC, 2); R(tN, mirror(tS), 3); R(tC, [CX, CY], 1);
+      const lineU = v => 5 * msin(0.035 * v) + 2 * msin(0.09 * v);
+      L.rail = [];
+      for (let v = -95; v <= 95; v += 0.5) { const p = uvp(lineU(v), v); if (p[0] > -2 && p[1] > -2 && p[0] < W + 2 && p[1] < H + 2) L.rail.push(p); }
     } else if (kind === 'mesa') {
       // Open desert between two bases: long dune ridges on the flanks and sheer-sided, flat-topped mesas that wall
       // off the ways across, the roads winding between them.
@@ -1258,6 +1277,25 @@ const Rules = (() => {
     // A layout's own walls of rock, as High Pass's ridge, raised over the ground. It may roughen them with the map's
     // noise, the same under its turns.
     if (L.wall) for (let j = 0; j < VH; j++) for (let i = 0; i < VW; i++) h[j * VW + i] += L.wall(i / RES, j / RES, sym);
+    // A layout's railway: its bed graded to the land's height along it, smoothed over RAIL_SMOOTH cells and raised a
+    // little, so it rides on embankments where the land dips and runs in cuttings where it rises, its banks falling
+    // away over a couple of cells. railG holds each height point's distance from the line, for the ground bits.
+    let railG = null;
+    if (L.rail && L.rail.length > 1) {
+      const P = L.rail, n = P.length, at = p => h[clamp(Math.round(p[1] * RES), 0, VH - 1) * VW + clamp(Math.round(p[0] * RES), 0, VW - 1)];
+      const nat = P.map(at), win = RAIL_SMOOTH * 2;
+      const bed = nat.map((_, i) => { let s = 0, k = 0; for (let j = Math.max(0, i - win); j <= Math.min(n - 1, i + win); j++) { s += nat[j]; k++; } return s / k + RAIL_RISE; });
+      railG = new Float32Array(VW * VH).fill(99);
+      const near = new Int32Array(VW * VH).fill(-1);
+      for (let i = 0; i + 1 < n; i++) {
+        const [ax, ay] = P[i], [bx, by] = P[i + 1], dx = bx - ax, dy = by - ay, L2 = dx * dx + dy * dy || 1e-9;
+        for (let j = Math.max(0, Math.floor((Math.min(ay, by) - 4) * RES)); j <= Math.min(VH - 1, Math.ceil((Math.max(ay, by) + 4) * RES)); j++) for (let k = Math.max(0, Math.floor((Math.min(ax, bx) - 4) * RES)); k <= Math.min(VW - 1, Math.ceil((Math.max(ax, bx) + 4) * RES)); k++) {
+          const x = k / RES, y = j / RES, t = clamp(((x - ax) * dx + (y - ay) * dy) / L2, 0, 1), d = mhypot(x - ax - dx * t, y - ay - dy * t), c = j * VW + k;
+          if (d < railG[c]) { railG[c] = d; near[c] = t < 0.5 ? i : i + 1; }
+        }
+      }
+      for (let c = 0; c < VW * VH; c++) if (near[c] >= 0) { const k = 1 - smooth(1.2, 4.5, railG[c]); if (k > 0) h[c] = lerp(h[c], bed[near[c]], k); }
+    }
     // Mountains break into benches with sheer faces of rock between them, which nothing climbs, so a mountain is
     // climbed only by its ways up: spurs where the faces give out, picked by a noise the same under the map's turns,
     // and wherever a road goes. Each step is CLIFF_STEP high, its face a quarter of the rise.
@@ -1518,8 +1556,15 @@ const Rules = (() => {
     const hAt = (x, y) => { const i = clamp(Math.round(x * RES), 0, VW - 1), j = clamp(Math.round(y * RES), 0, VH - 1); return h[j * VW + i]; };
     const deckAt = (x, y) => { const i = clamp(Math.round(x * RES), 0, VW - 1), j = clamp(Math.round(y * RES), 0, VH - 1); return deck[j * VW + i]; };
     const ground = new Uint8Array(N), fordCells = [], wadeCells = [];
-    // A cell's bits from the land alone, as if no bridge stood over it.
+    // A cell's bits from the land alone, as if no bridge stood over it. A railway's bed and banks stop vehicles but
+    // for where a road crosses, and nothing is built on them; men climb them.
     const landBits = (x, y) => {
+      const b = landBits0(x, y), c = (y * RES + 1) * VW + x * RES + 1;
+      if (!railG || railG[c] >= RAIL_CLIMB || roadDist[c] <= 1.2 || b === 7) return b;
+      // Men climb the banks however steep, and the bed and its banks' tops stop vehicles.
+      return railG[c] < RAIL_BANK ? (b & ~2) | 1 | 4 : b & ~2;
+    };
+    const landBits0 = (x, y) => {
       let hi = -99, lo = 99;
       for (let b = 0; b <= 2; b++) for (let a = 0; a <= 2; a++) {
         const z = hAt(x + a / 2, y + b / 2);
@@ -1567,7 +1612,7 @@ const Rules = (() => {
       const [rd, rw] = L.river(x, y);
       if (L.lake ? rd < rw + 5 : rd < 6.5) return false;
       const c = clamp(Math.round(y * RES), 0, VH - 1) * VW + clamp(Math.round(x * RES), 0, VW - 1);
-      return roadDist[c] > 3 && bD[c] > 1.8;
+      return roadDist[c] > 3 && bD[c] > 1.8 && !(railG && railG[c] < 4);
     };
     for (let y = 2; y < H - 2; y++) for (let x = 2; x < W - 2; x++) {
       if (!L.domain(x, y)) continue;
@@ -1634,7 +1679,7 @@ const Rules = (() => {
           for (let cy = py - 1; cy <= py + ph && ok; cy++) for (let cx = px - 1; cx <= px + pw; cx++) {
             if (cx < 1 || cy < 1 || cx >= W - 1 || cy >= H - 1) { ok = false; break; }
             const c = cy * W + cx, v = (cy * RES) * VW + cx * RES;
-            if (taken(c) || oreCells[c] || roadDist[v] < 4.5 || hAt(cx + 0.5, cy + 0.5) < wlAt(cx + 0.5, cy + 0.5) + 0.4) { ok = false; break; }
+            if (taken(c) || oreCells[c] || roadDist[v] < 4.5 || (railG && railG[v] < 4) || hAt(cx + 0.5, cy + 0.5) < wlAt(cx + 0.5, cy + 0.5) + 0.4) { ok = false; break; }
           }
         });
         if (!ok) continue;
@@ -1746,7 +1791,7 @@ const Rules = (() => {
     const fish = (L.fish || []).map(p => ({ x: p[0], y: p[1] }));
     let seaCells = 0;
     for (let c = 0; c < N; c++) seaCells += sea[c];
-    return { W, H, seed, kind, h, deck, water, ground, ore: oreCells, oreKind, oreFields, wells, towns, roads, roadDist, bridges, scatter, houses, oreRich, bases: L.bases, faces, fords: L.fords, fordCells, wadeCells, brooks, brookFords, brookDist: bD, brookFord: bF, falls, wl, cascades: L.cascades || [], sea, fish, seaCells, monuments: (L.monuments || []).map(([k, x, y, r, a]) => ({ k, x, y, r, a })), highs: L.highs || null, iceLine: L.iceLine ?? null, cloudLine: L.cloudLine ?? null, marsh, trenches };
+    return { W, H, seed, kind, h, deck, water, ground, ore: oreCells, oreKind, oreFields, wells, towns, roads, roadDist, bridges, scatter, houses, oreRich, bases: L.bases, faces, fords: L.fords, fordCells, wadeCells, brooks, brookFords, brookDist: bD, brookFord: bF, falls, wl, cascades: L.cascades || [], sea, fish, seaCells, monuments: (L.monuments || []).map(([k, x, y, r, a]) => ({ k, x, y, r, a })), highs: L.highs || null, iceLine: L.iceLine ?? null, cloudLine: L.cloudLine ?? null, marsh, trenches, rail: L.rail || null };
   }
 
   // A map is kept only if vehicles can get from the first base to every other base, town and well.
