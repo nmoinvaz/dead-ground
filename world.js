@@ -846,7 +846,9 @@ const World = (() => {
     const heightAt = (Mp, x, y) => {
       const h = groundAt(Mp, x, y);
       if (!S || !S.iceR) return h;
-      return S.gnd[clamp(y | 0, 0, Mp.H - 1) * Mp.W + clamp(x | 0, 0, Mp.W - 1)] & 128 ? Math.max(h, Rules.waterLevel(Mp, x, y)) : h;
+      // A tide's sands carry bit 128 at low tide too, but are walked on at their own height.
+      const c = clamp(y | 0, 0, Mp.H - 1) * Mp.W + clamp(x | 0, 0, Mp.W - 1);
+      return S.gnd[c] & 128 && !(Mp.sand && Mp.sand[c]) ? Math.max(h, Rules.waterLevel(Mp, x, y)) : h;
     };
     // The frozen water, the salt pans and the marsh for the ink to draw, in the heights texture's alpha on the heights'
     // grid, 1 for ice on the water and for a pan on the land, and a half for marsh, each point as its cell is. Written
@@ -858,7 +860,7 @@ const World = (() => {
       const d = hTex.image.data, one = toHalf(1), half = toHalf(0.5), zero = toHalf(0), R = Rules.RES;
       for (let j = 0; j < VH; j++) for (let i = 0; i < VW; i++) {
         const c = Math.min(M.H - 1, j / R | 0) * M.W + Math.min(M.W - 1, i / R | 0);
-        d[(j * VW + i) * 4 + 3] = (S.gnd[c] & 128) && (M.ground[c] & 2) ? one : S.pan && S.pan[c] ? one : M.marsh && M.marsh[c] ? half : zero;
+        d[(j * VW + i) * 4 + 3] = (S.gnd[c] & 128) && (M.ground[c] & 2) && !(M.sand && M.sand[c]) ? one : S.pan && S.pan[c] ? one : M.marsh && M.marsh[c] ? half : zero;
       }
       hTex.needsUpdate = true;
       SH.uIceOn.value = S.iceR > 0 ? 1 : 0;
@@ -1260,7 +1262,8 @@ const World = (() => {
         for (let c = 0; c < n; c++) riverNear[c] = dd[c] >= 4 && dd[c] <= 11 ? 1 : 0;
       }
       for (let c = 0; c < n; c++) {
-        cov[c * 4] = beachMap ? beachMap[c] : 0;
+        // A tide's sands are beach, seen as sand when the water is off them.
+        cov[c * 4] = M.sand && M.sand[c] ? 255 : beachMap ? beachMap[c] : 0;
         const x = c % W + 0.5, y = (c / W | 0) + 0.5;
         let d1 = 1e9, d2 = 1e9, ti = -1;
         M.towns.forEach((t, i) => { const d = Math.hypot(t.x - x, t.y - y); if (d < d1) { d2 = d1; d1 = d; ti = i; } else if (d < d2) d2 = d; });
@@ -3298,7 +3301,7 @@ const World = (() => {
       const capW = studySky && studySky.cap !== undefined ? studySky.cap : Rules.capDown(S) ? 1 : 0;
       SH.uCapK.value += (capW - SH.uCapK.value) * (studySky ? 1 : 1 - Math.exp(-dt * 0.5));
       // A broken dam's flood raises the water as a long rain does.
-      waterRise.value = Math.min(1.25, Math.max(sky.flood, Rules.damFlood(S) * 1.25)) * 0.26;
+      waterRise.value = Math.min(1.25, Math.max(sky.flood, Rules.damFlood(S) * 1.25)) * 0.26 - Rules.tideLevel(S) * Rules.TIDE_DROP;
       right3.setFromMatrixColumn(camera.matrixWorld, 0);
       sky.windS = right3.x * U.x + right3.z * U.y;
       // The hour. Pen and ink follows it; the painted looks keep their own light.

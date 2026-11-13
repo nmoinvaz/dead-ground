@@ -1633,6 +1633,8 @@ const Hud = (() => {
       if (Rules.capDown(s)) note = note ? note + '. Cloud on the heights' : 'Cloud on the heights hides them';
       // Ice on the water: men may cross it, and as the snow melts it thins and gives way.
       if (s.iceR > 0) note = Rules.iceThaw(s) ? (note ? note + '. Ice thinning' : 'Ice thinning: get off it') : (note ? note + '. Water frozen' : 'Water frozen: men cross on the ice');
+      // The tide: out over the sands, and a warning before it turns.
+      if (s.map.sand) { const turn = Rules.tideTurn(s), tn = turn === 'in' ? 'Tide coming in: off the sands' : turn === 'out' ? 'Tide going out' : Rules.tideLow(s) ? 'Low tide: the sands are open' : ''; if (tn) note = note ? note + '. ' + tn : tn; }
       if (w.next !== w.kind && w.left < 40 * HZ) note = (SKY_NAME[w.next] || w.next) + ' coming';
       // A newcomer's protection, counting down.
       const me = game.team >= 0 ? s.P[game.team] : null, left = me && me.shield > s.tick ? Math.ceil((me.shield - s.tick) / HZ) : 0;
