@@ -668,7 +668,7 @@ body[data-look="ink"] .sheet { box-shadow: 4px 4px 0 var(--ink); }
       <div class="choice"><h2>Shadow strength</h2><div id="s-shadow"><button data-v="full">Full</button><button data-v="light">Light</button><button data-v="off">Off</button></div></div>
       <div class="choice"><h2>Edge lines</h2><div id="s-edges" class="two"><button data-v="quick">Quick</button><button data-v="exact">Exact</button></div></div>
       <div class="choice"><h2>Music</h2><div id="s-music" class="two"><button data-v="on">On</button><button data-v="off">Off</button></div></div>
-      <p id="build">Build 85c7db0 2026-11-12 17:21</p>
+      <p id="build">Build afc2be6 2026-11-12 17:27</p>
       <p id="source"><a href="https://github.com/nmoinvaz/mapmakers-war" target="_blank" rel="noopener">Source on GitHub</a></p>
     </div>
     <div id="banner" hidden></div>
@@ -13226,6 +13226,7 @@ const World = (() => {
         cov[c * 4 + 1] = 255;
       }
       if (beachTex) beachTex.dispose();
+      fieldCov = cov;
       beachTex = new THREE.DataTexture(cov, W, H, THREE.RGBAFormat);
       beachTex.magFilter = beachTex.minFilter = THREE.LinearFilter; beachTex.needsUpdate = true;
       SH.tCover.value = beachTex;
@@ -13638,6 +13639,7 @@ const World = (() => {
       buildParks();
       buildGolf();
       buildFields();
+      buildRows();
 
       // Wellheads in a black stain, each bridge on its piers.
       instanced(sc.well, paint, M.wells.map(w => ({ x: w.x, y: terrainAt(M, w.x, w.y), z: w.y })));
@@ -13727,6 +13729,54 @@ const World = (() => {
     // and blasts throw them down. Only the picture keeps them.
     const railOf = (f, hgt, down) => down ? { x: f.mx + Math.sin(f.a) * hgt, y: f.g + 0.03, z: f.my + Math.cos(f.a) * hgt, sx: 1, a: f.a + 0.2 - hgt, c: 0x7a6a54 } : { x: f.mx, y: f.g + hgt, z: f.my, sx: 1.02, a: f.a, c: 0x9a8a70 };
     const postOf = (f, down) => ({ x: f.x0, y: f.g, z: f.y0, a: f.a, rx: down ? 1.45 : 0, c: 0x6a5a48 });
+    // Avenues and windbreaks: trees set in even rows along the roads near the towns, either side of the road, and along
+    // the farmland's outer edge where it meets open ground, in the theatre's own trees and a little smaller than the
+    // wild ones. They are for the picture alone, as a survey map draws the trees lining its roads. Cactus country has
+    // none.
+    let fieldCov = null;
+    function buildRows() {
+      const flora = mapOf(S).flora, sc = MODELS.scenery, rand = mulberry(M.seed + 101);
+      if (flora === 'cactus') return;
+      const geo = flora === 'palm' ? sc.palm : sc[theme.tree], lf = theme.leaf.map(c => new THREE.Color(c)), out = [], taken = new Set();
+      const wild = scen.trees ? scen.trees.byCell : new Map();
+      const free = (x, y) => {
+        if (x < 1 || y < 1 || x > W - 1 || y > H - 1) return false;
+        const cx = x | 0, cy = y | 0, c = cy * W + cx;
+        if ((M.ground[c] & 7) || taken.has(c) || terrainAt(M, x, y) < wAt(x, y) + 0.3) return false;
+        if (M.roadDist[Math.round(y * RES) * VW + Math.round(x * RES)] < 1.25) return false;
+        for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) if (wild.has(c + dy * W + dx)) return false;
+        return !M.houses.some(h => x > h.x - 1.2 && x < h.x + h.w + 1.2 && y > h.y - 1.2 && y < h.y + h.h + 1.2);
+      };
+      const put = (x, y, s) => { taken.add((y | 0) * W + (x | 0)); out.push({ x, y: terrainAt(M, x, y) - 0.04, z: y, s, a: rand() * 6.28, c: colA.copy(lf[0]).lerp(lf[1], rand()).getHex() }); };
+      // Each road walked a tree's spacing at a time, its trees set either side where it runs from 5.5 to 18 cells from
+      // a town's middle.
+      for (const road of M.roads) {
+        let carry = 0;
+        for (let i = 0; i + 1 < road.length; i++) {
+          const [x0, y0] = road[i], [x1, y1] = road[i + 1], len = Math.hypot(x1 - x0, y1 - y0);
+          if (len < 1e-6) continue;
+          const ux = (x1 - x0) / len, uy = (y1 - y0) / len;
+          for (let s = carry; s < len; s += 1.5) {
+            const x = x0 + ux * s, y = y0 + uy * s, dt = Math.min(...M.towns.map(t => Math.hypot(t.x - x, t.y - y)));
+            if (dt < 5.5 || dt > 18) continue;
+            for (const side of [-1, 1]) { const tx = x - uy * 1.7 * side, ty = y + ux * 1.7 * side; if (free(tx, ty)) put(tx, ty, 0.82 + rand() * 0.1); }
+          }
+          carry = (carry - len) % 1.5; if (carry < 0) carry += 1.5;
+        }
+      }
+      // Windbreaks along the farmland's edge where it meets open ground, on its north and west sides, every other cell.
+      if (fieldCov) for (let c = 0; c < W * H; c += 2) {
+        if (fieldCov[c * 4 + 1] < 200) continue;
+        const x = c % W, y = c / W | 0;
+        for (const [dx, dy] of [[0, -1], [-1, 0]]) {
+          const o = (y + dy) * W + x + dx;
+          if (y + dy < 0 || x + dx < 0 || fieldCov[o * 4 + 1] >= 200) continue;
+          const tx = x + 0.5 + dx * 0.5, ty = y + 0.5 + dy * 0.5;
+          if (rand() < 0.75 && free(tx, ty)) put(tx, ty, 0.75 + rand() * 0.1);
+        }
+      }
+      if (out.length) lineCat(tiled(geo, treeTint, out), 0.459, true);
+    }
     function buildFences() {
       const sc = MODELS.scenery, segs = [], taken = new Set(), RD = M.roadDist;
       M.houses.forEach(h => {
