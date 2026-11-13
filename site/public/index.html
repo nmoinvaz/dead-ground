@@ -668,7 +668,7 @@ body[data-look="ink"] .sheet { box-shadow: 4px 4px 0 var(--ink); }
       <div class="choice"><h2>Shadow strength</h2><div id="s-shadow"><button data-v="full">Full</button><button data-v="light">Light</button><button data-v="off">Off</button></div></div>
       <div class="choice"><h2>Edge lines</h2><div id="s-edges" class="two"><button data-v="quick">Quick</button><button data-v="exact">Exact</button></div></div>
       <div class="choice"><h2>Music</h2><div id="s-music" class="two"><button data-v="on">On</button><button data-v="off">Off</button></div></div>
-      <p id="build">Build 91d7907 2026-11-12 16:13</p>
+      <p id="build">Build b706a19 2026-11-12 17:07</p>
       <p id="source"><a href="https://github.com/nmoinvaz/mapmakers-war" target="_blank" rel="noopener">Source on GitHub</a></p>
     </div>
     <div id="banner" hidden></div>
@@ -2702,6 +2702,58 @@ const Rules = (() => {
     S._cap = { k, down };
     return down;
   }
+  // Ice on the water in a hard frost. While snow lies, the ice reaches a cell farther out from the banks each
+  // ICE_EVERY, as far as the theatre's frost allows, so a narrow river freezes across and a wide lake or sea only
+  // along its shores. As the snow melts it draws back, the middle of the water first. Men cross it slowly, as a ford,
+  // and wheels, tracks and ships cannot. One standing on it as it goes is lost through it, as on a bridge that falls.
+  // Only water men cannot wade freezes, so fords and brooks keep their own going.
+  const ICE_EVERY = 10 * HZ, ICE_MAX = { winter: 10, steppe: 4, any: 3, desert: 0 };
+  // Each water cell's distance from the nearest cell that is not water, in steps of one cell, 0 for no water.
+  function iceDist(M) {
+    if (M._iceD) return M._iceD;
+    const D = new Uint8Array(W * H), q = [];
+    const wet = c => (M.ground[c] & 2) && terrainAt(M, c % W + 0.5, (c / W | 0) + 0.5) < waterLevel(M, c % W + 0.5, (c / W | 0) + 0.5);
+    for (let c = 0; c < W * H; c++) if (wet(c)) D[c] = 255;
+    for (let c = 0; c < W * H; c++) if (D[c]) {
+      const x = c % W, y = c / W | 0;
+      if ((x > 0 && !D[c - 1]) || (x < W - 1 && !D[c + 1]) || (y > 0 && !D[c - W]) || (y < H - 1 && !D[c + W])) { D[c] = 1; q.push(c); }
+    }
+    for (let i = 0; i < q.length; i++) {
+      const c = q[i], x = c % W, y = c / W | 0;
+      for (const n of [x > 0 ? c - 1 : -1, x < W - 1 ? c + 1 : -1, y > 0 ? c - W : -1, y < H - 1 ? c + W : -1]) if (n >= 0 && D[n] === 255) { D[n] = Math.min(254, D[c] + 1); q.push(n); }
+    }
+    return M._iceD = D;
+  }
+  function stepIce(S) {
+    if (S.tick % ICE_EVERY || S.tick === 0) return;
+    const max = ICE_MAX[S.theatre] ?? ICE_MAX.any, was = S.iceR || 0;
+    if (!max && !was) return;
+    const w = sky(S);
+    const r = w.cover > 0.4 && was < max ? was + 1 : w.cover < 0.2 && was > 0 ? was - 1 : was;
+    if (r !== was) setIce(S, r);
+  }
+  function setIce(S, r) {
+    const M = S.map, D = iceDist(M), was = S.iceR || 0, cells = [], bits = [];
+    for (let c = 0; c < W * H; c++) {
+      const d = D[c];
+      if (!d) continue;
+      const now = d <= r, before = d <= was;
+      if (now === before) continue;
+      cells.push(c);
+      bits.push(now ? (M.ground[c] & ~(2 | 16)) | 1 | 4 | 128 : M.ground[c]);
+    }
+    S.iceR = r;
+    if (!cells.length) return;
+    setGround(S, cells, bits);
+    S.iceVer = (S.iceVer || 0) + 1;
+    if (r < was) {
+      const gone = new Set(cells);
+      for (const u of S.ents) if (!u.b && u.hp > 0 && !isAir(u) && !(u.drop > 0) && gone.has(cellOf(u.x, u.y)) && blocked(S, clsOf(u), cellOf(u.x, u.y))) hurt(S, u, 1e6, -1, 0);
+    }
+    S.ev.push({ t: 'ice', r, was });
+  }
+  // Whether the frost is going: ice lies and the snow that keeps it is melting.
+  const iceThaw = S => (S.iceR || 0) > 0 && sky(S).cover < 0.3;
   // The cells the cloud covers when it is down, worked out once for the map.
   function capCells(M) {
     if (M._capC) return M._capC;
@@ -3064,7 +3116,7 @@ const Rules = (() => {
       // The ground and the trees as pairs of cell and value, only where they differ from the map's start.
       gnd: diffs(S.gnd, S.map.ground), wood: diffs(S.wood, null), gndVer: S.gndVer, woodVer: S.woodVer, burn: S.burn, bridges: S.bridges, hh: S.hh, hr: S.hr, flooded: S.flooded,
       trail: b64.en(S.trail), trailSum: S.trailSum, hist: S.hist,
-      koth: S.koth, points: S.points, score: S.score, field: S.field,
+      koth: S.koth, points: S.points, score: S.score, field: S.field, iceR: S.iceR || 0, iceVer: S.iceVer || 0,
     };
   }
   function diffs(a, base) { const o = []; for (let c = 0; c < a.length; c++) if (a[c] !== (base ? base[c] : 0)) o.push(c, a[c]); return o; }
@@ -3093,7 +3145,7 @@ const Rules = (() => {
     const gd = o.gnd || [], wd = o.wood || [];
     for (let i = 0; i < gd.length; i += 2) S.gnd[gd[i]] = gd[i + 1];
     for (let i = 0; i < wd.length; i += 2) S.wood[wd[i]] = wd[i + 1];
-    S.gndVer = o.gndVer || 0; S.woodVer = o.woodVer || 0; S.burn = o.burn || []; S.flooded = !!o.flooded;
+    S.gndVer = o.gndVer || 0; S.woodVer = o.woodVer || 0; S.burn = o.burn || []; S.flooded = !!o.flooded; S.iceR = o.iceR || 0; S.iceVer = o.iceVer || 0;
     if (o.trail) S.trail = new Uint8Array(b64.de(o.trail)); S.trailSum = o.trailSum || 0;
     // A game saved before the record was kept starts its record now.
     if (o.hist) S.hist = o.hist;
@@ -3429,7 +3481,8 @@ const Rules = (() => {
 
   // Three ways of getting about: on foot, on wheels, and on tracks, which go through woods by flattening them.
   // Each is stopped by its own ground bits.
-  const BIT = { foot: 2, veh: 9, track: 1, naval: 0 };
+  // Ships keep to open water, and ice (bit 128 on the water) stops them.
+  const BIT = { foot: 2, veh: 9, track: 1, naval: 128 };
   const clsOf = u => u.d.move === 'foot' ? 'foot' : u.d.move === 'track' ? 'track' : u.d.move === 'naval' ? 'naval' : 'veh';
   function blocked(S, cls, c, occ = S.occ, g = S.gnd) {
     // A ship keeps to open water.
@@ -3526,7 +3579,7 @@ const Rules = (() => {
     Gd.S = ver >= 0 ? S : null; Gd.ver = ver; Gd.wq = wq;
     const M = S.map, bit = BIT[cls], woodC = cls === 'track' ? 3 : 1.6, roadC = ROAD_COST[cls], offK = 20 / wq, naval = cls === 'naval';
     const block = Gd.block, open = Gd.open, k = Gd.k, road = roadW(M);
-    if (naval) { const sea = M.sea; for (let c = 0; c < N; c++) block[c] = !sea[c] || occ[c] !== 0 ? 1 : 0; }
+    if (naval) { const sea = M.sea; for (let c = 0; c < N; c++) block[c] = !sea[c] || (g[c] & 128) || occ[c] !== 0 ? 1 : 0; }
     else for (let c = 0; c < N; c++) block[c] = (g[c] & bit) !== 0 || occ[c] !== 0 ? 1 : 0;
     const DX = [1, 1, 0, -1, -1, -1, 0, 1], DY = [0, 1, 1, 1, 0, -1, -1, -1];
     for (let y = 0, c = 0; y < H; y++) for (let x = 0; x < W; x++, c++) {
@@ -6156,6 +6209,7 @@ const Rules = (() => {
     stepSat(S);
     stepTowns(S);
     stepPoints(S);
+    stepIce(S);
     const danger = S.tick % SCAT_EVERY === 0 && S.shots.length ? dangerOf(S) : null;
     // Every other tick the units act from the last to the first, so no side's units always act first. Those made
     // during the tick act after the rest.
@@ -6262,7 +6316,7 @@ const Rules = (() => {
     msin, mcos, matan2, mhypot,
     BRIDGE_HP, SPELL, SKIES, WEATHERS, nightAt, skyOf, offGoing, route, weatherAt, sky, dayAt, spellOf, bridgeAt, clsOf, houseHp, hurtBridge, ignite, shielded,
     coverPoints, coverNear, COVER_R, COVER_ARC, FORMS, formOfGroup, STANCES,
-    FB_AT, PIN, TRAINERS, producerOf, canExplore, nameFor, townName, theatreOf, UPGRADES, UP_AGE, upCost, upNote, upsAt, upK, upBlocked, hpOf, rangeOf, capOf, showersAt, showerAt, capDown,
+    FB_AT, PIN, TRAINERS, producerOf, canExplore, nameFor, townName, theatreOf, UPGRADES, UP_AGE, upCost, upNote, upsAt, upK, upBlocked, hpOf, rangeOf, capOf, showersAt, showerAt, capDown, iceThaw, setIce, ICE_MAX,
   };
 })();
 if (typeof module !== 'undefined') module.exports = Rules;
@@ -10306,13 +10360,13 @@ if (typeof module !== 'undefined') module.exports = Looks;
       // 45 and 135 degrees, then flat and upright lines for the darkest, each line a little uneven with small gaps.
       // The ground's hatching is pinned to the map so it pans with it, the units' redraws a few times a second.
       const ink = new THREE.ShaderMaterial({ uniforms: { t: { value: null }, tSubj: { value: null }, tHeat: { value: null }, tPaper: { value: null }, res: { value: new THREE.Vector2(1, 1) }, uTime: { value: 0 }, uK: { value: 1 }, uOff: { value: new THREE.Vector2() }, uStyle: { value: 8 }, tNorm: { value: null }, tFogS: { value: null }, tLand: { value: null }, uSun2: { value: new THREE.Vector2(-1, 0) }, uUpV: { value: new THREE.Vector3(0, 1, 0) }, uRoad: { value: 0 }, uOre: { value: 0 }, uMarks: { value: 1 }, uRoadAge: { value: 4 }, uShadeH: { value: 1 }, tShade: { value: null },
-        uWindS: { value: new THREE.Vector2() }, uView: { value: new THREE.Vector2(1, 0) }, tFx: { value: null }, tAnc: { value: null }, uDark: { value: 0 }, uTone: { value: 0 }, uInks: { value: 0 }, uFxs: { value: 0 }, uFire: { value: 0 }, uUnits: { value: 0 }, tH: SH.tH, uHSize: { value: new THREE.Vector2(1, 1) }, uHScale: { value: 1 }, uSnowF: { value: 0 }, uSnowC: SH.uSnowC, uSnowLine: SH.uSnowLine, uIceLine: SH.uIceLine, uCapH: SH.uCapH, uCapK: SH.uCapK, uDraw: SH.uDraw, uSubjK: SH.uSubjK, tFlow: SH.tFlow, tBrook: SH.tBrook, uFlora: SH.uFlora, uShow: SH.uShow, uShowS: SH.uShowS, uGolfC: SH.uGolfC, uCastK: SH.uCastK, uDustT: SH.uDustT, uGolf: SH.uGolf, uGolfB: SH.uGolfB, tCover: SH.tCover, uFieldK: SH.uFieldK, uFieldK2: SH.uFieldK2, uPark: SH.uPark, uBridgeKind: SH.uBridgeKind, uFog: { value: 0 }, uMist: { value: 0 }, uNight: { value: 0 },
+        uWindS: { value: new THREE.Vector2() }, uView: { value: new THREE.Vector2(1, 0) }, tFx: { value: null }, tAnc: { value: null }, uDark: { value: 0 }, uTone: { value: 0 }, uInks: { value: 0 }, uFxs: { value: 0 }, uFire: { value: 0 }, uUnits: { value: 0 }, tH: SH.tH, uHSize: { value: new THREE.Vector2(1, 1) }, uHScale: { value: 1 }, uSnowF: { value: 0 }, uSnowC: SH.uSnowC, uSnowLine: SH.uSnowLine, uIceLine: SH.uIceLine, uCapH: SH.uCapH, uCapK: SH.uCapK, uDraw: SH.uDraw, uSubjK: SH.uSubjK, uIceOn: SH.uIceOn, tFlow: SH.tFlow, tBrook: SH.tBrook, uFlora: SH.uFlora, uShow: SH.uShow, uShowS: SH.uShowS, uGolfC: SH.uGolfC, uCastK: SH.uCastK, uDustT: SH.uDustT, uGolf: SH.uGolf, uGolfB: SH.uGolfB, tCover: SH.tCover, uFieldK: SH.uFieldK, uFieldK2: SH.uFieldK2, uPark: SH.uPark, uBridgeKind: SH.uBridgeKind, uFog: { value: 0 }, uMist: { value: 0 }, uNight: { value: 0 },
         uDayMul: { value: new THREE.Vector3(1, 1, 1) }, uDayAdd: { value: new THREE.Vector3() }, uWaterL: { value: -0.15 }, uCloudK: SH.uCloudK, tMarks: SH.tMarks, uMap: SH.uMap,
         uCloud: SH.uCloud, uCloudT: SH.uCloudT, uSunW: SH.uSunDir, uCloudA: { value: 0 }, uCloudG: { value: 0 }, uRayK: { value: 0 }, uDust: { value: new THREE.Vector4() },
         uInvVP: { value: new THREE.Matrix4() }, uW2S: { value: new THREE.Vector4(1, 0, 0, 1) }, uLev: { value: 1 }, tTerr: SH.tTerr, uBorder: SH.uBorder, uMe: { value: 0 },
         // Each side's colour as the anchor pass keeps it, its hue and how coloured it is, and its inks on either paper.
         uSideKey: { value: [...Array(8)].map(() => new THREE.Vector2()) }, uSideL: { value: [...Array(8)].map(() => new THREE.Vector3()) }, uSideD: { value: [...Array(8)].map(() => new THREE.Vector3()) }, uSideB: { value: [...Array(8)].map(() => new THREE.Vector3()) } }, vertexShader: vs, depthTest: false, depthWrite: false, fragmentShader: `
-        varying vec2 vUv; uniform sampler2D t, tSubj, tHeat, tPaper, tNorm, tFogS, tLand, tMarks; uniform float uMap; uniform vec2 res, uOff, uSun2, uWindS, uView, uHSize; uniform float uHScale, uFxs, uFire; uniform int uUnits, uInks; uniform float uDark, uTone; uniform sampler2D tH, tFx, tAnc, tFlow, tBrook, tCover, tShade; uniform vec4 uFieldK, uFieldK2; uniform vec4 uShow[8]; uniform vec2 uShowS[8]; uniform vec3 uGolfC[4]; uniform float uCastK; uniform vec2 uDustT; uniform vec4 uGolf[16]; uniform vec3 uGolfB[24]; uniform vec4 uPark[16]; uniform vec3 uUpV, uDayMul, uDayAdd; uniform float uTime, uK, uSnowF, uSnowC, uSnowLine, uIceLine, uCapH, uCapK, uDraw, uSubjK, uFlora, uBridgeKind, uFog, uMist, uNight, uWaterL, uCloudK, uMarks, uRoadAge, uShadeH; uniform int uStyle, uRoad, uOre;
+        varying vec2 vUv; uniform sampler2D t, tSubj, tHeat, tPaper, tNorm, tFogS, tLand, tMarks; uniform float uMap; uniform vec2 res, uOff, uSun2, uWindS, uView, uHSize; uniform float uHScale, uFxs, uFire; uniform int uUnits, uInks; uniform float uDark, uTone; uniform sampler2D tH, tFx, tAnc, tFlow, tBrook, tCover, tShade; uniform vec4 uFieldK, uFieldK2; uniform vec4 uShow[8]; uniform vec2 uShowS[8]; uniform vec3 uGolfC[4]; uniform float uCastK; uniform vec2 uDustT; uniform vec4 uGolf[16]; uniform vec3 uGolfB[24]; uniform vec4 uPark[16]; uniform vec3 uUpV, uDayMul, uDayAdd; uniform float uIceOn; uniform float uTime, uK, uSnowF, uSnowC, uSnowLine, uIceLine, uCapH, uCapK, uDraw, uSubjK, uFlora, uBridgeKind, uFog, uMist, uNight, uWaterL, uCloudK, uMarks, uRoadAge, uShadeH; uniform int uStyle, uRoad, uOre;
         uniform vec2 uSideKey[8]; uniform vec3 uSideL[8], uSideD[8], uSideB[8];
         uniform sampler2D tTerr; uniform float uBorder, uMe;
         uniform vec2 uCloud; uniform vec3 uSunW; uniform float uCloudT, uCloudA, uCloudG, uRayK; uniform vec4 uDust;
@@ -11142,6 +11196,20 @@ if (typeof module !== 'undefined') module.exports = Looks;
               // A brook's ford lies shallow, its wash paler.
               base = mix(base, mix(base, paperC, 0.5), bkS.g * isW);
               base = mix(base, base * (dk ? 0.5 : 0.8), shB * isW);
+              // Ice on frozen water, as the rules have it: a pale wash with the ripples stilled under it, broken here and
+              // there by a fine meandering crack, with drifts of snow lying on it. Brooks, which men wade in any case,
+              // freeze as soon as any water does.
+              if (uIceOn > 0.5 && isW > 0.0) {
+                float iceK = max(LW.a, 1.0 - smoothstep(bkHW, bkHW + 0.3, bkD)) * isW;
+                if (iceK > 0.01) {
+                  float ck = abs(noise(Wl * 0.8 + 17.0) - 0.5), ckW = max(fwidth(ck), 1e-4);
+                  float crack = (1.0 - smoothstep(0.4 * ckW * uK, 1.2 * ckW * uK, ck)) * smoothstep(0.45, 0.6, noise(Wl * 0.23 + 9.0));
+                  float drift = smoothstep(0.55, 0.78, noise(Wl * 0.35 + 3.0));
+                  vec3 ICEC = mix(dk ? vec3(0.4, 0.46, 0.54) : vec3(0.89, 0.92, 0.95), dk ? vec3(0.6, 0.62, 0.66) : vec3(0.98, 0.98, 0.97), drift * 0.75);
+                  ICEC = mix(ICEC, dk ? vec3(0.66, 0.74, 0.88) : vec3(0.44, 0.54, 0.72), crack * 0.55 * (1.0 - drift));
+                  base = mix(base, ICEC, iceK);
+                }
+              }
               if (isT > 0.0) {
                 float tn = noise(p / (60.0 * uK));
                 vec3 TR = tn < 0.4 ? TREE3 : tn < 0.62 ? TREE1 : TREE2;
@@ -11828,7 +11896,7 @@ if (typeof module !== 'undefined') module.exports = Looks;
 // Mapmaker's War, the picture. Terrain is baked once. Units are instanced by part. Fog, borders and
 // battle scars live in small textures every material reads. Fire and smoke are GPU particles.
 const World = (() => {
-  const { RES, HZ, UNITS, BUILDINGS, clamp, lerp, smooth, terrainAt, heightAt, mulberry, noiser } = Rules;
+  const { RES, HZ, UNITS, BUILDINGS, clamp, lerp, smooth, terrainAt, heightAt: groundAt, mulberry, noiser } = Rules;
   // The map's size comes with each world loaded: a duel is 128 cells across, the shared world 256.
   let W = Rules.W, H = Rules.H, VW = Rules.VW, VH = Rules.VH;
 
@@ -11906,6 +11974,8 @@ const World = (() => {
       uIceLine: { value: 99 }, uCapH: { value: 99 }, uCapK: { value: 0 },
       // How far the map is drawn in, 0 bare paper to 1 drawn, and how far its units and buildings are, the same.
       uDraw: { value: 1 }, uSubjK: { value: 1 },
+      // Whether any water is frozen; where it is lies in the heights texture's alpha.
+      uIceOn: { value: 0 },
       // The way the rivers run, from buildFlow, and how far each point lies from a brook and whether at its ford.
       tFlow: { value: black }, tBrook: { value: farBrook },
       // The land's cover from buildFields: the beaches in red, and the farmland round the towns, its extent in green,
@@ -12667,6 +12737,26 @@ const World = (() => {
     let S = null, M = null, theme = null, viewTeam = 0, sets = {}, terrainMesh = null, waterMesh = null, statics = [], baseImage = null;
     // The water's level at a point: the map's one level, or a gorge's lower one, as on The Falls.
     const wAt = (x, y) => Rules.waterLevel(M, x, y);
+    // What things stand on: the land or a bridge's deck, and on frozen water the ice.
+    const heightAt = (Mp, x, y) => {
+      const h = groundAt(Mp, x, y);
+      if (!S || !S.iceR) return h;
+      return S.gnd[clamp(y | 0, 0, Mp.H - 1) * Mp.W + clamp(x | 0, 0, Mp.W - 1)] & 128 ? Math.max(h, Rules.waterLevel(Mp, x, y)) : h;
+    };
+    // The frozen water for the ink to draw ice on, in the heights texture's alpha on the heights' grid, each point
+    // frozen where its cell is. Written again when the ice changes.
+    let iceSeen = -1;
+    function updateIce() {
+      if (!S || !hTex || (S.iceVer || 0) === iceSeen) return;
+      iceSeen = S.iceVer || 0;
+      const d = hTex.image.data, one = toHalf(1), zero = toHalf(0), R = Rules.RES;
+      for (let j = 0; j < VH; j++) for (let i = 0; i < VW; i++) {
+        const c = Math.min(M.H - 1, j / R | 0) * M.W + Math.min(M.W - 1, i / R | 0);
+        d[(j * VW + i) * 4 + 3] = (S.gnd[c] & 128) && (M.ground[c] & 2) ? one : zero;
+      }
+      hTex.needsUpdate = true;
+      SH.uIceOn.value = S.iceR > 0 ? 1 : 0;
+    }
     const rs = new Map();
     let wrecks = [], corpses = [], bleeds = [], flyers = [], planes = [], falls = [], marks = null, marksTex = null, marksDirty = false, marksLast = 0, treadFade = 0;
     let fogTex = null, fogData = null, fogR = null, fogG = null, terrTex = null, terrData = null, terrSeen = -1, hTex = null, flowTex = null, brookTex = null, beachTex = null, beachMap = null, riverLines = [], names = null;
@@ -14981,7 +15071,7 @@ const World = (() => {
 
     function load(state, themeName, team) {
       clearWorld();
-      S = state; M = S.map; theme = THEMES[themeName] || THEMES.desert; viewTeam = team;
+      S = state; M = S.map; theme = THEMES[themeName] || THEMES.desert; viewTeam = team; iceSeen = -1;
       Rules.setSize(M.W);
       W = M.W; H = M.H; VW = Rules.VW; VH = Rules.VH; CX = W / 2; CY = H / 2;
       SH.uMap.value = W;
@@ -15055,7 +15145,7 @@ const World = (() => {
         }
       }
       // The land's heights as a texture, for passes that draw the ground's form, with in green how far a gorge's
-      // water lies under the rest and in blue a falls' rapids.
+      // water lies under the rest, in blue a falls' rapids, and in alpha the frozen water, set by updateIce.
       if (hTex) hTex.dispose();
       const hd = new Uint16Array(M.h.length * 4);
       for (let i = 0; i < M.h.length; i++) { hd[i * 4] = toHalf(M.h[i]); hd[i * 4 + 1] = toHalf(lw[i * 2]); hd[i * 4 + 2] = toHalf(lw[i * 2 + 1]); hd[i * 4 + 3] = toHalf(0); }
@@ -16297,6 +16387,7 @@ const World = (() => {
       if (SH.uDraw.value < drawTo.map) SH.uDraw.value = Math.min(drawTo.map, SH.uDraw.value + dt * 0.9);
       if (SH.uSubjK.value < drawTo.subj) SH.uSubjK.value = Math.min(drawTo.subj, SH.uSubjK.value + dt * 2.5);
       SH.uShadowK.value = shadowK * SH.uSubjK.value;
+      updateIce();
       updateSky(dt);
       updateDust(alpha);
       updateMist(alpha);
@@ -18339,6 +18430,8 @@ const Hud = (() => {
       let note = SKY_NOTE[w.kind] || (Rules.nightAt(s.tick) > 0.5 ? 'Night: sight cut short, flares light the way' : '');
       if (s.flooded) note = note ? note + '. Fords flooded' : 'Fords flooded';
       if (Rules.capDown(s)) note = note ? note + '. Cloud on the heights' : 'Cloud on the heights hides them';
+      // Ice on the water: men may cross it, and as the snow melts it thins and gives way.
+      if (s.iceR > 0) note = Rules.iceThaw(s) ? (note ? note + '. Ice thinning' : 'Ice thinning: get off it') : (note ? note + '. Water frozen' : 'Water frozen: men cross on the ice');
       if (w.next !== w.kind && w.left < 40 * HZ) note = (SKY_NAME[w.next] || w.next) + ' coming';
       // A newcomer's protection, counting down.
       const me = game.team >= 0 ? s.P[game.team] : null, left = me && me.shield > s.tick ? Math.ceil((me.shield - s.tick) / HZ) : 0;
