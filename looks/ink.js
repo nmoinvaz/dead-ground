@@ -622,6 +622,10 @@
               // A beach by still water: sand on the steppe and the salt flats, grey shingle in the snowy pass, its
               // contours faint, wet and darker along the water's edge.
               vec4 cov = texture2D(tCover, Wl / uMap);
+              // Marsh, as a survey map draws it: a faint blue-green wash over the low wet ground, with rows of short
+              // blue dashes for its standing water and a few upright strokes of reed above them, drawn further on.
+              float msh = smoothstep(0.2, 0.42, LW.a) * (1.0 - smoothstep(0.8, 0.95, LW.a)) * isG * (1.0 - onRoad);
+              tint = mix(tint, dk ? vec3(0.3, 0.37, 0.35) : vec3(0.83, 0.87, 0.82), msh * 0.6);
               float bch = cov.r * (1.0 - cap);
               // A beach's own slope is gentle, so its relief shading is light.
               rfDark *= 1.0 - 0.6 * smoothstep(0.1, 0.45, bch);
@@ -678,6 +682,13 @@
               base = mix(base, CONT, contour * isG * (1.0 - onRoad * 0.55) * (1.0 - wet));
               // The glacier's crevasses and edge, in its blue.
               base = mix(base, dk ? vec3(0.56, 0.68, 0.88) : vec3(0.24, 0.38, 0.66), clamp(crev * 0.9 + iceE * 0.6, 0.0, 1.0) * (1.0 - onRoad));
+              // The marsh's dashes, level across the sheet, and its reeds in the band above each row.
+              if (msh > 0.01) {
+                float mRow = fract(p.y / (7.0 * uK)), mDash = hatch(p, 0.0, 7.0, 0.9, 71.0, 0.5);
+                float mReed = hatch(p, 90.0, 3.2, 0.75, 73.0, 0.72) * step(0.12, mRow) * step(mRow, 0.42);
+                base = mix(base, dk ? vec3(0.55, 0.66, 0.86) : vec3(0.32, 0.44, 0.68), mDash * msh * 0.75);
+                base = mix(base, dk ? vec3(0.5, 0.62, 0.45) : vec3(0.32, 0.42, 0.3), mReed * msh * 0.7);
+              }
               // The rock's strokes run down the fall line, heavy and close on the faces away from the sun and in the
               // gullies, and few and fine on those toward it, so the rock is modelled by its strokes alone.
               if (rock * isG > 0.01) {
@@ -859,7 +870,7 @@
               // there by a fine meandering crack, with drifts of snow lying on it. Brooks, which men wade in any case,
               // freeze as soon as any water does.
               if (uIceOn > 0.5 && isW > 0.0) {
-                float iceK = max(LW.a, 1.0 - smoothstep(bkHW, bkHW + 0.3, bkD)) * isW;
+                float iceK = max(smoothstep(0.6, 0.95, LW.a), 1.0 - smoothstep(bkHW, bkHW + 0.3, bkD)) * isW;
                 if (iceK > 0.01) {
                   float ck = abs(noise(Wl * 0.8 + 17.0) - 0.5), ckW = max(fwidth(ck), 1e-4);
                   float crack = (1.0 - smoothstep(0.4 * ckW * uK, 1.2 * ckW * uK, ck)) * smoothstep(0.45, 0.6, noise(Wl * 0.23 + 9.0));

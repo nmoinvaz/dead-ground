@@ -848,16 +848,17 @@ const World = (() => {
       if (!S || !S.iceR) return h;
       return S.gnd[clamp(y | 0, 0, Mp.H - 1) * Mp.W + clamp(x | 0, 0, Mp.W - 1)] & 128 ? Math.max(h, Rules.waterLevel(Mp, x, y)) : h;
     };
-    // The frozen water for the ink to draw ice on, in the heights texture's alpha on the heights' grid, each point
-    // frozen where its cell is. Written again when the ice changes.
+    // The frozen water and the marsh for the ink to draw, in the heights texture's alpha on the heights' grid, 1 for
+    // ice and a half for marsh, each point as its cell is. Written when a world is loaded and again when the ice
+    // changes.
     let iceSeen = -1;
     function updateIce() {
       if (!S || !hTex || (S.iceVer || 0) === iceSeen) return;
       iceSeen = S.iceVer || 0;
-      const d = hTex.image.data, one = toHalf(1), zero = toHalf(0), R = Rules.RES;
+      const d = hTex.image.data, one = toHalf(1), half = toHalf(0.5), zero = toHalf(0), R = Rules.RES;
       for (let j = 0; j < VH; j++) for (let i = 0; i < VW; i++) {
         const c = Math.min(M.H - 1, j / R | 0) * M.W + Math.min(M.W - 1, i / R | 0);
-        d[(j * VW + i) * 4 + 3] = (S.gnd[c] & 128) && (M.ground[c] & 2) ? one : zero;
+        d[(j * VW + i) * 4 + 3] = (S.gnd[c] & 128) && (M.ground[c] & 2) ? one : M.marsh && M.marsh[c] ? half : zero;
       }
       hTex.needsUpdate = true;
       SH.uIceOn.value = S.iceR > 0 ? 1 : 0;
