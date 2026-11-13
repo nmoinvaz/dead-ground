@@ -2135,6 +2135,41 @@ const Rules = (() => {
     });
   }
   const geyserOn = (S, g) => (S.tick + g.phase) % g.period < GEY_ON;
+  // Quarries. An ore field dug down to QUARRY_AT of its ore is worked out in its middle: a terraced pit QUARRY_K of the
+  // field's radius across opens there once no vehicle stands in it. No vehicle crosses the pit and nothing grows back
+  // in it, though men climb its terraces, and the field's rim is dug and grows as before. S.quarries lists the fields
+  // worked out. None in King of the Hill, where no ore is dug.
+  const QUARRY_AT = 0.03, QUARRY_K = 0.55, QUARRY_EVERY = 5 * HZ;
+  function fieldCells(M) {
+    if (M._fc) return M._fc;
+    return M._fc = M.oreFields.map(f => {
+      const cells = [];
+      for (let y = Math.max(0, Math.floor(f.y - f.r - 1)); y <= Math.min(H - 1, Math.ceil(f.y + f.r + 1)); y++) for (let x = Math.max(0, Math.floor(f.x - f.r - 1)); x <= Math.min(W - 1, Math.ceil(f.x + f.r + 1)); x++) { const c = y * W + x; if (M.ore[c] && mhypot(x + 0.5 - f.x, y + 0.5 - f.y) <= f.r + 1) cells.push(c); }
+      return { cells, full: cells.reduce((s, c) => s + M.ore[c], 0) };
+    });
+  }
+  function stepQuarries(S) {
+    if (S.koth || S.tick % QUARRY_EVERY || !S.tick) return;
+    const M = S.map, F = fieldCells(M), done = S.quarries || (S.quarries = []);
+    M.oreFields.forEach((f, i) => {
+      if (done.includes(i) || !F[i].full) return;
+      let left = 0;
+      for (const c of F[i].cells) left += S.ore[c];
+      if (left > F[i].full * QUARRY_AT) return;
+      const pr = f.r * QUARRY_K;
+      if (S.ents.some(e => !e.b && e.hp > 0 && !isAir(e) && e.d.move !== 'foot' && mhypot(e.x - f.x, e.y - f.y) < pr + 1.5)) return;
+      const cells = [], bits = [];
+      for (let y = Math.max(0, Math.floor(f.y - pr)); y <= Math.min(H - 1, Math.ceil(f.y + pr)); y++) for (let x = Math.max(0, Math.floor(f.x - pr)); x <= Math.min(W - 1, Math.ceil(f.x + pr)); x++) {
+        const c = y * W + x;
+        if (mhypot(x + 0.5 - f.x, y + 0.5 - f.y) > pr || (S.gnd[c] & 2) || S.occ[c] || M.roadDist[Math.round((y + 0.5) * RES) * VW + Math.round((x + 0.5) * RES)] < 1.5) continue;
+        cells.push(c); bits.push(S.gnd[c] | 1 | 4);
+        if (S.ore[c]) { S.ore[c] = 0; S.oreVer++; }
+      }
+      done.push(i);
+      setGround(S, cells, bits);
+      S.ev.push({ t: 'quarry', field: i, x: f.x, y: f.y });
+    });
+  }
   // Whether the frost is going: ice lies and the snow that keeps it is melting.
   const iceThaw = S => (S.iceR || 0) > 0 && sky(S).cover < 0.3;
   // The cells the cloud covers when it is down, worked out once for the map.
@@ -2502,7 +2537,7 @@ const Rules = (() => {
       // The ground and the trees as pairs of cell and value, only where they differ from the map's start.
       gnd: diffs(S.gnd, S.map.ground), wood: diffs(S.wood, null), gndVer: S.gndVer, woodVer: S.woodVer, burn: S.burn, bridges: S.bridges, hh: S.hh, hr: S.hr, flooded: S.flooded,
       trail: b64.en(S.trail), trailSum: S.trailSum, hist: S.hist,
-      koth: S.koth, points: S.points, score: S.score, field: S.field, iceR: S.iceR || 0, iceVer: S.iceVer || 0,
+      koth: S.koth, points: S.points, score: S.score, field: S.field, iceR: S.iceR || 0, iceVer: S.iceVer || 0, quarries: S.quarries || [],
     };
   }
   function diffs(a, base) { const o = []; for (let c = 0; c < a.length; c++) if (a[c] !== (base ? base[c] : 0)) o.push(c, a[c]); return o; }
@@ -2531,7 +2566,7 @@ const Rules = (() => {
     const gd = o.gnd || [], wd = o.wood || [];
     for (let i = 0; i < gd.length; i += 2) S.gnd[gd[i]] = gd[i + 1];
     for (let i = 0; i < wd.length; i += 2) S.wood[wd[i]] = wd[i + 1];
-    S.gndVer = o.gndVer || 0; S.woodVer = o.woodVer || 0; S.burn = o.burn || []; S.flooded = !!o.flooded; S.iceR = o.iceR || 0; S.iceVer = o.iceVer || 0;
+    S.gndVer = o.gndVer || 0; S.woodVer = o.woodVer || 0; S.burn = o.burn || []; S.flooded = !!o.flooded; S.iceR = o.iceR || 0; S.iceVer = o.iceVer || 0; S.quarries = (o.quarries || []).slice();
     if (o.trail) S.trail = new Uint8Array(b64.de(o.trail)); S.trailSum = o.trailSum || 0;
     // A game saved before the record was kept starts its record now.
     if (o.hist) S.hist = o.hist;
@@ -5608,6 +5643,7 @@ const Rules = (() => {
     stepTowns(S);
     stepPoints(S);
     stepIce(S);
+    stepQuarries(S);
     const danger = S.tick % SCAT_EVERY === 0 && S.shots.length ? dangerOf(S) : null;
     // Every other tick the units act from the last to the first, so no side's units always act first. Those made
     // during the tick act after the rest.
@@ -5626,7 +5662,8 @@ const Rules = (() => {
       const f = S.map.oreFields[S.tick / (HZ * 4) % S.map.oreFields.length];
       for (let i = 0; i < 40; i++) {
         const c = cellOf(f.x + (S.rand() - 0.5) * f.r * 1.6, f.y + (S.rand() - 0.5) * f.r * 1.6);
-        if (S.map.ore[c] && S.ore[c] < S.map.ore[c]) { S.ore[c] = Math.min(S.map.ore[c], S.ore[c] + 18); S.oreVer++; }
+        // Nothing grows back in a quarry's pit.
+        if (S.map.ore[c] && S.ore[c] < S.map.ore[c] && !(S.gnd[c] & ~S.map.ground[c] & 1)) { S.ore[c] = Math.min(S.map.ore[c], S.ore[c] + 18); S.oreVer++; }
       }
     }
     if (S.ents.some(e => e.hp <= 0)) {
@@ -5714,7 +5751,7 @@ const Rules = (() => {
     msin, mcos, matan2, mhypot,
     BRIDGE_HP, SPELL, SKIES, WEATHERS, nightAt, skyOf, offGoing, route, weatherAt, sky, dayAt, spellOf, bridgeAt, clsOf, houseHp, hurtBridge, ignite, shielded,
     coverPoints, coverNear, COVER_R, COVER_ARC, FORMS, formOfGroup, STANCES,
-    FB_AT, PIN, TRAINERS, producerOf, canExplore, nameFor, townName, theatreOf, UPGRADES, UP_AGE, upCost, upNote, upsAt, upK, upBlocked, hpOf, rangeOf, capOf, showersAt, showerAt, capDown, iceThaw, setIce, ICE_MAX, geyserOn, GEY_R,
+    FB_AT, PIN, TRAINERS, producerOf, canExplore, nameFor, townName, theatreOf, UPGRADES, UP_AGE, upCost, upNote, upsAt, upK, upBlocked, hpOf, rangeOf, capOf, showersAt, showerAt, capDown, iceThaw, setIce, ICE_MAX, geyserOn, GEY_R, QUARRY_K, stepQuarries,
   };
 })();
 if (typeof module !== 'undefined') module.exports = Rules;
