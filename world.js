@@ -2460,7 +2460,7 @@ const World = (() => {
     // two more churn up the face from the foot; the haze ahead of it is the ink look's. The heads rise with the
     // storm's strength and fall as it dies. Everything comes of the seed and the clock, so every player sees one
     // storm.
-    const DUST_SP = 4.6, DUST_CAP = 1400, wallC = [];
+    const DUST_SP = 6.4, DUST_CAP = 1400, wallC = [];
     let dustMesh = null;
     const dHash = (i, k, sd) => { const v = Math.sin(i * 12.9898 + k * 78.233 + sd * 0.1372) * 43758.5453; return v - Math.floor(v); };
     // The front's sway along its line, shared with the ink look so its haze begins where the heads stand.
@@ -2594,26 +2594,27 @@ const World = (() => {
       for (let i = -L; i <= L; i++) {
         const h = k => dHash(i, k, sd), s = (i + (h(20) - 0.5) * 0.6) * DUST_SP, f0 = front + dustWob(s, t, ph);
         const bx = cx + w.dx * f0 + px * s, by = cy + w.dy * f0 + py * s;
-        if (bx < -10 || by < -10 || bx > W + 10 || by > H + 10) continue;
+        // Now and then a head is missing, so the front breaks into clouds with the dust's own haze between them.
+        if (bx < -10 || by < -10 || bx > W + 10 || by > H + 10 || h(21) < 0.32) continue;
         const hs = (0.85 + 0.55 * h(1)) * kk, br = k => 1 + 0.08 * Math.sin(t * 0.25 + h(k) * 6.28);
         // Each billow sits off its head's middle along the front.
         const at = (k, wd = 3.2) => [bx + px * (h(k) - 0.5) * wd * hs, by + py * (h(k) - 0.5) * wd * hs];
         let q;
         // The body: foot, face, crown and sometimes a tower, each [along, f, height, radius].
         const body = [[at(2), 0, 1.6 * hs, 2.9 * hs * br(2)], [at(3), -2.2 * hs, 4.6 * hs, 3.8 * hs * br(3)], [at(4), -4.6 * hs, 8.2 * hs, 4.4 * hs * br(4)]];
-        if (h(5) > 0.4) body.push([at(6, 4), -6.5 * hs, 12 * hs, 3.9 * hs * br(6)]);
+        if (h(5) > 0.75) body.push([at(6, 4), -6.5 * hs, 12 * hs, 3.9 * hs * br(6)]);
         body.forEach(([p, f, y, r], j) => put(p[0], p[1], f, y, r, hs, j ? 0.86 : 0.7));
         // Billows boiling on the face, crown and tower, rolling from the back over the top and down the face.
         body.forEach(([p, f, y, r], j) => {
           if (!j) return;
-          for (let k = 0; k < (j === 2 ? 3 : 2); k++) {
+          for (let k = 0; k < (j === 2 ? 2 : 1); k++) {
             const u = 30 + j * 4 + k, ph2 = (t * (0.025 + 0.015 * h(u)) + h(u + 50)) % 1, a = Math.PI * (1 - ph2) - 0.5 * ph2, sw = Math.pow(Math.sin(Math.PI * ph2), 0.6);
             const lat = (h(u + 90) - 0.5) * 1.1 * r;
             put(p[0] + px * lat, p[1] + py * lat, f + Math.cos(a) * r * 0.8, y + Math.sin(a) * r * 0.8, r * (0.32 + 0.22 * h(u + 70)) * sw, hs);
           }
         });
-        // Two billows churning up the face from the foot to the crown.
-        for (let k = 0; k < 2; k++) {
+        // A billow churning up the face from the foot to the crown.
+        for (let k = 0; k < 1; k++) {
           const f = (t * 0.035 + h(7 + k) + k * 0.5) % 1, sw = Math.sin(Math.PI * f);
           q = at(9 + k); put(q[0], q[1], (1.0 - 5.6 * f) * hs, (1.2 + 7.0 * f) * hs, (0.8 + 2.0 * sw) * sw * hs, hs);
         }
