@@ -668,7 +668,7 @@ body[data-look="ink"] .sheet { box-shadow: 4px 4px 0 var(--ink); }
       <div class="choice"><h2>Shadow strength</h2><div id="s-shadow"><button data-v="full">Full</button><button data-v="light">Light</button><button data-v="off">Off</button></div></div>
       <div class="choice"><h2>Edge lines</h2><div id="s-edges" class="two"><button data-v="quick">Quick</button><button data-v="exact">Exact</button></div></div>
       <div class="choice"><h2>Music</h2><div id="s-music" class="two"><button data-v="on">On</button><button data-v="off">Off</button></div></div>
-      <p id="build">Build 07d7d59 2026-11-12 18:07</p>
+      <p id="build">Build 610a3be 2026-11-12 18:15</p>
       <p id="source"><a href="https://github.com/nmoinvaz/mapmakers-war" target="_blank" rel="noopener">Source on GitHub</a></p>
     </div>
     <div id="banner" hidden></div>
@@ -2603,6 +2603,22 @@ const Rules = (() => {
     return d > 0 ? Math.max(d, t) : t;
   }
 
+  // Old castles' ruins on the hilltops of the maps whose hills are fought for: one on each of the map's high points,
+  // found as King of the Hill finds its points, so in that mode each point is a ruined castle. A ruin is a square of
+  // broken curtain wall RUIN_R from its middle round a fallen keep. Its walls are cover, one inside sees RUIN_SIGHT
+  // as far, and nothing is built in it. Found from the map when a game begins.
+  const RUIN_R = 3.4, RUIN_SIGHT = 1.25, RUINED = new Set(['pass', 'twinlakes', 'peaks', 'highlands', 'crater', 'mesa']);
+  function ruinsOf(M) {
+    if (M.ruins) return M.ruins;
+    M.ruins = [];
+    if (!RUINED.has(M.kind)) return M.ruins;
+    const m = Object.values(MAPS).find(e => e.layout === M.kind), n = m && m.koth || 3;
+    for (const p of kothPoints({ map: M, bases: M.bases }, n)) {
+      M.ruins.push({ x: p.x, y: p.y, r: RUIN_R, a: matan2(CY - p.y, CX - p.x) + PI / 4 });
+      for (let y = Math.max(0, Math.floor(p.y - RUIN_R - 1)); y <= Math.min(H - 1, Math.ceil(p.y + RUIN_R + 1)); y++) for (let x = Math.max(0, Math.floor(p.x - RUIN_R - 1)); x <= Math.min(W - 1, Math.ceil(p.x + RUIN_R + 1)); x++) if (mhypot(x + 0.5 - p.x, y + 0.5 - p.y) < RUIN_R + 1) M.ground[y * W + x] |= 4;
+    }
+    return M.ruins;
+  }
   // Cover. Fixed points on the land a squad is sent to hold, after Rainbow Six's team orders: the kind of place
   // says what the team does there. Found once from the map and kept on it, each with the way it faces. A squad
   // stopped within COVER_R of one is in cover, and a shot from within COVER_ARC of its facing is softened.
@@ -2641,6 +2657,8 @@ const Rules = (() => {
       const a = matan2(-sy, -sx);
       edge.push(t); put(t.x + mcos(a) * 1.4, t.y + msin(a) * 1.4, 'wood', a);
     }
+    // An old castle's ruin: its walls' inner faces, a man behind each facing out.
+    for (const r of M.ruins || []) for (let k = 0; k < 8; k++) { const a = r.a + k / 8 * TAU; put(r.x + mcos(a) * (r.r - 0.9), r.y + msin(a) * (r.r - 0.9), 'wall', a); }
     // Old trenches: the middle of each bay, a man in it facing either way across the line.
     for (const t of M.trenches || []) for (let i = 0; i + 1 < t.length; i += 2) {
       const [x0, y0] = t[i], [x1, y1] = t[i + 1], a = matan2(y1 - y0, x1 - x0);
@@ -3079,6 +3097,7 @@ const Rules = (() => {
   // supply the later it starts. The game is over when one side is left.
   function newGame(o = {}) {
     const kind = o.layout || 'duel', M = mapFor(o.seed || 1, kind, o.debug), seed = M.seed;
+    ruinsOf(M);
     coverPoints(M);
     const n = M.bases.length;
     const seats = (o.seats || [...Array(n).keys()]).filter(t => t >= 0 && t < n);
@@ -3634,7 +3653,8 @@ const Rules = (() => {
       else if (e.d.move === 'air' || e.d.move === 'jet') light(P, e.x, e.y, e.d.sight * (up ? 1 : faAt(e) * (1 - 0.3 * n) * inSh(e)), 0, true);
       // A ground unit sees a half again as far across open water, and a scout two and a half times as far. A ship's
       // sight is its own.
-      else light(P, e.x, e.y, e.d.sight * (up ? 1 : fkAt(e) * nu * inSh(e)) * (e.cov >= 0 ? 1.2 : 1), 1.1, false, e.d.move === 'naval' ? 1 : canExplore(e) ? 2.5 : 1.5, e);
+      // One standing in an old castle's ruin sees a quarter farther from its walls.
+      else light(P, e.x, e.y, e.d.sight * (up ? 1 : fkAt(e) * nu * inSh(e)) * (e.cov >= 0 ? 1.2 : 1) * (M.ruins && M.ruins.length && M.ruins.some(r => mhypot(r.x - e.x, r.y - e.y) < r.r) ? RUIN_SIGHT : 1), 1.1, false, e.d.move === 'naval' ? 1 : canExplore(e) ? 2.5 : 1.5, e);
     }
     for (const t of S.towns) if (t.owner >= 0 && mine(t.owner)) light(S.P[t.owner], t.x, t.y, 9 * fkAt(t) * (1 - 0.25 * n), 2, false, 1, t);
     for (const s of S.sweeps) if (s.until > S.tick && mine(s.team)) light(S.P[s.team], s.x, s.y, s.r, 0, true);
@@ -13794,6 +13814,24 @@ const World = (() => {
           par.push({ x: mx + nx * 0.36 * near, y: g + 0.05, z: my + ny * 0.36 * near, sx: len + 0.1, sy: 0.1, sz: 0.24, a, c: 0xc8b896 }); }
       }
       if (tr.length) { instanced(sc.block, plainTint, tr, false); instanced(sc.block, plainTint, par, false); }
+      // Old castles' ruins: a square of curtain wall broken into stretches of uneven height with gaps where it has
+      // fallen, stumps of its four corner towers, a fallen keep in the middle and rubble about, in a weathered stone,
+      // each piece standing on the hill's slope below it.
+      const rw = [], rrub = [];
+      for (const [ri, r] of (M.ruins || []).entries()) {
+        const h = (k, s) => { const v = Math.sin((ri + 1) * 91.7 + k * 12.9898 + s) * 43758.5453; return v - Math.floor(v); };
+        const ca = Math.cos(r.a), sa = Math.sin(r.a), at = (u, v) => [r.x + u * ca - v * sa, r.y + u * sa + v * ca], R0 = r.r - 0.3;
+        const piece = (u, v, len, ht, th, rot, c) => { const [x, z] = at(u, v), g = terrainAt(M, x, z); rw.push({ x, y: g + ht / 2 - 0.15, z, sx: len, sy: ht + 0.3, sz: th, a: -(r.a + rot), c }); };
+        for (let side = 0; side < 4; side++) for (let k = -3; k < 3; k++) {
+          if (h(side * 8 + k, 1) < 0.28) continue;
+          const t = k + 0.5, ht = 0.18 + h(side * 8 + k, 2) * 0.4, rot = side * Math.PI / 2, u = Math.cos(rot) * R0 - Math.sin(rot) * t * R0 / 3, v = Math.sin(rot) * R0 + Math.cos(rot) * t * R0 / 3;
+          piece(u, v, 0.3, ht, R0 / 3 + 0.05, rot, 0xc4bcaa);
+        }
+        for (let c = 0; c < 4; c++) { const rot = c * Math.PI / 2 + Math.PI / 4, d = R0 * Math.SQRT2; piece(Math.cos(rot) * d, Math.sin(rot) * d, 0.85, 0.35 + h(c, 3) * 0.55, 0.85, rot, 0xbab19c); }
+        piece(0, 0, 1.5, 0.45 + h(9, 4) * 0.35, 1.3, 0.2, 0xb2a892);
+        for (let k = 0; k < 6; k++) { const [x, z] = at((h(k, 5) - 0.5) * R0 * 1.4, (h(k, 6) - 0.5) * R0 * 1.4); rrub.push({ x, y: terrainAt(M, x, z) + 0.02, z, s: 0.6 + h(k, 7) * 0.5, a: h(k, 8) * 6.28, c: 0xb8ae98 }); }
+      }
+      if (rw.length) { instanced(sc.block, plainTint, rw); instanced(sc.rubble, plainTint, rrub); }
       // Each geyser's vent: a ring of pale sinter stones round its mouth.
       const vents = (S.geysers || []).flatMap(g => [...Array(7).keys()].map(k => { const a = k / 7 * 6.283 + g.x, d = 0.75 + (k % 2) * 0.35, x = g.x + Math.cos(a) * d, y = g.y + Math.sin(a) * d; return { x, y: terrainAt(M, x, y) - 0.08, z: y, s: 0.38 + (k % 3) * 0.1, a: a * 2, c: 0xdedad0 }; }));
       if (vents.length) instanced(sc.rock, plainTint, vents);
