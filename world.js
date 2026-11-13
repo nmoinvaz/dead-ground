@@ -1,7 +1,7 @@
 // Mapmaker's War, the picture. Terrain is baked once. Units are instanced by part. Fog, borders and
 // battle scars live in small textures every material reads. Fire and smoke are GPU particles.
 const World = (() => {
-  const { RES, HZ, UNITS, BUILDINGS, clamp, lerp, smooth, terrainAt, heightAt, mulberry, noiser } = Rules;
+  const { RES, HZ, UNITS, BUILDINGS, clamp, lerp, smooth, terrainAt, heightAt: groundAt, mulberry, noiser } = Rules;
   // The map's size comes with each world loaded: a duel is 128 cells across, the shared world 256.
   let W = Rules.W, H = Rules.H, VW = Rules.VW, VH = Rules.VH;
 
@@ -79,6 +79,8 @@ const World = (() => {
       uIceLine: { value: 99 }, uCapH: { value: 99 }, uCapK: { value: 0 },
       // How far the map is drawn in, 0 bare paper to 1 drawn, and how far its units and buildings are, the same.
       uDraw: { value: 1 }, uSubjK: { value: 1 },
+      // Whether any water is frozen; where it is lies in the heights texture's alpha.
+      uIceOn: { value: 0 },
       // The way the rivers run, from buildFlow, and how far each point lies from a brook and whether at its ford.
       tFlow: { value: black }, tBrook: { value: farBrook },
       // The land's cover from buildFields: the beaches in red, and the farmland round the towns, its extent in green,
@@ -840,6 +842,26 @@ const World = (() => {
     let S = null, M = null, theme = null, viewTeam = 0, sets = {}, terrainMesh = null, waterMesh = null, statics = [], baseImage = null;
     // The water's level at a point: the map's one level, or a gorge's lower one, as on The Falls.
     const wAt = (x, y) => Rules.waterLevel(M, x, y);
+    // What things stand on: the land or a bridge's deck, and on frozen water the ice.
+    const heightAt = (Mp, x, y) => {
+      const h = groundAt(Mp, x, y);
+      if (!S || !S.iceR) return h;
+      return S.gnd[clamp(y | 0, 0, Mp.H - 1) * Mp.W + clamp(x | 0, 0, Mp.W - 1)] & 128 ? Math.max(h, Rules.waterLevel(Mp, x, y)) : h;
+    };
+    // The frozen water for the ink to draw ice on, in the heights texture's alpha on the heights' grid, each point
+    // frozen where its cell is. Written again when the ice changes.
+    let iceSeen = -1;
+    function updateIce() {
+      if (!S || !hTex || (S.iceVer || 0) === iceSeen) return;
+      iceSeen = S.iceVer || 0;
+      const d = hTex.image.data, one = toHalf(1), zero = toHalf(0), R = Rules.RES;
+      for (let j = 0; j < VH; j++) for (let i = 0; i < VW; i++) {
+        const c = Math.min(M.H - 1, j / R | 0) * M.W + Math.min(M.W - 1, i / R | 0);
+        d[(j * VW + i) * 4 + 3] = (S.gnd[c] & 128) && (M.ground[c] & 2) ? one : zero;
+      }
+      hTex.needsUpdate = true;
+      SH.uIceOn.value = S.iceR > 0 ? 1 : 0;
+    }
     const rs = new Map();
     let wrecks = [], corpses = [], bleeds = [], flyers = [], planes = [], falls = [], marks = null, marksTex = null, marksDirty = false, marksLast = 0, treadFade = 0;
     let fogTex = null, fogData = null, fogR = null, fogG = null, terrTex = null, terrData = null, terrSeen = -1, hTex = null, flowTex = null, brookTex = null, beachTex = null, beachMap = null, riverLines = [], names = null;
@@ -3154,7 +3176,7 @@ const World = (() => {
 
     function load(state, themeName, team) {
       clearWorld();
-      S = state; M = S.map; theme = THEMES[themeName] || THEMES.desert; viewTeam = team;
+      S = state; M = S.map; theme = THEMES[themeName] || THEMES.desert; viewTeam = team; iceSeen = -1;
       Rules.setSize(M.W);
       W = M.W; H = M.H; VW = Rules.VW; VH = Rules.VH; CX = W / 2; CY = H / 2;
       SH.uMap.value = W;
@@ -3228,7 +3250,7 @@ const World = (() => {
         }
       }
       // The land's heights as a texture, for passes that draw the ground's form, with in green how far a gorge's
-      // water lies under the rest and in blue a falls' rapids.
+      // water lies under the rest, in blue a falls' rapids, and in alpha the frozen water, set by updateIce.
       if (hTex) hTex.dispose();
       const hd = new Uint16Array(M.h.length * 4);
       for (let i = 0; i < M.h.length; i++) { hd[i * 4] = toHalf(M.h[i]); hd[i * 4 + 1] = toHalf(lw[i * 2]); hd[i * 4 + 2] = toHalf(lw[i * 2 + 1]); hd[i * 4 + 3] = toHalf(0); }
@@ -4470,6 +4492,7 @@ const World = (() => {
       if (SH.uDraw.value < drawTo.map) SH.uDraw.value = Math.min(drawTo.map, SH.uDraw.value + dt * 0.9);
       if (SH.uSubjK.value < drawTo.subj) SH.uSubjK.value = Math.min(drawTo.subj, SH.uSubjK.value + dt * 2.5);
       SH.uShadowK.value = shadowK * SH.uSubjK.value;
+      updateIce();
       updateSky(dt);
       updateDust(alpha);
       updateMist(alpha);

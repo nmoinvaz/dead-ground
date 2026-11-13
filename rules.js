@@ -1907,6 +1907,58 @@ const Rules = (() => {
     S._cap = { k, down };
     return down;
   }
+  // Ice on the water in a hard frost. While snow lies, the ice reaches a cell farther out from the banks each
+  // ICE_EVERY, as far as the theatre's frost allows, so a narrow river freezes across and a wide lake or sea only
+  // along its shores. As the snow melts it draws back, the middle of the water first. Men cross it slowly, as a ford,
+  // and wheels, tracks and ships cannot. One standing on it as it goes is lost through it, as on a bridge that falls.
+  // Only water men cannot wade freezes, so fords and brooks keep their own going.
+  const ICE_EVERY = 10 * HZ, ICE_MAX = { winter: 10, steppe: 4, any: 3, desert: 0 };
+  // Each water cell's distance from the nearest cell that is not water, in steps of one cell, 0 for no water.
+  function iceDist(M) {
+    if (M._iceD) return M._iceD;
+    const D = new Uint8Array(W * H), q = [];
+    const wet = c => (M.ground[c] & 2) && terrainAt(M, c % W + 0.5, (c / W | 0) + 0.5) < waterLevel(M, c % W + 0.5, (c / W | 0) + 0.5);
+    for (let c = 0; c < W * H; c++) if (wet(c)) D[c] = 255;
+    for (let c = 0; c < W * H; c++) if (D[c]) {
+      const x = c % W, y = c / W | 0;
+      if ((x > 0 && !D[c - 1]) || (x < W - 1 && !D[c + 1]) || (y > 0 && !D[c - W]) || (y < H - 1 && !D[c + W])) { D[c] = 1; q.push(c); }
+    }
+    for (let i = 0; i < q.length; i++) {
+      const c = q[i], x = c % W, y = c / W | 0;
+      for (const n of [x > 0 ? c - 1 : -1, x < W - 1 ? c + 1 : -1, y > 0 ? c - W : -1, y < H - 1 ? c + W : -1]) if (n >= 0 && D[n] === 255) { D[n] = Math.min(254, D[c] + 1); q.push(n); }
+    }
+    return M._iceD = D;
+  }
+  function stepIce(S) {
+    if (S.tick % ICE_EVERY || S.tick === 0) return;
+    const max = ICE_MAX[S.theatre] ?? ICE_MAX.any, was = S.iceR || 0;
+    if (!max && !was) return;
+    const w = sky(S);
+    const r = w.cover > 0.4 && was < max ? was + 1 : w.cover < 0.2 && was > 0 ? was - 1 : was;
+    if (r !== was) setIce(S, r);
+  }
+  function setIce(S, r) {
+    const M = S.map, D = iceDist(M), was = S.iceR || 0, cells = [], bits = [];
+    for (let c = 0; c < W * H; c++) {
+      const d = D[c];
+      if (!d) continue;
+      const now = d <= r, before = d <= was;
+      if (now === before) continue;
+      cells.push(c);
+      bits.push(now ? (M.ground[c] & ~(2 | 16)) | 1 | 4 | 128 : M.ground[c]);
+    }
+    S.iceR = r;
+    if (!cells.length) return;
+    setGround(S, cells, bits);
+    S.iceVer = (S.iceVer || 0) + 1;
+    if (r < was) {
+      const gone = new Set(cells);
+      for (const u of S.ents) if (!u.b && u.hp > 0 && !isAir(u) && !(u.drop > 0) && gone.has(cellOf(u.x, u.y)) && blocked(S, clsOf(u), cellOf(u.x, u.y))) hurt(S, u, 1e6, -1, 0);
+    }
+    S.ev.push({ t: 'ice', r, was });
+  }
+  // Whether the frost is going: ice lies and the snow that keeps it is melting.
+  const iceThaw = S => (S.iceR || 0) > 0 && sky(S).cover < 0.3;
   // The cells the cloud covers when it is down, worked out once for the map.
   function capCells(M) {
     if (M._capC) return M._capC;
@@ -2269,7 +2321,7 @@ const Rules = (() => {
       // The ground and the trees as pairs of cell and value, only where they differ from the map's start.
       gnd: diffs(S.gnd, S.map.ground), wood: diffs(S.wood, null), gndVer: S.gndVer, woodVer: S.woodVer, burn: S.burn, bridges: S.bridges, hh: S.hh, hr: S.hr, flooded: S.flooded,
       trail: b64.en(S.trail), trailSum: S.trailSum, hist: S.hist,
-      koth: S.koth, points: S.points, score: S.score, field: S.field,
+      koth: S.koth, points: S.points, score: S.score, field: S.field, iceR: S.iceR || 0, iceVer: S.iceVer || 0,
     };
   }
   function diffs(a, base) { const o = []; for (let c = 0; c < a.length; c++) if (a[c] !== (base ? base[c] : 0)) o.push(c, a[c]); return o; }
@@ -2298,7 +2350,7 @@ const Rules = (() => {
     const gd = o.gnd || [], wd = o.wood || [];
     for (let i = 0; i < gd.length; i += 2) S.gnd[gd[i]] = gd[i + 1];
     for (let i = 0; i < wd.length; i += 2) S.wood[wd[i]] = wd[i + 1];
-    S.gndVer = o.gndVer || 0; S.woodVer = o.woodVer || 0; S.burn = o.burn || []; S.flooded = !!o.flooded;
+    S.gndVer = o.gndVer || 0; S.woodVer = o.woodVer || 0; S.burn = o.burn || []; S.flooded = !!o.flooded; S.iceR = o.iceR || 0; S.iceVer = o.iceVer || 0;
     if (o.trail) S.trail = new Uint8Array(b64.de(o.trail)); S.trailSum = o.trailSum || 0;
     // A game saved before the record was kept starts its record now.
     if (o.hist) S.hist = o.hist;
@@ -2634,7 +2686,8 @@ const Rules = (() => {
 
   // Three ways of getting about: on foot, on wheels, and on tracks, which go through woods by flattening them.
   // Each is stopped by its own ground bits.
-  const BIT = { foot: 2, veh: 9, track: 1, naval: 0 };
+  // Ships keep to open water, and ice (bit 128 on the water) stops them.
+  const BIT = { foot: 2, veh: 9, track: 1, naval: 128 };
   const clsOf = u => u.d.move === 'foot' ? 'foot' : u.d.move === 'track' ? 'track' : u.d.move === 'naval' ? 'naval' : 'veh';
   function blocked(S, cls, c, occ = S.occ, g = S.gnd) {
     // A ship keeps to open water.
@@ -2731,7 +2784,7 @@ const Rules = (() => {
     Gd.S = ver >= 0 ? S : null; Gd.ver = ver; Gd.wq = wq;
     const M = S.map, bit = BIT[cls], woodC = cls === 'track' ? 3 : 1.6, roadC = ROAD_COST[cls], offK = 20 / wq, naval = cls === 'naval';
     const block = Gd.block, open = Gd.open, k = Gd.k, road = roadW(M);
-    if (naval) { const sea = M.sea; for (let c = 0; c < N; c++) block[c] = !sea[c] || occ[c] !== 0 ? 1 : 0; }
+    if (naval) { const sea = M.sea; for (let c = 0; c < N; c++) block[c] = !sea[c] || (g[c] & 128) || occ[c] !== 0 ? 1 : 0; }
     else for (let c = 0; c < N; c++) block[c] = (g[c] & bit) !== 0 || occ[c] !== 0 ? 1 : 0;
     const DX = [1, 1, 0, -1, -1, -1, 0, 1], DY = [0, 1, 1, 1, 0, -1, -1, -1];
     for (let y = 0, c = 0; y < H; y++) for (let x = 0; x < W; x++, c++) {
@@ -5361,6 +5414,7 @@ const Rules = (() => {
     stepSat(S);
     stepTowns(S);
     stepPoints(S);
+    stepIce(S);
     const danger = S.tick % SCAT_EVERY === 0 && S.shots.length ? dangerOf(S) : null;
     // Every other tick the units act from the last to the first, so no side's units always act first. Those made
     // during the tick act after the rest.
@@ -5467,7 +5521,7 @@ const Rules = (() => {
     msin, mcos, matan2, mhypot,
     BRIDGE_HP, SPELL, SKIES, WEATHERS, nightAt, skyOf, offGoing, route, weatherAt, sky, dayAt, spellOf, bridgeAt, clsOf, houseHp, hurtBridge, ignite, shielded,
     coverPoints, coverNear, COVER_R, COVER_ARC, FORMS, formOfGroup, STANCES,
-    FB_AT, PIN, TRAINERS, producerOf, canExplore, nameFor, townName, theatreOf, UPGRADES, UP_AGE, upCost, upNote, upsAt, upK, upBlocked, hpOf, rangeOf, capOf, showersAt, showerAt, capDown,
+    FB_AT, PIN, TRAINERS, producerOf, canExplore, nameFor, townName, theatreOf, UPGRADES, UP_AGE, upCost, upNote, upsAt, upK, upBlocked, hpOf, rangeOf, capOf, showersAt, showerAt, capDown, iceThaw, setIce, ICE_MAX,
   };
 })();
 if (typeof module !== 'undefined') module.exports = Rules;

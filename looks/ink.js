@@ -19,13 +19,13 @@
       // 45 and 135 degrees, then flat and upright lines for the darkest, each line a little uneven with small gaps.
       // The ground's hatching is pinned to the map so it pans with it, the units' redraws a few times a second.
       const ink = new THREE.ShaderMaterial({ uniforms: { t: { value: null }, tSubj: { value: null }, tHeat: { value: null }, tPaper: { value: null }, res: { value: new THREE.Vector2(1, 1) }, uTime: { value: 0 }, uK: { value: 1 }, uOff: { value: new THREE.Vector2() }, uStyle: { value: 8 }, tNorm: { value: null }, tFogS: { value: null }, tLand: { value: null }, uSun2: { value: new THREE.Vector2(-1, 0) }, uUpV: { value: new THREE.Vector3(0, 1, 0) }, uRoad: { value: 0 }, uOre: { value: 0 }, uMarks: { value: 1 }, uRoadAge: { value: 4 }, uShadeH: { value: 1 }, tShade: { value: null },
-        uWindS: { value: new THREE.Vector2() }, uView: { value: new THREE.Vector2(1, 0) }, tFx: { value: null }, tAnc: { value: null }, uDark: { value: 0 }, uTone: { value: 0 }, uInks: { value: 0 }, uFxs: { value: 0 }, uFire: { value: 0 }, uUnits: { value: 0 }, tH: SH.tH, uHSize: { value: new THREE.Vector2(1, 1) }, uHScale: { value: 1 }, uSnowF: { value: 0 }, uSnowC: SH.uSnowC, uSnowLine: SH.uSnowLine, uIceLine: SH.uIceLine, uCapH: SH.uCapH, uCapK: SH.uCapK, uDraw: SH.uDraw, uSubjK: SH.uSubjK, tFlow: SH.tFlow, tBrook: SH.tBrook, uFlora: SH.uFlora, uShow: SH.uShow, uShowS: SH.uShowS, uGolfC: SH.uGolfC, uCastK: SH.uCastK, uDustT: SH.uDustT, uGolf: SH.uGolf, uGolfB: SH.uGolfB, tCover: SH.tCover, uFieldK: SH.uFieldK, uFieldK2: SH.uFieldK2, uPark: SH.uPark, uBridgeKind: SH.uBridgeKind, uFog: { value: 0 }, uMist: { value: 0 }, uNight: { value: 0 },
+        uWindS: { value: new THREE.Vector2() }, uView: { value: new THREE.Vector2(1, 0) }, tFx: { value: null }, tAnc: { value: null }, uDark: { value: 0 }, uTone: { value: 0 }, uInks: { value: 0 }, uFxs: { value: 0 }, uFire: { value: 0 }, uUnits: { value: 0 }, tH: SH.tH, uHSize: { value: new THREE.Vector2(1, 1) }, uHScale: { value: 1 }, uSnowF: { value: 0 }, uSnowC: SH.uSnowC, uSnowLine: SH.uSnowLine, uIceLine: SH.uIceLine, uCapH: SH.uCapH, uCapK: SH.uCapK, uDraw: SH.uDraw, uSubjK: SH.uSubjK, uIceOn: SH.uIceOn, tFlow: SH.tFlow, tBrook: SH.tBrook, uFlora: SH.uFlora, uShow: SH.uShow, uShowS: SH.uShowS, uGolfC: SH.uGolfC, uCastK: SH.uCastK, uDustT: SH.uDustT, uGolf: SH.uGolf, uGolfB: SH.uGolfB, tCover: SH.tCover, uFieldK: SH.uFieldK, uFieldK2: SH.uFieldK2, uPark: SH.uPark, uBridgeKind: SH.uBridgeKind, uFog: { value: 0 }, uMist: { value: 0 }, uNight: { value: 0 },
         uDayMul: { value: new THREE.Vector3(1, 1, 1) }, uDayAdd: { value: new THREE.Vector3() }, uWaterL: { value: -0.15 }, uCloudK: SH.uCloudK, tMarks: SH.tMarks, uMap: SH.uMap,
         uCloud: SH.uCloud, uCloudT: SH.uCloudT, uSunW: SH.uSunDir, uCloudA: { value: 0 }, uCloudG: { value: 0 }, uRayK: { value: 0 }, uDust: { value: new THREE.Vector4() },
         uInvVP: { value: new THREE.Matrix4() }, uW2S: { value: new THREE.Vector4(1, 0, 0, 1) }, uLev: { value: 1 }, tTerr: SH.tTerr, uBorder: SH.uBorder, uMe: { value: 0 },
         // Each side's colour as the anchor pass keeps it, its hue and how coloured it is, and its inks on either paper.
         uSideKey: { value: [...Array(8)].map(() => new THREE.Vector2()) }, uSideL: { value: [...Array(8)].map(() => new THREE.Vector3()) }, uSideD: { value: [...Array(8)].map(() => new THREE.Vector3()) }, uSideB: { value: [...Array(8)].map(() => new THREE.Vector3()) } }, vertexShader: vs, depthTest: false, depthWrite: false, fragmentShader: `
-        varying vec2 vUv; uniform sampler2D t, tSubj, tHeat, tPaper, tNorm, tFogS, tLand, tMarks; uniform float uMap; uniform vec2 res, uOff, uSun2, uWindS, uView, uHSize; uniform float uHScale, uFxs, uFire; uniform int uUnits, uInks; uniform float uDark, uTone; uniform sampler2D tH, tFx, tAnc, tFlow, tBrook, tCover, tShade; uniform vec4 uFieldK, uFieldK2; uniform vec4 uShow[8]; uniform vec2 uShowS[8]; uniform vec3 uGolfC[4]; uniform float uCastK; uniform vec2 uDustT; uniform vec4 uGolf[16]; uniform vec3 uGolfB[24]; uniform vec4 uPark[16]; uniform vec3 uUpV, uDayMul, uDayAdd; uniform float uTime, uK, uSnowF, uSnowC, uSnowLine, uIceLine, uCapH, uCapK, uDraw, uSubjK, uFlora, uBridgeKind, uFog, uMist, uNight, uWaterL, uCloudK, uMarks, uRoadAge, uShadeH; uniform int uStyle, uRoad, uOre;
+        varying vec2 vUv; uniform sampler2D t, tSubj, tHeat, tPaper, tNorm, tFogS, tLand, tMarks; uniform float uMap; uniform vec2 res, uOff, uSun2, uWindS, uView, uHSize; uniform float uHScale, uFxs, uFire; uniform int uUnits, uInks; uniform float uDark, uTone; uniform sampler2D tH, tFx, tAnc, tFlow, tBrook, tCover, tShade; uniform vec4 uFieldK, uFieldK2; uniform vec4 uShow[8]; uniform vec2 uShowS[8]; uniform vec3 uGolfC[4]; uniform float uCastK; uniform vec2 uDustT; uniform vec4 uGolf[16]; uniform vec3 uGolfB[24]; uniform vec4 uPark[16]; uniform vec3 uUpV, uDayMul, uDayAdd; uniform float uIceOn; uniform float uTime, uK, uSnowF, uSnowC, uSnowLine, uIceLine, uCapH, uCapK, uDraw, uSubjK, uFlora, uBridgeKind, uFog, uMist, uNight, uWaterL, uCloudK, uMarks, uRoadAge, uShadeH; uniform int uStyle, uRoad, uOre;
         uniform vec2 uSideKey[8]; uniform vec3 uSideL[8], uSideD[8], uSideB[8];
         uniform sampler2D tTerr; uniform float uBorder, uMe;
         uniform vec2 uCloud; uniform vec3 uSunW; uniform float uCloudT, uCloudA, uCloudG, uRayK; uniform vec4 uDust;
@@ -855,6 +855,20 @@
               // A brook's ford lies shallow, its wash paler.
               base = mix(base, mix(base, paperC, 0.5), bkS.g * isW);
               base = mix(base, base * (dk ? 0.5 : 0.8), shB * isW);
+              // Ice on frozen water, as the rules have it: a pale wash with the ripples stilled under it, broken here and
+              // there by a fine meandering crack, with drifts of snow lying on it. Brooks, which men wade in any case,
+              // freeze as soon as any water does.
+              if (uIceOn > 0.5 && isW > 0.0) {
+                float iceK = max(LW.a, 1.0 - smoothstep(bkHW, bkHW + 0.3, bkD)) * isW;
+                if (iceK > 0.01) {
+                  float ck = abs(noise(Wl * 0.8 + 17.0) - 0.5), ckW = max(fwidth(ck), 1e-4);
+                  float crack = (1.0 - smoothstep(0.4 * ckW * uK, 1.2 * ckW * uK, ck)) * smoothstep(0.45, 0.6, noise(Wl * 0.23 + 9.0));
+                  float drift = smoothstep(0.55, 0.78, noise(Wl * 0.35 + 3.0));
+                  vec3 ICEC = mix(dk ? vec3(0.4, 0.46, 0.54) : vec3(0.89, 0.92, 0.95), dk ? vec3(0.6, 0.62, 0.66) : vec3(0.98, 0.98, 0.97), drift * 0.75);
+                  ICEC = mix(ICEC, dk ? vec3(0.66, 0.74, 0.88) : vec3(0.44, 0.54, 0.72), crack * 0.55 * (1.0 - drift));
+                  base = mix(base, ICEC, iceK);
+                }
+              }
               if (isT > 0.0) {
                 float tn = noise(p / (60.0 * uK));
                 vec3 TR = tn < 0.4 ? TREE3 : tn < 0.62 ? TREE1 : TREE2;

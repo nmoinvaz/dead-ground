@@ -1631,6 +1631,8 @@ const Hud = (() => {
       let note = SKY_NOTE[w.kind] || (Rules.nightAt(s.tick) > 0.5 ? 'Night: sight cut short, flares light the way' : '');
       if (s.flooded) note = note ? note + '. Fords flooded' : 'Fords flooded';
       if (Rules.capDown(s)) note = note ? note + '. Cloud on the heights' : 'Cloud on the heights hides them';
+      // Ice on the water: men may cross it, and as the snow melts it thins and gives way.
+      if (s.iceR > 0) note = Rules.iceThaw(s) ? (note ? note + '. Ice thinning' : 'Ice thinning: get off it') : (note ? note + '. Water frozen' : 'Water frozen: men cross on the ice');
       if (w.next !== w.kind && w.left < 40 * HZ) note = (SKY_NAME[w.next] || w.next) + ' coming';
       // A newcomer's protection, counting down.
       const me = game.team >= 0 ? s.P[game.team] : null, left = me && me.shield > s.tick ? Math.ceil((me.shield - s.tick) / HZ) : 0;
