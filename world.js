@@ -4656,12 +4656,17 @@ const World = (() => {
     let plateReq = null;
     // Where the map's drawing in is going, eased toward each frame.
     const drawTo = { map: 1, subj: 1 };
+    // A plate may be of the game as it stood a little before, past, a state loaded on the same map: its units and
+    // buildings are set in its place for the one drawing, and the present's put back after.
     function drawPlate() {
       const q = plateReq, keep = { x: cam.x, y: cam.y, dist: cam.dist, shake: cam.shake }, dark = Looks.dark, fog = SH.uFogOn.value;
       plateReq = null;
       Object.assign(cam, { x: clamp(q.x, 2, W - 2), y: clamp(q.y, 2, H - 2), dist: q.dist || 34, shake: 0 });
       Looks.dark = false; SH.uFogOn.value = 0;
+      const now = S;
+      if (q.past && q.past.map === M) { try { S = q.past; drawEntities(1, 0, performance.now()); finishSets(); } catch (e) { S = now; } }
       placeCamera(); aimSun(); pp.render();
+      if (S !== now) { S = now; drawEntities(1, 0, performance.now()); finishSets(); }
       // A wide band across the middle of the view, where the place lies, as a book's plate is wider than tall.
       const src = renderer.domElement, bh = Math.min(src.height, Math.round(src.width / 2.2)), k = Math.min(1, 1280 / src.width), cv = document.createElement('canvas');
       cv.width = Math.round(src.width * k); cv.height = Math.round(bh * k);
@@ -5074,7 +5079,7 @@ const World = (() => {
       study(o) { studySky = o; },
       // Draws a plate of the place at x, y with the next frame, and hands it to cb as a picture's data URL; raw
       // leaves it unengraved, for checks.
-      plate(x, y, cb, dist, raw) { plateReq = { x, y, cb, dist, raw }; },
+      plate(x, y, cb, dist, raw, past) { plateReq = { x, y, cb, dist, raw, past }; },
       get look() { return style.name; },
       get style() { return style; },
       cam, vw: 1, vh: 1, onScreen: [], load, frame, event, resize, reshape, pick, project, setGhost, cameos, renderer, camera, scene, place: placeCamera,

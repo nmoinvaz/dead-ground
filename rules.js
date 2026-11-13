@@ -2451,7 +2451,8 @@ const Rules = (() => {
   // when `shuffle` gives a random draw. Every side starts in the age `age`, Ancient unless given, with more
   // supply the later it starts. The game is over when one side is left.
   function newGame(o = {}) {
-    const kind = o.layout || 'duel', M = mapFor(o.seed || 1, kind, o.debug), seed = M.seed;
+    // A map already made for this seed and layout may be given, as a game loaded beside the one it was saved from.
+    const kind = o.layout || 'duel', M = o.map && o.map.kind === kind && o.map.seed === o.seed ? o.map : mapFor(o.seed || 1, kind, o.debug), seed = M.seed;
     ruinsOf(M);
     coverPoints(M);
     const n = M.bases.length;
@@ -2656,8 +2657,8 @@ const Rules = (() => {
     };
   }
   function diffs(a, base) { const o = []; for (let c = 0; c < a.length; c++) if (a[c] !== (base ? base[c] : 0)) o.push(c, a[c]); return o; }
-  function load(o) {
-    const S = newGame({ seed: o.seed, layout: o.layout, seats: o.seats, pos: o.pos, age: o.age0 || 5, theatre: o.theatre, weather: o.weather, free: o.free, regicide: o.regicide, koth: o.koth, empty: true });
+  function load(o, map) {
+    const S = newGame({ seed: o.seed, layout: o.layout, seats: o.seats, pos: o.pos, age: o.age0 || 5, theatre: o.theatre, weather: o.weather, free: o.free, regicide: o.regicide, koth: o.koth, empty: true, map });
     if (S.seed !== o.seed) throw new Error('map seed mismatch');
     Object.assign(S, { tick: o.tick, rs: o.rs, next: o.next, occVer: o.occVer, oreVer: o.oreVer, terrVer: o.terrVer, dirty: o.dirty, over: o.over, shots: o.shots, sweeps: o.sweeps, flights: o.flights, occLog: o.occLog || [] });
     S.towns = o.towns.map(t => Object.assign({}, t));

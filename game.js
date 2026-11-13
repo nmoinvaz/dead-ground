@@ -488,8 +488,24 @@ const Game = (() => {
     const WSND = { rifle: ['rifle', 0.34, 0.04], hmg: ['hmg', 0.4, 0.06], auto: ['auto', 0.5, 0.08], cannon: ['cannon', 0.8, 0.06], flak: ['flak', 0.45, 0.08], missile: ['missile', 0.6, 0.1], rocket: ['rocket', 0.5, 0.05], rail: ['rail', 0.9, 0.1], sniper: ['sniper', 0.7, 0.1], bow: ['bow', 0.45, 0.05], xbow: ['xbow', 0.45, 0.06], longbow: ['longbow', 0.45, 0.06], clash: ['clash', 0.35, 0.06], musket: ['musket', 0.55, 0.05], catapult: ['catapult', 0.7, 0.1], pulse: ['pulse', 0.35, 0.04] };
     // Whether the player's side is still before the Industrial Age, when the calls come from a herald, not a radio.
     const oldAge = () => !!(G.S && G.S.P[Math.max(0, G.team)] && G.S.P[Math.max(0, G.team)].tech < Rules.POWER_AGE);
+    // The game a little way back, saved every PAST_EVERY ticks and kept for PAST_KEEP of them, so the report's plate of a
+    // fall can show the fight a quarter of a minute before it.
+    const PAST_EVERY = 5 * Rules.HZ, PAST_KEEP = 5, PAST_BACK = 15 * Rules.HZ, PLATE_DIST = 52;
+    let past = [];
+    function keepPast(S) {
+      if (!G.playing || S.tick % PAST_EVERY || (past.length && past[past.length - 1].tick === S.tick)) return;
+      if (past.length && past[0].S !== S) past = [];
+      past.push({ tick: S.tick, S, o: Rules.save(S) });
+      if (past.length > PAST_KEEP) past.shift();
+    }
+    // The game as it stood about PAST_BACK before now, loaded beside it on the same map, or null.
+    function pastState(S) {
+      const want = S.tick - PAST_BACK, at = past.filter(p => p.S === S && p.tick <= want).pop() || past.find(p => p.S === S);
+      try { return at ? Rules.load(at.o, S.map) : null; } catch (e) { return null; }
+    }
     function drain() {
       const S = G.S, ev = S.ev;
+      keepPast(S);
       if (S.P[Math.max(0, G.team)]) audio.age = S.P[Math.max(0, G.team)].tech;
       for (const e of ev) {
         world.event(e);
@@ -532,9 +548,10 @@ const Game = (() => {
           case 'placed': if (G.playing && e.team === G.team) audio.at('place', e.x, e.y, { gain: 0.8 }); break;
           case 'over': if (G.playing) setTimeout(outcome, 1800); drawRoster(); break;
           case 'fallen': {
-            // A plate of the fall for the report: where the side's last building went down, or else its base.
+            // A plate of the fall for the report: where the side's last building went down, or else its base, drawn back
+            // to take in the fight round it, as it stood a quarter of a minute before.
             const at = G.falls[e.team] || (S.bases[e.team] ? { x: S.bases[e.team][0], y: S.bases[e.team][1] } : null);
-            if (at && !e.forfeit) world.plate(at.x, at.y, url => { G.plate = { url, team: e.team, kind: at.kind, tick: S.tick, x: at.x, y: at.y, regicide: e.regicide }; }, undefined, true);
+            if (at && !e.forfeit) { const then = pastState(S); world.plate(at.x, at.y, url => { G.plate = { url, team: e.team, kind: at.kind, tick: then ? then.tick : S.tick, x: at.x, y: at.y, regicide: e.regicide }; }, PLATE_DIST, true, then); }
             if (G.playing && e.team === G.team) setTimeout(outcome, 1800);
             else if (G.playing && G.names[e.team]) hud.say(e.forfeit ? `${G.names[e.team]} has forfeited the game.` : e.regicide ? `${G.names[e.team]}'s general has fallen. They are out.` : `${G.names[e.team]} is out.`, 'good');
             drawRoster();
