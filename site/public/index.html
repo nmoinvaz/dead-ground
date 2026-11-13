@@ -668,7 +668,7 @@ body[data-look="ink"] .sheet { box-shadow: 4px 4px 0 var(--ink); }
       <div class="choice"><h2>Shadow strength</h2><div id="s-shadow"><button data-v="full">Full</button><button data-v="light">Light</button><button data-v="off">Off</button></div></div>
       <div class="choice"><h2>Edge lines</h2><div id="s-edges" class="two"><button data-v="quick">Quick</button><button data-v="exact">Exact</button></div></div>
       <div class="choice"><h2>Music</h2><div id="s-music" class="two"><button data-v="on">On</button><button data-v="off">Off</button></div></div>
-      <p id="build">Build 23f3aab 2026-11-12 18:47</p>
+      <p id="build">Build 070ac5d 2026-11-12 19:02</p>
       <p id="source"><a href="https://github.com/nmoinvaz/mapmakers-war" target="_blank" rel="noopener">Source on GitHub</a></p>
     </div>
     <div id="banner" hidden></div>
@@ -1305,7 +1305,7 @@ const Rules = (() => {
   };
   const SIZES = {
     duel: 128, quad: 192, world: 256, gulf: 128, pass: 128, lakes: 192,
-    greenwood: 128, oldforest: 192, twinlakes: 128, ponds: 192, seas: 128, isles: 192, peaks: 128, highlands: 192, rivers3: 128, crater: 192, mesa: 128, nile: 128, atlantis: 192, falls: 128, summit: 128, junction: 128, dam: 128,
+    greenwood: 128, oldforest: 192, twinlakes: 128, ponds: 192, seas: 128, isles: 192, peaks: 128, highlands: 192, rivers3: 128, crater: 192, mesa: 128, nile: 128, atlantis: 192, falls: 128, summit: 128, junction: 128, dam: 128, tidal: 128,
   };
   // The maps a game may be set on, each a layout and the most sides it seats.
   const MAPS = {
@@ -1333,6 +1333,7 @@ const Rules = (() => {
     summit: { name: 'The Summit', layout: 'summit', seats: 2, koth: 3, about: 'One great mountain between the bases, its top far above the land, climbed on foot by four ridges, with a camp partway up each base\'s. Glaciers above the camps slow the climb, and at times cloud comes down over the top and hides it. Roads run round its foot.' },
     junction: { name: 'The Junction', layout: 'junction', seats: 2, about: 'A railway crosses the field between the bases on embankments and through cuttings. Vehicles cross it only where the roads do; men climb its banks. From the Industrial Age trains run along it.' },
     dam: { name: 'The Dam', layout: 'dam', seats: 2, about: 'A river runs between the two sides, held back by a great dam into a reservoir above. Below the dam two bridges and a ford cross it. Break the dam and the valley below floods: the ford closes, the bridges are swept away, and the water falls back over a few minutes.' },
+    tidal: { name: 'Tidal Isle', layout: 'tidal', seats: 2, about: 'An island in a bay between the two shores, its towns and rich ore cut off at high tide; the shores meet only the long way round the bay. At low tide the sands rise from the water and a causeway runs out to the island from each shore, for a minute and a half, before the tide comes in over whatever is still on them.' },
   };
   // The theatre a game on a map is fought in: the map's own, if it fixes one, or the one chosen.
   const theatreOf = (map, chosen) => (MAPS[map] && MAPS[map].theatre) || chosen;
@@ -1522,7 +1523,7 @@ const Rules = (() => {
   }
 
   // ---- The second set of maps: woods, lakes, seas, islands, mountains and rivers ----
-  const MORE = new Set(['greenwood', 'oldforest', 'twinlakes', 'ponds', 'seas', 'isles', 'peaks', 'highlands', 'rivers3', 'crater', 'mesa', 'nile', 'atlantis', 'falls', 'summit', 'junction', 'dam']);
+  const MORE = new Set(['greenwood', 'oldforest', 'twinlakes', 'ponds', 'seas', 'isles', 'peaks', 'highlands', 'rivers3', 'crater', 'mesa', 'nile', 'atlantis', 'falls', 'summit', 'junction', 'dam', 'tidal']);
   // The layouts with marsh by their water, each with the share of the low, gentle ground near its water that is
   // marsh; how far from the water, in cells, marsh may lie; and how high above the water and how steep its ground
   // may be.
@@ -1530,6 +1531,9 @@ const Rules = (() => {
   // A railway's bed: the cells along which the land's height is smoothed for it, how far it rides above that, and how
   // far from its line its bed and banks stop vehicles.
   const RAIL_SMOOTH = 8, RAIL_RISE = 0.5, RAIL_BANK = 1.7, RAIL_CLIMB = 3.2;
+  // Tides: how far the water falls at low tide, the tide's period, and the part of it the tide is out, from LOW_FROM to
+  // LOW_TO of the way through, and how long before it comes in that it is warned of.
+  const TIDE_DROP = 0.6, TIDE_P = 300 * HZ, TIDE_LOW_FROM = 0.5, TIDE_LOW_TO = 0.8, TIDE_WARN = 20 * HZ;
   // The duel layouts with old trenches across their open fields, and the shortest run of trench kept, in cells.
   const TRENCHED = new Set(['duel', 'pass', 'peaks', 'twinlakes', 'rivers3']), TRENCH_MIN = 6;
   function moreLayout(kind, L, all, fordAt, R) {
@@ -1821,6 +1825,27 @@ const Rules = (() => {
       // The ford is its own reflection, so it is laid once.
       const fa = fp(0, -26); L.fords.push([fa[0], fa[1], 0, -1]);
       L.fish = [fp(0, 44), fp(0, -50)];
+    } else if (kind === 'tidal') {
+      // Tidal Isle: a sea channel between the two shores with an island in its middle. A causeway of sand runs out to
+      // the island from each shore, just under the water at high tide; at low tide it and the flats along the shores
+      // dry, and the island can be walked and driven to.
+      duel(); L.lake = true; L.tide = true;
+      const SHORE = 30, ISLE = 12, END = 56;
+      // How far into the land a point lies, from the sea's deep middle: the mainland beyond |u| SHORE, the island, and
+      // the land closing the sea at either end beyond |v| END, so the two shores meet the long way round the bay.
+      L.river = (x, y) => { const [u, v] = toUV(x, y); return [Math.max(0, Math.max(Math.abs(u) - SHORE, ISLE - mhypot(u, v), Math.abs(v) - END) + 8), 3]; };
+      // The causeways: a bank of sand along each, its crest just under the water and falling away to either side.
+      const cA = [-SHORE - 4, 16], cB = [-ISLE + 3, 5];
+      const cwD = (u, v) => Math.min(...[[cA, cB], [[-cA[0], -cA[1]], [-cB[0], -cB[1]]]].map(([a, b]) => segD([u, v], a, b)));
+      L.carve = (x, y, z, z0, water0) => { const [u, v] = toUV(x, y), d = cwD(u, v); return d < 4 ? Math.max(z, water0 - 0.35 - 0.6 * smooth(1.5, 4, d)) : z; };
+      L.bases.push(uvp(-54, 0), mirror(uvp(-54, 0)));
+      const tA = uvp(-40, 28), tB = uvp(-42, -24), tI = uvp(-4, 6), hub = uvp(-46, 0);
+      for (const t of [tA, tB, tI]) all(L.towns, t);
+      duelKit(-54, 0);
+      all(L.ore, uvp(-36, -38), [5.5]); all(L.ore, uvp(5, -5), [4.5]);
+      all(L.wells, uvp(-36, 42)); all(L.wells, uvp(-6, -6));
+      R(hub, tA, 2.5); R(hub, tB, 2.5); R(tA, uvp(cA[0] - 1, cA[1]), 1); R(tI, [CX, CY], 0);
+      L.fish = []; [[-20, 40], [16, 30], [-18, -6]].forEach(o => all(L.fish, uvp(o[0], o[1])));
     } else if (kind === 'junction') {
       // A railway across the field between the bases, winding a little, on its own graded bed: embankments where the
       // land is low and cuttings where it is high, crossed by the roads at level crossings. The line is odd in v, so it
@@ -2605,6 +2630,18 @@ const Rules = (() => {
         for (const T of L.syms) trenches.push(pts.map(p => T(p)));
       }
     }
+    // A tidal layout's sands: water whose bed lies within TIDE_DROP of the surface, which dries at low tide.
+    const sand = L.tide ? new Uint8Array(N) : null, sandCells = [], housed = new Set();
+    if (sand) for (const h of houses) for (let y = h.y; y < h.y + h.h; y++) for (let x = h.x; x < h.x + h.w; x++) housed.add(y * W + x);
+    if (sand) for (let y = 0; y < H; y++) for (let x = 0; x < W; x++) {
+      const c = y * W + x;
+      if (ground[c] !== 7 || deckAt(x + 0.5, y + 0.5) > 0 || housed.has(c)) continue;
+      let lo = 99;
+      for (let b = 0; b <= 2; b++) for (let a = 0; a <= 2; a++) lo = Math.min(lo, hAt(x + a / 2, y + b / 2));
+      // Only water, as the land's bits judge it: a house's or a rock's cells carry the same bits on dry ground.
+      const wl0 = wlAt(x + 0.5, y + 0.5);
+      if (lo < wl0 + 0.1 && lo >= wl0 - TIDE_DROP + 0.05) { sand[c] = 1; sandCells.push(c); }
+    }
     // Open water deep enough for a ship: every corner of the cell well under the surface. Bridges stand high
     // enough for ships to pass beneath. Shoals where fishing boats fish lie in it.
     const sea = new Uint8Array(N);
@@ -2616,13 +2653,14 @@ const Rules = (() => {
     const fish = (L.fish || []).map(p => ({ x: p[0], y: p[1] }));
     let seaCells = 0;
     for (let c = 0; c < N; c++) seaCells += sea[c];
-    return { W, H, seed, kind, h, deck, water, ground, ore: oreCells, oreKind, oreFields, wells, towns, roads, roadDist, bridges, scatter, houses, oreRich, bases: L.bases, faces, fords: L.fords, fordCells, wadeCells, brooks, brookFords, brookDist: bD, brookFord: bF, falls, wl, cascades: L.cascades || [], sea, fish, seaCells, monuments: (L.monuments || []).map(([k, x, y, r, a]) => ({ k, x, y, r, a })), highs: L.highs || null, iceLine: L.iceLine ?? null, cloudLine: L.cloudLine ?? null, marsh, trenches, rail: L.rail || null, dam: L.dam ?? -1, damCuts: L.damCuts || [] };
+    return { W, H, seed, kind, h, deck, water, ground, ore: oreCells, oreKind, oreFields, wells, towns, roads, roadDist, bridges, scatter, houses, oreRich, bases: L.bases, faces, fords: L.fords, fordCells, wadeCells, brooks, brookFords, brookDist: bD, brookFord: bF, falls, wl, cascades: L.cascades || [], sea, fish, seaCells, monuments: (L.monuments || []).map(([k, x, y, r, a]) => ({ k, x, y, r, a })), highs: L.highs || null, iceLine: L.iceLine ?? null, cloudLine: L.cloudLine ?? null, marsh, trenches, rail: L.rail || null, dam: L.dam ?? -1, damCuts: L.damCuts || [], sand, sandCells };
   }
 
   // A map is kept only if vehicles can get from the first base to every other base, town and well.
   // Whether every base, town and well can be reached on foot and wheel from the first base, over the ground bits.
   function reachable(ground, L, towns, wells) {
-    const pass = c => !(ground[c] & 9), a = L.bases[0], seen = new Uint8Array(N), q = [Math.floor(a[1]) * W + Math.floor(a[0]) + 4];
+    // On a tidal layout the water counts as ground, as its sands are not yet known and are crossed at low tide.
+    const pass = c => !(ground[c] & 9) || (L.tide && ground[c] === 7), a = L.bases[0], seen = new Uint8Array(N), q = [Math.floor(a[1]) * W + Math.floor(a[0]) + 4];
     seen[q[0]] = 1;
     while (q.length) {
       const c = q.pop(), x = c % W, y = c / W | 0;
@@ -2637,7 +2675,8 @@ const Rules = (() => {
   }
   function goodMap(M) {
     const pass = new Uint8Array(N);
-    for (let c = 0; c < N; c++) pass[c] = (M.ground[c] & 9) ? 0 : 1;
+    // A tide's sands count as ground, as they are at low tide.
+    for (let c = 0; c < N; c++) pass[c] = (M.ground[c] & 9) && !(M.sand && M.sand[c]) ? 0 : 1;
     const a = M.bases[0];
     const seen = new Uint8Array(N), q = [Math.floor(a[1]) * W + Math.floor(a[0]) + 4];
     seen[q[0]] = 1;
@@ -2906,7 +2945,8 @@ const Rules = (() => {
   function iceDist(M) {
     if (M._iceD) return M._iceD;
     const D = new Uint8Array(W * H), q = [];
-    const wet = c => (M.ground[c] & 2) && terrainAt(M, c % W + 0.5, (c / W | 0) + 0.5) < waterLevel(M, c % W + 0.5, (c / W | 0) + 0.5);
+    // The tide's sands are its own, and never freeze.
+    const wet = c => (M.ground[c] & 2) && !(M.sand && M.sand[c]) && terrainAt(M, c % W + 0.5, (c / W | 0) + 0.5) < waterLevel(M, c % W + 0.5, (c / W | 0) + 0.5);
     for (let c = 0; c < W * H; c++) if (wet(c)) D[c] = 255;
     for (let c = 0; c < W * H; c++) if (D[c]) {
       const x = c % W, y = c / W | 0;
@@ -3407,7 +3447,7 @@ const Rules = (() => {
       // The ground and the trees as pairs of cell and value, only where they differ from the map's start.
       gnd: diffs(S.gnd, S.map.ground), wood: diffs(S.wood, null), gndVer: S.gndVer, woodVer: S.woodVer, burn: S.burn, bridges: S.bridges, hh: S.hh, hr: S.hr, flooded: S.flooded,
       trail: b64.en(S.trail), trailSum: S.trailSum, hist: S.hist,
-      koth: S.koth, points: S.points, score: S.score, field: S.field, iceR: S.iceR || 0, iceVer: S.iceVer || 0, quarries: S.quarries || [], damBroke: S.damBroke ?? -1,
+      koth: S.koth, points: S.points, score: S.score, field: S.field, iceR: S.iceR || 0, iceVer: S.iceVer || 0, quarries: S.quarries || [], damBroke: S.damBroke ?? -1, lowTide: !!S.lowTide,
     };
   }
   function diffs(a, base) { const o = []; for (let c = 0; c < a.length; c++) if (a[c] !== (base ? base[c] : 0)) o.push(c, a[c]); return o; }
@@ -3436,7 +3476,7 @@ const Rules = (() => {
     const gd = o.gnd || [], wd = o.wood || [];
     for (let i = 0; i < gd.length; i += 2) S.gnd[gd[i]] = gd[i + 1];
     for (let i = 0; i < wd.length; i += 2) S.wood[wd[i]] = wd[i + 1];
-    S.gndVer = o.gndVer || 0; S.woodVer = o.woodVer || 0; S.burn = o.burn || []; S.flooded = !!o.flooded; S.iceR = o.iceR || 0; S.iceVer = o.iceVer || 0; S.quarries = (o.quarries || []).slice(); S.damBroke = o.damBroke ?? -1;
+    S.gndVer = o.gndVer || 0; S.woodVer = o.woodVer || 0; S.burn = o.burn || []; S.flooded = !!o.flooded; S.iceR = o.iceR || 0; S.iceVer = o.iceVer || 0; S.quarries = (o.quarries || []).slice(); S.damBroke = o.damBroke ?? -1; S.lowTide = !!o.lowTide;
     if (o.trail) S.trail = new Uint8Array(b64.de(o.trail)); S.trailSum = o.trailSum || 0;
     // A game saved before the record was kept starts its record now.
     if (o.hist) S.hist = o.hist;
@@ -4514,6 +4554,24 @@ const Rules = (() => {
       S.ev.push({ t: 'dambreak', x: (m.x0 + m.x1) / 2, y: (m.y0 + m.y1) / 2 });
       for (const j of S.map.damCuts) if (S.bridges[j].hp > 0) dropBridge(S, j);
     }
+  }
+  // The tide, by the clock alone: out for a stretch of each TIDE_P. tideLevel is the water's fall for the picture, 0 at
+  // high tide and 1 at low, easing over the twenty seconds either side of the turn.
+  const tidePh = S => S.tick % TIDE_P / TIDE_P;
+  const tideLow = S => !!S.map.sand && tidePh(S) >= TIDE_LOW_FROM && tidePh(S) < TIDE_LOW_TO;
+  const tideLevel = S => { if (!S.map.sand) return 0; const t = S.tick % TIDE_P, a = TIDE_LOW_FROM * TIDE_P, b = TIDE_LOW_TO * TIDE_P, e = 20 * HZ; return smooth(a - e, a, t) * (1 - smooth(b - e * 0.25, b + e * 0.25, t)); };
+  // Whether the tide turns within TIDE_WARN: 'in' while it is out and soon to come in, 'out' while it is in and soon to go.
+  const tideTurn = S => { if (!S.map.sand) return ''; const t = S.tick % TIDE_P, a = TIDE_LOW_FROM * TIDE_P, b = TIDE_LOW_TO * TIDE_P; return t >= b - TIDE_WARN && t < b ? 'in' : t >= a - TIDE_WARN && t < a ? 'out' : ''; };
+  function stepTide(S) {
+    if (!S.map.sand || S.tick % 10) return;
+    const want = tideLow(S);
+    if (want === !!S.lowTide) return;
+    S.lowTide = want;
+    const M = S.map, cs = M.sandCells;
+    // Out: the sands are wet sand, slow going for all and no water for a ship. In: water again, over whatever is on them.
+    setGround(S, cs, cs.map(c => want ? 4 | 128 : M.ground[c]));
+    if (!want) { const on = new Set(cs); for (const u of S.ents) if (!u.b && u.hp > 0 && !isAir(u) && !(u.drop > 0) && on.has(cellOf(u.x, u.y)) && blocked(S, clsOf(u), cellOf(u.x, u.y))) hurt(S, u, 1e6, -1, 0); }
+    S.ev.push({ t: 'tide', low: want });
   }
   // A dam's flood, from 0 to 1: up in the first seconds after it breaks, holding, then falling back over its last third.
   const DAM_FLOOD = 180 * HZ;
@@ -6524,6 +6582,7 @@ const Rules = (() => {
     stepPoints(S);
     stepIce(S);
     stepQuarries(S);
+    stepTide(S);
     const danger = S.tick % SCAT_EVERY === 0 && S.shots.length ? dangerOf(S) : null;
     // Every other tick the units act from the last to the first, so no side's units always act first. Those made
     // during the tick act after the rest.
@@ -6631,7 +6690,7 @@ const Rules = (() => {
     msin, mcos, matan2, mhypot,
     BRIDGE_HP, SPELL, SKIES, WEATHERS, nightAt, skyOf, offGoing, route, weatherAt, sky, dayAt, spellOf, bridgeAt, clsOf, houseHp, hurtBridge, ignite, shielded,
     coverPoints, coverNear, COVER_R, COVER_ARC, FORMS, formOfGroup, STANCES,
-    FB_AT, PIN, TRAINERS, producerOf, canExplore, nameFor, townName, theatreOf, UPGRADES, UP_AGE, upCost, upNote, upsAt, upK, upBlocked, hpOf, rangeOf, capOf, showersAt, showerAt, capDown, iceThaw, setIce, ICE_MAX, geyserOn, GEY_R, QUARRY_K, stepQuarries, damFlood, dropBridge,
+    FB_AT, PIN, TRAINERS, producerOf, canExplore, nameFor, townName, theatreOf, UPGRADES, UP_AGE, upCost, upNote, upsAt, upK, upBlocked, hpOf, rangeOf, capOf, showersAt, showerAt, capDown, iceThaw, setIce, ICE_MAX, geyserOn, GEY_R, QUARRY_K, stepQuarries, damFlood, dropBridge, tideLow, tideLevel, tideTurn, TIDE_DROP,
   };
 })();
 if (typeof module !== 'undefined') module.exports = Rules;
@@ -13108,7 +13167,9 @@ const World = (() => {
     const heightAt = (Mp, x, y) => {
       const h = groundAt(Mp, x, y);
       if (!S || !S.iceR) return h;
-      return S.gnd[clamp(y | 0, 0, Mp.H - 1) * Mp.W + clamp(x | 0, 0, Mp.W - 1)] & 128 ? Math.max(h, Rules.waterLevel(Mp, x, y)) : h;
+      // A tide's sands carry bit 128 at low tide too, but are walked on at their own height.
+      const c = clamp(y | 0, 0, Mp.H - 1) * Mp.W + clamp(x | 0, 0, Mp.W - 1);
+      return S.gnd[c] & 128 && !(Mp.sand && Mp.sand[c]) ? Math.max(h, Rules.waterLevel(Mp, x, y)) : h;
     };
     // The frozen water, the salt pans and the marsh for the ink to draw, in the heights texture's alpha on the heights'
     // grid, 1 for ice on the water and for a pan on the land, and a half for marsh, each point as its cell is. Written
@@ -13120,7 +13181,7 @@ const World = (() => {
       const d = hTex.image.data, one = toHalf(1), half = toHalf(0.5), zero = toHalf(0), R = Rules.RES;
       for (let j = 0; j < VH; j++) for (let i = 0; i < VW; i++) {
         const c = Math.min(M.H - 1, j / R | 0) * M.W + Math.min(M.W - 1, i / R | 0);
-        d[(j * VW + i) * 4 + 3] = (S.gnd[c] & 128) && (M.ground[c] & 2) ? one : S.pan && S.pan[c] ? one : M.marsh && M.marsh[c] ? half : zero;
+        d[(j * VW + i) * 4 + 3] = (S.gnd[c] & 128) && (M.ground[c] & 2) && !(M.sand && M.sand[c]) ? one : S.pan && S.pan[c] ? one : M.marsh && M.marsh[c] ? half : zero;
       }
       hTex.needsUpdate = true;
       SH.uIceOn.value = S.iceR > 0 ? 1 : 0;
@@ -13522,7 +13583,8 @@ const World = (() => {
         for (let c = 0; c < n; c++) riverNear[c] = dd[c] >= 4 && dd[c] <= 11 ? 1 : 0;
       }
       for (let c = 0; c < n; c++) {
-        cov[c * 4] = beachMap ? beachMap[c] : 0;
+        // A tide's sands are beach, seen as sand when the water is off them.
+        cov[c * 4] = M.sand && M.sand[c] ? 255 : beachMap ? beachMap[c] : 0;
         const x = c % W + 0.5, y = (c / W | 0) + 0.5;
         let d1 = 1e9, d2 = 1e9, ti = -1;
         M.towns.forEach((t, i) => { const d = Math.hypot(t.x - x, t.y - y); if (d < d1) { d2 = d1; d1 = d; ti = i; } else if (d < d2) d2 = d; });
@@ -15560,7 +15622,7 @@ const World = (() => {
       const capW = studySky && studySky.cap !== undefined ? studySky.cap : Rules.capDown(S) ? 1 : 0;
       SH.uCapK.value += (capW - SH.uCapK.value) * (studySky ? 1 : 1 - Math.exp(-dt * 0.5));
       // A broken dam's flood raises the water as a long rain does.
-      waterRise.value = Math.min(1.25, Math.max(sky.flood, Rules.damFlood(S) * 1.25)) * 0.26;
+      waterRise.value = Math.min(1.25, Math.max(sky.flood, Rules.damFlood(S) * 1.25)) * 0.26 - Rules.tideLevel(S) * Rules.TIDE_DROP;
       right3.setFromMatrixColumn(camera.matrixWorld, 0);
       sky.windS = right3.x * U.x + right3.z * U.y;
       // The hour. Pen and ink follows it; the painted looks keep their own light.
@@ -19007,6 +19069,8 @@ const Hud = (() => {
       if (Rules.capDown(s)) note = note ? note + '. Cloud on the heights' : 'Cloud on the heights hides them';
       // Ice on the water: men may cross it, and as the snow melts it thins and gives way.
       if (s.iceR > 0) note = Rules.iceThaw(s) ? (note ? note + '. Ice thinning' : 'Ice thinning: get off it') : (note ? note + '. Water frozen' : 'Water frozen: men cross on the ice');
+      // The tide: out over the sands, and a warning before it turns.
+      if (s.map.sand) { const turn = Rules.tideTurn(s), tn = turn === 'in' ? 'Tide coming in: off the sands' : turn === 'out' ? 'Tide going out' : Rules.tideLow(s) ? 'Low tide: the sands are open' : ''; if (tn) note = note ? note + '. ' + tn : tn; }
       if (w.next !== w.kind && w.left < 40 * HZ) note = (SKY_NAME[w.next] || w.next) + ' coming';
       // A newcomer's protection, counting down.
       const me = game.team >= 0 ? s.P[game.team] : null, left = me && me.shield > s.tick ? Math.ceil((me.shield - s.tick) / HZ) : 0;
@@ -21990,6 +22054,7 @@ const Game = (() => {
             break;
           case 'hint': if (G.playing && e.team === G.team && e.hint === 'attrition') hud.say('Attrition: troops wear down abroad. A Support Truck stops it.', 'bad'); break;
           case 'dambreak': if (G.playing) hud.say('The dam has broken. The valley below floods and its bridges are swept away.', 'bad'); break;
+          case 'tide': if (G.playing) hud.say(e.low ? 'Low tide: the sands are open to the island.' : 'The tide is in over the sands.'); break;
           // King of the Hill: a side holds every hill and every town but the keeps, and the others yield in a minute.
           case 'field':
             if (G.playing && G.team >= 0) hud.say(e.team === G.team ? `You hold the whole field. Keep it ${Rules.KOTH_HOLD / Rules.HZ} seconds and the enemy yields.` : `${G.names[e.team] || 'The enemy'} holds the whole field. Take a hill or a town back within ${Rules.KOTH_HOLD / Rules.HZ} seconds.`, e.team === G.team ? 'good' : 'bad');
