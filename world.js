@@ -1674,6 +1674,25 @@ const World = (() => {
           par.push({ x: mx + nx * 0.36 * near, y: g + 0.05, z: my + ny * 0.36 * near, sx: len + 0.1, sy: 0.1, sz: 0.24, a, c: 0xc8b896 }); }
       }
       if (tr.length) { instanced(sc.block, plainTint, tr, false); instanced(sc.block, plainTint, par, false); }
+      // A railway: its bed of pale ballast along the line, and from the Industrial Age its track drawn as a survey map
+      // draws a railway, a line of black and white dashes, with a train now and then running its length.
+      scen.rail = null;
+      if (M.rail && M.rail.length > 1) {
+        const bed = [], dash = [], P = M.rail;
+        for (let i = 0; i + 1 < P.length; i++) {
+          const [x0, y0] = P[i], [x1, y1] = P[i + 1], len = Math.hypot(x1 - x0, y1 - y0), mx = (x0 + x1) / 2, my = (y0 + y1) / 2, a = -Math.atan2(y1 - y0, x1 - x0), g = terrainAt(M, mx, my);
+          bed.push({ x: mx, y: g + 0.01, z: my, sx: len + 0.05, sy: 0.04, sz: 0.95, a, c: 0xcfc8b8 });
+          dash.push({ x: mx, y: g + 0.06, z: my, sx: len + 0.02, sy: 0.05, sz: 0.34, a, c: (i >> 1) % 2 ? 0x2c2824 : 0xf2eee4 });
+        }
+        instanced(sc.block, plainTint, bed, false);
+        const track = instanced(sc.block, plainTint, dash, false);
+        // The train: an engine, its tender and five wagons, set along the line by arc length each frame.
+        const cars = [{ l: 1.5, w: 0.5, h: 0.5, c: 0x34302c }, { l: 0.9, w: 0.5, h: 0.42, c: 0x3e3934 }, ...[0, 1, 2, 3, 4].map(k => ({ l: 1.15, w: 0.52, h: 0.48, c: k % 2 ? 0x7a5a40 : 0x8a8478 }))];
+        const tm = instanced(sc.block, plainTint, cars.map(() => ({ x: 0, y: -50, z: 0, s: 0 })));
+        const arc = [0];
+        for (let i = 1; i < P.length; i++) arc.push(arc[i - 1] + Math.hypot(P[i][0] - P[i - 1][0], P[i][1] - P[i - 1][1]));
+        scen.rail = { track, tm, cars, arc, P, smokeT: 0 };
+      }
       // Old castles' ruins: a square of curtain wall broken into stretches of uneven height with gaps where it has
       // fallen, stumps of its four corner towers, a fallen keep in the middle and rubble about, in a weathered stone,
       // each piece standing on the hill's slope below it.
@@ -2469,6 +2488,39 @@ const World = (() => {
     // and drifting on the wind, wide as the ground it hides. Steam is a dim blue in the effects, which the ink knows
     // from fire, bright, and from smoke, grey, and draws white.
     const STEAM = [0.06, 0.11, 0.2];
+    // The railway by the age: its track from the Industrial Age, and a train running the line one way and back every
+    // TRAIN_RUN seconds by the world's clock, so every player sees it in the same place, puffing smoke from its engine.
+    // A car shows only where its ground is in view.
+    const TRAIN_RUN = 70, TRAIN_SPEED = 7;
+    function updateTrain(dt) {
+      const R0 = scen && scen.rail;
+      if (!R0) return;
+      const on = worldAge() >= MOTOR_AGE;
+      R0.track.visible = on;
+      const { tm, cars, arc, P } = R0, total = arc[arc.length - 1], t = (S.tick / HZ) % (TRAIN_RUN * 2), back = t >= TRAIN_RUN;
+      // How far along the line the engine's front is, running in from off the line's end to past the other.
+      const len = cars.reduce((s, c) => s + c.l + 0.15, 0), s0 = ((back ? t - TRAIN_RUN : t) * TRAIN_SPEED) - len;
+      const head = back ? total - s0 : s0;
+      const at = s => {
+        if (s <= 0 || s >= total) return null;
+        let i = 1;
+        while (i < arc.length - 1 && arc[i] < s) i++;
+        const k = (s - arc[i - 1]) / (arc[i] - arc[i - 1] || 1), x = P[i - 1][0] + (P[i][0] - P[i - 1][0]) * k, y = P[i - 1][1] + (P[i][1] - P[i - 1][1]) * k;
+        return [x, y, Math.atan2(P[i][1] - P[i - 1][1], P[i][0] - P[i - 1][0])];
+      };
+      let s = head;
+      cars.forEach((c, i) => {
+        const mid = back ? s + c.l / 2 : s - c.l / 2, p = on ? at(mid) : null;
+        if (p && VIS(p[0], p[1])) setInst(tm, i, { x: p[0], y: terrainAt(M, p[0], p[1]) + 0.08 + c.h / 2, z: p[1], sx: c.l, sy: c.h, sz: c.w, a: -p[2], c: c.c });
+        else setInst(tm, i, { x: 0, y: -50, z: 0, s: 0 }, true);
+        if (i === 0 && p && VIS(p[0], p[1]) && (R0.smokeT -= dt) <= 0) {
+          R0.smokeT = 0.18;
+          smoke.add(p[0], terrainAt(M, p[0], p[1]) + 0.9, p[1], SH.uWind.value.x * 0.5, 0.7, SH.uWind.value.y * 0.5, 2.6, 0.25, 1.1, [0.32, 0.31, 0.3, 0.5], [0.45, 0.44, 0.43, 0], Math.random() * 4 | 0, { drag: 0.5 });
+        }
+        s += back ? c.l + 0.15 : -(c.l + 0.15);
+      });
+      dirty(tm);
+    }
     // Quarries, drawn as each opens: the pit's stepped edges as three rings of dug earth, each hachured inward as a
     // survey map draws a pit, loose stone on its floor, and heaps of spoil outside it on the side away from the middle.
     let quarrySeen = 0;
@@ -4622,6 +4674,7 @@ const World = (() => {
       updateIce();
       updateGeysers(dt);
       updateQuarries();
+      updateTrain(dt);
       updateSky(dt);
       updateDust(alpha);
       updateMist(alpha);
