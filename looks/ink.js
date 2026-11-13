@@ -625,7 +625,22 @@
               // Marsh, as a survey map draws it: a faint blue-green wash over the low wet ground, with rows of short
               // blue dashes for its standing water and a few upright strokes of reed above them, drawn further on.
               float msh = smoothstep(0.2, 0.42, LW.a) * (1.0 - smoothstep(0.8, 0.95, LW.a)) * isG * (1.0 - onRoad);
+              // A salt pan's edge passes through marsh's half on its way down, so no marsh is drawn within half a cell of
+              // a pan.
+              if (msh > 0.01) {
+                #define HA(o) texture2D(tH, ((Wl + o) * uHScale + 0.5) / uHSize).a
+                msh *= 1.0 - smoothstep(0.75, 0.9, max(max(HA(vec2(0.6, 0.0)), HA(vec2(-0.6, 0.0))), max(HA(vec2(0.0, 0.6)), HA(vec2(0.0, -0.6)))));
+              }
               tint = mix(tint, dk ? vec3(0.3, 0.37, 0.35) : vec3(0.83, 0.87, 0.82), msh * 0.6);
+              // A salt pan in the desert, as a survey map draws a dry lake's bed: a white crust over the lowest flat
+              // ground, broken into plates by fine cracks.
+              float pan = smoothstep(0.7, 0.95, LW.a) * isG * (1.0 - onRoad);
+              if (pan > 0.01) {
+                float pc = abs(noise(Wl * 1.1 + 23.0) - 0.5), pcW = max(fwidth(pc), 1e-4);
+                float plate = 1.0 - smoothstep(0.35 * pcW * uK, 1.1 * pcW * uK, pc);
+                tint = mix(tint, dk ? vec3(0.5, 0.49, 0.46) : vec3(0.965, 0.955, 0.93), pan * 0.85);
+                tint = mix(tint, dk ? vec3(0.66, 0.64, 0.6) : vec3(0.72, 0.7, 0.64), plate * pan * 0.45);
+              }
               float bch = cov.r * (1.0 - cap);
               // A beach's own slope is gentle, so its relief shading is light.
               rfDark *= 1.0 - 0.6 * smoothstep(0.1, 0.45, bch);

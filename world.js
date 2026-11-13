@@ -848,9 +848,9 @@ const World = (() => {
       if (!S || !S.iceR) return h;
       return S.gnd[clamp(y | 0, 0, Mp.H - 1) * Mp.W + clamp(x | 0, 0, Mp.W - 1)] & 128 ? Math.max(h, Rules.waterLevel(Mp, x, y)) : h;
     };
-    // The frozen water and the marsh for the ink to draw, in the heights texture's alpha on the heights' grid, 1 for
-    // ice and a half for marsh, each point as its cell is. Written when a world is loaded and again when the ice
-    // changes.
+    // The frozen water, the salt pans and the marsh for the ink to draw, in the heights texture's alpha on the heights'
+    // grid, 1 for ice on the water and for a pan on the land, and a half for marsh, each point as its cell is. Written
+    // when a world is loaded and again when the ice changes.
     let iceSeen = -1;
     function updateIce() {
       if (!S || !hTex || (S.iceVer || 0) === iceSeen) return;
@@ -858,7 +858,7 @@ const World = (() => {
       const d = hTex.image.data, one = toHalf(1), half = toHalf(0.5), zero = toHalf(0), R = Rules.RES;
       for (let j = 0; j < VH; j++) for (let i = 0; i < VW; i++) {
         const c = Math.min(M.H - 1, j / R | 0) * M.W + Math.min(M.W - 1, i / R | 0);
-        d[(j * VW + i) * 4 + 3] = (S.gnd[c] & 128) && (M.ground[c] & 2) ? one : M.marsh && M.marsh[c] ? half : zero;
+        d[(j * VW + i) * 4 + 3] = (S.gnd[c] & 128) && (M.ground[c] & 2) ? one : S.pan && S.pan[c] ? one : M.marsh && M.marsh[c] ? half : zero;
       }
       hTex.needsUpdate = true;
       SH.uIceOn.value = S.iceR > 0 ? 1 : 0;
@@ -1618,10 +1618,12 @@ const World = (() => {
       const flora = mapOf(S).flora, cactus = flora === 'cactus', palms = flora === 'palm', cf = [new THREE.Color(0x6f8f5e), new THREE.Color(0x8aa070)];
       const tl = trees.map(t => {
         const g = terrainAt(M, t.x, t.y), hi = !cactus && !palms && th.pine !== undefined && g > th.pine + (rand() - 0.5) * 2.4, L = cactus ? cf : hi ? pf : lf;
-        return { x: t.x, y: g - 0.04, z: t.y, s: t.s * 1.1, a: t.a, c: colA.copy(L[0]).lerp(L[1], rand()).getHex(), cell: t.c, hi, pear: cactus && rand() < 0.45 };
+        return { x: t.x, y: g - 0.04, z: t.y, s: t.s * 1.1, a: t.a, c: colA.copy(t.palm ? lf[0] : L[0]).lerp(t.palm ? lf[1] : L[1], rand()).getHex(), cell: t.c, hi, pear: cactus && rand() < 0.45, palm: !!t.palm };
       });
       const meshes = [];
-      const treeKinds = cactus ? [[sc.saguaro, tl.filter(t => !t.pear)], [sc.pear, tl.filter(t => t.pear)]] : palms ? [[sc.palm, tl.map(t => Object.assign(t, { s: t.s * 1.5 }))]] : [[sc[th.tree], tl.filter(t => !t.hi)], [sc.conifer, tl.filter(t => t.hi)]];
+      // A layout's own palms, as round an oasis, are palms whatever the country's trees.
+      const wl = tl.filter(t => !t.palm), own = tl.filter(t => t.palm).map(t => Object.assign(t, { s: t.s * 1.5 }));
+      const treeKinds = (cactus ? [[sc.saguaro, wl.filter(t => !t.pear)], [sc.pear, wl.filter(t => t.pear)]] : palms ? [[sc.palm, wl.map(t => Object.assign(t, { s: t.s * 1.5 }))]] : [[sc[th.tree], wl.filter(t => !t.hi)], [sc.conifer, wl.filter(t => t.hi)]]).concat([[sc.palm, own]]);
       for (const [geo, list] of treeKinds) {
         if (!list.length) continue;
         const m = lineCat(tiled(geo, treeTint, list), 0.459, true);
@@ -3375,7 +3377,9 @@ const World = (() => {
       if (trailT > 0 || !trailData) return;
       trailT = 0.5;
       const G = S.gnd, T = S.trail, d = trailData;
-      for (let c = 0; c < W * H; c++) { d[c * 4] = ((G[c] >> 5) & 3) * 85; d[c * 4 + 1] = T[c]; }
+      // A salt pan's hardness is its crust's, not a track's, so it is drawn as no track.
+      const P = S.pan;
+      for (let c = 0; c < W * H; c++) { d[c * 4] = P && P[c] ? 0 : ((G[c] >> 5) & 3) * 85; d[c * 4 + 1] = T[c]; }
       trailTex.needsUpdate = true;
     }
 
