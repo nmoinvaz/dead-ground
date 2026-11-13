@@ -19,13 +19,13 @@
       // 45 and 135 degrees, then flat and upright lines for the darkest, each line a little uneven with small gaps.
       // The ground's hatching is pinned to the map so it pans with it, the units' redraws a few times a second.
       const ink = new THREE.ShaderMaterial({ uniforms: { t: { value: null }, tSubj: { value: null }, tHeat: { value: null }, tPaper: { value: null }, res: { value: new THREE.Vector2(1, 1) }, uTime: { value: 0 }, uK: { value: 1 }, uOff: { value: new THREE.Vector2() }, uStyle: { value: 8 }, tNorm: { value: null }, tFogS: { value: null }, tLand: { value: null }, uSun2: { value: new THREE.Vector2(-1, 0) }, uUpV: { value: new THREE.Vector3(0, 1, 0) }, uRoad: { value: 0 }, uOre: { value: 0 }, uMarks: { value: 1 }, uRoadAge: { value: 4 }, uShadeH: { value: 1 }, tShade: { value: null },
-        uWindS: { value: new THREE.Vector2() }, uView: { value: new THREE.Vector2(1, 0) }, tFx: { value: null }, tAnc: { value: null }, uDark: { value: 0 }, uTone: { value: 0 }, uInks: { value: 0 }, uFxs: { value: 0 }, uFire: { value: 0 }, uUnits: { value: 0 }, tH: SH.tH, uHSize: { value: new THREE.Vector2(1, 1) }, uHScale: { value: 1 }, uSnowF: { value: 0 }, uSnowC: SH.uSnowC, uSnowLine: SH.uSnowLine, uIceLine: SH.uIceLine, uCapH: SH.uCapH, uCapK: SH.uCapK, tFlow: SH.tFlow, tBrook: SH.tBrook, uFlora: SH.uFlora, uShow: SH.uShow, uShowS: SH.uShowS, uGolfC: SH.uGolfC, uCastK: SH.uCastK, uDustT: SH.uDustT, uGolf: SH.uGolf, uGolfB: SH.uGolfB, tCover: SH.tCover, uFieldK: SH.uFieldK, uFieldK2: SH.uFieldK2, uPark: SH.uPark, uBridgeKind: SH.uBridgeKind, uFog: { value: 0 }, uMist: { value: 0 }, uNight: { value: 0 },
+        uWindS: { value: new THREE.Vector2() }, uView: { value: new THREE.Vector2(1, 0) }, tFx: { value: null }, tAnc: { value: null }, uDark: { value: 0 }, uTone: { value: 0 }, uInks: { value: 0 }, uFxs: { value: 0 }, uFire: { value: 0 }, uUnits: { value: 0 }, tH: SH.tH, uHSize: { value: new THREE.Vector2(1, 1) }, uHScale: { value: 1 }, uSnowF: { value: 0 }, uSnowC: SH.uSnowC, uSnowLine: SH.uSnowLine, uIceLine: SH.uIceLine, uCapH: SH.uCapH, uCapK: SH.uCapK, uDraw: SH.uDraw, uSubjK: SH.uSubjK, tFlow: SH.tFlow, tBrook: SH.tBrook, uFlora: SH.uFlora, uShow: SH.uShow, uShowS: SH.uShowS, uGolfC: SH.uGolfC, uCastK: SH.uCastK, uDustT: SH.uDustT, uGolf: SH.uGolf, uGolfB: SH.uGolfB, tCover: SH.tCover, uFieldK: SH.uFieldK, uFieldK2: SH.uFieldK2, uPark: SH.uPark, uBridgeKind: SH.uBridgeKind, uFog: { value: 0 }, uMist: { value: 0 }, uNight: { value: 0 },
         uDayMul: { value: new THREE.Vector3(1, 1, 1) }, uDayAdd: { value: new THREE.Vector3() }, uWaterL: { value: -0.15 }, uCloudK: SH.uCloudK, tMarks: SH.tMarks, uMap: SH.uMap,
         uCloud: SH.uCloud, uCloudT: SH.uCloudT, uSunW: SH.uSunDir, uCloudA: { value: 0 }, uCloudG: { value: 0 }, uRayK: { value: 0 }, uDust: { value: new THREE.Vector4() },
         uInvVP: { value: new THREE.Matrix4() }, uW2S: { value: new THREE.Vector4(1, 0, 0, 1) }, uLev: { value: 1 }, tTerr: SH.tTerr, uBorder: SH.uBorder, uMe: { value: 0 },
         // Each side's colour as the anchor pass keeps it, its hue and how coloured it is, and its inks on either paper.
         uSideKey: { value: [...Array(8)].map(() => new THREE.Vector2()) }, uSideL: { value: [...Array(8)].map(() => new THREE.Vector3()) }, uSideD: { value: [...Array(8)].map(() => new THREE.Vector3()) }, uSideB: { value: [...Array(8)].map(() => new THREE.Vector3()) } }, vertexShader: vs, depthTest: false, depthWrite: false, fragmentShader: `
-        varying vec2 vUv; uniform sampler2D t, tSubj, tHeat, tPaper, tNorm, tFogS, tLand, tMarks; uniform float uMap; uniform vec2 res, uOff, uSun2, uWindS, uView, uHSize; uniform float uHScale, uFxs, uFire; uniform int uUnits, uInks; uniform float uDark, uTone; uniform sampler2D tH, tFx, tAnc, tFlow, tBrook, tCover, tShade; uniform vec4 uFieldK, uFieldK2; uniform vec4 uShow[8]; uniform vec2 uShowS[8]; uniform vec3 uGolfC[4]; uniform float uCastK; uniform vec2 uDustT; uniform vec4 uGolf[16]; uniform vec3 uGolfB[24]; uniform vec4 uPark[16]; uniform vec3 uUpV, uDayMul, uDayAdd; uniform float uTime, uK, uSnowF, uSnowC, uSnowLine, uIceLine, uCapH, uCapK, uFlora, uBridgeKind, uFog, uMist, uNight, uWaterL, uCloudK, uMarks, uRoadAge, uShadeH; uniform int uStyle, uRoad, uOre;
+        varying vec2 vUv; uniform sampler2D t, tSubj, tHeat, tPaper, tNorm, tFogS, tLand, tMarks; uniform float uMap; uniform vec2 res, uOff, uSun2, uWindS, uView, uHSize; uniform float uHScale, uFxs, uFire; uniform int uUnits, uInks; uniform float uDark, uTone; uniform sampler2D tH, tFx, tAnc, tFlow, tBrook, tCover, tShade; uniform vec4 uFieldK, uFieldK2; uniform vec4 uShow[8]; uniform vec2 uShowS[8]; uniform vec3 uGolfC[4]; uniform float uCastK; uniform vec2 uDustT; uniform vec4 uGolf[16]; uniform vec3 uGolfB[24]; uniform vec4 uPark[16]; uniform vec3 uUpV, uDayMul, uDayAdd; uniform float uTime, uK, uSnowF, uSnowC, uSnowLine, uIceLine, uCapH, uCapK, uDraw, uSubjK, uFlora, uBridgeKind, uFog, uMist, uNight, uWaterL, uCloudK, uMarks, uRoadAge, uShadeH; uniform int uStyle, uRoad, uOre;
         uniform vec2 uSideKey[8]; uniform vec3 uSideL[8], uSideD[8], uSideB[8];
         uniform sampler2D tTerr; uniform float uBorder, uMe;
         uniform vec2 uCloud; uniform vec3 uSunW; uniform float uCloudT, uCloudA, uCloudG, uRayK; uniform vec4 uDust;
@@ -186,6 +186,15 @@
           // A dust storm's heads are weather, seen wherever they stand, as the clouds are.
           float isDst = 1.0 - smoothstep(0.006, 0.012, abs(s0 - 0.4784));
           seenE = max(seenE, isDst); visE = max(visE, isDst);
+          // The map drawn in, as the title's first battle is made ready: the pencil spreads from the middle over bare
+          // paper, raggedly, the ink follows it, and units and buildings are inked last, as they stand once it is ready.
+          // Ground not yet inked is drawn as ground never seen, its pencil fading up from the paper.
+          float drawS = 1.0;
+          if (uDraw < 1.0 || uSubjK < 1.0) {
+            float rr = clamp(length(Wl - vec2(uMap * 0.5)) / (0.71 * uMap), 0.0, 1.0) * 0.8 + noise(Wl * 0.07 + 31.0) * 0.2;
+            drawS = smoothstep(rr - 0.1, rr, uDraw * 1.45);
+            seenE = min(seenE, min(smoothstep(rr - 0.15, rr, uDraw * 1.45 - 0.45), mix(1.0, uSubjK, step(0.4, s0))));
+          }
           // A waterfall's sheet on the land under the pixel, and the distance from its foot, set by the mixture.
           float fallK = 0.0, foamD = 9.0;
           // The water's level under the pixel, lower in a gorge such as The Falls', and how much of a falls' rapids
@@ -1231,6 +1240,7 @@
             // black, and blue so it is not taken for the brown of high ground.
             vec3 skP = dk ? SLATE : paperC;
             vec3 sketch = mix(skP, dk ? vec3(0.47, 0.51, 0.58) : vec3(0.5, 0.49, 0.47), clamp(cont * 0.42 + guide * 0.14 + rP * 0.4, 0.0, 1.0));
+            sketch = mix(paperC, sketch, drawS);
             col = mix(sketch, col, seenE);
           }
           // Weather over everything. Fog and morning mist lie in the low ground and drift in banks, and the fog of

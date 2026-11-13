@@ -306,21 +306,40 @@ const Game = (() => {
     }
 
     // The battle behind the title is two commanders fighting from the fourth minute on.
-    // It is played forward in slices of a frame's time, longer while nothing is drawn, so the title is up at once and
-    // stays answering; the battle shows when it has caught up, fading in over the paper the first time.
+    // It is played forward in slices of a frame's time, so the title is up at once and stays answering. In the pen and
+    // ink look the first battle is shown at once and drawn in as it is played forward, so the drawing is the page's
+    // sign of loading: its land pencilled and inked as the battle is made ready, and its units and buildings inked
+    // once it is. Otherwise the battle shows when it has caught up, fading in over the paper the first time.
     const AHEAD = 20 * 60 * 4.5;
-    let ahead = null;
+    let ahead = null, ovDraw = false;
     function attract() {
       const S = Rules.newGame({ seed: 40 + (Date.now() / 86400000 | 0) % 40 });
       S.ais.push(AI.create(0, 'veteran'), AI.create(1, 'veteran'));
       ahead = { S, n: 0 };
+      if (G.S || world.look !== 'ink') return;
+      ahead.draw = true;
+      begin(S, 'desert', -1);
+      world.focus(Rules.W / 2, Rules.H / 2, 110);
+      world.drawIn(0, 0, 0);
+      ovDraw = true; $('ov').style.opacity = '0';
+      requestAnimationFrame(() => requestAnimationFrame(() => $('view').classList.remove('dawn')));
+    }
+    // The labels over the map come in as the last of the land is drawn.
+    function drawOv() {
+      if (!ovDraw) return;
+      const d = world.drawn;
+      $('ov').style.opacity = d >= 1 ? '' : String(Rules.clamp((d - 0.6) / 0.4, 0, 1));
+      if (d >= 1) ovDraw = false;
     }
     function attractAhead() {
       if (!ahead) return;
       if (G.playing) { ahead = null; return; }
-      const S = ahead.S, t0 = performance.now(), slice = G.S ? 14 : 30;
+      const S = ahead.S, t0 = performance.now(), slice = G.S && !ahead.draw ? 14 : 30;
       while (ahead.n < AHEAD && performance.now() - t0 < slice) { Rules.step(S); S.ev.length = 0; ahead.n++; }
+      // The drawing keeps pace with the battle made ready, and is finished, with its units and buildings, when it is.
+      if (ahead.draw) world.drawIn(ahead.n < AHEAD ? 0.97 * ahead.n / AHEAD : 1, ahead.n < AHEAD ? 0 : 1);
       if (ahead.n < AHEAD) return;
+      if (ahead.draw) { ahead = null; setTimeout(() => { cameoDue = true; }, 1200); return; }
       ahead = null;
       const first = !G.S;
       begin(S, 'desert', -1);
@@ -333,6 +352,8 @@ const Game = (() => {
     function enterPlay(S, theme, team) {
       $('title').hidden = true; $('end').hidden = true; $('veil').hidden = true;
       $('view').classList.remove('dawn');
+      // A game begun while the title's map is still being drawn in is shown whole at once.
+      world.drawIn(1, 1, 1); ovDraw = false; $('ov').style.opacity = '';
       begin(S, theme, team);
       cameoDue = true; cameos();
       pictures();
@@ -622,6 +643,7 @@ const Game = (() => {
       attractAhead();
       if (cameoDue && !renders) cameos(3);
       if (S) world.frame(Math.min(1, acc / Rules.DT), G.paused ? 0 : dt, now / 1000);
+      drawOv();
       // The sound is held exactly while a game stands paused, however it came to be paused or let go.
       audio.hold(G.playing && G.paused);
       hud.frame(dt);

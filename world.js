@@ -77,6 +77,8 @@ const World = (() => {
       uSnowLine: { value: 99 },
       // A layout's ice line and cloud line, 99 where it has none, and how far the cloud is down, 0 to 1.
       uIceLine: { value: 99 }, uCapH: { value: 99 }, uCapK: { value: 0 },
+      // How far the map is drawn in, 0 bare paper to 1 drawn, and how far its units and buildings are, the same.
+      uDraw: { value: 1 }, uSubjK: { value: 1 },
       // The way the rivers run, from buildFlow, and how far each point lies from a brook and whether at its ford.
       tFlow: { value: black }, tBrook: { value: farBrook },
       // The land's cover from buildFields: the beaches in red, and the farmland round the towns, its extent in green,
@@ -4409,7 +4411,7 @@ const World = (() => {
       // Cast shadows fall from a sun no lower than SHADOW_EL, so a low sun's reach at most twice a caster's height,
       // and fade as it sinks. The land keeps the true sun's shading.
       const el = Math.asin(clamp(dir.y, -1, 1)), hz = Math.hypot(dir.x, dir.z) || 1;
-      SH.uCastK.value = smooth(0.1, 0.28, el) * shadowK;
+      SH.uCastK.value = smooth(0.1, 0.28, el) * shadowK * SH.uSubjK.value;
       if (el < SHADOW_EL) dir.set(dir.x / hz * Math.cos(SHADOW_EL), Math.sin(SHADOW_EL), dir.z / hz * Math.cos(SHADOW_EL));
       const texel = half * 2 / sun.shadow.mapSize.x;
       sun.target.position.x = Math.round(sun.target.position.x / texel) * texel;
@@ -4421,6 +4423,8 @@ const World = (() => {
     // A plate of a moment, as a history book prints one: the view drawn once more over the place on light paper
     // with nothing hidden, read back small, the view put back as it was, and the picture engraved.
     let plateReq = null;
+    // Where the map's drawing in is going, eased toward each frame.
+    const drawTo = { map: 1, subj: 1 };
     function drawPlate() {
       const q = plateReq, keep = { x: cam.x, y: cam.y, dist: cam.dist, shake: cam.shake }, dark = Looks.dark, fog = SH.uFogOn.value;
       plateReq = null;
@@ -4461,6 +4465,11 @@ const World = (() => {
 
     function frame(alpha, dt, now) {
       SH.uTime.value += dt;
+      // The map drawn in goes toward where it is sent, never back, at most 0.9 of the way a second, and its units and
+      // buildings, with their shadows, at most 2.5.
+      if (SH.uDraw.value < drawTo.map) SH.uDraw.value = Math.min(drawTo.map, SH.uDraw.value + dt * 0.9);
+      if (SH.uSubjK.value < drawTo.subj) SH.uSubjK.value = Math.min(drawTo.subj, SH.uSubjK.value + dt * 2.5);
+      SH.uShadowK.value = shadowK * SH.uSubjK.value;
       updateSky(dt);
       updateDust(alpha);
       updateMist(alpha);
@@ -4822,6 +4831,10 @@ const World = (() => {
       setShadeHatch(on) { shadeHatch = !!on; },
       setQuickEdges(on) { lumPass = !!on; },
       setShadowK(k) { shadowK = k; SH.uShadowK.value = k; renderer.shadowMap.autoUpdate = k > 0; renderer.shadowMap.needsUpdate = k > 0; },
+      // The map drawn in from bare paper: how far its land and its units and buildings are to go, 0 to 1, and with
+      // from, where both start.
+      drawIn(map, subj, from) { drawTo.map = map; drawTo.subj = subj; if (from !== undefined) { SH.uDraw.value = from; SH.uSubjK.value = from; } },
+      get drawn() { return SH.uDraw.value; },
       setOre(n) { oreStyle = n; },
       study(o) { studySky = o; },
       // Draws a plate of the place at x, y with the next frame, and hands it to cb as a picture's data URL; raw

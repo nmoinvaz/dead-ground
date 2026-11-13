@@ -23,9 +23,10 @@ kbd { font: 11px var(--mono); color: var(--dim); }
 
 #app { position: fixed; inset: 0; display: flex; padding-top: 0; }
 #view { position: relative; flex: 1 1 auto; min-width: 0; overflow: hidden; background: #000; touch-action: none; }
-/* Before the battle behind the title has caught up, plain paper, and the battle fades in over it. */
+/* Before the title's battle is shown, plain paper, and the map fades in over it as bare paper, to be drawn in. The
+   pen and ink look keeps paper under the picture, so nothing dark shows through as it fades in. */
 #view canvas { transition: opacity .6s ease; }
-#view.dawn { background: var(--paper, #ece4d2); }
+#view.dawn, body[data-look="ink"] #view { background: var(--paper, #ece4d2); }
 #view.dawn canvas { opacity: 0; transition: none; }
 #gl, #ov { position: absolute; inset: 0; width: 100%; height: 100%; display: block; }
 #ov { pointer-events: none; }
