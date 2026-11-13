@@ -2469,6 +2469,28 @@ const World = (() => {
     // and drifting on the wind, wide as the ground it hides. Steam is a dim blue in the effects, which the ink knows
     // from fire, bright, and from smoke, grey, and draws white.
     const STEAM = [0.06, 0.11, 0.2];
+    // Quarries, drawn as each opens: the pit's stepped edges as three rings of dug earth, each hachured inward as a
+    // survey map draws a pit, loose stone on its floor, and heaps of spoil outside it on the side away from the middle.
+    let quarrySeen = 0;
+    function updateQuarries() {
+      if (!S || !S.quarries || S.quarries.length <= quarrySeen) return;
+      const sc = MODELS.scenery, ring = [], tick = [], stone = [];
+      for (const i of S.quarries.slice(quarrySeen)) {
+        const f = M.oreFields[i], pr = f.r * Rules.QUARRY_K, out = Math.atan2(f.y - CY, f.x - CX);
+        [1, 0.68, 0.36].forEach((k, ri) => {
+          const rr = pr * k, n = Math.max(8, Math.round(6.283 * rr / 0.6));
+          for (let j = 0; j < n; j++) {
+            const t = j / n * 6.283, x = f.x + Math.cos(t) * rr, y = f.y + Math.sin(t) * rr, g = terrainAt(M, x, y);
+            ring.push({ x, y: g + 0.02, z: y, sx: 0.14, sy: 0.04, sz: 6.283 * rr / n * 0.92, a: -t, c: 0x6b5a48 });
+            if (ri < 2 && j % 2 === 0) { const ix = f.x + Math.cos(t) * (rr - 0.22), iy = f.y + Math.sin(t) * (rr - 0.22); tick.push({ x: ix, y: terrainAt(M, ix, iy) + 0.02, z: iy, sx: 0.36, sy: 0.03, sz: 0.07, a: -t, c: 0x7c6a56 }); }
+          }
+        });
+        for (let j = 0; j < 9; j++) { const t = j * 2.4 + i, d = pr * 0.25 * (j % 3), x = f.x + Math.cos(t) * d, y = f.y + Math.sin(t) * d; stone.push({ x, y: terrainAt(M, x, y) - 0.04, z: y, s: 0.3 + (j % 2) * 0.15, a: t, c: 0x9c9284 }); }
+        for (let j = 0; j < 4; j++) { const t = out + (j - 1.5) * 0.35, d = f.r + 0.8 + (j % 2) * 0.6, x = f.x + Math.cos(t) * d, y = f.y + Math.sin(t) * d; stone.push({ x, y: terrainAt(M, x, y) - 0.15, z: y, s: 1.3 + (j % 2) * 0.5, a: t * 3, c: 0xc6bca6 }); }
+      }
+      quarrySeen = S.quarries.length;
+      instanced(sc.block, plainTint, ring, false); instanced(sc.block, plainTint, tick, false); instanced(sc.rock, plainTint, stone);
+    }
     function updateGeysers(dt) {
       if (!S || !S.geysers || !S.geysers.length || !dt) return;
       const U = SH.uWind.value;
@@ -3279,7 +3301,7 @@ const World = (() => {
 
     function load(state, themeName, team) {
       clearWorld();
-      S = state; M = S.map; theme = THEMES[themeName] || THEMES.desert; viewTeam = team; iceSeen = -1;
+      S = state; M = S.map; theme = THEMES[themeName] || THEMES.desert; viewTeam = team; iceSeen = -1; quarrySeen = 0;
       Rules.setSize(M.W);
       W = M.W; H = M.H; VW = Rules.VW; VH = Rules.VH; CX = W / 2; CY = H / 2;
       SH.uMap.value = W;
@@ -4599,6 +4621,7 @@ const World = (() => {
       SH.uShadowK.value = shadowK * SH.uSubjK.value;
       updateIce();
       updateGeysers(dt);
+      updateQuarries();
       updateSky(dt);
       updateDust(alpha);
       updateMist(alpha);
