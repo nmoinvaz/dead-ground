@@ -1674,6 +1674,18 @@ const World = (() => {
           par.push({ x: mx + nx * 0.36 * near, y: g + 0.05, z: my + ny * 0.36 * near, sx: len + 0.1, sy: 0.1, sz: 0.24, a, c: 0xc8b896 }); }
       }
       if (tr.length) { instanced(sc.block, plainTint, tr, false); instanced(sc.block, plainTint, par, false); }
+      // A dam: a wall of masonry under its crest road, from the river's bed to the crest, its foot battered out wider,
+      // in stretches so a breach can open in its middle.
+      scen.damWall = null;
+      if (M.dam >= 0 && M.bridges[M.dam]) {
+        const b = M.bridges[M.dam], n = 10, list = [], a = -Math.atan2(b.uy, b.ux);
+        for (let k = 0; k < n; k++) {
+          const t = (k + 0.5) / n, x = b.x0 + (b.x1 - b.x0) * t, y = b.y0 + (b.y1 - b.y0) * t, bed = Math.min(terrainAt(M, x, y), b.z - 0.5) - 0.3, ht = b.z - bed;
+          list.push({ x, y: bed + ht / 2, z: y, sx: b.len / n + 0.02, sy: ht, sz: b.w * 0.7, a, c: 0xd3cdc0, t });
+          list.push({ x, y: bed + ht * 0.3, z: y, sx: b.len / n + 0.02, sy: ht * 0.6, sz: b.w * 1.05, a, c: 0xc8c1b2, t });
+        }
+        scen.damWall = { mesh: instanced(sc.block, plainTint, list), list };
+      }
       // A railway: its bed of pale ballast along the line, and from the Industrial Age its track drawn as a survey map
       // draws a railway, a line of black and white dashes, with a train now and then running its length.
       scen.rail = null;
@@ -1751,14 +1763,16 @@ const World = (() => {
       // Wellheads in a black stain, each bridge on its piers.
       instanced(sc.well, paint, M.wells.map(w => ({ x: w.x, y: terrainAt(M, w.x, w.y), z: w.y })));
       const dk = [], pier = [], brub = [];
-      for (const b of M.bridges) {
+      for (const [bi, b] of M.bridges.entries()) {
         const dx = b.x1 - b.x0, dy = b.y1 - b.y0, len = Math.hypot(dx, dy) + 2, a = -Math.atan2(dy, dx), mx = (b.x0 + b.x1) / 2, my = (b.y0 + b.y1) / 2;
-        // The whole deck, and a second piece kept for when it lies broken in two.
-        dk.push({ x: mx, y: b.z - 0.1, z: my, sx: len, sy: 1, sz: b.w + 0.3, a, c: 0x5e5d59 }, { x: mx, y: b.z - 0.1, z: my, sx: len, sy: 1, sz: b.w + 0.3, a, c: 0x5e5d59 });
+        // The whole deck, and a second piece kept for when it lies broken in two. A dam's crest is its own wall's top,
+        // so its deck and piers are not drawn.
+        const dam = bi === M.dam, k0 = dam ? 0.001 : 1;
+        dk.push({ x: mx, y: b.z - 0.1, z: my, sx: len * k0, sy: k0, sz: (b.w + 0.3) * k0, a, c: 0x5e5d59 }, { x: mx, y: b.z - 0.1, z: my, sx: len * k0, sy: k0, sz: (b.w + 0.3) * k0, a, c: 0x5e5d59 });
         for (let k = 0; k < 4; k++) brub.push({ x: mx + dx / len * (k - 1.5) * 2.2 + (k % 2 - 0.5) * 1.2, y: wAt(mx, my) - 0.25, z: my + dy / len * (k - 1.5) * 2.2, s: 1.3, a: k * 1.7, c: 0x6a675f });
         // Piers stand in the river, across the deck and out past both its sides, pointed up and down stream, so
         // from far off the bridge reads by its piers on the water as an old map draws one.
-        for (let i = -3; i <= 3; i++) {
+        for (let i = -3; i <= 3 && !dam; i++) {
           const t = i * 2.6, px = mx + dx / len * t, py = my + dy / len * t;
           if (terrainAt(M, px, py) > wAt(px, py) - 0.05) continue;
           pier.push({ x: px, y: b.z - 0.1, z: py, a, sx: 0.7, sy: b.z - wAt(px, py) + 1.2, sz: b.w + 1.7, c: 0x77746c });
@@ -1770,7 +1784,7 @@ const World = (() => {
       const KIND_PIER = { wood: ['trestle', 0x6a5038, 0.35], stone: ['cutwater', 0xa8a090, 1], iron: ['cutwater', 0x8a8478, 0.8], concrete: ['cutwater', 0x77746c, 1] };
       const kinds = {};
       for (const k of Object.keys(KIND_DECK)) {
-        const dkk = dk.map(o => Object.assign({}, o, { c: KIND_DECK[k][1], sy: k === 'iron' ? 1.4 : 1 }));
+        const dkk = dk.map(o => Object.assign({}, o, { c: KIND_DECK[k][1], sy: o.sy < 0.01 ? o.sy : k === 'iron' ? 1.4 : 1 }));
         const m = lineCat(instanced(sc[KIND_DECK[k][0]], plainTint, dkk), 0.42);
         dkk.forEach((o, i) => { if (i % 2) setInst(m, i, o, true); }); dirty(m);
         const pm = pier.length ? lineCat(instanced(sc[KIND_PIER[k][0]], plainTint, pier.map(o => Object.assign({}, o, { c: KIND_PIER[k][1], sx: o.sx * KIND_PIER[k][2] }))), 0.42) : null;
@@ -2341,12 +2355,14 @@ const World = (() => {
         X.list.forEach((o, j) => { if (!T.on[o.h] || HS.ruined[o.h] || !VIS(o.x, o.z)) return; o.rz = SH.uTime.value * turn + o.ph; setInst(X.mesh, j, o); });
         dirty(X.mesh);
       }
-      // Bridges: a fallen one is two stubs from the banks with its middle in the river.
+      // Bridges: a fallen one is two stubs from the banks with its middle in the river. A broken dam keeps its ends,
+      // its middle gone.
       const B = scen.bridges;
       M.bridges.forEach((b, i) => {
         const now = S.bridges[i].hp > 0 ? 'up' : 'down';
         if (B.shown[i] === now) return;
         B.shown[i] = now;
+        if (i === M.dam && scen.damWall) { const DW = scen.damWall; DW.list.forEach((o, j) => setInst(DW.mesh, j, o, now === 'down' && o.t > 0.2 && o.t < 0.8)); dirty(DW.mesh); }
         const len = b.len + 2, piece = len * 0.27, off = (len - piece) / 2;
         for (const K of Object.values(B.kinds)) {
           const main = K.dk[i * 2];
@@ -3281,7 +3297,8 @@ const World = (() => {
       // Cloud on the heights comes down and lifts over a few seconds.
       const capW = studySky && studySky.cap !== undefined ? studySky.cap : Rules.capDown(S) ? 1 : 0;
       SH.uCapK.value += (capW - SH.uCapK.value) * (studySky ? 1 : 1 - Math.exp(-dt * 0.5));
-      waterRise.value = Math.min(1.25, sky.flood) * 0.26;
+      // A broken dam's flood raises the water as a long rain does.
+      waterRise.value = Math.min(1.25, Math.max(sky.flood, Rules.damFlood(S) * 1.25)) * 0.26;
       right3.setFromMatrixColumn(camera.matrixWorld, 0);
       sky.windS = right3.x * U.x + right3.z * U.y;
       // The hour. Pen and ink follows it; the painted looks keep their own light.
@@ -4463,6 +4480,15 @@ const World = (() => {
           // Every building of the side takes its new age's form, each marked where it stands.
           for (const b of S.ents) if (b.b && b.team === e.team && b.hp > 0) { const r = rs.get(b.id); if (r && r.seen && VIS(b.x, b.y)) ageMark(b.x, b.y, 0, e.team, b); }
           break;
+        case 'dambreak': {
+          // The reservoir bursts through the breach in a wall of white water and spray.
+          const m = M.bridges[M.dam];
+          for (let k = 0; k < 40; k++) {
+            const t = 0.2 + Math.random() * 0.6, x = lerp(m.x0, m.x1, t), y = lerp(m.y0, m.y1, t), nx = -m.uy, ny = m.ux, s = Math.random() < 0.5 ? 1 : -1;
+            smoke.add(x + nx * s * Math.random() * 3, m.z, y + ny * s * Math.random() * 3, nx * s * (2 + Math.random() * 3), 1.5 + Math.random() * 2, ny * s * (2 + Math.random() * 3), 3 + Math.random() * 2, 0.6, 3.2, STEAM.concat(0.7), STEAM.concat(0), Math.random() * 4 | 0, { drag: 0.7 });
+          }
+          break;
+        }
         case 'bridge': if (e.down) {
           // The span breaks along its middle and drops into the river.
           const m = M.bridges[e.i];

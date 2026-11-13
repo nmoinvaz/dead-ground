@@ -522,6 +522,7 @@ const Game = (() => {
             }
             break;
           case 'hint': if (G.playing && e.team === G.team && e.hint === 'attrition') hud.say('Attrition: troops wear down abroad. A Support Truck stops it.', 'bad'); break;
+          case 'dambreak': if (G.playing) hud.say('The dam has broken. The valley below floods and its bridges are swept away.', 'bad'); break;
           // King of the Hill: a side holds every hill and every town but the keeps, and the others yield in a minute.
           case 'field':
             if (G.playing && G.team >= 0) hud.say(e.team === G.team ? `You hold the whole field. Keep it ${Rules.KOTH_HOLD / Rules.HZ} seconds and the enemy yields.` : `${G.names[e.team] || 'The enemy'} holds the whole field. Take a hill or a town back within ${Rules.KOTH_HOLD / Rules.HZ} seconds.`, e.team === G.team ? 'good' : 'bad');
