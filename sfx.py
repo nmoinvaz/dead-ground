@@ -51,7 +51,9 @@ def boom(d, k, rumble, crack=0.5, f0=120, f1=30):
     return tail(mix(low(noise(d), 1400 if d < 1 else 900, 3) * env(d, 0.003, k), thump(d, f0, f1, k * 0.7) * rumble, high(noise(0.06), 1800) * env(0.06, 0.0005, 50) * crack, low(noise(d), 160, 2) * env(d, 0.01, k * 0.6) * rumble * 2), d * 0.6, 0.28, 0.14)
 write('boom_x', boom(4.5, 0.9, 2.2, 0.3, 60, 18))
 write('scream', low(noise(0.18), 500) * env(0.18, 0.004, 26))
-write('click', band(noise(0.03), 2000, 6000) * env(0.03, 0.0005, 160) + np.sin(2 * np.pi * 1800 * t_(0.03)) * env(0.03, 0.0005, 120) * 0.5)
+# A menu's click: a pencil's soft tap on paper, its noise low and dull, eased in, with a faint low tone under it, and
+# quieter than the other interface sounds. It draws the same noise as before, so the sounds after it are unchanged.
+write('click', band(noise(0.03), 500, 2200) * env(0.03, 0.0015, 110) + np.sin(2 * np.pi * 520 * t_(0.03)) * env(0.03, 0.002, 90) * 0.35, peak=0.55)
 # A refusal: a soft two-note "nope", marimba-like, falling a fourth, quieter than the other interface sounds.
 nope = lambda f: mix(np.sin(2 * np.pi * f * t_(0.16)) * env(0.16, 0.003, 26), np.sin(2 * np.pi * f * 3 * t_(0.16)) * env(0.16, 0.002, 45) * 0.25)
 write('deny', mix(nope(660), np.concatenate([np.zeros(int(SR * 0.1)), nope(494)])), 0.55)
